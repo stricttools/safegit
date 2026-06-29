@@ -1,6 +1,0 @@
-{"commits":["6e18cd25887aa97652f6dcf5926d841cc8c9d32c"],"user_facing":true,"description":"**Bug fix.** `scrub run --diff` no longer writes blob objects to the git store. Preview is now truly read-only.","type":"fix"}
-{"commits":["348c1becae895e50a2a3b7d5bef16222e3182b81"],"user_facing":true,"description":"**Bug fix.** `scrub file --dry-run` no longer writes the replacement blob to the git store. SHA is computed without persisting.","type":"fix"}
-{"commits":["0d6efd6837c8992e31870f2c866fd0a522944b03"],"user_facing":true,"description":"**New feature.** `scrub run --dry-run` shows per-operation match counts and affected files without writing objects or acquiring the rewrite lock.","type":"feature"}
-{"commits":["d15fc0db126de484c2618b0a167825d8497f9fcc"],"user_facing":false}
-{"commits":["a91ac4804a39a8d5d60dbcfa0b7db86ca8b602ce"],"user_facing":false}
-{"commits":["a39ffdb65300233f4f817cf03d9da0de4b1cbf07"],"user_facing":false}
