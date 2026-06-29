@@ -1031,3 +1031,148 @@ func TestRewriteAuthorJSONDryRun(t *testing.T) {
 		t.Errorf("HEAD changed during dry run: %s -> %s", headBefore[:12], headAfter[:12])
 	}
 }
+
+// makeCommitWithTrailer creates a single commit with the given author identity
+// and a commit message that includes the specified trailer line.
+func makeCommitWithTrailer(t *testing.T, repoDir string, authorName, authorEmail, prefix string, index int, trailerLine string) {
+	t.Helper()
+	fname := fmt.Sprintf("%s%d.txt", prefix, index)
+	content := fmt.Sprintf("%s%d", prefix, index)
+	fpath := filepath.Join(repoDir, fname)
+	if err := os.WriteFile(fpath, []byte(content), 0644); err != nil {
+		t.Fatalf("writing %s: %v", fname, err)
+	}
+
+	cmd := exec.Command("git", "add", fname)
+	cmd.Dir = repoDir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add %s: %v\n%s", fname, err, out)
+	}
+
+	msg := fmt.Sprintf("%s commit %d\n\n%s\n", prefix, index, trailerLine)
+	cmd = exec.Command("git", "commit", "-m", msg)
+	cmd.Dir = repoDir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME="+authorName,
+		"GIT_AUTHOR_EMAIL="+authorEmail,
+		"GIT_COMMITTER_NAME="+authorName,
+		"GIT_COMMITTER_EMAIL="+authorEmail,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git commit %s: %v\n%s", fname, err, out)
+	}
+}
+
+// getCommitMessageBodies returns full commit messages (%B) from all commits (reverse topo-order).
+func getCommitMessageBodies(t *testing.T, repoDir string) []string {
+	t.Helper()
+	cmd := exec.Command("git", "log", "--all", "--reverse", "--format=%B")
+	cmd.Dir = repoDir
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git log --format=%%B: %v", err)
+	}
+	// Split by double-newline between commit messages and trim
+	raw := strings.TrimSpace(string(out))
+	if raw == "" {
+		return nil
+	}
+	// git log %B separates messages with blank lines, but messages themselves
+	// can contain blank lines. Use a different approach: get per-commit.
+	cmd = exec.Command("git", "log", "--all", "--reverse", "--format=%x01%B")
+	cmd.Dir = repoDir
+	out, err = cmd.Output()
+	if err != nil {
+		t.Fatalf("git log --format=%%x01%%B: %v", err)
+	}
+	parts := strings.Split(string(out), "\x01")
+	var msgs []string
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if trimmed == "" {
+			continue
+		}
+		msgs = append(msgs, trimmed)
+	}
+	return msgs
+}
+
+func TestRewriteAuthorTrailerRewrite(t *testing.T) {
+	dir := newRepo(t)
+
+	// Create commits with Co-authored-by and Signed-off-by trailers
+	makeCommitWithTrailer(t, dir, "oldname", "old@test.com", "trailer", 0,
+		"Co-authored-by: Old Name <old@test.com>")
+	makeCommitWithTrailer(t, dir, "oldname", "old@test.com", "trailer", 1,
+		"Signed-off-by: Old Name <old@test.com>")
+	// A commit with a non-matching trailer (should be unchanged)
+	makeCommitWithTrailer(t, dir, "oldname", "old@test.com", "trailer", 2,
+		"Co-authored-by: Other Person <other@test.com>")
+
+	// Run rewrite with email-only change
+	stdout, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite",
+		"--old-email=old@test.com", "--new-email=new@test.com")
+	if code != 0 {
+		t.Fatalf("rewrite-author failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	// Verify author emails are rewritten
+	emails := getAuthorEmails(t, dir)
+	for _, e := range emails {
+		if e == "old@test.com" {
+			t.Errorf("old email 'old@test.com' still present in author emails: %v", emails)
+			break
+		}
+	}
+
+	// Verify trailers are rewritten in commit messages
+	msgs := getCommitMessageBodies(t, dir)
+	foundNewEmail := false
+	foundOtherPreserved := false
+	for _, m := range msgs {
+		if strings.Contains(m, "Co-authored-by: Old Name <new@test.com>") ||
+			strings.Contains(m, "Signed-off-by: Old Name <new@test.com>") {
+			foundNewEmail = true
+		}
+		if strings.Contains(m, "<old@test.com>") {
+			t.Errorf("old email still present in trailer: %s", m)
+		}
+		if strings.Contains(m, "Co-authored-by: Other Person <other@test.com>") {
+			foundOtherPreserved = true
+		}
+	}
+	if !foundNewEmail {
+		t.Errorf("no trailer with new email found in commit messages: %v", msgs)
+	}
+	if !foundOtherPreserved {
+		t.Errorf("non-matching trailer should be preserved: %v", msgs)
+	}
+}
+
+func TestRewriteAuthorTrailerBothNameAndEmail(t *testing.T) {
+	dir := newRepo(t)
+
+	makeCommitWithTrailer(t, dir, "oldname", "old@test.com", "both", 0,
+		"Signed-off-by: oldname <old@test.com>")
+
+	stdout, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite",
+		"--old-name=oldname", "--new-name=newname",
+		"--old-email=old@test.com", "--new-email=new@test.com")
+	if code != 0 {
+		t.Fatalf("rewrite-author failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	msgs := getCommitMessageBodies(t, dir)
+	found := false
+	for _, m := range msgs {
+		if strings.Contains(m, "Signed-off-by: newname <new@test.com>") {
+			found = true
+		}
+		if strings.Contains(m, "oldname <old@test.com>") {
+			t.Errorf("old identity still present in trailer: %s", m)
+		}
+	}
+	if !found {
+		t.Errorf("expected trailer with new identity, got messages: %v", msgs)
+	}
+}

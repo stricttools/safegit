@@ -15,6 +15,11 @@ const envVar = "CLAUDE_CODE_SESSION_ID"
 // trailerLine matches lines of the form "Key-Name: value".
 var trailerLine = regexp.MustCompile(`^[A-Za-z0-9][-A-Za-z0-9]*:\s`)
 
+// identityTrailerKey matches trailer keys ending in "-by" (case-insensitive),
+// which are the conventional identity-bearing trailers: Signed-off-by,
+// Co-authored-by, Reviewed-by, Acked-by, etc.
+var identityTrailerKey = regexp.MustCompile(`(?i)^[A-Za-z0-9][-A-Za-z0-9]*-[Bb][Yy]:\s`)
+
 // Inject reads CLAUDE_CODE_SESSION_ID from the environment and appends
 // a Claude-Code-Session-Id trailer to the commit message if present.
 // For amend: deduplicates if the same session ID already exists as a trailer;
@@ -139,6 +144,91 @@ func SplitBodyTrailers(message string) (body, trailerBlock string) {
 	body = strings.Join(bodyLines, "\n") + "\n"
 	trailerBlock = strings.Join(lines[trailerStart:], "\n") + "\n"
 	return body, trailerBlock
+}
+
+// ReplaceIdentity replaces author identity in identity-bearing trailers
+// (lines whose key ends in "-by", such as Signed-off-by, Co-authored-by,
+// Reviewed-by, Acked-by). Within those trailer lines, it replaces
+// "oldName <oldEmail>" with "newName <newEmail>". When only one of
+// name/email is changing (the other old value is empty), only the
+// provided part is replaced. Non-identity trailers and the message body
+// are never modified. If no changes are made, the original message is
+// returned unchanged.
+func ReplaceIdentity(message, oldName, newName, oldEmail, newEmail string) string {
+	body, trailerBlock := SplitBodyTrailers(message)
+	if trailerBlock == "" {
+		return message
+	}
+
+	lines := strings.Split(strings.TrimRight(trailerBlock, "\n"), "\n")
+	changed := false
+
+	for i, line := range lines {
+		// Only process identity trailers (keys ending in -by).
+		if !identityTrailerKey.MatchString(line) {
+			continue
+		}
+
+		newLine := replaceIdentityInLine(line, oldName, newName, oldEmail, newEmail)
+		if newLine != line {
+			lines[i] = newLine
+			changed = true
+		}
+	}
+
+	if !changed {
+		return message
+	}
+
+	return body + strings.Join(lines, "\n") + "\n"
+}
+
+// replaceIdentityInLine replaces identity occurrences in a single trailer
+// line. It handles three cases:
+//   - Both name and email provided: replace "oldName <oldEmail>" with "newName <newEmail>"
+//   - Only email provided (oldName == ""): replace "<oldEmail>" with "<newEmail>"
+//   - Only name provided (oldEmail == ""): replace "oldName" with "newName" when
+//     it appears as the name portion before a " <" email delimiter
+func replaceIdentityInLine(line, oldName, newName, oldEmail, newEmail string) string {
+	// Extract the value portion (after "Key: ")
+	colonIdx := strings.Index(line, ":")
+	if colonIdx < 0 {
+		return line
+	}
+	key := line[:colonIdx+1]
+	value := line[colonIdx+1:]
+
+	// Trim leading space from value for processing, but track it.
+	trimmedValue := strings.TrimLeft(value, " ")
+	leadingSpace := value[:len(value)-len(trimmedValue)]
+
+	newValue := trimmedValue
+
+	switch {
+	case oldName != "" && oldEmail != "":
+		// Replace "oldName <oldEmail>" with "newName <newEmail>"
+		old := oldName + " <" + oldEmail + ">"
+		repl := newName + " <" + newEmail + ">"
+		newValue = strings.Replace(trimmedValue, old, repl, 1)
+
+	case oldEmail != "":
+		// Replace "<oldEmail>" with "<newEmail>"
+		old := "<" + oldEmail + ">"
+		repl := "<" + newEmail + ">"
+		newValue = strings.Replace(trimmedValue, old, repl, 1)
+
+	case oldName != "":
+		// Replace the name portion: "oldName <" -> "newName <"
+		old := oldName + " <"
+		repl := newName + " <"
+		newValue = strings.Replace(trimmedValue, old, repl, 1)
+	}
+
+	if newValue == trimmedValue {
+		return line
+	}
+
+	return key + leadingSpace + newValue
 }
 
 // endsWithTrailerBlock returns true if the lines end with a block of

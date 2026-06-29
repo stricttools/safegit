@@ -11,6 +11,7 @@ import (
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
+	"github.com/smm-h/safegit/internal/trailer"
 )
 
 func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
@@ -208,7 +209,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		}
 
 		infof(flags, "Verifying...\n")
-		failures := compareSnapshots(before, after, oldName, newName, oldEmail)
+		failures := compareSnapshots(before, after, oldName, newName, oldEmail, true)
 
 		// Also verify working tree is clean after rewrite
 		statusOut, _, err := git.Run(ctx, "status", "--porcelain")
@@ -503,7 +504,7 @@ func buildTagToMessage(ctx context.Context, tagNames []string) (map[string]strin
 // oldName is the author name that should no longer appear after the
 // rewrite. Returns a slice of failure descriptions; an empty slice
 // means all checks passed.
-func compareSnapshots(before, after rewriteSnapshot, oldName, newName, oldEmail string) []string {
+func compareSnapshots(before, after rewriteSnapshot, oldName, newName, oldEmail string, ignoreTrailers bool) []string {
 	var failures []string
 
 	// 1. Commit count
@@ -567,8 +568,26 @@ func compareSnapshots(before, after rewriteSnapshot, oldName, newName, oldEmail 
 	}
 
 	// 6. Messages
-	if msg := compareStringSlices("messages", before.Messages, after.Messages); msg != "" {
-		failures = append(failures, msg)
+	if ignoreTrailers {
+		// Strip trailers before comparing so that trailer rewrites
+		// (e.g., Signed-off-by identity changes) don't cause false failures.
+		beforeBodies := make([]string, len(before.Messages))
+		afterBodies := make([]string, len(after.Messages))
+		for i, m := range before.Messages {
+			body, _ := trailer.SplitBodyTrailers(m)
+			beforeBodies[i] = body
+		}
+		for i, m := range after.Messages {
+			body, _ := trailer.SplitBodyTrailers(m)
+			afterBodies[i] = body
+		}
+		if msg := compareStringSlices("messages (body only)", beforeBodies, afterBodies); msg != "" {
+			failures = append(failures, msg)
+		}
+	} else {
+		if msg := compareStringSlices("messages", before.Messages, after.Messages); msg != "" {
+			failures = append(failures, msg)
+		}
 	}
 
 	// 7. Author dates
@@ -717,6 +736,12 @@ func rewriteCommits(ctx context.Context, oldName, newName, oldEmail, newEmail st
 		if thisNameChanged {
 			xform.Author = author
 			xform.Committer = committer
+
+			// Also rewrite identity-bearing trailers (Signed-off-by, Co-authored-by, etc.)
+			newMsg := trailer.ReplaceIdentity(info.Message, oldName, newName, oldEmail, newEmail)
+			if newMsg != info.Message {
+				xform.Message = newMsg
+			}
 		}
 		return xform, nil
 	}, verbose)

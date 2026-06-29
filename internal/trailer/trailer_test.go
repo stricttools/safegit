@@ -344,6 +344,79 @@ func TestSplitBodyTrailers_MultipleTrailerBlocks(t *testing.T) {
 	}
 }
 
+// --- ReplaceIdentity tests ---
+
+func TestReplaceIdentity_BothNameAndEmail(t *testing.T) {
+	msg := "fix bug\n\nSigned-off-by: Old Name <old@test.com>\n"
+	got := ReplaceIdentity(msg, "Old Name", "New Name", "old@test.com", "new@test.com")
+	want := "fix bug\n\nSigned-off-by: New Name <new@test.com>\n"
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
+	}
+}
+
+func TestReplaceIdentity_EmailOnly(t *testing.T) {
+	msg := "fix bug\n\nCo-authored-by: Alice <old@test.com>\n"
+	got := ReplaceIdentity(msg, "", "", "old@test.com", "new@test.com")
+	want := "fix bug\n\nCo-authored-by: Alice <new@test.com>\n"
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
+	}
+}
+
+func TestReplaceIdentity_NameOnly(t *testing.T) {
+	msg := "fix bug\n\nReviewed-by: Old Name <keep@test.com>\n"
+	got := ReplaceIdentity(msg, "Old Name", "New Name", "", "")
+	want := "fix bug\n\nReviewed-by: New Name <keep@test.com>\n"
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
+	}
+}
+
+func TestReplaceIdentity_NoTrailers(t *testing.T) {
+	msg := "just a subject line"
+	got := ReplaceIdentity(msg, "Old Name", "New Name", "old@test.com", "new@test.com")
+	if got != msg {
+		t.Errorf("expected message unchanged, got %q", got)
+	}
+}
+
+func TestReplaceIdentity_MultipleIdentityTrailers(t *testing.T) {
+	msg := "fix bug\n\nSigned-off-by: Old Name <old@test.com>\nCo-authored-by: Old Name <old@test.com>\nAcked-by: Other Person <other@test.com>\n"
+	got := ReplaceIdentity(msg, "Old Name", "New Name", "old@test.com", "new@test.com")
+	want := "fix bug\n\nSigned-off-by: New Name <new@test.com>\nCo-authored-by: New Name <new@test.com>\nAcked-by: Other Person <other@test.com>\n"
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
+	}
+}
+
+func TestReplaceIdentity_NonIdentityTrailersUnchanged(t *testing.T) {
+	msg := "fix bug\n\nFixes: #123\nSigned-off-by: Old Name <old@test.com>\nClaude-Code-Session-Id: session-abc\n"
+	got := ReplaceIdentity(msg, "Old Name", "New Name", "old@test.com", "new@test.com")
+	want := "fix bug\n\nFixes: #123\nSigned-off-by: New Name <new@test.com>\nClaude-Code-Session-Id: session-abc\n"
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
+	}
+}
+
+func TestReplaceIdentity_NoMatchReturnsUnchanged(t *testing.T) {
+	msg := "fix bug\n\nSigned-off-by: Someone Else <else@test.com>\n"
+	got := ReplaceIdentity(msg, "Old Name", "New Name", "old@test.com", "new@test.com")
+	if got != msg {
+		t.Errorf("expected message unchanged when no match, got %q", got)
+	}
+}
+
+func TestReplaceIdentity_BodyPreserved(t *testing.T) {
+	msg := "fix bug\n\nThis body mentions Old Name <old@test.com> but should not change.\n\nSigned-off-by: Old Name <old@test.com>\n"
+	got := ReplaceIdentity(msg, "Old Name", "New Name", "old@test.com", "new@test.com")
+	// Only the trailer should change, not the body
+	want := "fix bug\n\nThis body mentions Old Name <old@test.com> but should not change.\n\nSigned-off-by: New Name <new@test.com>\n"
+	if got != want {
+		t.Errorf("expected %q, got %q", want, got)
+	}
+}
+
 func TestSplitBodyTrailers_SessionTrailer(t *testing.T) {
 	msg := "add feature\n\nClaude-Code-Session-Id: session-abc-123\n"
 	body, trailers := SplitBodyTrailers(msg)
