@@ -267,6 +267,90 @@ func TestScrubVerifyJSONOutput(t *testing.T) {
 	}
 }
 
+// TestScrubVerifyMultiPolicySingleScan creates a repo with two different
+// secrets, scrubs both, then verifies both policies pass in a single
+// `scrub verify` call. This exercises the optimized single-scan path
+// that tests all compiled patterns against each object in one pass.
+func TestScrubVerifyMultiPolicySingleScan(t *testing.T) {
+	dir := newRepo(t)
+
+	// Create files with two distinct secrets.
+	commitFileEnv(t, dir, scrubVerifyEnv, "db.env", "DB_PASS=alpha_secret_one\n", "add db secret")
+	commitFileEnv(t, dir, scrubVerifyEnv, "api.env", "API_KEY=beta_secret_two\n", "add api secret")
+
+	// Scrub first secret.
+	_, stderr, code := runSafegitEnv(t, dir, scrubVerifyEnv,
+		"--yes", "scrub", "match",
+		"--pattern", "alpha_secret_one",
+		"--replace", "REDACTED_1",
+		"--reason", "remove db password",
+		"--entire-history",
+	)
+	if code != 0 {
+		t.Fatalf("scrub match (first) failed (code %d): %s", code, stderr)
+	}
+
+	// Scrub second secret.
+	_, stderr, code = runSafegitEnv(t, dir, scrubVerifyEnv,
+		"--yes", "scrub", "match",
+		"--pattern", "beta_secret_two",
+		"--replace", "REDACTED_2",
+		"--reason", "remove api key",
+		"--entire-history",
+	)
+	if code != 0 {
+		t.Fatalf("scrub match (second) failed (code %d): %s", code, stderr)
+	}
+
+	// Verify both policies exist.
+	policies := readPolicyFile(t, dir)
+	if len(policies) != 2 {
+		t.Fatalf("expected 2 policies, got %d", len(policies))
+	}
+
+	// Run scrub verify -- single call should verify both policies.
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubVerifyEnv, "scrub", "verify")
+	if code != 0 {
+		t.Fatalf("scrub verify failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "2 passed") {
+		t.Errorf("expected '2 passed' in output, got: %s", stdout)
+	}
+
+	// Also verify JSON output reports both policies.
+	stdout, stderr, code = runSafegitEnv(t, dir, scrubVerifyEnv, "--json", "scrub", "verify")
+	if code != 0 {
+		t.Fatalf("scrub verify --json failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	var result struct {
+		Policies int `json:"policies"`
+		Passed   int `json:"passed"`
+		Failed   int `json:"failed"`
+		Results  []struct {
+			Pattern string `json:"pattern"`
+			Pass    bool   `json:"pass"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("failed to parse JSON: %v\nstdout: %s", err, stdout)
+	}
+	if result.Policies != 2 {
+		t.Errorf("policies = %d, want 2", result.Policies)
+	}
+	if result.Passed != 2 {
+		t.Errorf("passed = %d, want 2", result.Passed)
+	}
+	if len(result.Results) != 2 {
+		t.Fatalf("results length = %d, want 2", len(result.Results))
+	}
+	for _, r := range result.Results {
+		if !r.Pass {
+			t.Errorf("policy %q should pass", r.Pattern)
+		}
+	}
+}
+
 // TestScrubVerifyScopeAutoAppend verifies that scrub match with --scope
 // stores the scope in the auto-appended policy.
 func TestScrubVerifyScopeAutoAppend(t *testing.T) {
