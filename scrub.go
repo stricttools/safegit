@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -321,38 +322,34 @@ func runScrubFileInSubmodule(
 		die(flags, cmd, 1, fmt.Sprintf("initializing safegit for submodule %s: %v", sub.RelativePath, err))
 	}
 
-	// Save parent cwd.
-	parentDir, err := os.Getwd()
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("getting cwd: %v", err))
-	}
-
-	// Chdir into the submodule.
-	if err := os.Chdir(sub.WorkTreePath); err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("chdir to submodule %s: %v", sub.RelativePath, err))
-	}
+	// Context-scoped git directory targeting: all git commands using subCtx
+	// will target the submodule's repo without needing os.Chdir.
+	subCtx := git.WithDir(ctx, sub.GitDir, sub.WorkTreePath)
 
 	// Resolve --from within the submodule. Since the user's --from likely
 	// refers to the parent repo, we use the submodule's entire history.
 	// The parent's --from will be used when rewriting parent gitlinks.
-	subFromSHA, subFromErr := git.RevParse(ctx, from)
+	subFromSHA, subFromErr := git.RevParse(subCtx, from)
 	useEntireSubHistory := subFromErr != nil
 
 	if !useEntireSubHistory {
 		// Verify it's an ancestor of submodule HEAD.
-		isAnc, err := git.IsAncestorOf(ctx, subFromSHA, "HEAD")
+		isAnc, err := git.IsAncestorOf(subCtx, subFromSHA, "HEAD")
 		if err != nil || !isAnc {
 			useEntireSubHistory = true
 		}
 	}
 
 	// Determine replacement blob within the submodule context.
+	// Use absolute path for os.Stat since CWD is the parent repo.
 	var newBlobSHA string
 	var mode string
-	if _, err := os.Stat(subFilePath); err == nil {
-		newBlobSHA, err = git.HashObjectWrite(ctx, subFilePath)
+	absSubFilePath := filepath.Join(sub.WorkTreePath, subFilePath)
+	if _, err := os.Stat(absSubFilePath); err == nil {
+		// HashObjectWrite receives subCtx so cmd.Dir is set to the submodule
+		// work tree; use the relative subFilePath so git resolves it correctly.
+		newBlobSHA, err = git.HashObjectWrite(subCtx, subFilePath)
 		if err != nil {
-			os.Chdir(parentDir)
 			die(flags, cmd, 1, fmt.Sprintf("hashing file %q in submodule: %v", subFilePath, err))
 		}
 		mode = "replace"
@@ -363,16 +360,14 @@ func runScrubFileInSubmodule(
 	// Get submodule commit range.
 	var subSHAs []string
 	if useEntireSubHistory {
-		out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", "HEAD")
+		out, _, err := git.Run(subCtx, "rev-list", "--topo-order", "--reverse", "HEAD")
 		if err != nil {
-			os.Chdir(parentDir)
 			die(flags, cmd, 1, fmt.Sprintf("submodule: listing commits: %v", err))
 		}
 		subSHAs = git.SplitNonEmpty(out)
 	} else {
-		out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", subFromSHA+"..HEAD")
+		out, _, err := git.Run(subCtx, "rev-list", "--topo-order", "--reverse", subFromSHA+"..HEAD")
 		if err != nil {
-			os.Chdir(parentDir)
 			die(flags, cmd, 1, fmt.Sprintf("submodule: listing commits: %v", err))
 		}
 		subSHAs = append([]string{subFromSHA}, git.SplitNonEmpty(out)...)
@@ -390,7 +385,6 @@ func runScrubFileInSubmodule(
 	// Confirmation prompt (skipped with --yes)
 	if !confirmOrAbort(flags, "This will rewrite submodule + parent history. This cannot be undone. Proceed?") {
 		infof(flags, "Aborted.\n")
-		os.Chdir(parentDir)
 		return 0
 	}
 
@@ -409,21 +403,19 @@ func runScrubFileInSubmodule(
 			emitJSON(result)
 		}
 		infof(flags, "Dry run: no changes made.\n")
-		os.Chdir(parentDir)
 		return 0
 	}
 
 	// Capture old submodule HEAD before rewriting.
-	oldSubHeadSHA, err := git.RevParse(ctx, "HEAD")
+	oldSubHeadSHA, err := git.RevParse(subCtx, "HEAD")
 	if err != nil {
-		os.Chdir(parentDir)
 		die(flags, cmd, 1, fmt.Sprintf("resolving submodule HEAD: %v", err))
 	}
 
 	// Walk and rewrite submodule commits.
 	oldSubBlobSHAs := make(map[string]bool)
 	subTreeCache := make(map[string]string)
-	subShaMap, subRewrittenCount, err := walkAndRewrite(ctx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
+	subShaMap, subRewrittenCount, err := walkAndRewrite(subCtx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
 		oldBlobSHA := lookupBlobAtPath(ctx, info.Tree, subFilePath)
 		newTreeSHA, err := replaceInTree(ctx, info.Tree, subFilePath, newBlobSHA, subTreeCache)
 		if err != nil {
@@ -439,7 +431,6 @@ func runScrubFileInSubmodule(
 		return xform, nil
 	}, flags.verbose)
 	if err != nil {
-		os.Chdir(parentDir)
 		die(flags, cmd, 1, fmt.Sprintf("submodule walk and rewrite: %v", err))
 	}
 
@@ -457,18 +448,12 @@ func runScrubFileInSubmodule(
 			"mode":   mode,
 		},
 	}
-	if err := subResult.Finalize(ctx, flags, cmd, nil, nil); err != nil {
-		os.Chdir(parentDir)
+	if err := subResult.Finalize(subCtx, flags, cmd, nil, nil); err != nil {
 		die(flags, cmd, 1, fmt.Sprintf("submodule finalize: %v", err))
 	}
 	subTagRewrites := subResult.TagRewrites
 
 	infof(flags, "  [%s] %d commits rewritten\n", sub.RelativePath, subRewrittenCount)
-
-	// Chdir back to parent.
-	if err := os.Chdir(parentDir); err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("chdir back to parent: %v", err))
-	}
 
 	// Build gitlink map from submodule SHA mappings.
 	gitlinkMap := make(map[string]string)
@@ -538,15 +523,13 @@ func runScrubFileInSubmodule(
 		if len(oldSubBlobSHAs) == 0 {
 			return nil
 		}
-		os.Chdir(sub.WorkTreePath)
-		defer os.Chdir(parentDir)
-
 		infof(flags, "Verifying old blobs unreachable in submodule...\n")
 		oldBlobList := make([]string, 0, len(oldSubBlobSHAs))
 		for sha := range oldSubBlobSHAs {
 			oldBlobList = append(oldBlobList, sha)
 		}
-		reachableBlobs, err := buildReachableBlobSet(ctx)
+		// Use subCtx to target the submodule's object store without chdir.
+		reachableBlobs, err := buildReachableBlobSet(subCtx)
 		if err != nil {
 			return nil // can't verify, not fatal
 		}
