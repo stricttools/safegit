@@ -118,12 +118,13 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		die(flags, cmd, 1, fmt.Sprintf("resolving HEAD: %v", err))
 	}
 
-	// Determine replacement blob: if file exists on disk, hash it as the
-	// replacement. Otherwise, empty string signals removal mode.
+	// Determine replacement blob: if file exists on disk, compute its SHA
+	// (read-only, no write to object store) for dry-run output. The blob is
+	// written later only on the execute path.
 	var newBlobSHA string
 	var mode string
 	if _, err := os.Stat(filePath); err == nil {
-		newBlobSHA, err = git.HashObjectWrite(ctx, filePath)
+		newBlobSHA, err = git.HashObject(ctx, filePath)
 		if err != nil {
 			die(flags, cmd, 1, fmt.Sprintf("hashing file %q: %v", filePath, err))
 		}
@@ -174,6 +175,14 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		}
 		infof(flags, "Dry run: no changes made.\n")
 		return 0
+	}
+
+	// Write the replacement blob to the object store (execute path only).
+	if mode == "replace" {
+		newBlobSHA, err = git.HashObjectWrite(ctx, filePath)
+		if err != nil {
+			die(flags, cmd, 1, fmt.Sprintf("writing blob for %q: %v", filePath, err))
+		}
 	}
 
 	// Commit walker: topo-order, parents before children (inclusive of fromSHA)
@@ -342,13 +351,13 @@ func runScrubFileInSubmodule(
 
 	// Determine replacement blob within the submodule context.
 	// Use absolute path for os.Stat since CWD is the parent repo.
+	// HashObject (read-only) computes the SHA for dry-run output; the blob
+	// is written later only on the execute path.
 	var newBlobSHA string
 	var mode string
 	absSubFilePath := filepath.Join(sub.WorkTreePath, subFilePath)
 	if _, err := os.Stat(absSubFilePath); err == nil {
-		// HashObjectWrite receives subCtx so cmd.Dir is set to the submodule
-		// work tree; use the relative subFilePath so git resolves it correctly.
-		newBlobSHA, err = git.HashObjectWrite(subCtx, subFilePath)
+		newBlobSHA, err = git.HashObject(subCtx, subFilePath)
 		if err != nil {
 			die(flags, cmd, 1, fmt.Sprintf("hashing file %q in submodule: %v", subFilePath, err))
 		}
@@ -404,6 +413,15 @@ func runScrubFileInSubmodule(
 		}
 		infof(flags, "Dry run: no changes made.\n")
 		return 0
+	}
+
+	// Write the replacement blob to the submodule's object store (execute path only).
+	if mode == "replace" {
+		var writeErr error
+		newBlobSHA, writeErr = git.HashObjectWrite(subCtx, subFilePath)
+		if writeErr != nil {
+			die(flags, cmd, 1, fmt.Sprintf("writing blob for %q in submodule: %v", subFilePath, writeErr))
+		}
 	}
 
 	// Capture old submodule HEAD before rewriting.

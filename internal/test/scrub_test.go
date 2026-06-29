@@ -6,9 +6,32 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
+
+// countLooseObjects returns the number of loose objects in the repo's object
+// store by parsing `git count-objects` output.
+func countLooseObjects(t *testing.T, dir string) int {
+	t.Helper()
+	cmd := exec.Command("git", "count-objects")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git count-objects: %v", err)
+	}
+	// Output format: "N objects, M kilobytes"
+	parts := strings.Fields(strings.TrimSpace(string(out)))
+	if len(parts) < 1 {
+		t.Fatal("unexpected git count-objects output")
+	}
+	n, err := strconv.Atoi(parts[0])
+	if err != nil {
+		t.Fatalf("parsing object count %q: %v", parts[0], err)
+	}
+	return n
+}
 
 // commitFileEnv creates a file, writes content, and commits it via safegit with
 // the given session env. Returns the new HEAD SHA.
@@ -1342,6 +1365,77 @@ func TestScrubFileJSON(t *testing.T) {
 	}
 	if result.OldHead == result.NewHead {
 		t.Errorf("old_head should differ from new_head: %s", result.OldHead)
+	}
+}
+
+// TestScrubFileDryRunNoObjectWrites verifies that --dry-run does not write any
+// new objects to the git object store.
+func TestScrubFileDryRunNoObjectWrites(t *testing.T) {
+	dir := newRepo(t)
+
+	commitFileEnv(t, dir, scrubEnv, "secret.txt", "sensitive_data\n", "add secret")
+
+	shas := revListReverse(t, dir)
+	initialSHA := shas[0]
+
+	// Write replacement and commit so tree is clean for scrub.
+	commitFileEnv(t, dir, scrubEnv, "secret.txt", "REDACTED\n", "commit replacement")
+
+	// Count loose objects before dry run.
+	countBefore := countLooseObjects(t, dir)
+
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv,
+		"--yes", "--dry-run", "scrub", "file",
+		"--from", initialSHA,
+		"--reason", "dry run object test",
+		"secret.txt",
+	)
+	if code != 0 {
+		t.Fatalf("scrub --dry-run failed (code %d): %s", code, stderr)
+	}
+
+	// Count loose objects after dry run -- must be unchanged.
+	countAfter := countLooseObjects(t, dir)
+	if countAfter != countBefore {
+		t.Errorf("dry run wrote objects: before=%d after=%d", countBefore, countAfter)
+	}
+}
+
+// TestScrubFileDryRunShowsSHA verifies that --dry-run --json output includes
+// a non-empty NewBlobSHA field.
+func TestScrubFileDryRunShowsSHA(t *testing.T) {
+	dir := newRepo(t)
+
+	commitFileEnv(t, dir, scrubEnv, "secret.txt", "sensitive_data\n", "add secret")
+
+	shas := revListReverse(t, dir)
+	initialSHA := shas[0]
+
+	// Write replacement and commit so tree is clean for scrub.
+	commitFileEnv(t, dir, scrubEnv, "secret.txt", "REDACTED\n", "commit replacement")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv,
+		"--yes", "--json", "--dry-run", "scrub", "file",
+		"--from", initialSHA,
+		"--reason", "dry run sha test",
+		"secret.txt",
+	)
+	if code != 0 {
+		t.Fatalf("scrub --dry-run --json failed (code %d): %s", code, stderr)
+	}
+
+	var result struct {
+		NewBlobSHA string `json:"new_blob_sha"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("failed to parse JSON: %v\nstdout: %s", err, stdout)
+	}
+	if result.NewBlobSHA == "" {
+		t.Error("new_blob_sha should be non-empty in dry-run JSON output")
+	}
+	// SHA should be a valid 40-char hex string.
+	if len(result.NewBlobSHA) != 40 {
+		t.Errorf("new_blob_sha has unexpected length: %d (%q)", len(result.NewBlobSHA), result.NewBlobSHA)
 	}
 }
 
