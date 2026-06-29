@@ -564,3 +564,89 @@ func TestReplaceInTreeRemoveNested(t *testing.T) {
 		t.Errorf("directory 'a' missing from root tree; entries: %v", rootNames)
 	}
 }
+
+func TestReplaceInTreeByBlobMapCacheBenefit(t *testing.T) {
+	// Create a repo with 3 commits sharing deep directory structure (a/b/c/).
+	// Only one blob changes between commits. The cache should accumulate entries
+	// for shared subtrees, avoiding redundant git calls.
+	dir := initTestRepo(t)
+
+	writeFile(t, dir, "a/b/c/file.txt", "v1\n")
+	writeFile(t, dir, "a/b/other.txt", "stable\n")
+	writeFile(t, dir, "root.txt", "root\n")
+	sha1 := commitAll(t, dir, "commit 1")
+	tree1 := commitTreeSHA(t, sha1)
+
+	writeFile(t, dir, "a/b/c/file.txt", "v2\n")
+	sha2 := commitAll(t, dir, "commit 2")
+	tree2 := commitTreeSHA(t, sha2)
+
+	writeFile(t, dir, "a/b/c/file.txt", "v3\n")
+	sha3 := commitAll(t, dir, "commit 3")
+	tree3 := commitTreeSHA(t, sha3)
+
+	// All three root trees should differ (the blob changed each time).
+	if tree1 == tree2 || tree2 == tree3 {
+		t.Fatal("expected distinct root tree SHAs for each commit")
+	}
+
+	ctx := context.Background()
+
+	// Build a blobMap that replaces v1, v2, and v3 with a single replacement.
+	origBlob1 := findBlobInTree(t, tree1, "a/b/c/file.txt")
+	origBlob2 := findBlobInTree(t, tree2, "a/b/c/file.txt")
+	origBlob3 := findBlobInTree(t, tree3, "a/b/c/file.txt")
+	newBlob := hashBlob(t, dir, "REDACTED\n")
+
+	blobMap := map[string]string{
+		origBlob1: newBlob,
+		origBlob2: newBlob,
+		origBlob3: newBlob,
+	}
+
+	cache := make(map[string]string)
+
+	// Process all three trees with a shared cache.
+	result1, err := replaceInTreeByBlobMap(ctx, tree1, blobMap, nil, cache)
+	if err != nil {
+		t.Fatalf("tree1: %v", err)
+	}
+	result2, err := replaceInTreeByBlobMap(ctx, tree2, blobMap, nil, cache)
+	if err != nil {
+		t.Fatalf("tree2: %v", err)
+	}
+	result3, err := replaceInTreeByBlobMap(ctx, tree3, blobMap, nil, cache)
+	if err != nil {
+		t.Fatalf("tree3: %v", err)
+	}
+
+	// All results should have the replacement blob.
+	for i, result := range []string{result1, result2, result3} {
+		got := findBlobInTree(t, result, "a/b/c/file.txt")
+		if got != newBlob {
+			t.Errorf("tree %d: a/b/c/file.txt blob = %s, want %s", i+1, got, newBlob)
+		}
+	}
+
+	// All three result trees should be identical: same blob replacement produces
+	// the same tree, and the same unchanged subtrees are shared.
+	if result1 != result2 || result2 != result3 {
+		t.Errorf("expected identical result trees, got %s, %s, %s", result1, result2, result3)
+	}
+
+	// The cache should have entries. At minimum: 3 root trees + the shared
+	// subtrees (a/, a/b/, a/b/c/ in various forms). The key point is that
+	// subtrees that didn't change (like the tree containing other.txt or
+	// root.txt entries) are cached and reused.
+	if len(cache) < 3 {
+		t.Errorf("expected cache to have at least 3 entries, got %d", len(cache))
+	}
+
+	// Verify that unchanged files are preserved.
+	if got := findBlobInTree(t, result1, "a/b/other.txt"); got == "" {
+		t.Error("a/b/other.txt missing from result")
+	}
+	if got := findBlobInTree(t, result1, "root.txt"); got == "" {
+		t.Error("root.txt missing from result")
+	}
+}
