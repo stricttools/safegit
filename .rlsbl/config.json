@@ -14,5 +14,18 @@
     }
   },
   "private": false,
-  "push_timeout": 120
+  "push_timeout": 120,
+  "batch_limits": {
+    "exclusions": [
+      {
+        "reason": "non-user-facing batch",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 11
+          }
+        ]
+      }
+    ]
+  }
 }
