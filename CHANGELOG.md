@@ -2,6 +2,42 @@
 
 # Changelog
 
+## 0.19.0
+
+New scan, author, and recipe commands; scrub verification; breaking rename of rewrite-author
+
+<details>
+<summary>Context</summary>
+
+This release adds five new commands and restructures the CLI around an author group.
+
+safegit scan is a top-level read-only search across git history with --target filtering (blobs, commits, tags, trailers, files). The author group provides safegit author list (identity auditing), safegit author check (deviation detection), and safegit author rewrite (renamed from the top-level rewrite-author, which now prints a deprecation error).
+
+safegit scrub run executes multi-operation scrub recipes from TOML files with independent and chained operations, per-operation scope/target filters, and --diff preview. safegit scrub verify reads a persistent policy file (auto-populated after scrubs) to continuously verify that removed secrets stay gone.
+
+Internally, all three history-rewriting commands now share a RewriteResult pipeline (Finalize method) that handles ref updates, index sync, cleanup, oplog, and push hints in one place. rewrite-author gains previously-missing index sync and object cleanup. Push hints now detect .rlsbl-managed repos. Tree caching reduces git plumbing calls during scrubs. Multi-line regex patterns now work correctly in scan/dry-run mode.
+
+</details>
+
+### Breaking
+
+- **Renamed.** `safegit rewrite-author` is now `safegit author rewrite`. The old name prints a deprecation error.
+
+### Features
+
+- **New command.** `safegit scan` searches git history for regex patterns across blobs, commit messages, tag annotations, trailers, and working tree files. Supports `--target` filtering, `--scope` glob, `--from`/`--entire-history` range, and `--json` output.
+- **New commands.** `safegit author list` enumerates all author/committer identities with commit counts. `safegit author check` compares identities against expected values and suggests rewrite commands for mismatches.
+- **New command.** `safegit scrub run` executes multi-operation scrub recipes from TOML files. Supports independent and chained operations (`depends_on`), per-operation `scope` and `target` filters, `--diff` preview mode, and overlap detection.
+- **New command.** `safegit scrub verify` checks that previously scrubbed patterns remain absent from git history. Reads from a persistent policy file auto-populated after scrub operations. Supports hand-written policies for preventive scanning.
+- **Unified post-rewrite pipeline.** All history-rewriting commands (`scrub file`, `scrub match`, `author rewrite`) now share a `RewriteResult.Finalize` method that handles index sync, working tree update, object pruning, oplog, verification, and push hints. This replaces per-command post-rewrite logic with a single consistent pipeline.
+- **Performance.** Scrub operations now cache tree objects during the rewrite walk, avoiding redundant `git ls-tree` and `git mktree` calls for unchanged subtrees.
+
+### Fixes
+
+- **Bug fix.** `author rewrite` now updates identity-bearing trailers (`Co-authored-by`, `Signed-off-by`, `Reviewed-by`, `Acked-by`) alongside commit header fields.
+- **Bug fix.** `author rewrite` now syncs the working tree index and prunes old objects after rewriting, matching the behavior of scrub commands. Previously the working tree could be stale and old objects would linger.
+- **Bug fix.** Pattern scanning now matches on full blob content instead of line-by-line, fixing multi-line regex patterns that previously produced zero matches in dry-run mode.
+
 ## 0.18.4
 
 Fix commit --amend on root commits.
@@ -19,6 +55,15 @@ amend.go rejected root commits (no parent) even though reword and CommitTree alr
 
 ## 0.18.3
 
+Fix rewrite-author --quiet, add ScopeFilter to dry-run JSON, submodule-aware range scanning infrastructure.
+
+<details>
+<summary>Context</summary>
+
+Loose ends from v0.18.2: rewrite-author summary had unconverted fmt.Printf calls, dry-run JSON lost the --scope glob value, and ScanObjectsInRangeWithDir was added for future submodule range-scoping.
+
+</details>
+
 ### Features
 
 - **Submodule-aware range-scoped scanning.** Added `ScanObjectsInRangeWithDir` and `CatFileBatchSHAsWithDir` for future submodule range-scoped dry-run support.
@@ -28,6 +73,15 @@ amend.go rejected root commits (no parent) even though reword and CommitTree alr
 - **`rewrite-author` respects `--quiet`.** Summary output is suppressed when `--quiet` is passed.
 
 ## 0.18.2
+
+Add rewrite-author --json, range-scoped dry-run scanning, JSON error safety net, splitNonEmpty consolidation.
+
+<details>
+<summary>Context</summary>
+
+Range-scoped dry-run uses git rev-list --objects to scan only range-reachable objects instead of the entire store. rewrite-author now supports --json for both execute and dry-run modes. die() emits JSON error objects when --json is active, and mustGitDir routes through die() for coverage. splitNonEmpty consolidated from two implementations into a single exported git.SplitNonEmpty.
+
+</details>
 
 ### Features
 
@@ -41,11 +95,29 @@ amend.go rejected root commits (no parent) even though reword and CommitTree alr
 
 ## 0.18.1
 
+Fix push test CI failure on ubuntu-latest.
+
+<details>
+<summary>Context</summary>
+
+Bare remotes in tests used system default branch (master on CI) while local repos used main. Fixed by setting --initial-branch=main on all bare inits.
+
+</details>
+
 ### Fixes
 
 - **Fixed CI test failure for push commands.** Tests now use explicit branch names for bare remote verification, fixing failures on systems where the default branch is not `main`.
 
 ## 0.18.0
+
+Add global --json flag, scrub JSON output, explicit push mode flags.
+
+<details>
+<summary>Context</summary>
+
+Push now requires an explicit mode flag (--only-head, --only-branches, --only-tags, --both-branches-and-tags) instead of implicit current-branch default and refspec positional args. Scrub match and scrub file support --json for machine-readable output (commit SHA mapping, tag rewrites). This unblocks rlsbl release scrub (upstream consumer). Scrub commands now respect --quiet. All post-rewrite suggestions route through safegit push.
+
+</details>
 
 ### Breaking
 
@@ -59,11 +131,29 @@ amend.go rejected root commits (no parent) even though reword and CommitTree alr
 
 ## 0.17.2
 
+Sync submodule working trees after scrub history rewrites.
+
+<details>
+<summary>Context</summary>
+
+v0.17.1 added working-tree sync for the parent repo but missed submodule child repos. Submodule files on disk could still contain pre-scrub secrets.
+
+</details>
+
 ### Fixes
 
 - **Scrub now syncs submodule working trees after rewriting history.** Previously only the parent repo's working tree was updated; submodule files on disk could still contain pre-scrub content.
 
 ## 0.17.1
+
+Fix scrub data loss for tracked+gitignored files, fix doctor dry-run submodule reporting, add unlock --dry-run.
+
+<details>
+<summary>Context</summary>
+
+The v0.16.0 working-tree sync (read-tree --reset -u) could overwrite tracked+gitignored files (e.g., config files with runtime secrets that were committed by mistake then gitignored). SyncMainIndexWithWorktree now saves and restores their content, then untracks them. Also fixed doctor --fix --dry-run not reporting submodule state, and added --dry-run support to unlock.
+
+</details>
 
 ### Features
 
@@ -75,6 +165,15 @@ amend.go rejected root commits (no parent) even though reword and CommitTree alr
 - **Scrub preserves tracked+gitignored files.** When a committed-then-gitignored file is scrubbed, the on-disk content is preserved and the file is automatically untracked. Prevents data loss for config files with runtime secrets.
 
 ## 0.17.0
+
+Rename --force-push to --force-with-lease, remove --push from rewrite-author, fix doctor stale lock cleanup.
+
+<details>
+<summary>Context</summary>
+
+Loose ends from the v0.16.0 --force removal: the --force-push flag name was misleading (it triggers --force-with-lease), rewrite-author --push bypassed safegit's push pipeline, and doctor --fix didn't clean stale locks in the main repo. Also added integration tests for unlock (previously untested) and doctor stale lock cleanup.
+
+</details>
 
 ### Breaking
 
@@ -88,11 +187,29 @@ amend.go rejected root commits (no parent) even though reword and CommitTree alr
 
 ## 0.16.1
 
+Fix macOS symlink bug in submodule detection.
+
+<details>
+<summary>Context</summary>
+
+DetectParent compared symlink-resolved paths from git with unresolved paths from os.Getwd(), causing filepath.Rel to produce incorrect relative paths on macOS where /var -> /private/var. This broke autobump and push-hook-cascade on macOS since v0.15.0.
+
+</details>
+
 ### Fixes
 
 - **Fixed macOS symlink bug in submodule detection.** `DetectParent` now resolves symlinks on both `parentWorkTree` and `cwd`, fixing autobump and push-hook-cascade on macOS where `/var` is a symlink to `/private/var`.
 
 ## 0.16.0
+
+Remove global --force flag, add --yes and --mangle, sync working tree after scrub, use --force-with-lease for pushes.
+
+<details>
+<summary>Context</summary>
+
+The global --force flag was overloaded across 10+ use sites with 5+ distinct meanings. This release replaces it with explicit per-purpose mechanisms: --yes for confirmation prompts, unconditional dirty-tree rejection, no coordination guard bypass, no hook skip, no gitignore override. Push now uses --force-with-lease (safe force push) instead of --force (destructive). Scrub operations now sync the working tree after rewriting history, so secrets no longer linger on disk. New --mangle flag for scrub match replaces matched content with crypto-random printable ASCII of the same length.
+
+</details>
 
 ### Breaking
 
@@ -107,11 +224,15 @@ amend.go rejected root commits (no parent) even though reword and CommitTree alr
 
 ## 0.15.3
 
+Fix macOS symlink path resolution in submodule discovery.
+
 ### Fixes
 
 - **Fix:** submodule path resolution now handles macOS `/tmp` symlinks correctly.
 
 ## 0.15.2
+
+Fix macOS CI: use portable GIT_CONFIG env vars instead of --global for file transport allow.
 
 ### Fixes
 
@@ -119,11 +240,22 @@ amend.go rejected root commits (no parent) even though reword and CommitTree alr
 
 ## 0.15.1
 
+Fix submodule test infrastructure for CI environments with restricted file transport.
+
 ### Fixes
 
 - **Fix:** submodule integration tests now pass on CI environments that restrict `protocol.file.allow`.
 
 ## 0.15.0
+
+Full submodule support: commit/undo/redo inside submodules, auto-bump parent pointer, scrub auto-recurse, push hook cascade, doctor cleanup.
+
+<details>
+<summary>Context</summary>
+
+safegit previously refused to operate in repos with submodules. This release removes that limitation and adds deep submodule integration across all commands.
+
+</details>
 
 ### Features
 
@@ -139,11 +271,15 @@ amend.go rejected root commits (no parent) even though reword and CommitTree alr
 
 ## 0.14.2
 
+Improved documentation descriptions for AI discoverability.
+
 ### Fixes
 
 - **Improved documentation descriptions.** Expanded CLI help strings and package doc comments for better AI discoverability.
 
 ## 0.14.1
+
+Rewrite-author lock, scrub match --scope flag, CLAUDE.md update.
 
 ### Features
 
@@ -154,6 +290,21 @@ amend.go rejected root commits (no parent) even though reword and CommitTree alr
 - **Rewrite-author now uses the repo-wide rewrite lock.** Prevents concurrent rewrite-author and scrub operations from corrupting history.
 
 ## 0.14.0
+
+New scrub match command for pattern-based secret removal with surgical cleanup.
+
+<details>
+<summary>Context</summary>
+
+Major release driven by a real secret leak incident. A user ran scrub on leaked API keys and found secrets persisted in reflog entries and unreachable objects.
+
+New: safegit scrub match --pattern <regex> --replace <text> --reason <text> --entire-history searches all git objects (blobs, commit messages, tag annotations) for a pattern and replaces matches. Includes surgical post-rewrite cleanup (tainted reflog entries expired, unreachable objects pruned) and re-scan verification that hard-errors if any matches survive.
+
+Breaking: safegit scrub is now a command group. The old 'safegit scrub <file>' becomes 'safegit scrub file <file>'. TreeEntry.BlobSHA renamed to TreeEntry.SHA.
+
+Also: shared walkAndRewrite extraction, ParseCommit dedup in verification, branch ref verification, streaming object enumeration, new scan package.
+
+</details>
 
 ### Breaking
 
@@ -174,6 +325,19 @@ amend.go rejected root commits (no parent) even though reword and CommitTree alr
 
 ## 0.13.0
 
+Breaking: --from is now inclusive. Scrub safety improvements.
+
+<details>
+<summary>Context</summary>
+
+Three scrub improvements:
+
+- --from is now inclusive: the commit you point to IS rewritten, not just everything after it. An ancestry guard rejects non-ancestral --from commits.
+- Dirty-tree guard prevents scrub from clobbering staged changes (use --force to override). SyncMainIndex after rewriting keeps git status clean.
+- Post-rewrite verification now detects tags that still point to pre-rewrite commits.
+
+</details>
+
 ### Breaking
 
 - **Breaking: --from is now inclusive.** `safegit scrub --from X` now includes commit X in the rewrite. Previously it started after X (exclusive). An ancestry guard now rejects --from commits not ancestral to HEAD.
@@ -184,6 +348,19 @@ amend.go rejected root commits (no parent) even though reword and CommitTree alr
 - **Scrub verification: stale tag detection.** Post-rewrite verification now catches tags that still point to pre-rewrite commits, detecting `updateRefs` failures.
 
 ## 0.12.0
+
+Session-scoped undo, redo command, and scrub command for surgical history rewriting.
+
+<details>
+<summary>Context</summary>
+
+Three new features aimed at multi-session safety and sensitive content cleanup:
+
+- safegit undo is now session-scoped by default (requires CLAUDE_CODE_SESSION_ID), preventing accidental cross-session rollbacks. --bypass-session restores old behavior.
+- safegit redo explicitly restores what undo removed, with one-shot design to prevent oscillation.
+- safegit scrub <file> --from <commit> --reason <text> surgically replaces or removes a file's blob across history, with post-rewrite verification, annotated tag rewriting, and confirmation prompt.
+
+</details>
 
 ### Features
 
