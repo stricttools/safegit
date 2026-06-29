@@ -1,0 +1,18 @@
+# Version bump type: patch, minor, major, hotfix, or prerelease
+bump = "patch"
+# Short description of this release (required)
+description = "Fix dry-run and preview modes that were writing objects to the git store"
+# Optional context explaining why these changes were made
+context = """
+Three dry-run/preview code paths were writing real objects to the git object store, \
+contradicting their documented read-only behavior. scrub run --diff wrote replacement blobs \
+via HashObjectWriteBytes. scrub file --dry-run wrote the replacement blob before the dry-run \
+gate. Both are now truly read-only. Additionally, scrub run --dry-run is a new mode showing \
+per-operation match counts without any writes or lock acquisition.
+"""
+# Pre-release identifier: alpha, beta, rc, or stable
+# preid = ""
+# Set to true to generate a blog post for this release
+# blog = false
+include = ["go", "docker"]
+exclude = []
