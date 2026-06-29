@@ -40,6 +40,11 @@ func gitRun(t *testing.T, dir string, args ...string) {
 	}
 }
 
+// entireHistoryOpts returns ScanOpts for a full history scan with no custom git dir.
+func entireHistoryOpts() ScanOpts {
+	return ScanOpts{EntireHistory: true}
+}
+
 func TestScanObjectsFindsBlob(t *testing.T) {
 	dir := initRepo(t)
 	testutil.Chdir(t, dir)
@@ -52,7 +57,7 @@ func TestScanObjectsFindsBlob(t *testing.T) {
 	ctx := context.Background()
 	pattern := regexp.MustCompile(`SECRET_123`)
 
-	results, err := ScanObjects(ctx, pattern)
+	results, err := ScanObjects(ctx, pattern, entireHistoryOpts())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +105,7 @@ func TestScanObjectsFindsCommitMessage(t *testing.T) {
 	ctx := context.Background()
 	pattern := regexp.MustCompile(`SECRET_123`)
 
-	results, err := ScanObjects(ctx, pattern)
+	results, err := ScanObjects(ctx, pattern, entireHistoryOpts())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +147,7 @@ func TestScanObjectsSkipsBinary(t *testing.T) {
 	ctx := context.Background()
 	pattern := regexp.MustCompile(`SECRET_123`)
 
-	results, err := ScanObjects(ctx, pattern)
+	results, err := ScanObjects(ctx, pattern, entireHistoryOpts())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +185,7 @@ func TestScanObjectsFindsUnreachable(t *testing.T) {
 	ctx := context.Background()
 	pattern := regexp.MustCompile(`SECRET_123`)
 
-	results, err := ScanObjects(ctx, pattern)
+	results, err := ScanObjects(ctx, pattern, entireHistoryOpts())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +213,7 @@ func TestScanObjectsNoMatch(t *testing.T) {
 	ctx := context.Background()
 	pattern := regexp.MustCompile(`SECRET_123`)
 
-	results, err := ScanObjects(ctx, pattern)
+	results, err := ScanObjects(ctx, pattern, entireHistoryOpts())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -218,6 +223,15 @@ func TestScanObjectsNoMatch(t *testing.T) {
 	}
 	if results.Scanned == 0 {
 		t.Error("expected scanned > 0")
+	}
+}
+
+func TestScanObjectsErrorOnEmptyOpts(t *testing.T) {
+	ctx := context.Background()
+	pattern := regexp.MustCompile(`test`)
+	_, err := ScanObjects(ctx, pattern, ScanOpts{})
+	if err == nil {
+		t.Fatal("expected error when both EntireHistory and FromSHA are empty")
 	}
 }
 

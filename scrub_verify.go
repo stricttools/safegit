@@ -263,7 +263,7 @@ func verifyScrub(ctx context.Context, shaMap map[string]string, filePath string,
 // scrub rewrite and cleanup. If any matches survive, it returns an error
 // listing where they were found. A nil return means the secret is fully gone.
 func verifySecretRemoved(ctx context.Context, pattern *regexp.Regexp) error {
-	results, err := scan.ScanObjects(ctx, pattern)
+	results, err := scan.ScanObjects(ctx, pattern, scan.ScanOpts{EntireHistory: true})
 	if err != nil {
 		return fmt.Errorf("re-scan failed: %w", err)
 	}

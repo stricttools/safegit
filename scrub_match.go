@@ -146,12 +146,13 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 // matches the glob are shown.
 func scrubMatchDryRun(ctx context.Context, flags globalFlags, cmd string, compiledPattern *regexp.Regexp, scope *string, gitDir string, pattern string, fromSHA string, entireHistory bool) int {
 	infof(flags, "Scanning all objects...\n")
-	results, err := scan.ScanObjectsInRange(ctx, compiledPattern, fromSHA, entireHistory)
+	scanOpts := scan.ScanOpts{FromSHA: fromSHA, EntireHistory: entireHistory}
+	results, err := scan.ScanObjects(ctx, compiledPattern, scanOpts)
 	if err != nil {
 		die(flags, cmd, 1, fmt.Sprintf("scanning objects: %v", err))
 	}
 
-	if err := scan.AddAttribution(ctx, results); err != nil {
+	if err := scan.AddAttribution(ctx, results, scanOpts); err != nil {
 		die(flags, cmd, 1, fmt.Sprintf("adding attribution: %v", err))
 	}
 
@@ -176,12 +177,13 @@ func scrubMatchDryRun(ctx context.Context, flags globalFlags, cmd string, compil
 			if !sub.Initialized {
 				continue
 			}
-			subScan, err := scan.ScanObjectsInRangeWithDir(ctx, compiledPattern, sub.GitDir, sub.WorkTreePath, sub.RelativePath, "" /* fromSHA */, true /* entireHistory */)
+			subOpts := scan.ScanOpts{GitDir: sub.GitDir, WorkTree: sub.WorkTreePath, SubmodulePath: sub.RelativePath, EntireHistory: true}
+			subScan, err := scan.ScanObjects(ctx, compiledPattern, subOpts)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "warning: scanning submodule %s: %v\n", sub.RelativePath, err)
 				continue
 			}
-			if err := scan.AddAttributionWithDir(ctx, subScan, sub.GitDir, sub.WorkTreePath); err != nil {
+			if err := scan.AddAttribution(ctx, subScan, subOpts); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: adding attribution for submodule %s: %v\n", sub.RelativePath, err)
 			}
 			if len(subScan.Matches) > 0 {
@@ -421,7 +423,8 @@ func scrubMatchExecute(
 ) int {
 	// Scan to find all matches
 	infof(flags, "Scanning objects...\n")
-	results, err := scan.ScanObjects(ctx, compiledPattern)
+	parentOpts := scan.ScanOpts{EntireHistory: true}
+	results, err := scan.ScanObjects(ctx, compiledPattern, parentOpts)
 	if err != nil {
 		die(flags, cmd, 1, fmt.Sprintf("scanning objects: %v", err))
 	}
@@ -448,7 +451,8 @@ func scrubMatchExecute(
 			if !sub.Initialized {
 				continue
 			}
-			subResults, err := scan.ScanObjectsWithDir(ctx, compiledPattern, sub.GitDir, sub.WorkTreePath, sub.RelativePath)
+			subCheckOpts := scan.ScanOpts{GitDir: sub.GitDir, WorkTree: sub.WorkTreePath, SubmodulePath: sub.RelativePath, EntireHistory: true}
+			subResults, err := scan.ScanObjects(ctx, compiledPattern, subCheckOpts)
 			if err != nil {
 				continue
 			}
@@ -511,7 +515,8 @@ func scrubMatchExecute(
 				continue
 			}
 		}
-		subResults, err := scan.ScanObjectsWithDir(ctx, compiledPattern, sub.GitDir, sub.WorkTreePath, sub.RelativePath)
+		subScanOpts := scan.ScanOpts{GitDir: sub.GitDir, WorkTree: sub.WorkTreePath, SubmodulePath: sub.RelativePath, EntireHistory: true}
+		subResults, err := scan.ScanObjects(ctx, compiledPattern, subScanOpts)
 		if err != nil {
 			die(flags, cmd, 1, fmt.Sprintf("scanning submodule %s: %v", sub.RelativePath, err))
 		}
@@ -925,7 +930,8 @@ func scrubMatchExecute(
 					subScope = nil
 				}
 			}
-			subResults, err := scan.ScanObjectsWithDir(ctx, compiledPattern, sr.sub.GitDir, sr.sub.WorkTreePath, sr.sub.RelativePath)
+			subVerifyOpts := scan.ScanOpts{GitDir: sr.sub.GitDir, WorkTree: sr.sub.WorkTreePath, SubmodulePath: sr.sub.RelativePath, EntireHistory: true}
+			subResults, err := scan.ScanObjects(ctx, compiledPattern, subVerifyOpts)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "CRITICAL: re-scan submodule %s failed: %v\n", sr.sub.RelativePath, err)
 				exitCode = 1
@@ -940,7 +946,7 @@ func scrubMatchExecute(
 					remaining = append(remaining, m)
 				}
 				if subScope != nil && len(remaining) > 0 {
-					if err := scan.AddAttributionWithDir(ctx, subResults, sr.sub.GitDir, sr.sub.WorkTreePath); err == nil {
+					if err := scan.AddAttribution(ctx, subResults, subVerifyOpts); err == nil {
 						var filtered []scan.Match
 						for _, m := range remaining {
 							if m.ObjectType == "blob" && !matchScope(*subScope, m.Path) {
@@ -1131,51 +1137,10 @@ func buildScopedBlobSetWithDir(ctx context.Context, scope, gitDir, workTree stri
 // checking each tag's annotation body for the pattern and rewriting if matched.
 // Returns the count of tags whose annotations were rewritten.
 func rewriteTagAnnotations(ctx context.Context, flags globalFlags, cmd string, compiledPattern *regexp.Regexp, replaceBytes []byte, mangleMode bool, shaMap map[string]string) ([]TagRewrite, int) {
-	out, _, err := git.Run(ctx, "for-each-ref", "--format=%(refname) %(objecttype) %(objectname)", "refs/tags/")
-	if err != nil {
-		if flags.verbose {
-			fmt.Fprintf(os.Stderr, "warning: failed to list tags for annotation rewriting: %v\n", err)
-		}
-		return nil, 0
-	}
-
-	var tagRewrites []TagRewrite
-	tagsRewritten := 0
-	lines := git.SplitNonEmpty(out)
-	for _, line := range lines {
-		parts := strings.SplitN(line, " ", 3)
-		if len(parts) != 3 {
-			continue
-		}
-		refname, objecttype, objectname := parts[0], parts[1], parts[2]
-
-		if objecttype != "tag" {
-			continue
-		}
-
-		// Read the tag object
-		tagContent, _, err := git.Run(ctx, "cat-file", "-p", objectname)
-		if err != nil {
-			if flags.verbose {
-				fmt.Fprintf(os.Stderr, "warning: failed to read tag object %s: %v\n", objectname, err)
-			}
-			continue
-		}
-
-		// Split into header and body
-		headerEnd := strings.Index(tagContent, "\n\n")
-		if headerEnd < 0 {
-			// No body -- nothing to search
-			continue
-		}
-		header := tagContent[:headerEnd]
-		body := tagContent[headerEnd+2:]
-
-		// Check if body matches the pattern
+	tagRewrites, tagsRewritten, err := forEachAnnotatedTag(ctx, shaMap, func(refname, header, body string) (string, error) {
 		if !compiledPattern.MatchString(body) {
-			continue
+			return body, nil
 		}
-
 		var newBody string
 		if mangleMode {
 			newBody = compiledPattern.ReplaceAllStringFunc(body, func(s string) string {
@@ -1184,30 +1149,16 @@ func rewriteTagAnnotations(ctx context.Context, flags globalFlags, cmd string, c
 		} else {
 			newBody = compiledPattern.ReplaceAllString(body, string(replaceBytes))
 		}
-		if newBody == body {
-			continue
-		}
-
-		// Reconstruct tag object and write it
-		newContent := header + "\n\n" + newBody
-		newTagSHA, _, err := git.RunWithEnvStdin(ctx, nil, []byte(newContent), "hash-object", "-t", "tag", "-w", "--stdin")
-		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("writing rewritten tag annotation for %s: %v", refname, err))
-		}
-		newTagSHA = strings.TrimSpace(newTagSHA)
-
-		// Update the tag ref
-		if err := git.UpdateRef(ctx, refname, newTagSHA, objectname); err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("updating tag ref %s after annotation rewrite: %v", refname, err))
-		}
-
-		tagRewrites = append(tagRewrites, TagRewrite{Refname: refname, OldSHA: objectname, NewSHA: newTagSHA, Annotated: true})
-		tagsRewritten++
-		if flags.verbose {
-			fmt.Fprintf(os.Stderr, "  tag annotation %s: %s -> %s\n", refname, shortSHA(objectname), shortSHA(newTagSHA))
+		return newBody, nil
+	})
+	if err != nil {
+		die(flags, cmd, 1, fmt.Sprintf("rewriting tag annotations: %v", err))
+	}
+	if tagsRewritten > 0 && flags.verbose {
+		for _, tr := range tagRewrites {
+			fmt.Fprintf(os.Stderr, "  tag annotation %s: %s -> %s\n", tr.Refname, shortSHA(tr.OldSHA), shortSHA(tr.NewSHA))
 		}
 	}
-
 	return tagRewrites, tagsRewritten
 }
 
@@ -1238,7 +1189,8 @@ func verifySecretRemovedScoped(ctx context.Context, pattern *regexp.Regexp, scop
 		return verifySecretRemoved(ctx, pattern)
 	}
 
-	results, err := scan.ScanObjects(ctx, pattern)
+	verifyOpts := scan.ScanOpts{EntireHistory: true}
+	results, err := scan.ScanObjects(ctx, pattern, verifyOpts)
 	if err != nil {
 		return fmt.Errorf("re-scan failed: %w", err)
 	}
@@ -1247,7 +1199,7 @@ func verifySecretRemovedScoped(ctx context.Context, pattern *regexp.Regexp, scop
 	}
 
 	// Add attribution so blob matches have paths.
-	if err := scan.AddAttribution(ctx, results); err != nil {
+	if err := scan.AddAttribution(ctx, results, verifyOpts); err != nil {
 		return fmt.Errorf("adding attribution for verification: %w", err)
 	}
 

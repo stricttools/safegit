@@ -23,8 +23,9 @@ func TestAddAttribution(t *testing.T) {
 
 	ctx := context.Background()
 	pattern := regexp.MustCompile(`SECRET_ATTR_123`)
+	opts := entireHistoryOpts()
 
-	results, err := ScanObjects(ctx, pattern)
+	results, err := ScanObjects(ctx, pattern, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +49,7 @@ func TestAddAttribution(t *testing.T) {
 	}
 
 	// Run attribution.
-	if err := AddAttribution(ctx, results); err != nil {
+	if err := AddAttribution(ctx, results, opts); err != nil {
 		t.Fatal(err)
 	}
 
@@ -85,13 +86,14 @@ func TestAddAttributionSubdirectory(t *testing.T) {
 
 	ctx := context.Background()
 	pattern := regexp.MustCompile(`SECRET_SUBDIR_456`)
+	opts := entireHistoryOpts()
 
-	results, err := ScanObjects(ctx, pattern)
+	results, err := ScanObjects(ctx, pattern, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := AddAttribution(ctx, results); err != nil {
+	if err := AddAttribution(ctx, results, opts); err != nil {
 		t.Fatal(err)
 	}
 
@@ -126,8 +128,9 @@ func TestAddAttributionUnreachableBlob(t *testing.T) {
 
 	ctx := context.Background()
 	pattern := regexp.MustCompile(`SECRET_ORPHAN_789`)
+	opts := entireHistoryOpts()
 
-	results, err := ScanObjects(ctx, pattern)
+	results, err := ScanObjects(ctx, pattern, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +147,7 @@ func TestAddAttributionUnreachableBlob(t *testing.T) {
 		t.Fatal("expected unreachable blob match")
 	}
 
-	if err := AddAttribution(ctx, results); err != nil {
+	if err := AddAttribution(ctx, results, opts); err != nil {
 		t.Fatal(err)
 	}
 
@@ -160,7 +163,7 @@ func TestAddAttributionUnreachableBlob(t *testing.T) {
 func TestAddAttributionNilResults(t *testing.T) {
 	ctx := context.Background()
 	// Should not panic or error on nil results.
-	if err := AddAttribution(ctx, nil); err != nil {
+	if err := AddAttribution(ctx, nil, ScanOpts{}); err != nil {
 		t.Errorf("AddAttribution(nil) = %v, want nil", err)
 	}
 }
@@ -174,8 +177,9 @@ func TestAddAttributionNoBlobs(t *testing.T) {
 
 	ctx := context.Background()
 	pattern := regexp.MustCompile(`SECRET_NOMATCH_111`)
+	opts := entireHistoryOpts()
 
-	results, err := ScanObjects(ctx, pattern)
+	results, err := ScanObjects(ctx, pattern, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +191,7 @@ func TestAddAttributionNoBlobs(t *testing.T) {
 		}
 	}
 
-	if err := AddAttribution(ctx, results); err != nil {
+	if err := AddAttribution(ctx, results, opts); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -413,13 +417,14 @@ func TestAddAttributionCommitSHAIsValid(t *testing.T) {
 
 	ctx := context.Background()
 	pattern := regexp.MustCompile(`SECRET_VALID_222`)
+	opts := entireHistoryOpts()
 
-	results, err := ScanObjects(ctx, pattern)
+	results, err := ScanObjects(ctx, pattern, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := AddAttribution(ctx, results); err != nil {
+	if err := AddAttribution(ctx, results, opts); err != nil {
 		t.Fatal(err)
 	}
 

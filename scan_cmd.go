@@ -214,13 +214,14 @@ func runScan(flags globalFlags, kwargs map[string]interface{}) int {
 
 	// Scan git objects.
 	infof(flags, "Scanning objects...\n")
-	results, err := scan.ScanObjectsInRange(ctx, compiledPattern, fromSHA, entireHistory)
+	scanOpts := scan.ScanOpts{FromSHA: fromSHA, EntireHistory: entireHistory}
+	results, err := scan.ScanObjects(ctx, compiledPattern, scanOpts)
 	if err != nil {
 		die(flags, cmd, 1, fmt.Sprintf("scanning objects: %v", err))
 	}
 
 	// Enrich blob matches with file paths.
-	if err := scan.AddAttribution(ctx, results); err != nil {
+	if err := scan.AddAttribution(ctx, results, scanOpts); err != nil {
 		die(flags, cmd, 1, fmt.Sprintf("adding attribution: %v", err))
 	}
 
