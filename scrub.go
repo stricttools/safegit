@@ -185,11 +185,12 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	// Track old blob SHAs that get replaced, for post-cleanup verification.
 	oldBlobSHAs := make(map[string]bool)
 
+	treeCache := make(map[string]string)
 	shaMap, rewrittenCount, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
 		// Look up the old blob SHA at the target path before replacing.
 		oldBlobSHA := lookupBlobAtPath(ctx, info.Tree, filePath)
 
-		newTreeSHA, err := replaceInTree(ctx, info.Tree, filePath, newBlobSHA)
+		newTreeSHA, err := replaceInTree(ctx, info.Tree, filePath, newBlobSHA, treeCache)
 		if err != nil {
 			return CommitTransform{}, fmt.Errorf("replacing in tree for commit %s: %w", sha, err)
 		}
@@ -421,9 +422,10 @@ func runScrubFileInSubmodule(
 
 	// Walk and rewrite submodule commits.
 	oldSubBlobSHAs := make(map[string]bool)
+	subTreeCache := make(map[string]string)
 	subShaMap, subRewrittenCount, err := walkAndRewrite(ctx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
 		oldBlobSHA := lookupBlobAtPath(ctx, info.Tree, subFilePath)
-		newTreeSHA, err := replaceInTree(ctx, info.Tree, subFilePath, newBlobSHA)
+		newTreeSHA, err := replaceInTree(ctx, info.Tree, subFilePath, newBlobSHA, subTreeCache)
 		if err != nil {
 			return CommitTransform{}, fmt.Errorf("replacing in tree for commit %s: %w", sha, err)
 		}
@@ -498,8 +500,9 @@ func runScrubFileInSubmodule(
 	infof(flags, "Rewriting %d parent commits (gitlink updates)...\n", len(parentSHAs))
 
 	// Walk parent, only updating gitlinks (no blob changes, no message changes).
+	parentTreeCache := make(map[string]string)
 	parentShaMap, parentRewrittenCount, err := walkAndRewrite(ctx, parentSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
-		newTreeSHA, err := replaceInTreeByBlobMap(ctx, info.Tree, nil, gitlinkMap)
+		newTreeSHA, err := replaceInTreeByBlobMap(ctx, info.Tree, nil, gitlinkMap, parentTreeCache)
 		if err != nil {
 			return CommitTransform{}, fmt.Errorf("updating gitlinks in tree for commit %s: %w", sha, err)
 		}

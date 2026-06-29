@@ -13,7 +13,11 @@ import (
 // mutated. If filePath does not exist in the tree, the original treeSHA is
 // returned unchanged (no error) so the scrub walker can skip commits where
 // the file is absent.
-func replaceInTree(ctx context.Context, treeSHA string, filePath string, newBlobSHA string) (string, error) {
+func replaceInTree(ctx context.Context, treeSHA string, filePath string, newBlobSHA string, cache map[string]string) (string, error) {
+	if cached, ok := cache[treeSHA]; ok {
+		return cached, nil
+	}
+
 	segments := strings.SplitN(filePath, "/", 2)
 	name := segments[0]
 
@@ -32,6 +36,7 @@ func replaceInTree(ctx context.Context, treeSHA string, filePath string, newBlob
 
 	// File not found in this tree level -- return original tree unchanged.
 	if idx < 0 {
+		cache[treeSHA] = treeSHA
 		return treeSHA, nil
 	}
 
@@ -40,14 +45,16 @@ func replaceInTree(ctx context.Context, treeSHA string, filePath string, newBlob
 		subtreeEntry := entries[idx]
 		if subtreeEntry.ObjectType != "tree" {
 			// Path component exists but is not a tree -- file not found.
+			cache[treeSHA] = treeSHA
 			return treeSHA, nil
 		}
-		newSubtreeSHA, err := replaceInTree(ctx, subtreeEntry.SHA, segments[1], newBlobSHA)
+		newSubtreeSHA, err := replaceInTree(ctx, subtreeEntry.SHA, segments[1], newBlobSHA, cache)
 		if err != nil {
 			return "", err
 		}
 		// If the subtree didn't change (file not found deeper), propagate.
 		if newSubtreeSHA == subtreeEntry.SHA {
+			cache[treeSHA] = treeSHA
 			return treeSHA, nil
 		}
 		entries[idx].SHA = newSubtreeSHA
@@ -66,6 +73,7 @@ func replaceInTree(ctx context.Context, treeSHA string, filePath string, newBlob
 	if err != nil {
 		return "", fmt.Errorf("mktree: %w", err)
 	}
+	cache[treeSHA] = newTreeSHA
 	return newTreeSHA, nil
 }
 
@@ -106,7 +114,11 @@ func lookupBlobAtPath(ctx context.Context, treeSHA string, filePath string) stri
 // into. Gitlink entries (submodules, ObjectType "commit") are passed through
 // unchanged unless gitlinkMap is non-nil and contains a mapping for the SHA.
 // If no entries match, the original treeSHA is returned unchanged.
-func replaceInTreeByBlobMap(ctx context.Context, treeSHA string, blobMap map[string]string, gitlinkMap map[string]string) (string, error) {
+func replaceInTreeByBlobMap(ctx context.Context, treeSHA string, blobMap map[string]string, gitlinkMap map[string]string, cache map[string]string) (string, error) {
+	if cached, ok := cache[treeSHA]; ok {
+		return cached, nil
+	}
+
 	entries, err := git.LsTree(ctx, treeSHA)
 	if err != nil {
 		return "", fmt.Errorf("ls-tree %s: %w", treeSHA, err)
@@ -121,7 +133,7 @@ func replaceInTreeByBlobMap(ctx context.Context, treeSHA string, blobMap map[str
 				changed = true
 			}
 		case "tree":
-			newSubSHA, err := replaceInTreeByBlobMap(ctx, e.SHA, blobMap, gitlinkMap)
+			newSubSHA, err := replaceInTreeByBlobMap(ctx, e.SHA, blobMap, gitlinkMap, cache)
 			if err != nil {
 				return "", err
 			}
@@ -142,6 +154,7 @@ func replaceInTreeByBlobMap(ctx context.Context, treeSHA string, blobMap map[str
 	}
 
 	if !changed {
+		cache[treeSHA] = treeSHA
 		return treeSHA, nil
 	}
 
@@ -149,5 +162,6 @@ func replaceInTreeByBlobMap(ctx context.Context, treeSHA string, blobMap map[str
 	if err != nil {
 		return "", fmt.Errorf("mktree: %w", err)
 	}
+	cache[treeSHA] = newTreeSHA
 	return newTreeSHA, nil
 }

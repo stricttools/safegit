@@ -660,10 +660,11 @@ func scrubMatchExecute(
 		}
 
 		subMessagesModified := 0
+		subTreeCache := make(map[string]string)
 		subShaMap, subRewrittenCount, err := walkAndRewrite(ctx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
 			var xform CommitTransform
 
-			newTreeSHA, err := replaceInTreeByBlobMap(ctx, info.Tree, subBlobMap, nil)
+			newTreeSHA, err := replaceInTreeByBlobMap(ctx, info.Tree, subBlobMap, nil, subTreeCache)
 			if err != nil {
 				return CommitTransform{}, fmt.Errorf("replacing blobs in tree for commit %s: %w", sha, err)
 			}
@@ -782,10 +783,11 @@ func scrubMatchExecute(
 	replaceBytes := []byte(replace)
 
 	// Walk and rewrite parent, passing gitlinkMap for submodule SHA remapping.
+	treeCache := make(map[string]string)
 	shaMap, rewrittenCount, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
 		var xform CommitTransform
 
-		newTreeSHA, err := replaceInTreeByBlobMap(ctx, info.Tree, blobMap, gitlinkMap)
+		newTreeSHA, err := replaceInTreeByBlobMap(ctx, info.Tree, blobMap, gitlinkMap, treeCache)
 		if err != nil {
 			return CommitTransform{}, fmt.Errorf("replacing blobs in tree for commit %s: %w", sha, err)
 		}

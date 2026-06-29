@@ -168,7 +168,8 @@ func TestReplaceInTreeFlat(t *testing.T) {
 	origOtherBlob := findBlobInTree(t, treeSHA, "other.txt")
 	origHelloBlob := findBlobInTree(t, treeSHA, "hello.txt")
 
-	newTree, err := replaceInTree(ctx, treeSHA, "hello.txt", newBlob)
+	cache := make(map[string]string)
+	newTree, err := replaceInTree(ctx, treeSHA, "hello.txt", newBlob, cache)
 	if err != nil {
 		t.Fatalf("replaceInTree: %v", err)
 	}
@@ -212,7 +213,8 @@ func TestReplaceInTreeNested(t *testing.T) {
 	origTopBlob := findBlobInTree(t, treeSHA, "a/top.txt")
 	origSiblingBlob := findBlobInTree(t, treeSHA, "a/b/other.txt")
 
-	newTree, err := replaceInTree(ctx, treeSHA, "a/b/c.txt", newBlob)
+	cache := make(map[string]string)
+	newTree, err := replaceInTree(ctx, treeSHA, "a/b/c.txt", newBlob, cache)
 	if err != nil {
 		t.Fatalf("replaceInTree: %v", err)
 	}
@@ -249,7 +251,8 @@ func TestReplaceInTreeRemove(t *testing.T) {
 	ctx := context.Background()
 	origKeepBlob := findBlobInTree(t, treeSHA, "keep.txt")
 
-	newTree, err := replaceInTree(ctx, treeSHA, "remove.txt", "")
+	cache := make(map[string]string)
+	newTree, err := replaceInTree(ctx, treeSHA, "remove.txt", "", cache)
 	if err != nil {
 		t.Fatalf("replaceInTree: %v", err)
 	}
@@ -278,7 +281,8 @@ func TestReplaceInTreeNotFound(t *testing.T) {
 	ctx := context.Background()
 	dummyBlob := hashBlob(t, dir, "irrelevant\n")
 
-	newTree, err := replaceInTree(ctx, treeSHA, "nonexistent.txt", dummyBlob)
+	cache := make(map[string]string)
+	newTree, err := replaceInTree(ctx, treeSHA, "nonexistent.txt", dummyBlob, cache)
 	if err != nil {
 		t.Fatalf("replaceInTree: %v", err)
 	}
@@ -312,7 +316,8 @@ func TestReplaceInTreePreservesMode(t *testing.T) {
 	ctx := context.Background()
 	newBlob := hashBlob(t, dir, "#!/bin/sh\necho replaced\n")
 
-	newTree, err := replaceInTree(ctx, treeSHA, "script.sh", newBlob)
+	cache := make(map[string]string)
+	newTree, err := replaceInTree(ctx, treeSHA, "script.sh", newBlob, cache)
 	if err != nil {
 		t.Fatalf("replaceInTree: %v", err)
 	}
@@ -352,7 +357,8 @@ func TestReplaceInTreeByBlobMapFlat(t *testing.T) {
 		origB: newB,
 	}
 
-	newTree, err := replaceInTreeByBlobMap(ctx, treeSHA, blobMap, nil)
+	cache := make(map[string]string)
+	newTree, err := replaceInTreeByBlobMap(ctx, treeSHA, blobMap, nil, cache)
 	if err != nil {
 		t.Fatalf("replaceInTreeByBlobMap: %v", err)
 	}
@@ -396,7 +402,8 @@ func TestReplaceInTreeByBlobMapNested(t *testing.T) {
 		origDeep: newDeep,
 	}
 
-	newTree, err := replaceInTreeByBlobMap(ctx, treeSHA, blobMap, nil)
+	cache := make(map[string]string)
+	newTree, err := replaceInTreeByBlobMap(ctx, treeSHA, blobMap, nil, cache)
 	if err != nil {
 		t.Fatalf("replaceInTreeByBlobMap: %v", err)
 	}
@@ -437,7 +444,8 @@ func TestReplaceInTreeByBlobMapNoMatch(t *testing.T) {
 		bogusOld: bogusNew,
 	}
 
-	newTree, err := replaceInTreeByBlobMap(ctx, treeSHA, blobMap, nil)
+	cache := make(map[string]string)
+	newTree, err := replaceInTreeByBlobMap(ctx, treeSHA, blobMap, nil, cache)
 	if err != nil {
 		t.Fatalf("replaceInTreeByBlobMap: %v", err)
 	}
@@ -477,24 +485,24 @@ func TestReplaceInTreeByBlobMapWithCache(t *testing.T) {
 	newBlob := hashBlob(t, dir, "replaced\n")
 	blobMap := map[string]string{origBlob: newBlob}
 
-	// Simulate caller-managed cache: cache[treeSHA] = resultTreeSHA.
+	// Use built-in cache: first call populates it, second call hits it.
 	cache := make(map[string]string)
 
 	// First call: cache miss, compute result.
-	result1, ok := cache[tree1]
-	if ok {
-		t.Fatal("expected cache miss on first call")
-	}
-	result1, err = replaceInTreeByBlobMap(ctx, tree1, blobMap, nil)
+	result1, err := replaceInTreeByBlobMap(ctx, tree1, blobMap, nil, cache)
 	if err != nil {
 		t.Fatalf("replaceInTreeByBlobMap (first): %v", err)
 	}
-	cache[tree1] = result1
 
-	// Second call: cache hit, skip computation.
-	result2, ok := cache[tree2]
-	if !ok {
-		t.Fatal("expected cache hit on second call (same tree SHA)")
+	// Cache should now contain the tree mapping.
+	if len(cache) == 0 {
+		t.Fatal("expected cache to be populated after first call")
+	}
+
+	// Second call with the same tree SHA should hit the cache.
+	result2, err := replaceInTreeByBlobMap(ctx, tree2, blobMap, nil, cache)
+	if err != nil {
+		t.Fatalf("replaceInTreeByBlobMap (second): %v", err)
 	}
 
 	if result1 != result2 {
@@ -517,7 +525,8 @@ func TestReplaceInTreeRemoveNested(t *testing.T) {
 
 	ctx := context.Background()
 
-	newTree, err := replaceInTree(ctx, treeSHA, "a/b/c.txt", "")
+	cache := make(map[string]string)
+	newTree, err := replaceInTree(ctx, treeSHA, "a/b/c.txt", "", cache)
 	if err != nil {
 		t.Fatalf("replaceInTree: %v", err)
 	}
