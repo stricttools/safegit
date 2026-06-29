@@ -717,5 +717,5 @@
   "name": "safegit",
   "project_id": "github.com/smm-h/safegit",
   "schema_version": 1,
-  "version": "0.21.1-0.20260629205735-caa56673105e+dirty"
+  "version": "dev"
 }

@@ -2,6 +2,21 @@
 
 # Changelog
 
+## 0.21.1
+
+Internal cleanup: SEO, hook migration, DRY extraction, test modernization
+
+<details>
+<summary>Context</summary>
+
+Infrastructure-only release. Expanded CLI help texts for selfdoc SEO compliance. Migrated pre-release hooks to config-driven format. Extracted duplicated commit count estimation into shared helper. Migrated tree_ops_test.go from os.Chdir to git.WithDir for test isolation.
+
+</details>
+
+### Hotfix
+
+- Internal cleanup: SEO, hook migration, DRY extraction, test modernization
+
 ## 0.21.0
 
 Revert tracked policy file — scrub patterns are no longer committed to the repo
