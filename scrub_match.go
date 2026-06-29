@@ -587,30 +587,21 @@ func scrubMatchExecute(
 		return 0
 	}
 
-	// Save parent cwd for os.Chdir back.
-	parentDir, err := os.Getwd()
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("getting cwd: %v", err))
-	}
-
 	// Phase 1: Process submodules (blob map, walkAndRewrite, Finalize per submodule).
 	replaceBytes := []byte(replace)
 	var subScrubResults []submoduleScrubResult
 	for _, si := range subScans {
 		infof(flags, "Scrubbing submodule [%s]...\n", si.sub.RelativePath)
 
-		// Chdir into submodule working tree so git commands target it.
-		if err := os.Chdir(si.sub.WorkTreePath); err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("chdir to submodule %s: %v", si.sub.RelativePath, err))
-		}
+		// Context-scoped git directory targeting: all git commands using
+		// subCtx will target the submodule's repo without os.Chdir.
+		subCtx := git.WithDir(ctx, si.sub.GitDir, si.sub.WorkTreePath)
 
 		// Build blob replacement map for this submodule.
 		subBlobMap := make(map[string]string, len(si.uniqueBlobs))
 		for blobSHA := range si.uniqueBlobs {
-			content, err := git.CatFileBlob(ctx, blobSHA)
+			content, err := git.CatFileBlob(subCtx, blobSHA)
 			if err != nil {
-				// Chdir back before dying.
-				os.Chdir(parentDir)
 				die(flags, cmd, 1, fmt.Sprintf("submodule %s: reading blob %s: %v", si.sub.RelativePath, blobSHA, err))
 			}
 			if isBinaryContent(content) {
@@ -625,9 +616,8 @@ func scrubMatchExecute(
 			if bytes.Equal(content, modified) {
 				continue
 			}
-			newSHA, err := git.HashObjectWriteBytes(ctx, modified)
+			newSHA, err := git.HashObjectWriteBytes(subCtx, modified)
 			if err != nil {
-				os.Chdir(parentDir)
 				die(flags, cmd, 1, fmt.Sprintf("submodule %s: writing replaced blob: %v", si.sub.RelativePath, err))
 			}
 			subBlobMap[blobSHA] = newSHA
@@ -639,18 +629,16 @@ func scrubMatchExecute(
 		// Determine commit range for the submodule.
 		var subSHAs []string
 		if entireHistory {
-			out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", "HEAD")
+			out, _, err := git.Run(subCtx, "rev-list", "--topo-order", "--reverse", "HEAD")
 			if err != nil {
-				os.Chdir(parentDir)
 				die(flags, cmd, 1, fmt.Sprintf("submodule %s: listing commits: %v", si.sub.RelativePath, err))
 			}
 			subSHAs = git.SplitNonEmpty(out)
 		} else {
 			// For submodules with --from, use entire history since we don't know
 			// the corresponding commit boundary in the submodule.
-			out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", "HEAD")
+			out, _, err := git.Run(subCtx, "rev-list", "--topo-order", "--reverse", "HEAD")
 			if err != nil {
-				os.Chdir(parentDir)
 				die(flags, cmd, 1, fmt.Sprintf("submodule %s: listing commits: %v", si.sub.RelativePath, err))
 			}
 			subSHAs = git.SplitNonEmpty(out)
@@ -658,7 +646,7 @@ func scrubMatchExecute(
 
 		subMessagesModified := 0
 		subTreeCache := make(map[string]string)
-		subShaMap, subRewrittenCount, err := walkAndRewrite(ctx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
+		subShaMap, subRewrittenCount, err := walkAndRewrite(subCtx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
 			var xform CommitTransform
 
 			newTreeSHA, err := replaceInTreeByBlobMap(ctx, info.Tree, subBlobMap, nil, subTreeCache)
@@ -687,7 +675,6 @@ func scrubMatchExecute(
 			return xform, nil
 		}, flags.verbose)
 		if err != nil {
-			os.Chdir(parentDir)
 			die(flags, cmd, 1, fmt.Sprintf("submodule %s: walk and rewrite: %v", si.sub.RelativePath, err))
 		}
 
@@ -703,20 +690,15 @@ func scrubMatchExecute(
 			si.sub.RelativePath, subRewrittenCount, len(subBlobMap))
 	}
 
-	// Chdir back to parent for parent-repo processing.
-	if err := os.Chdir(parentDir); err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("chdir back to parent: %v", err))
-	}
-
 	// Apply submodule ref updates (Finalize per submodule).
 	for _, sr := range subScrubResults {
 		infof(flags, "Updating refs for submodule [%s]...\n", sr.sub.RelativePath)
-		if err := os.Chdir(sr.sub.WorkTreePath); err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("chdir to submodule %s for ref update: %v", sr.sub.RelativePath, err))
-		}
+
+		// Context-scoped git directory for this submodule's ref updates.
+		subCtx := git.WithDir(ctx, sr.sub.GitDir, sr.sub.WorkTreePath)
 
 		// Capture old HEAD before refs are updated.
-		subOldHead, _ := git.RevParse(ctx, "HEAD")
+		subOldHead, _ := git.RevParse(subCtx, "HEAD")
 
 		// Annotation rewrite closure for submodule tags.
 		subAnnotFunc := func(ctx context.Context, shaMap map[string]string) error {
@@ -765,15 +747,9 @@ func scrubMatchExecute(
 			OplogExtra:     subOplogExtra,
 			PolicyData:     &subPolicy,
 		}
-		if err := subResult.Finalize(ctx, flags, cmd, subAnnotFunc, nil); err != nil {
-			os.Chdir(parentDir)
+		if err := subResult.Finalize(subCtx, flags, cmd, subAnnotFunc, nil); err != nil {
 			die(flags, cmd, 1, fmt.Sprintf("submodule %s: %v", sr.sub.RelativePath, err))
 		}
-	}
-
-	// Chdir back to parent for parent processing.
-	if err := os.Chdir(parentDir); err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("chdir back to parent for ref update: %v", err))
 	}
 
 	// Build the combined gitlink map from all submodule SHA mappings.
