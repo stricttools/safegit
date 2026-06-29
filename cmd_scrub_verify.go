@@ -56,7 +56,7 @@ func runScrubVerify(flags globalFlags) int {
 				Results:  []ScrubVerifyPolicyResult{},
 			})
 		} else {
-			infof(flags, "No scrub policies found.\n")
+			infof(flags, "No scrub policies found. Policies are stored at .git/safegit/scrub-policies.jsonl and are local to the machine where the scrub was performed. To verify patterns on this machine, run a scrub first.\n")
 		}
 		return 0
 	}

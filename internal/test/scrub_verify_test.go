@@ -195,6 +195,24 @@ func TestScrubVerifyEmptyPolicies(t *testing.T) {
 	}
 }
 
+// TestScrubVerifyGuidanceMessage verifies that scrub verify on a fresh repo
+// (no scrubs done) prints guidance about where policies are stored and that
+// they are local to the machine.
+func TestScrubVerifyGuidanceMessage(t *testing.T) {
+	dir := newRepo(t)
+
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubVerifyEnv, "scrub", "verify")
+	if code != 0 {
+		t.Fatalf("scrub verify failed on fresh repo (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if !strings.Contains(stdout, ".git/safegit/scrub-policies.jsonl") {
+		t.Errorf("expected guidance about policy file path, got: %s", stdout)
+	}
+	if !strings.Contains(stdout, "local to the machine") {
+		t.Errorf("expected guidance about locality, got: %s", stdout)
+	}
+}
+
 // TestScrubVerifyMissingPolicyFile verifies that scrub verify exits 0 when
 // the policy file doesn't exist (same as empty, but file is absent entirely).
 func TestScrubVerifyMissingPolicyFile(t *testing.T) {
