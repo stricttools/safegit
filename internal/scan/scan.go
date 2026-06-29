@@ -413,29 +413,59 @@ func extractBody(content []byte) []byte {
 	return content[idx+2:]
 }
 
-// findMatches searches content line-by-line for pattern, returning a Match
-// for each hit with line number and a context snippet.
+// findMatches searches content for pattern matches, running the regex on the
+// full content so that multi-line patterns (e.g., (?s)foo.*bar) work correctly.
+// Line numbers are back-computed from byte offsets.
 func findMatches(sha, objType string, content []byte, pattern *regexp.Regexp, reachable bool) []Match {
-	var matches []Match
-	lines := bytes.Split(content, []byte("\n"))
+	locs := pattern.FindAllIndex(content, -1)
+	if len(locs) == 0 {
+		return nil
+	}
 
-	for i, line := range lines {
-		locs := pattern.FindAllIndex(line, -1)
-		if len(locs) == 0 {
-			continue
-		}
-		for _, loc := range locs {
-			ctx := buildContext(string(line), loc[0], loc[1])
-			matches = append(matches, Match{
-				SHA:        sha,
-				ObjectType: objType,
-				Line:       i + 1, // 1-based
-				Reachable:  reachable,
-				Context:    ctx,
-			})
-		}
+	var matches []Match
+	for _, loc := range locs {
+		// Back-compute 1-based line number: count newlines before the match start.
+		line := 1 + bytes.Count(content[:loc[0]], []byte("\n"))
+
+		ctx := buildContextFromContent(content, loc[0], loc[1])
+		matches = append(matches, Match{
+			SHA:        sha,
+			ObjectType: objType,
+			Line:       line,
+			Reachable:  reachable,
+			Context:    ctx,
+		})
 	}
 	return matches
+}
+
+// buildContextFromContent extracts a context snippet from full content bytes.
+// It finds the line containing the match start (the enclosing \n boundaries)
+// and uses that line for context. For multi-line matches, the first line is used.
+func buildContextFromContent(content []byte, matchStart, matchEnd int) string {
+	// Find the start of the line containing matchStart.
+	lineStart := matchStart
+	for lineStart > 0 && content[lineStart-1] != '\n' {
+		lineStart--
+	}
+
+	// Find the end of the line containing matchStart (not matchEnd, so
+	// multi-line matches get the first line's context).
+	lineEnd := matchStart
+	for lineEnd < len(content) && content[lineEnd] != '\n' {
+		lineEnd++
+	}
+
+	line := string(content[lineStart:lineEnd])
+
+	// Adjust match offsets to be relative to the line.
+	relStart := matchStart - lineStart
+	relEnd := matchEnd - lineStart
+	if relEnd > len(line) {
+		relEnd = len(line) // clamp for multi-line matches
+	}
+
+	return buildContext(line, relStart, relEnd)
 }
 
 // buildContext extracts a snippet around a match, replacing the matched text

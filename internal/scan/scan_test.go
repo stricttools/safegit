@@ -317,3 +317,130 @@ func containsStr(s, sub string) bool {
 	}
 	return false
 }
+
+func TestFindMatchesMultiLine(t *testing.T) {
+	// Multi-line pattern spanning two lines: (?s)foo.*bar where foo and bar
+	// are on different lines.
+	content := []byte("prefix\nbegin foo secret\nbar suffix\ntrailer\n")
+	pattern := regexp.MustCompile(`(?s)foo.*bar`)
+
+	matches := findMatches("abc123", "blob", content, pattern, true)
+	if len(matches) != 1 {
+		t.Fatalf("expected 1 match, got %d", len(matches))
+	}
+
+	m := matches[0]
+	// "foo" starts on line 2 (after "prefix\n").
+	if m.Line != 2 {
+		t.Errorf("Line = %d, want 2", m.Line)
+	}
+	if !contains(m.Context, "<MATCH>") {
+		t.Errorf("Context %q missing <MATCH>", m.Context)
+	}
+	// Context should come from the first line of the match.
+	// "begin " precedes "foo" on that line and should appear.
+	if !contains(m.Context, "begin ") {
+		t.Errorf("Context %q should contain text before match on the first line", m.Context)
+	}
+	// "bar" is on a subsequent line and should not appear in context.
+	if contains(m.Context, "bar") {
+		t.Errorf("Context %q should not contain text from subsequent match lines", m.Context)
+	}
+}
+
+func TestFindMatchesCRLFLineEndings(t *testing.T) {
+	content := []byte("line1\r\ntoken=SECRET_123\r\nline3\r\n")
+	pattern := regexp.MustCompile(`SECRET_123`)
+
+	matches := findMatches("abc123", "blob", content, pattern, true)
+	if len(matches) != 1 {
+		t.Fatalf("expected 1 match, got %d", len(matches))
+	}
+
+	m := matches[0]
+	// With \r\n, the \n is still the line delimiter for counting.
+	// "line1\r\n" has one \n, so SECRET_123 is on line 2.
+	if m.Line != 2 {
+		t.Errorf("Line = %d, want 2", m.Line)
+	}
+	if !contains(m.Context, "<MATCH>") {
+		t.Errorf("Context %q missing <MATCH>", m.Context)
+	}
+	if contains(m.Context, "SECRET_123") {
+		t.Errorf("Context %q leaks the secret", m.Context)
+	}
+}
+
+func TestFindMatchesNoTrailingNewline(t *testing.T) {
+	content := []byte("first line\ntoken=SECRET_123")
+	pattern := regexp.MustCompile(`SECRET_123`)
+
+	matches := findMatches("abc123", "blob", content, pattern, true)
+	if len(matches) != 1 {
+		t.Fatalf("expected 1 match, got %d", len(matches))
+	}
+
+	m := matches[0]
+	if m.Line != 2 {
+		t.Errorf("Line = %d, want 2", m.Line)
+	}
+	if !contains(m.Context, "<MATCH>") {
+		t.Errorf("Context %q missing <MATCH>", m.Context)
+	}
+}
+
+func TestFindMatchesEmptyContent(t *testing.T) {
+	content := []byte("")
+	pattern := regexp.MustCompile(`SECRET_123`)
+
+	matches := findMatches("abc123", "blob", content, pattern, true)
+	if len(matches) != 0 {
+		t.Errorf("expected 0 matches for empty content, got %d", len(matches))
+	}
+}
+
+func TestBuildContextFromContent(t *testing.T) {
+	content := []byte("line one\nprefix-SECRET_123-suffix\nline three\n")
+	// SECRET_123 starts at byte offset 16 (after "line one\nprefix-"), ends at 26.
+	matchStart := 16
+	matchEnd := 26
+
+	ctx := buildContextFromContent(content, matchStart, matchEnd)
+	if !contains(ctx, "<MATCH>") {
+		t.Errorf("context %q missing <MATCH>", ctx)
+	}
+	if contains(ctx, "SECRET_123") {
+		t.Errorf("context %q leaks secret", ctx)
+	}
+	if !contains(ctx, "prefix-") {
+		t.Errorf("context %q missing prefix", ctx)
+	}
+	if !contains(ctx, "-suffix") {
+		t.Errorf("context %q missing suffix", ctx)
+	}
+}
+
+func TestBuildContextFromContentMultiLineMatch(t *testing.T) {
+	content := []byte("aaa\nsome foo secret\nbar end\nzzz\n")
+	// "aaa\n" = offsets 0-3
+	// "some foo secret\n" = offsets 4-19 (\n at 19)
+	// "bar end\n" = offsets 20-27
+	// Match spans from "foo" at offset 9 to end of "bar" at offset 23.
+	matchStart := 9
+	matchEnd := 23
+
+	ctx := buildContextFromContent(content, matchStart, matchEnd)
+	if !contains(ctx, "<MATCH>") {
+		t.Errorf("context %q missing <MATCH>", ctx)
+	}
+	// For multi-line matches, context comes from the first line only.
+	// The first line is "some foo secret" (offset 4..19). relStart=5, relEnd=min(19,15)=15.
+	// So before="some " and the matched portion of this line is replaced by <MATCH>.
+	if !contains(ctx, "some ") {
+		t.Errorf("context %q should contain text before match on first line", ctx)
+	}
+	// "bar" is on a subsequent line and should not appear.
+	if contains(ctx, "bar") {
+		t.Errorf("context %q should not contain text from subsequent match lines", ctx)
+	}
+}
