@@ -1158,3 +1158,100 @@ func TestCatFileBatchAllClose(t *testing.T) {
 		t.Fatalf("Close returned error: %v", err)
 	}
 }
+
+// TestWithDirTargetsSecondRepo creates two repos and verifies that WithDir
+// makes git commands target the second repo from the first repo's CWD.
+func TestWithDirTargetsSecondRepo(t *testing.T) {
+	// Create repo A (our CWD).
+	dirA := testutil.InitBareRepo(t)
+	testutil.Chdir(t, dirA)
+
+	// Create repo B (the target repo).
+	dirB := testutil.InitBareRepo(t)
+
+	// Make a distinct commit in repo B so its HEAD differs from repo A.
+	cmdB := exec.Command("git", "commit", "--allow-empty", "-m", "repo-b-commit")
+	cmdB.Dir = dirB
+	if out, err := cmdB.CombinedOutput(); err != nil {
+		t.Fatalf("commit in repo B failed: %v\n%s", err, out)
+	}
+
+	ctx := context.Background()
+
+	// Get repo A's HEAD (from CWD).
+	headA, err := RevParse(ctx, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Get repo B's HEAD using RunWithGitDir for reference.
+	gitDirB := filepath.Join(dirB, ".git")
+	refOut, _, err := RunWithGitDir(ctx, gitDirB, dirB, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	headB := strings.TrimSpace(refOut)
+
+	// Heads must differ (different repos, different commit history).
+	if headA == headB {
+		t.Fatal("repo A and B have the same HEAD; test setup is broken")
+	}
+
+	// Now use WithDir to target repo B while CWD is repo A.
+	subCtx := WithDir(ctx, gitDirB, dirB)
+	headViaCtx, err := RevParse(subCtx, "HEAD")
+	if err != nil {
+		t.Fatalf("RevParse with WithDir failed: %v", err)
+	}
+
+	if headViaCtx != headB {
+		t.Errorf("WithDir RevParse = %q, want repo B HEAD %q (got repo A HEAD %q)", headViaCtx, headB, headA)
+	}
+
+	// Also verify RepoRoot returns repo B's path.
+	rootViaCtx, err := RepoRoot(subCtx)
+	if err != nil {
+		t.Fatalf("RepoRoot with WithDir failed: %v", err)
+	}
+	wantRoot, _ := filepath.EvalSymlinks(dirB)
+	gotRoot, _ := filepath.EvalSymlinks(rootViaCtx)
+	if gotRoot != wantRoot {
+		t.Errorf("WithDir RepoRoot = %q, want %q", gotRoot, wantRoot)
+	}
+}
+
+// TestWithDirDoesNotAffectRunWithGitDir verifies that RunWithGitDir still
+// works correctly even when the context has a WithDir override (RunWithGitDir
+// should use its own explicit args, not the context).
+func TestWithDirDoesNotAffectRunWithGitDir(t *testing.T) {
+	dirA := testutil.InitBareRepo(t)
+	dirB := testutil.InitBareRepo(t)
+	testutil.Chdir(t, dirA)
+
+	// Make a distinct commit in repo B.
+	cmdB := exec.Command("git", "commit", "--allow-empty", "-m", "repo-b-only")
+	cmdB.Dir = dirB
+	if out, err := cmdB.CombinedOutput(); err != nil {
+		t.Fatalf("commit in repo B failed: %v\n%s", err, out)
+	}
+
+	ctx := context.Background()
+	gitDirA := filepath.Join(dirA, ".git")
+	gitDirB := filepath.Join(dirB, ".git")
+
+	// Set WithDir to repo A.
+	subCtx := WithDir(ctx, gitDirA, dirA)
+
+	// RunWithGitDir targeting repo B should still return repo B's HEAD.
+	refOut, _, err := RunWithGitDir(subCtx, gitDirB, dirB, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	headB := strings.TrimSpace(refOut)
+
+	// Verify it's really repo B's HEAD (not repo A's).
+	headA, _ := RevParse(ctx, "HEAD")
+	if headB == headA {
+		t.Error("RunWithGitDir returned repo A's HEAD instead of repo B's HEAD")
+	}
+}

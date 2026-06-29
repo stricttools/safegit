@@ -15,6 +15,37 @@ import (
 	"strings"
 )
 
+// gitDirKey is the context key for directory overrides set by WithDir.
+type gitDirKey struct{}
+
+// gitDirVal holds the git directory and work tree paths for context-scoped
+// git directory targeting. When present in a context, Run/RunWithEnv/
+// RunWithEnvStdin/RunPassthrough set GIT_DIR, GIT_WORK_TREE, and cmd.Dir
+// on the subprocess so all git commands target the specified repo without
+// needing os.Chdir.
+type gitDirVal struct{ GitDir, WorkTree string }
+
+// WithDir returns a context that carries git directory overrides. All git
+// functions that receive this context will automatically set GIT_DIR,
+// GIT_WORK_TREE, and cmd.Dir on the subprocess, targeting the specified
+// repo regardless of the process's current working directory.
+func WithDir(ctx context.Context, gitDir, workTree string) context.Context {
+	return context.WithValue(ctx, gitDirKey{}, gitDirVal{gitDir, workTree})
+}
+
+// applyDirOverride checks ctx for a WithDir override and applies it to cmd
+// by setting cmd.Dir and appending GIT_DIR/GIT_WORK_TREE to the env slice.
+// Returns the (possibly extended) env slice. Callers are responsible for
+// setting cmd.Env from os.Environ() + the returned env when non-empty.
+func applyDirOverride(ctx context.Context, cmd *exec.Cmd, env []string) []string {
+	val, ok := ctx.Value(gitDirKey{}).(gitDirVal)
+	if !ok {
+		return env
+	}
+	cmd.Dir = val.WorkTree
+	return append(env, "GIT_DIR="+val.GitDir, "GIT_WORK_TREE="+val.WorkTree)
+}
+
 // Run executes a git command and returns stdout, stderr, and any error.
 func Run(ctx context.Context, args ...string) (stdout, stderr string, err error) {
 	return RunWithEnv(ctx, nil, args...)
@@ -30,6 +61,7 @@ func RunWithEnv(ctx context.Context, env []string, args ...string) (stdout, stde
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
 
+	env = applyDirOverride(ctx, cmd, env)
 	if len(env) > 0 {
 		cmd.Env = append(os.Environ(), env...)
 	}
@@ -54,6 +86,7 @@ func RunWithEnvStdin(ctx context.Context, env []string, stdin []byte, args ...st
 	cmd.Stderr = &errBuf
 	cmd.Stdin = bytes.NewReader(stdin)
 
+	env = applyDirOverride(ctx, cmd, env)
 	if len(env) > 0 {
 		cmd.Env = append(os.Environ(), env...)
 	}
@@ -361,6 +394,10 @@ func RunPassthrough(ctx context.Context, args ...string) error {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	env := applyDirOverride(ctx, cmd, nil)
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	return cmd.Run()
 }
 
@@ -667,9 +704,13 @@ type ObjectIterator struct {
 
 // CatFileBatchAll starts a git cat-file --batch-all-objects --batch subprocess
 // and returns an ObjectIterator for streaming the results. The caller must call
-// Close() when done.
+// Close() when done. Respects WithDir context overrides.
 func CatFileBatchAll(ctx context.Context) (*ObjectIterator, error) {
 	cmd := exec.CommandContext(ctx, "git", "--no-optional-locks", "cat-file", "--batch-all-objects", "--batch")
+	env := applyDirOverride(ctx, cmd, nil)
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, fmt.Errorf("cat-file --batch-all-objects: stdout pipe: %w", err)
@@ -698,6 +739,10 @@ func CatFileBatchSHAs(ctx context.Context, shas []string) (*ObjectIterator, erro
 
 	cmd := exec.CommandContext(ctx, "git", "--no-optional-locks", "cat-file", "--batch")
 	cmd.Stdin = bytes.NewReader(input)
+	env := applyDirOverride(ctx, cmd, nil)
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
