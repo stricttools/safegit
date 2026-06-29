@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/scan"
 )
@@ -37,9 +38,15 @@ func runScrubVerify(flags globalFlags) int {
 		die(flags, cmd, 4, err.Error())
 	}
 
-	sgDir := repo.SafegitDir(gitDir)
+	ctx := context.Background()
 
-	policies, err := readScrubPolicies(sgDir)
+	sgDir := repo.SafegitDir(gitDir)
+	repoRoot, err := git.RepoRoot(ctx)
+	if err != nil {
+		die(flags, cmd, 1, fmt.Sprintf("resolving repo root: %v", err))
+	}
+
+	policies, err := readScrubPolicies(repoRoot, sgDir)
 	if err != nil {
 		die(flags, cmd, 1, fmt.Sprintf("reading scrub policies: %v", err))
 	}
@@ -58,8 +65,6 @@ func runScrubVerify(flags globalFlags) int {
 		}
 		return 0
 	}
-
-	ctx := context.Background()
 
 	var results []ScrubVerifyPolicyResult
 	passed := 0
@@ -106,6 +111,27 @@ func runScrubVerify(flags globalFlags) int {
 		allScanResults, err := scan.ScanObjectsMulti(ctx, patterns, scan.ScanOpts{EntireHistory: true})
 		if err != nil {
 			die(flags, cmd, 1, fmt.Sprintf("scanning objects: %v", err))
+		}
+
+		// Phase 2.5: Exclude matches from the policy file itself. The
+		// tracked policy file (.safegit/scrub-policies.jsonl) contains
+		// pattern strings by design and should not trigger false positives.
+		policyBlobSHAs, err := buildScopedBlobSet(ctx, ".safegit/scrub-policies.jsonl")
+		if err != nil {
+			// Non-fatal: if we can't build the set, proceed without filtering.
+			policyBlobSHAs = nil
+		}
+		if len(policyBlobSHAs) > 0 {
+			for i := range allScanResults {
+				var filtered []scan.Match
+				for _, m := range allScanResults[i].Matches {
+					if m.ObjectType == "blob" && policyBlobSHAs[m.SHA] {
+						continue
+					}
+					filtered = append(filtered, m)
+				}
+				allScanResults[i].Matches = filtered
+			}
 		}
 
 		// Phase 3: For scoped policies, we need attribution. Run AddAttribution

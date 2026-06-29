@@ -1067,6 +1067,23 @@ func verifySecretRemovedScoped(ctx context.Context, pattern *regexp.Regexp, scop
 		return nil
 	}
 
+	// Exclude matches from the tracked policy file, which legitimately
+	// contains pattern strings.
+	policyBlobs, _ := buildScopedBlobSet(ctx, ".safegit/scrub-policies.jsonl")
+	if len(policyBlobs) > 0 {
+		var filtered []scan.Match
+		for _, m := range results.Matches {
+			if m.ObjectType == "blob" && policyBlobs[m.SHA] {
+				continue
+			}
+			filtered = append(filtered, m)
+		}
+		results.Matches = filtered
+		if len(results.Matches) == 0 {
+			return nil
+		}
+	}
+
 	// Add attribution so blob matches have paths.
 	if err := scan.AddAttribution(ctx, results, verifyOpts); err != nil {
 		return fmt.Errorf("adding attribution for verification: %w", err)
