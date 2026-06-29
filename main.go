@@ -310,6 +310,16 @@ func main() {
 	},
 		strictcli.WithArgs(strictcli.NewArg("ref", "the ref name (e.g. refs/heads/main) whose stale .lock file to remove")),
 	)
+	app.Command("scan", "search git history for regex pattern matches across all objects and working tree files", func(kwargs map[string]interface{}) int {
+		return runScan(globalsToFlags(kwargs), kwargs)
+	},
+		strictcli.WithFlags(
+			strictcli.StringFlag("pattern", "regular expression pattern to search for across all objects in history"),
+			strictcli.StringFlag("scope", "glob pattern limiting which blob file paths are included (e.g. '*.env', 'config/**')", strictcli.Default(nil)),
+			strictcli.StringFlag("from", "first commit hash to include when scanning history (mutually exclusive with --entire-history)", strictcli.Default(nil)),
+			strictcli.BoolFlag("entire-history", "scan all commits from the root of the repository to HEAD (mutually exclusive with --from)"),
+		),
+	)
 	app.Command("version", "print safegit version, Go runtime version, and git version", func(kwargs map[string]interface{}) int {
 		runVersion(globalsToFlags(kwargs))
 		return 0
