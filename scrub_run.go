@@ -176,21 +176,67 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 
 	// Execute the recipe via the shared pipeline.
-	exitCode, _ := executeScrubRecipe(ctx, flags, cmd, recipe, reason, fromSHA, entireHistory, nil, gitDir, sgDir, nil)
+	exitCode, result := executeScrubRecipe(ctx, flags, cmd, recipe, reason, fromSHA, entireHistory, nil, gitDir, sgDir, nil, "scrub-run", nil, false)
 
-	// Append scrub policies for each operation.
-	for _, op := range recipe.Operations {
-		policy := ScrubPolicy{
-			Type:        "match",
-			Pattern:     op.Pattern,
-			Reason:      reason,
-			CreatedByOp: "scrub-run",
+	// For multi-operation recipes, append scrub policies per-operation.
+	// Single-operation recipes have their policy appended by executeScrubRecipe
+	// via PolicyData on the RewriteResult.
+	if len(recipe.Operations) > 1 {
+		for _, op := range recipe.Operations {
+			policy := ScrubPolicy{
+				Type:        "match",
+				Pattern:     op.Pattern,
+				Reason:      reason,
+				CreatedByOp: "scrub-run",
+			}
+			if op.Scope != nil {
+				policy.Scope = *op.Scope
+			}
+			if err := appendScrubPolicy(sgDir, policy); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: failed to append scrub policy: %v\n", err)
+			}
 		}
-		if op.Scope != nil {
-			policy.Scope = *op.Scope
-		}
-		if err := appendScrubPolicy(sgDir, policy); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to append scrub policy: %v\n", err)
+	}
+
+	// Emit JSON or text output.
+	if result != nil {
+		allTagRewrites := append(result.TagRewrites, result.AnnotationTagRewrites...)
+
+		if flags.json {
+			rewrites := make(map[string]string)
+			for old, new_ := range result.ShaMap {
+				if old != new_ {
+					rewrites[old] = new_
+				}
+			}
+			combinedTagRewrites := make([]TagRewrite, 0, len(allTagRewrites))
+			combinedTagRewrites = append(combinedTagRewrites, allTagRewrites...)
+			jsonResult := ScrubRunResult{
+				Version:          1,
+				DryRun:           false,
+				Rewrites:         rewrites,
+				Tags:             combinedTagRewrites,
+				CommitsRewritten: result.RewrittenCount,
+				BlobsReplaced:    result.BlobsReplaced,
+				MessagesModified: result.MessagesModified,
+				TagsRewritten:    result.TagsRewrittenCount,
+				OperationCount:   len(recipe.Operations),
+				OldHead:          result.OldHeadSHA,
+				NewHead:          result.NewHeadSHA,
+			}
+			if jsonResult.Tags == nil {
+				jsonResult.Tags = []TagRewrite{}
+			}
+			emitJSON(jsonResult)
+		} else {
+			infof(flags, "\nScrub complete:\n")
+			infof(flags, "  %d operations applied\n", len(recipe.Operations))
+			infof(flags, "  %d commits rewritten\n", result.RewrittenCount)
+			infof(flags, "  %d blobs replaced\n", result.BlobsReplaced)
+			infof(flags, "  %d commit messages modified\n", result.MessagesModified)
+			infof(flags, "  %d tag annotations rewritten\n", result.TagsRewrittenCount)
+			infof(flags, "  Old HEAD: %s\n", result.OldHeadSHA[:12])
+			infof(flags, "  New HEAD: %s\n", result.NewHeadSHA[:12])
 		}
 	}
 

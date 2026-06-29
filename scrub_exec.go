@@ -12,13 +12,22 @@ import (
 )
 
 // executeScrubRecipe runs the shared execution pipeline for recipe-based scrub
-// operations (currently used by `scrub run`). It handles:
-//   - Range-scoped scanning (fromSHA or entireHistory)
+// operations (used by `scrub run` and `scrub match`). It handles:
+//   - Range-scoped scanning (fromSHA or entireHistory; scanEntireHistory overrides for scanning)
 //   - Blob map construction via buildRecipeBlobMap
 //   - walkAndRewrite with per-operation target filtering for commit messages
 //   - RewriteResult construction and Finalize call
-//   - Scrub policy appending
-//   - JSON/text output
+//
+// The caller is responsible for JSON/text output using the returned RewriteResult
+// (which includes BlobsReplaced, MessagesModified, TagsRewrittenCount, and
+// AnnotationTagRewrites).
+//
+// Parameters:
+//   - opName: operation name for the oplog ("scrub-run", "scrub-match")
+//   - baseOplogExtra: caller-provided oplog fields (executeScrubRecipe merges in computed fields);
+//     nil means use a default map with just "reason" and "operations"
+//   - scanEntireHistory: when true, the scan uses EntireHistory regardless of fromSHA/entireHistory;
+//     the walk range still uses fromSHA/entireHistory
 //
 // Returns the exit code and a pointer to the RewriteResult (nil if no rewrite
 // was performed, e.g., no matches found).
@@ -34,6 +43,9 @@ func executeScrubRecipe(
 	gitDir string,
 	sgDir string,
 	gitlinkMap map[string]string,
+	opName string,
+	baseOplogExtra map[string]interface{},
+	scanEntireHistory bool,
 ) (int, *RewriteResult) {
 	// Build a combined regex that matches ANY operation's pattern. This is used
 	// to find candidate blobs efficiently in one pass.
@@ -46,30 +58,45 @@ func executeScrubRecipe(
 		die(flags, cmd, 2, fmt.Sprintf("compiling combined pattern: %v", err))
 	}
 
-	// Scan for matching blobs using range-scoped scanning.
-	// When --from is set, only scan objects reachable from the range; when
-	// --entire-history is set, scan the full object store.
+	// Scan for matching blobs. When scanEntireHistory is set, use EntireHistory
+	// for scanning to find ALL matching blobs regardless of the walk range.
+	// Otherwise use the user's fromSHA/entireHistory for range-scoped scanning.
 	infof(flags, "Scanning objects...\n")
 	scanOpts := scan.ScanOpts{
 		FromSHA:       fromSHA,
 		EntireHistory: entireHistory,
+	}
+	if scanEntireHistory {
+		scanOpts = scan.ScanOpts{EntireHistory: true}
 	}
 	results, err := scan.ScanObjects(ctx, combinedPattern, scanOpts)
 	if err != nil {
 		die(flags, cmd, 1, fmt.Sprintf("scanning objects: %v", err))
 	}
 
-	if len(results.Matches) == 0 {
+	if len(results.Matches) == 0 && len(gitlinkMap) == 0 {
 		infof(flags, "No matches found. Nothing to rewrite.\n")
 		return 0, nil
 	}
 
-	// Collect unique blob SHAs from matches, respecting per-operation scope filters.
+	// When --scope is set, build a scoped blob set to filter blobs by path.
+	var scopedBlobSHAs map[string]bool
+	if scope != nil {
+		scopedBlobSHAs, err = buildScopedBlobSet(ctx, *scope)
+		if err != nil {
+			die(flags, cmd, 1, fmt.Sprintf("building scoped blob set: %v", err))
+		}
+	}
+
+	// Collect unique blob SHAs from matches, filtering by scope when set.
 	uniqueBlobSHAs := make(map[string]bool)
 	var commitMatchCount, tagMatchCount int
 	for _, m := range results.Matches {
 		switch m.ObjectType {
 		case "blob":
+			if scope != nil && !scopedBlobSHAs[m.SHA] {
+				continue
+			}
 			uniqueBlobSHAs[m.SHA] = true
 		case "commit":
 			commitMatchCount++
@@ -93,7 +120,7 @@ func executeScrubRecipe(
 	infof(flags, "Found %d blobs to replace, %d commit message matches, %d tag matches\n",
 		len(blobMap), commitMatchCount, tagMatchCount)
 
-	if len(blobMap) == 0 && commitMatchCount == 0 && tagMatchCount == 0 {
+	if len(blobMap) == 0 && commitMatchCount == 0 && tagMatchCount == 0 && len(gitlinkMap) == 0 {
 		infof(flags, "No replacements needed. Nothing to rewrite.\n")
 		return 0, nil
 	}
@@ -176,13 +203,16 @@ func executeScrubRecipe(
 		die(flags, cmd, 1, err.Error())
 	}
 
-	// Oplog extra
-	oplogExtra := map[string]interface{}{
-		"reason":           reason,
-		"operations":       len(recipe.Operations),
-		"blobsReplaced":    len(blobMap),
-		"messagesModified": messagesModified,
+	// Oplog extra: use caller-provided base or build a default.
+	oplogExtra := baseOplogExtra
+	if oplogExtra == nil {
+		oplogExtra = map[string]interface{}{
+			"reason":     reason,
+			"operations": len(recipe.Operations),
+		}
 	}
+	oplogExtra["blobsReplaced"] = len(blobMap)
+	oplogExtra["messagesModified"] = messagesModified
 
 	// Annotation rewrite closure: applies recipe operations to tag annotations,
 	// respecting per-op target filters for "tags".
@@ -214,59 +244,40 @@ func executeScrubRecipe(
 		return nil
 	}
 
+	// Build policy data for single-operation recipes.
+	var policyData *ScrubPolicy
+	if len(recipe.Operations) == 1 {
+		op := recipe.Operations[0]
+		policy := ScrubPolicy{
+			Type:        "match",
+			Pattern:     op.Pattern,
+			Reason:      reason,
+			CreatedByOp: opName,
+		}
+		if op.Scope != nil {
+			policy.Scope = *op.Scope
+		}
+		policyData = &policy
+	}
+
 	result := RewriteResult{
 		ShaMap:         shaMap,
 		RewrittenCount: rewrittenCount,
 		OldHeadSHA:     oldHeadSHA,
 		SgDir:          sgDir,
-		OpName:         "scrub-run",
+		OpName:         opName,
 		OplogExtra:     oplogExtra,
+		PolicyData:     policyData,
 	}
 	if err := result.Finalize(ctx, flags, cmd, parentAnnotFunc, parentVerifyFunc); err != nil {
 		die(flags, cmd, 1, err.Error())
 	}
 
-	allTagRewrites := append(result.TagRewrites, annotationTagRewrites...)
-
-	// JSON output
-	if flags.json {
-		rewrites := make(map[string]string)
-		for old, new_ := range shaMap {
-			if old != new_ {
-				rewrites[old] = new_
-			}
-		}
-		combinedTagRewrites := make([]TagRewrite, 0, len(allTagRewrites))
-		combinedTagRewrites = append(combinedTagRewrites, allTagRewrites...)
-		jsonResult := ScrubRunResult{
-			Version:          1,
-			DryRun:           false,
-			Rewrites:         rewrites,
-			Tags:             combinedTagRewrites,
-			CommitsRewritten: rewrittenCount,
-			BlobsReplaced:    len(blobMap),
-			MessagesModified: messagesModified,
-			TagsRewritten:    tagsRewritten,
-			OperationCount:   len(recipe.Operations),
-			OldHead:          oldHeadSHA,
-			NewHead:          result.NewHeadSHA,
-		}
-		if jsonResult.Tags == nil {
-			jsonResult.Tags = []TagRewrite{}
-		}
-		emitJSON(jsonResult)
-		return exitCode, &result
-	}
-
-	// Summary
-	infof(flags, "\nScrub complete:\n")
-	infof(flags, "  %d operations applied\n", len(recipe.Operations))
-	infof(flags, "  %d commits rewritten\n", rewrittenCount)
-	infof(flags, "  %d blobs replaced\n", len(blobMap))
-	infof(flags, "  %d commit messages modified\n", messagesModified)
-	infof(flags, "  %d tag annotations rewritten\n", tagsRewritten)
-	infof(flags, "  Old HEAD: %s\n", oldHeadSHA[:12])
-	infof(flags, "  New HEAD: %s\n", result.NewHeadSHA[:12])
+	// Populate post-execution metrics for callers.
+	result.BlobsReplaced = len(blobMap)
+	result.MessagesModified = messagesModified
+	result.TagsRewrittenCount = tagsRewritten
+	result.AnnotationTagRewrites = annotationTagRewrites
 
 	return exitCode, &result
 }

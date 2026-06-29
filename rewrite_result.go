@@ -44,9 +44,19 @@ type RewriteResult struct {
 	OpName     string                 // operation name ("scrub-file", "scrub-match", "rewrite-author")
 	OplogExtra map[string]interface{} // command-specific oplog fields
 
+	// Policy: when non-nil, Finalize appends this scrub policy after
+	// the oplog entry. When nil, no policy is appended.
+	PolicyData *ScrubPolicy
+
 	// Post-Finalize outputs (populated by Finalize for callers to read)
 	NewHeadSHA string // HEAD after the rewrite
 	Ref        string // current ref name (e.g. "refs/heads/main" or "HEAD (detached)")
+
+	// Post-execution metrics (populated by executeScrubRecipe for callers)
+	BlobsReplaced          int          // number of blobs replaced
+	MessagesModified       int          // number of commit messages modified
+	TagsRewrittenCount     int          // number of tag annotations rewritten
+	AnnotationTagRewrites  []TagRewrite // tag annotation rewrite records
 }
 
 // Finalize runs the shared post-rewrite pipeline. The execution order is:
@@ -127,21 +137,10 @@ func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd str
 		Extra: extra,
 	})
 
-	// 9.5. Auto-append scrub policy for scrub-match operations.
-	if r.OpName == "scrub-match" {
-		if patternStr, ok := extra["pattern"].(string); ok && patternStr != "" {
-			policy := ScrubPolicy{
-				Type:        "match",
-				Pattern:     patternStr,
-				Reason:      extraString(extra, "reason"),
-				CreatedByOp: r.OpName,
-			}
-			if scopeStr := extraString(extra, "scope"); scopeStr != "" {
-				policy.Scope = scopeStr
-			}
-			if err := appendScrubPolicy(r.SgDir, policy); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: failed to append scrub policy: %v\n", err)
-			}
+	// 9.5. Append scrub policy when explicitly provided by the caller.
+	if r.PolicyData != nil {
+		if err := appendScrubPolicy(r.SgDir, *r.PolicyData); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to append scrub policy: %v\n", err)
 		}
 	}
 
@@ -150,15 +149,6 @@ func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd str
 	infof(flags, "\n%s\n", hint)
 
 	return nil
-}
-
-// extraString extracts a string value from a map[string]interface{}, returning
-// "" if the key is absent or not a string.
-func extraString(m map[string]interface{}, key string) string {
-	if v, ok := m[key].(string); ok {
-		return v
-	}
-	return ""
 }
 
 // pushHintForRepo returns the appropriate push hint based on whether the repo
