@@ -624,7 +624,7 @@ func TestScrubUndoRejected(t *testing.T) {
 func TestScrubRootCommitInclusive(t *testing.T) {
 	// Create a custom repo without newRepo's seed commit -- we want our
 	// secret.txt commit to be the root.
-	dir := t.TempDir()
+	dir := evalTempDir(t)
 
 	for _, args := range [][]string{
 		{"git", "init", "--initial-branch=main"},

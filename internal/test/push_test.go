@@ -14,7 +14,7 @@ func newRepoWithRemote(t *testing.T) (string, string) {
 	t.Helper()
 	dir := newRepo(t)
 
-	remoteDir := t.TempDir()
+	remoteDir := evalTempDir(t)
 	cmd := exec.Command("git", "init", "--bare", "--initial-branch=main", remoteDir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init --bare: %v\n%s", err, out)

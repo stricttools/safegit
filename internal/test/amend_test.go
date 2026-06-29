@@ -11,7 +11,7 @@ import (
 // newEmptyRepo creates a git repo with no commits (empty HEAD).
 func newEmptyRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
+	dir := evalTempDir(t)
 
 	for _, args := range [][]string{
 		{"git", "init", "--initial-branch=main"},

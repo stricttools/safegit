@@ -15,7 +15,7 @@ import (
 // The parent has 2 commits: "initial" (seed.txt) and "add submodule" (.gitmodules + mysub).
 func newRepoWithSubmodule(t *testing.T) (parentDir, subOriginDir string) {
 	t.Helper()
-	base := t.TempDir()
+	base := evalTempDir(t)
 
 	// Create the repo that will become the submodule origin
 	subOriginDir = filepath.Join(base, "sub-origin")
@@ -1079,7 +1079,7 @@ func TestPushHookCascadeFromParent(t *testing.T) {
 	subDir := prepSubmoduleForCommit(t, parentDir)
 
 	// Create a bare remote for the submodule to push to
-	bareRemote := filepath.Join(t.TempDir(), "sub-bare")
+	bareRemote := filepath.Join(evalTempDir(t), "sub-bare")
 	cmd := exec.Command("git", "init", "--bare", "--initial-branch=main", bareRemote)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init --bare: %v\n%s", err, out)
@@ -1105,7 +1105,7 @@ func TestPushHookCascadeFromParent(t *testing.T) {
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	markerFile := filepath.Join(t.TempDir(), "cascade-marker")
+	markerFile := filepath.Join(evalTempDir(t), "cascade-marker")
 	hookScript := fmt.Sprintf("#!/bin/sh\ntouch %s\n", markerFile)
 	hookPath := filepath.Join(hooksDir, "pre-pre-push")
 	if err := os.WriteFile(hookPath, []byte(hookScript), 0755); err != nil {
@@ -1140,7 +1140,7 @@ func TestPushHookCascadeRejectsOnParentHookFailure(t *testing.T) {
 	subDir := prepSubmoduleForCommit(t, parentDir)
 
 	// Create a bare remote for the submodule to push to
-	bareRemote := filepath.Join(t.TempDir(), "sub-bare")
+	bareRemote := filepath.Join(evalTempDir(t), "sub-bare")
 	cmd := exec.Command("git", "init", "--bare", "--initial-branch=main", bareRemote)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init --bare: %v\n%s", err, out)
@@ -1218,7 +1218,7 @@ func TestPushHookCascadeRejectsOnParentHookFailure(t *testing.T) {
 // working directory inside the parent.
 func newRepoWithSubmoduleSecret(t *testing.T, secret, filename string) (parentDir, subOriginDir, subDir string) {
 	t.Helper()
-	base := t.TempDir()
+	base := evalTempDir(t)
 
 	// Create the repo that will become the submodule origin
 	subOriginDir = filepath.Join(base, "sub-origin")
@@ -1316,7 +1316,7 @@ func newRepoWithSubmoduleSecret(t *testing.T, secret, filename string) (parentDi
 // are on the "main" branch.
 func newRepoWithTwoSubmoduleSecrets(t *testing.T, secret, filename string) (parentDir, sub1Dir, sub2Dir string) {
 	t.Helper()
-	base := t.TempDir()
+	base := evalTempDir(t)
 
 	// Helper to create a submodule origin with a secret file
 	createSubOrigin := func(name string) string {
@@ -1765,7 +1765,7 @@ func enableAutoBump(t *testing.T, parentDir string) {
 // sub1 dir, and sub2 dir.
 func newRepoWithTwoSubmodules(t *testing.T) (parentDir, sub1Dir, sub2Dir string) {
 	t.Helper()
-	base := t.TempDir()
+	base := evalTempDir(t)
 
 	// Helper to create a submodule origin
 	createSubOrigin := func(name string) string {
@@ -2248,7 +2248,7 @@ func TestAutoBumpNoopWhenCurrent(t *testing.T) {
 // unchanged and the operation should succeed cleanly.
 func TestScrubMatchPartialFailure(t *testing.T) {
 	t.Parallel()
-	base := t.TempDir()
+	base := evalTempDir(t)
 
 	// Create submodule origin with a binary file containing the secret
 	subOriginDir := filepath.Join(base, "sub-origin")

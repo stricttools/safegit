@@ -223,7 +223,7 @@ func TestHookTimeout(t *testing.T) {
 	runSafegit(t, dir, "config", "set", "hooks.preprepush.timeoutSeconds", "2")
 
 	// Set up a bare remote so push has something to target
-	remoteDir := t.TempDir()
+	remoteDir := evalTempDir(t)
 	cmd := exec.Command("git", "init", "--bare", "--initial-branch=main", remoteDir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init --bare: %v\n%s", err, out)
@@ -300,7 +300,7 @@ func TestConcurrentPush(t *testing.T) {
 	dir := newRepo(t)
 
 	// Create bare remote (--initial-branch=main ensures HEAD resolves after push)
-	remoteDir := t.TempDir()
+	remoteDir := evalTempDir(t)
 	cmd := exec.Command("git", "init", "--bare", "--initial-branch=main", remoteDir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init --bare: %v\n%s", err, out)
@@ -383,7 +383,7 @@ func TestConcurrentDifferentBranchPush(t *testing.T) {
 	dir := newRepo(t)
 
 	// Create bare remote and add as origin
-	remoteDir := t.TempDir()
+	remoteDir := evalTempDir(t)
 	cmd := exec.Command("git", "init", "--bare", "--initial-branch=main", remoteDir)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init --bare: %v\n%s", err, out)
@@ -1058,7 +1058,7 @@ func TestWorktree_LockSharing(t *testing.T) {
 	dir := newRepo(t)
 
 	// Create a git worktree
-	wtDir := filepath.Join(t.TempDir(), "wt")
+	wtDir := filepath.Join(evalTempDir(t), "wt")
 	cmd := exec.Command("git", "worktree", "add", wtDir, "-b", "feature")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {

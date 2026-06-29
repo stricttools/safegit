@@ -48,10 +48,24 @@ func projectRoot() string {
 	return filepath.Join(wd, "..", "..")
 }
 
+// evalTempDir creates a temp directory and resolves symlinks in the path.
+// On macOS, t.TempDir() returns paths like /var/folders/... which is a
+// symlink to /private/var/folders/...; git resolves symlinks, causing
+// path comparison mismatches in test assertions.
+func evalTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%s): %v", dir, err)
+	}
+	return resolved
+}
+
 // newRepo creates a temp git repo with an initial commit (safegit auto-inits).
 func newRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
+	dir := evalTempDir(t)
 
 	cmds := [][]string{
 		{"git", "init", "--initial-branch=main"},

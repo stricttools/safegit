@@ -472,7 +472,7 @@ func TestRewriteAuthorIdempotent(t *testing.T) {
 
 func TestRewriteAuthorRootCommit(t *testing.T) {
 	// Create a new repo from scratch (not using newRepo, so we control the root commit's author)
-	dir := t.TempDir()
+	dir := evalTempDir(t)
 
 	cmds := [][]string{
 		{"git", "init", "--initial-branch=main"},

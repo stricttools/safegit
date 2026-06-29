@@ -21,7 +21,7 @@ import (
 //	dir, gitDir, sgDir := testutil.InitRepo(t, repo.Init)
 func InitRepo(t *testing.T, safegitInit func(gitDir string) error) (repoDir, gitDir, safegitDir string) {
 	t.Helper()
-	dir := t.TempDir()
+	dir := evalTempDir(t)
 
 	cmds := [][]string{
 		{"git", "init", "--initial-branch=main"},
@@ -65,7 +65,7 @@ func InitRepo(t *testing.T, safegitInit func(gitDir string) error) (repoDir, git
 // packages like git and index that don't need safegit infrastructure.
 func InitBareRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
+	dir := evalTempDir(t)
 
 	cmds := [][]string{
 		{"git", "init", "--initial-branch=main"},
@@ -81,6 +81,20 @@ func InitBareRepo(t *testing.T) string {
 		}
 	}
 	return dir
+}
+
+// evalTempDir creates a temp directory and resolves symlinks in the path.
+// On macOS, t.TempDir() returns paths like /var/folders/... which is a
+// symlink to /private/var/folders/...; git resolves symlinks, causing
+// path comparison mismatches in test assertions.
+func evalTempDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(%s): %v", dir, err)
+	}
+	return resolved
 }
 
 // Chdir changes into dir for the duration of the test, restoring the
