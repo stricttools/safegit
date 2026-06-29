@@ -1,0 +1,30 @@
+# Version bump type: patch, minor, major, hotfix, or prerelease
+bump = "minor"
+# Short description of this release (required)
+description = "New scan, author, and recipe commands; scrub verification; breaking rename of rewrite-author"
+# Optional context explaining why these changes were made
+context = """
+This release adds five new commands and restructures the CLI around an author group.
+
+safegit scan is a top-level read-only search across git history with --target filtering \
+(blobs, commits, tags, trailers, files). The author group provides safegit author list \
+(identity auditing), safegit author check (deviation detection), and safegit author rewrite \
+(renamed from the top-level rewrite-author, which now prints a deprecation error).
+
+safegit scrub run executes multi-operation scrub recipes from TOML files with independent \
+and chained operations, per-operation scope/target filters, and --diff preview. \
+safegit scrub verify reads a persistent policy file (auto-populated after scrubs) to \
+continuously verify that removed secrets stay gone.
+
+Internally, all three history-rewriting commands now share a RewriteResult pipeline \
+(Finalize method) that handles ref updates, index sync, cleanup, oplog, and push hints \
+in one place. rewrite-author gains previously-missing index sync and object cleanup. \
+Push hints now detect .rlsbl-managed repos. Tree caching reduces git plumbing calls \
+during scrubs. Multi-line regex patterns now work correctly in scan/dry-run mode.
+"""
+# Pre-release identifier: alpha, beta, rc, or stable
+# preid = ""
+# Set to true to generate a blog post for this release
+# blog = false
+include = ["go", "docker"]
+exclude = []
