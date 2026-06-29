@@ -58,8 +58,6 @@ func main() {
 	app.GlobalFlag(strictcli.StringFlag("config", "path to a custom safegit config file instead of the default location", strictcli.Default("")))
 	app.GlobalFlag(strictcli.BoolFlag("json", "emit machine-readable JSON output to stdout instead of human text"))
 
-	app.TagContract("json", "json")
-
 	pt := func(name string, args []string, globals map[string]interface{}) int {
 		gf := globalsToFlags(globals)
 		switch name {
