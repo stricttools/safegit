@@ -881,6 +881,9 @@ func scrubMatchExecute(
 		"messagesModified": messagesModified,
 		"submodules":       len(subScrubResults),
 	}
+	if scope != nil {
+		parentOplogExtra["scope"] = *scope
+	}
 	if mangleMode {
 		parentOplogExtra["mode"] = "mangle"
 	} else {

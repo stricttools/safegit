@@ -297,6 +297,9 @@ func main() {
 			},
 		}),
 	)
+	sg.Command("verify", "check all scrub policies to confirm that previously scrubbed secrets remain absent from the git object store, reporting per-policy pass or fail results", func(kwargs map[string]interface{}) int {
+		return runScrubVerify(globalsToFlags(kwargs))
+	})
 	app.Passthrough("cherry-pick", "cherry-pick one or more commits onto HEAD with safety guards", pt)
 	app.Passthrough("revert", "revert one or more commits creating inverse patches, with safety guards", pt)
 	app.Command("undo", "reverse the last commit, amend, or reword operation using the oplog", func(kwargs map[string]interface{}) int {

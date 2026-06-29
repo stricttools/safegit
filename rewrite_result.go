@@ -127,11 +127,38 @@ func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd str
 		Extra: extra,
 	})
 
+	// 9.5. Auto-append scrub policy for scrub-match operations.
+	if r.OpName == "scrub-match" {
+		if patternStr, ok := extra["pattern"].(string); ok && patternStr != "" {
+			policy := ScrubPolicy{
+				Type:        "match",
+				Pattern:     patternStr,
+				Reason:      extraString(extra, "reason"),
+				CreatedByOp: r.OpName,
+			}
+			if scopeStr := extraString(extra, "scope"); scopeStr != "" {
+				policy.Scope = scopeStr
+			}
+			if err := appendScrubPolicy(r.SgDir, policy); err != nil {
+				fmt.Fprintf(os.Stderr, "warning: failed to append scrub policy: %v\n", err)
+			}
+		}
+	}
+
 	// 10. Push hint (rlsbl-aware)
 	hint := pushHintForRepo(ctx)
 	infof(flags, "\n%s\n", hint)
 
 	return nil
+}
+
+// extraString extracts a string value from a map[string]interface{}, returning
+// "" if the key is absent or not a string.
+func extraString(m map[string]interface{}, key string) string {
+	if v, ok := m[key].(string); ok {
+		return v
+	}
+	return ""
 }
 
 // pushHintForRepo returns the appropriate push hint based on whether the repo
