@@ -285,7 +285,10 @@
         }
       ],
       "help": "search git history for regex pattern matches across all objects and working tree files",
-      "name": "scan"
+      "name": "scan",
+      "tags": [
+        "json"
+      ]
     },
     "undo": {
       "flags": [
@@ -427,11 +430,17 @@
             }
           ],
           "help": "check that all commits use the expected author and committer identity, reporting any deviations and suggesting a rewrite command to fix them",
-          "name": "check"
+          "name": "check",
+          "tags": [
+            "json"
+          ]
         },
         "list": {
           "help": "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity",
-          "name": "list"
+          "name": "list",
+          "tags": [
+            "json"
+          ]
         },
         "rewrite": {
           "constraints": [
@@ -473,7 +482,10 @@
             }
           ],
           "help": "rewrite author and committer name or email across all commit history",
-          "name": "rewrite"
+          "name": "rewrite",
+          "tags": [
+            "json"
+          ]
         }
       },
       "help": "audit and rewrite commit author/committer identity",
@@ -566,7 +578,10 @@
             }
           ],
           "help": "replace or remove a specific file across all commits in the repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized version or delete the file entirely from every historical snapshot",
-          "name": "file"
+          "name": "file",
+          "tags": [
+            "json"
+          ]
         },
         "match": {
           "constraints": [
@@ -627,7 +642,10 @@
             }
           ],
           "help": "replace all occurrences of a regex pattern across every blob in the repository history, rewriting commit trees to substitute matched text with a replacement string so that sensitive values like secrets and credentials are permanently removed from all historical snapshots",
-          "name": "match"
+          "name": "match",
+          "tags": [
+            "json"
+          ]
         },
         "run": {
           "args": [
@@ -678,11 +696,17 @@
             }
           ],
           "help": "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements across history in a single coordinated pass with topological ordering and overlap detection",
-          "name": "run"
+          "name": "run",
+          "tags": [
+            "json"
+          ]
         },
         "verify": {
           "help": "check all scrub policies to confirm that previously scrubbed secrets remain absent from the git object store, reporting per-policy pass or fail results",
-          "name": "verify"
+          "name": "verify",
+          "tags": [
+            "json"
+          ]
         }
       },
       "help": "surgically rewrite git history to remove or replace sensitive content such as secrets, credentials, and private data from all commits, trees, and blobs in the repository",
