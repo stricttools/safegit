@@ -13,10 +13,18 @@ Concurrency-safe Git wrapper (Go CLI). When multiple AI agent sessions share one
 - `config` -- show/set configuration
 - `unlock` -- release stale ref locks
 - `hook` -- manage pre-pre-push hooks
-- `rewrite-author` -- rewrite author/committer across history
+- `rewrite-author` -- deprecated, replaced by `author rewrite`
+- `scan --pattern <regex>` -- search git objects and working tree for regex pattern matches
+- `author list` -- enumerate all distinct author/committer identities with commit counts
+- `author check` -- compare identities against expected name/email, exit 1 on deviations
+- `author rewrite` -- rewrite author/committer identity across history
 - `scrub file <path> --from <commit> --reason <text>` -- replace a file's blob across history with current on-disk content
 - `scrub match --pattern <regex> --replace <text> --reason <text> --entire-history` -- pattern-based secret removal across all git objects (blobs, commit messages, tag annotations) with surgical cleanup and re-scan verification; `--dry-run` to scan without rewriting; `--scope <glob>` to limit file paths
-- Guarded passthroughs: `checkout`, `pull`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick`, `revert`
+- `scrub run <recipe.toml>` -- execute multi-operation scrub recipes from TOML files; `--diff` to preview
+- `scrub verify` -- check that previously scrubbed patterns remain absent from history via persistent policies
+- `pull` -- pull with `--ff-only`, `--ff`, `--no-ff` flag support
+- `version` -- print safegit version, Go runtime, and git version
+- Guarded passthroughs: `checkout`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick`, `revert`
 
 ## Architecture
 
@@ -32,7 +40,10 @@ Concurrency-safe Git wrapper (Go CLI). When multiple AI agent sessions share one
 | `internal/hooks` | Pre-pre-push hook management |
 | `internal/repo` | Configuration and repository state |
 | `internal/scan` | Object store scanning (pattern matching, attribution, non-object files) |
+| `internal/submodule` | Submodule enumeration, parent detection, nesting checks |
 | `internal/test` | Integration tests (build + run safegit as subprocess) |
+| `internal/testutil` | Test helpers for repo setup and symlink resolution |
+| `internal/trailer` | Git trailer injection, parsing, and identity replacement |
 
 ## Build and test
 
@@ -66,4 +77,6 @@ This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestrat
 - `safegit commit --amend --branch <name>` for cross-branch amend/reword
 - `safegit doctor --fix` to garbage-collect and repair (replaces gc)
 - `safegit scrub file` and `safegit scrub match` for history rewriting (repo-wide coordination lock prevents concurrent rewrites)
+- `safegit scrub run` for recipe-based multi-operation scrub from TOML files
+- `safegit scrub verify` for policy-based verification that scrubbed patterns remain absent
 - cherry-pick, revert are guarded passthroughs (coordination check before git)
