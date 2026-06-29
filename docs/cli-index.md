@@ -28,13 +28,14 @@ Version: dev
 - [redo](cli-redo.html) -- restore the commit that undo removed, as a one-shot counterpart to undo
 - [reset](cli-reset.html) -- reset HEAD with guards that prevent accidental --hard data loss
 - [revert](cli-revert.html) -- revert one or more commits creating inverse patches, with safety guards
-- [rewrite-author](cli-rewrite-author.html) -- rewrite author and committer name or email across all commit history
+- [scan](cli-scan.html) -- search git history for regex pattern matches across all objects and working tree files
 - [undo](cli-undo.html) -- reverse the last commit, amend, or reword operation using the oplog
 - [unlock](cli-unlock.html) -- release a stale .lock file left behind by a crashed git process
 - [version](cli-version.html) -- print safegit version, Go runtime version, and git version
 
 ## Command Groups
 
+- [author](cli-author.html) -- audit and rewrite commit author/committer identity
 - [config](cli-config.html) -- show, get, or set safegit configuration key-value pairs
 - [hook](cli-hook.html) -- manage pre-pre-push hook scripts that run before every push
 - [scrub](cli-scrub.html) -- surgically rewrite git history to remove or replace sensitive content such as secrets, credentials, and private data from all commits, trees, and blobs in the repository
