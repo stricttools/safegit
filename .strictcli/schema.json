@@ -284,7 +284,7 @@
           "type": "str"
         }
       ],
-      "help": "search git history for regex pattern matches across all objects and working tree files",
+      "help": "search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection",
       "name": "scan",
       "tags": [
         "json"
@@ -429,14 +429,14 @@
               "type": "str"
             }
           ],
-          "help": "check that all commits use the expected author and committer identity, reporting any deviations and suggesting a rewrite command to fix them",
+          "help": "check that all commits use the expected author and committer identity by scanning every commit in the repository history, reporting any deviations with the exact commit hashes and mismatched fields, and suggesting the corresponding safegit author rewrite command to fix each deviation found",
           "name": "check",
           "tags": [
             "json"
           ]
         },
         "list": {
-          "help": "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity",
+          "help": "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite",
           "name": "list",
           "tags": [
             "json"
@@ -481,14 +481,14 @@
               "type": "str"
             }
           ],
-          "help": "rewrite author and committer name or email across all commit history",
+          "help": "rewrite author and committer name or email across all commit history using git filter-branch style rewriting, replacing every occurrence of the old identity with the new one in both author and committer fields while preserving timestamps, commit messages, tree contents, and parent relationships so the rewritten history is otherwise identical to the original",
           "name": "rewrite",
           "tags": [
             "json"
           ]
         }
       },
-      "help": "audit and rewrite commit author/committer identity",
+      "help": "audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history",
       "name": "author"
     },
     "config": {
@@ -695,14 +695,14 @@
               "type": "bool"
             }
           ],
-          "help": "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements across history in a single coordinated pass with topological ordering and overlap detection",
+          "help": "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite",
           "name": "run",
           "tags": [
             "json"
           ]
         },
         "verify": {
-          "help": "check all scrub policies to confirm that previously scrubbed secrets remain absent from the git object store, reporting per-policy pass or fail results",
+          "help": "check all scrub policies defined in the repository configuration to confirm that previously scrubbed secrets and sensitive patterns remain completely absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-policy pass or fail results with match locations for any violations found",
           "name": "verify",
           "tags": [
             "json"
@@ -717,5 +717,5 @@
   "name": "safegit",
   "project_id": "github.com/smm-h/safegit",
   "schema_version": 1,
-  "version": "dev"
+  "version": "0.21.1-0.20260629205735-caa56673105e+dirty"
 }
