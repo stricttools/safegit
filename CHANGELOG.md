@@ -2,6 +2,23 @@
 
 # Changelog
 
+## 0.20.2
+
+Fix per-operation recipe scope enforcement and dry-run lock acquisition
+
+<details>
+<summary>Context</summary>
+
+Per-operation scope fields in recipe TOML files were recorded in policies but not enforced during blob filtering. scrub match and scrub file dry-run modes unnecessarily acquired the exclusive rewrite lock, blocking concurrent operations during read-only preview.
+
+</details>
+
+### Fixes
+
+- **Bug fix.** Per-operation `scope` in recipe TOML files is now enforced during execution and dry-run. Previously, recipe scopes were recorded in policies but not used for blob filtering.
+- **Bug fix.** `scrub match --dry-run` no longer acquires the exclusive rewrite lock, allowing concurrent operations during preview.
+- **Bug fix.** `scrub file --dry-run` no longer acquires the exclusive rewrite lock.
+
 ## 0.20.1
 
 Fix dry-run and preview modes that were writing objects to the git store
