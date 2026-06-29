@@ -178,3 +178,183 @@ func TestInject_TrailingNewlines(t *testing.T) {
 		t.Errorf("should not have triple newlines, got %q", got)
 	}
 }
+
+func TestSplitBodyTrailers_EmptyMessage(t *testing.T) {
+	body, trailers := SplitBodyTrailers("")
+	if body != "" {
+		t.Errorf("expected empty body, got %q", body)
+	}
+	if trailers != "" {
+		t.Errorf("expected empty trailers, got %q", trailers)
+	}
+}
+
+func TestSplitBodyTrailers_NoTrailers(t *testing.T) {
+	msg := "subject line\n\nThis is the body.\nIt has multiple lines.\n"
+	body, trailers := SplitBodyTrailers(msg)
+	if body != msg {
+		t.Errorf("expected body = entire message %q, got %q", msg, body)
+	}
+	if trailers != "" {
+		t.Errorf("expected empty trailers, got %q", trailers)
+	}
+}
+
+func TestSplitBodyTrailers_SubjectOnly(t *testing.T) {
+	msg := "just a subject"
+	body, trailers := SplitBodyTrailers(msg)
+	if body != msg {
+		t.Errorf("expected body = entire message %q, got %q", msg, body)
+	}
+	if trailers != "" {
+		t.Errorf("expected empty trailers, got %q", trailers)
+	}
+}
+
+func TestSplitBodyTrailers_WithTrailers(t *testing.T) {
+	msg := "subject line\n\nBody paragraph.\n\nSigned-off-by: Test <test@test.com>\nReviewed-by: Other <other@test.com>\n"
+	body, trailers := SplitBodyTrailers(msg)
+
+	expectedBody := "subject line\n\nBody paragraph.\n\n"
+	expectedTrailers := "Signed-off-by: Test <test@test.com>\nReviewed-by: Other <other@test.com>\n"
+
+	if body != expectedBody {
+		t.Errorf("expected body %q, got %q", expectedBody, body)
+	}
+	if trailers != expectedTrailers {
+		t.Errorf("expected trailers %q, got %q", expectedTrailers, trailers)
+	}
+}
+
+func TestSplitBodyTrailers_SubjectAndTrailers(t *testing.T) {
+	msg := "subject line\n\nSigned-off-by: Test <test@test.com>\n"
+	body, trailers := SplitBodyTrailers(msg)
+
+	expectedBody := "subject line\n\n"
+	expectedTrailers := "Signed-off-by: Test <test@test.com>\n"
+
+	if body != expectedBody {
+		t.Errorf("expected body %q, got %q", expectedBody, body)
+	}
+	if trailers != expectedTrailers {
+		t.Errorf("expected trailers %q, got %q", expectedTrailers, trailers)
+	}
+}
+
+func TestSplitBodyTrailers_AllTrailerMessage(t *testing.T) {
+	// Entire message is trailer-format lines with no blank-line separator
+	msg := "Signed-off-by: Test <test@test.com>\nReviewed-by: Other <other@test.com>\n"
+	body, trailers := SplitBodyTrailers(msg)
+
+	if body != "" {
+		t.Errorf("expected empty body for all-trailer message, got %q", body)
+	}
+	expectedTrailers := "Signed-off-by: Test <test@test.com>\nReviewed-by: Other <other@test.com>\n"
+	if trailers != expectedTrailers {
+		t.Errorf("expected trailers %q, got %q", expectedTrailers, trailers)
+	}
+}
+
+func TestSplitBodyTrailers_SingleTrailerLine(t *testing.T) {
+	// Single line that is a trailer
+	msg := "Signed-off-by: Test <test@test.com>"
+	body, trailers := SplitBodyTrailers(msg)
+
+	if body != "" {
+		t.Errorf("expected empty body for single trailer line, got %q", body)
+	}
+	if trailers != "Signed-off-by: Test <test@test.com>\n" {
+		t.Errorf("expected trailer %q, got %q", "Signed-off-by: Test <test@test.com>\n", trailers)
+	}
+}
+
+func TestSplitBodyTrailers_ContinuationLines(t *testing.T) {
+	msg := "subject line\n\nSigned-off-by: Very Long Name\n  <email@example.com>\nReviewed-by: Other <other@test.com>\n"
+	body, trailers := SplitBodyTrailers(msg)
+
+	expectedBody := "subject line\n\n"
+	expectedTrailers := "Signed-off-by: Very Long Name\n  <email@example.com>\nReviewed-by: Other <other@test.com>\n"
+
+	if body != expectedBody {
+		t.Errorf("expected body %q, got %q", expectedBody, body)
+	}
+	if trailers != expectedTrailers {
+		t.Errorf("expected trailers %q, got %q", expectedTrailers, trailers)
+	}
+}
+
+func TestSplitBodyTrailers_ContinuationAtEnd(t *testing.T) {
+	msg := "subject line\n\nSigned-off-by: Very Long Name\n\tindented with tab\n"
+	body, trailers := SplitBodyTrailers(msg)
+
+	expectedBody := "subject line\n\n"
+	expectedTrailers := "Signed-off-by: Very Long Name\n\tindented with tab\n"
+
+	if body != expectedBody {
+		t.Errorf("expected body %q, got %q", expectedBody, body)
+	}
+	if trailers != expectedTrailers {
+		t.Errorf("expected trailers %q, got %q", expectedTrailers, trailers)
+	}
+}
+
+func TestSplitBodyTrailers_TrailingNewlines(t *testing.T) {
+	// Extra trailing newlines should be trimmed
+	msg := "subject\n\nSigned-off-by: Test <test@test.com>\n\n\n"
+	body, trailers := SplitBodyTrailers(msg)
+
+	expectedBody := "subject\n\n"
+	expectedTrailers := "Signed-off-by: Test <test@test.com>\n"
+
+	if body != expectedBody {
+		t.Errorf("expected body %q, got %q", expectedBody, body)
+	}
+	if trailers != expectedTrailers {
+		t.Errorf("expected trailers %q, got %q", expectedTrailers, trailers)
+	}
+}
+
+func TestSplitBodyTrailers_NoBlankLineSeparator_NonTrailerBody(t *testing.T) {
+	// Body text immediately followed by trailer-looking lines (no blank line)
+	// should NOT be detected as trailers
+	msg := "this is body text\nSigned-off-by: Test <test@test.com>\n"
+	body, trailers := SplitBodyTrailers(msg)
+
+	if body != msg {
+		t.Errorf("expected body = entire message %q, got %q", msg, body)
+	}
+	if trailers != "" {
+		t.Errorf("expected no trailers (no blank line separator), got %q", trailers)
+	}
+}
+
+func TestSplitBodyTrailers_MultipleTrailerBlocks(t *testing.T) {
+	// Only the last trailer block should be split off
+	msg := "subject\n\nSigned-off-by: First <first@test.com>\n\nSome body text\n\nReviewed-by: Second <second@test.com>\n"
+	body, trailers := SplitBodyTrailers(msg)
+
+	expectedBody := "subject\n\nSigned-off-by: First <first@test.com>\n\nSome body text\n\n"
+	expectedTrailers := "Reviewed-by: Second <second@test.com>\n"
+
+	if body != expectedBody {
+		t.Errorf("expected body %q, got %q", expectedBody, body)
+	}
+	if trailers != expectedTrailers {
+		t.Errorf("expected trailers %q, got %q", expectedTrailers, trailers)
+	}
+}
+
+func TestSplitBodyTrailers_SessionTrailer(t *testing.T) {
+	msg := "add feature\n\nClaude-Code-Session-Id: session-abc-123\n"
+	body, trailers := SplitBodyTrailers(msg)
+
+	expectedBody := "add feature\n\n"
+	expectedTrailers := "Claude-Code-Session-Id: session-abc-123\n"
+
+	if body != expectedBody {
+		t.Errorf("expected body %q, got %q", expectedBody, body)
+	}
+	if trailers != expectedTrailers {
+		t.Errorf("expected trailers %q, got %q", expectedTrailers, trailers)
+	}
+}

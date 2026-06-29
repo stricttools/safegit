@@ -76,6 +76,71 @@ func AppendCustom(message string, trailers []string) string {
 	return b.String()
 }
 
+// SplitBodyTrailers splits a commit message into the body (everything
+// before the trailer block) and the trailer block (trailing Key: Value
+// lines preceded by a blank line). Continuation lines (indented lines
+// following a trailer) are included in the trailer block.
+//
+// If the message has no trailers, body is the entire message and
+// trailerBlock is empty. If the entire message consists of trailer-
+// format lines with no blank-line separator, body is empty and
+// trailerBlock is the entire message.
+func SplitBodyTrailers(message string) (body, trailerBlock string) {
+	if message == "" {
+		return "", ""
+	}
+
+	trimmed := strings.TrimRight(message, "\n")
+	lines := strings.Split(trimmed, "\n")
+
+	// Walk backwards from the end to find the trailer block.
+	// A trailer line matches the trailerLine regex. Continuation lines
+	// (starting with whitespace) are part of the preceding trailer.
+	i := len(lines) - 1
+	for i >= 0 {
+		line := lines[i]
+		if trailerLine.MatchString(line) {
+			i--
+			continue
+		}
+		// Continuation line: starts with space/tab, non-empty after trim
+		if len(line) > 0 && (line[0] == ' ' || line[0] == '\t') && strings.TrimSpace(line) != "" {
+			i--
+			continue
+		}
+		break
+	}
+
+	trailerStart := i + 1
+	trailerCount := len(lines) - trailerStart
+	if trailerCount == 0 {
+		// No trailer lines found
+		return message, ""
+	}
+
+	// The first line of the trailer block must itself be a trailer line
+	// (not a continuation line), otherwise it's not a valid block.
+	if !trailerLine.MatchString(lines[trailerStart]) {
+		return message, ""
+	}
+
+	// All-trailer message: every line is part of the trailer block
+	if trailerStart == 0 {
+		return "", trimmed + "\n"
+	}
+
+	// The line immediately before the trailer block must be blank
+	if strings.TrimSpace(lines[trailerStart-1]) != "" {
+		return message, ""
+	}
+
+	// Split: body includes everything up to and including the blank line
+	bodyLines := lines[:trailerStart]
+	body = strings.Join(bodyLines, "\n") + "\n"
+	trailerBlock = strings.Join(lines[trailerStart:], "\n") + "\n"
+	return body, trailerBlock
+}
+
 // endsWithTrailerBlock returns true if the lines end with a block of
 // trailer-format lines preceded by a blank line (or if the entire message
 // is trailer lines, which happens with single-line messages that look like trailers).
