@@ -12,10 +12,10 @@ import (
 var scrubVerifyEnv = []string{"CLAUDE_CODE_SESSION_ID=scrub-verify-test"}
 
 // readPolicyFile reads and parses the scrub-policies.jsonl file from the
-// repo's .safegit/ directory (tracked working-tree location).
+// repo's .git/safegit/ directory (untracked).
 func readPolicyFile(t *testing.T, dir string) []map[string]interface{} {
 	t.Helper()
-	policyPath := filepath.Join(dir, ".safegit", "scrub-policies.jsonl")
+	policyPath := filepath.Join(dir, ".git", "safegit", "scrub-policies.jsonl")
 	f, err := os.Open(policyPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -119,9 +119,9 @@ func TestScrubVerifyHandWrittenPolicy(t *testing.T) {
 	}
 
 	// Write an additional hand-crafted policy that should also pass
-	// (pattern that was never in the repo). Since the policy file is now
-	// tracked in the working tree, we must commit it after appending.
-	policyPath := filepath.Join(dir, ".safegit", "scrub-policies.jsonl")
+	// (pattern that was never in the repo). The policy file lives in
+	// .git/safegit/ (untracked), so no commit is needed.
+	policyPath := filepath.Join(dir, ".git", "safegit", "scrub-policies.jsonl")
 	f, err := os.OpenFile(policyPath, os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		t.Fatalf("opening policy file for append: %v", err)
@@ -131,12 +131,6 @@ func TestScrubVerifyHandWrittenPolicy(t *testing.T) {
 		t.Fatalf("writing hand-crafted policy: %v", err)
 	}
 	f.Close()
-
-	// Commit the updated policy file so the working tree is clean.
-	_, stderr, code = runSafegitEnv(t, dir, scrubVerifyEnv, "commit", "-m", "add hand-written policy", "--", ".safegit/scrub-policies.jsonl")
-	if code != 0 {
-		t.Fatalf("committing hand-written policy failed (code %d): %s", code, stderr)
-	}
 
 	// Run scrub verify -- both policies should pass
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubVerifyEnv, "scrub", "verify")
@@ -396,66 +390,3 @@ func TestScrubVerifyScopeAutoAppend(t *testing.T) {
 	}
 }
 
-// TestScrubVerifyMigrationFromOldLocation verifies that scrub policies stored
-// in the old location (.git/safegit/scrub-policies.jsonl) are automatically
-// migrated to the new tracked location (.safegit/scrub-policies.jsonl) when
-// scrub verify is run.
-func TestScrubVerifyMigrationFromOldLocation(t *testing.T) {
-	dir := newRepo(t)
-
-	// Create a file and commit so the repo has history
-	commitFileEnv(t, dir, scrubVerifyEnv, "data.txt", "some data\n", "initial commit")
-
-	// Ensure safegit is initialized so .git/safegit/ exists
-	_, _, _ = runSafegitEnv(t, dir, scrubVerifyEnv, "config", "show")
-
-	// Manually create a policy in the OLD location (.git/safegit/)
-	oldPolicyDir := filepath.Join(dir, ".git", "safegit")
-	if err := os.MkdirAll(oldPolicyDir, 0755); err != nil {
-		t.Fatalf("creating old policy dir: %v", err)
-	}
-	oldPolicyPath := filepath.Join(oldPolicyDir, "scrub-policies.jsonl")
-	oldEntry := `{"type":"match","pattern":"OLD_SECRET","reason":"migrated from old location","created_at":"2026-01-01T00:00:00Z"}` + "\n"
-	if err := os.WriteFile(oldPolicyPath, []byte(oldEntry), 0644); err != nil {
-		t.Fatalf("writing old policy file: %v", err)
-	}
-
-	// Verify that the new location does NOT have the file yet
-	newPolicyPath := filepath.Join(dir, ".safegit", "scrub-policies.jsonl")
-	if _, err := os.Stat(newPolicyPath); err == nil {
-		t.Fatal("new policy file should not exist before migration")
-	}
-
-	// Run scrub verify -- should trigger migration and read the migrated policies
-	stdout, stderr, code := runSafegitEnv(t, dir, scrubVerifyEnv, "scrub", "verify")
-	if code != 0 {
-		t.Fatalf("scrub verify failed after migration (code %d): stdout=%s stderr=%s", code, stdout, stderr)
-	}
-
-	// Verify migration happened: new file should now exist
-	if _, err := os.Stat(newPolicyPath); err != nil {
-		t.Fatalf("new policy file should exist after migration: %v", err)
-	}
-
-	// Read the migrated file and check its contents
-	policies := readPolicyFile(t, dir)
-	if len(policies) != 1 {
-		t.Fatalf("expected 1 migrated policy, got %d", len(policies))
-	}
-	if policies[0]["pattern"] != "OLD_SECRET" {
-		t.Errorf("migrated policy pattern = %v, want OLD_SECRET", policies[0]["pattern"])
-	}
-	if policies[0]["reason"] != "migrated from old location" {
-		t.Errorf("migrated policy reason = %v, want 'migrated from old location'", policies[0]["reason"])
-	}
-
-	// Verify the migration message was printed
-	if !strings.Contains(stderr, "Migrated scrub policies") {
-		t.Errorf("expected migration message in stderr, got: %s", stderr)
-	}
-
-	// Verify the PASS output (the pattern "OLD_SECRET" was never in the repo)
-	if !strings.Contains(stdout, "PASS") {
-		t.Errorf("expected PASS in output, got: %s", stdout)
-	}
-}

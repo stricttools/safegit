@@ -422,18 +422,15 @@ func TestScrubMatchEntireHistory(t *testing.T) {
 
 	allSHAsAfter := revListReverse(t, dir)
 
-	// After scrub, there is exactly 1 extra commit: the auto-commit that
-	// records the scrub policy in .safegit/scrub-policies.jsonl.
-	expectedCount := len(allSHAsBefore) + 1
-	if len(allSHAsAfter) != expectedCount {
-		t.Fatalf("commit count: want %d (original %d + 1 policy commit), got %d",
-			expectedCount, len(allSHAsBefore), len(allSHAsAfter))
+	// Commit count should be unchanged (no auto-commit for policy storage).
+	if len(allSHAsAfter) != len(allSHAsBefore) {
+		t.Fatalf("commit count: want %d, got %d",
+			len(allSHAsBefore), len(allSHAsAfter))
 	}
 
 	// The seed commit (index 0) doesn't contain SECRET_ABC, but it may still
 	// be rewritten because --entire-history includes all commits and descendant
 	// commits get new parent SHAs. Skip the seed commit and verify commits 1-5.
-	// The last commit (index len-1) is the auto-committed policy, skip that too.
 	for i := 1; i < len(allSHAsBefore); i++ {
 		if allSHAsAfter[i] == allSHAsBefore[i] {
 			t.Errorf("commit %d was not rewritten: SHA still %s", i, allSHAsBefore[i][:12])
