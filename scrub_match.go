@@ -90,24 +90,10 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 	ctx := context.Background()
 	requireCleanTree(ctx, flags, cmd)
 
-	sgDir := repo.SafegitDir(gitDir)
-
-	// Acquire rewrite lock to prevent concurrent scrub operations
-	cfg, err := loadConfig(flags, gitDir)
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("loading config: %v", err))
-	}
-	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
-	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
-	lk, err := lock.Acquire(sharedDir, sgDir, "safegit/rewrite", "scrub-match", timeout)
-	if err != nil {
-		die(flags, cmd, 1, "another rewrite operation is in progress")
-	}
-	defer lk.Release()
-
 	// Resolve --from if provided
 	var fromSHA string
 	if from != nil {
+		var err error
 		fromSHA, err = git.RevParse(ctx, *from)
 		if err != nil {
 			die(flags, cmd, 1, fmt.Sprintf("resolving --from %q: %v", *from, err))
@@ -132,10 +118,25 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 		die(flags, cmd, 2, fmt.Sprintf("invalid regex pattern: %v", err))
 	}
 
-	// Dry-run mode
+	// Dry-run mode: purely read-only, no lock needed.
 	if flags.dryRun {
 		return scrubMatchDryRun(ctx, flags, cmd, compiledPattern, scope, gitDir, pattern, fromSHA, entireHistory)
 	}
+
+	sgDir := repo.SafegitDir(gitDir)
+
+	// Acquire rewrite lock to prevent concurrent scrub operations
+	cfg, err := loadConfig(flags, gitDir)
+	if err != nil {
+		die(flags, cmd, 1, fmt.Sprintf("loading config: %v", err))
+	}
+	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
+	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
+	lk, err := lock.Acquire(sharedDir, sgDir, "safegit/rewrite", "scrub-match", timeout)
+	if err != nil {
+		die(flags, cmd, 1, "another rewrite operation is in progress")
+	}
+	defer lk.Release()
 
 	// Execution mode
 	return scrubMatchExecute(ctx, flags, cmd, compiledPattern, replace, mangleMode, reason, fromSHA, entireHistory, scope, gitDir, sgDir)
