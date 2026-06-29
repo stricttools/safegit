@@ -11,22 +11,11 @@ import (
 )
 
 // initTestRepo creates a bare-minimum git repo in a temp dir, configures
-// user.name/email (required for commits), and changes the working directory
-// to it for the duration of the test. Returns the repo path and a cleanup
-// function that restores the original working directory.
-func initTestRepo(t *testing.T) string {
+// user.name/email (required for commits), and returns the repo path and a
+// context scoped to that directory via git.WithDir.
+func initTestRepo(t *testing.T) (string, context.Context) {
 	t.Helper()
 	dir := t.TempDir()
-
-	// Save original dir so we can restore it.
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	if err := os.Chdir(dir); err != nil {
-		t.Fatalf("chdir: %v", err)
-	}
-	t.Cleanup(func() { os.Chdir(origDir) })
 
 	run := func(args ...string) {
 		t.Helper()
@@ -42,7 +31,8 @@ func initTestRepo(t *testing.T) string {
 	run("config", "user.name", "Test")
 	run("config", "user.email", "test@test.com")
 
-	return dir
+	ctx := git.WithDir(context.Background(), filepath.Join(dir, ".git"), dir)
+	return dir, ctx
 }
 
 // writeFile creates a file relative to dir with the given content.
@@ -58,7 +48,7 @@ func writeFile(t *testing.T, dir, relPath, content string) {
 }
 
 // commitAll stages all files and commits, returning the commit SHA.
-func commitAll(t *testing.T, dir, msg string) string {
+func commitAll(t *testing.T, dir string, ctx context.Context, msg string) string {
 	t.Helper()
 	run := func(args ...string) string {
 		t.Helper()
@@ -72,7 +62,6 @@ func commitAll(t *testing.T, dir, msg string) string {
 	}
 	run("add", "-A")
 	run("commit", "-m", msg)
-	ctx := context.Background()
 	sha, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
 		t.Fatalf("rev-parse HEAD: %v", err)
@@ -81,9 +70,8 @@ func commitAll(t *testing.T, dir, msg string) string {
 }
 
 // commitTreeSHA returns the tree SHA of a commit.
-func commitTreeSHA(t *testing.T, commitSHA string) string {
+func commitTreeSHA(t *testing.T, ctx context.Context, commitSHA string) string {
 	t.Helper()
-	ctx := context.Background()
 	info, err := git.ParseCommit(ctx, commitSHA)
 	if err != nil {
 		t.Fatalf("parse-commit %s: %v", commitSHA, err)
@@ -92,14 +80,13 @@ func commitTreeSHA(t *testing.T, commitSHA string) string {
 }
 
 // hashBlob writes content as a blob object and returns its SHA.
-func hashBlob(t *testing.T, dir, content string) string {
+func hashBlob(t *testing.T, dir string, ctx context.Context, content string) string {
 	t.Helper()
 	path := filepath.Join(dir, ".tmp-blob")
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write tmp blob: %v", err)
 	}
 	defer os.Remove(path)
-	ctx := context.Background()
 	sha, err := git.HashObjectWrite(ctx, path)
 	if err != nil {
 		t.Fatalf("hash-object -w: %v", err)
@@ -109,9 +96,8 @@ func hashBlob(t *testing.T, dir, content string) string {
 
 // findBlobInTree recursively searches the tree for filePath and returns its
 // blob SHA, or empty string if not found.
-func findBlobInTree(t *testing.T, treeSHA, filePath string) string {
+func findBlobInTree(t *testing.T, ctx context.Context, treeSHA, filePath string) string {
 	t.Helper()
-	ctx := context.Background()
 	entries, err := git.LsTreeAll(ctx, treeSHA)
 	if err != nil {
 		t.Fatalf("ls-tree -r %s: %v", treeSHA, err)
@@ -125,9 +111,8 @@ func findBlobInTree(t *testing.T, treeSHA, filePath string) string {
 }
 
 // findEntryMode recursively searches the tree for filePath and returns its mode.
-func findEntryMode(t *testing.T, treeSHA, filePath string) string {
+func findEntryMode(t *testing.T, ctx context.Context, treeSHA, filePath string) string {
 	t.Helper()
-	ctx := context.Background()
 	entries, err := git.LsTreeAll(ctx, treeSHA)
 	if err != nil {
 		t.Fatalf("ls-tree -r %s: %v", treeSHA, err)
@@ -141,9 +126,8 @@ func findEntryMode(t *testing.T, treeSHA, filePath string) string {
 }
 
 // treeEntryNames returns the names of all entries at the top level of a tree.
-func treeEntryNames(t *testing.T, treeSHA string) []string {
+func treeEntryNames(t *testing.T, ctx context.Context, treeSHA string) []string {
 	t.Helper()
-	ctx := context.Background()
 	entries, err := git.LsTree(ctx, treeSHA)
 	if err != nil {
 		t.Fatalf("ls-tree %s: %v", treeSHA, err)
@@ -156,17 +140,16 @@ func treeEntryNames(t *testing.T, treeSHA string) []string {
 }
 
 func TestReplaceInTreeFlat(t *testing.T) {
-	dir := initTestRepo(t)
+	dir, ctx := initTestRepo(t)
 	writeFile(t, dir, "hello.txt", "hello world\n")
 	writeFile(t, dir, "other.txt", "other content\n")
-	sha := commitAll(t, dir, "init")
-	treeSHA := commitTreeSHA(t, sha)
+	sha := commitAll(t, dir, ctx, "init")
+	treeSHA := commitTreeSHA(t, ctx, sha)
 
-	ctx := context.Background()
-	newBlob := hashBlob(t, dir, "replaced content\n")
+	newBlob := hashBlob(t, dir, ctx, "replaced content\n")
 
-	origOtherBlob := findBlobInTree(t, treeSHA, "other.txt")
-	origHelloBlob := findBlobInTree(t, treeSHA, "hello.txt")
+	origOtherBlob := findBlobInTree(t, ctx, treeSHA, "other.txt")
+	origHelloBlob := findBlobInTree(t, ctx, treeSHA, "hello.txt")
 
 	cache := make(map[string]string)
 	newTree, err := replaceInTree(ctx, treeSHA, "hello.txt", newBlob, cache)
@@ -180,7 +163,7 @@ func TestReplaceInTreeFlat(t *testing.T) {
 	}
 
 	// The replaced file should have the new blob.
-	gotBlob := findBlobInTree(t, newTree, "hello.txt")
+	gotBlob := findBlobInTree(t, ctx, newTree, "hello.txt")
 	if gotBlob != newBlob {
 		t.Errorf("hello.txt blob = %s, want %s", gotBlob, newBlob)
 	}
@@ -191,27 +174,26 @@ func TestReplaceInTreeFlat(t *testing.T) {
 	}
 
 	// other.txt should be unchanged.
-	gotOther := findBlobInTree(t, newTree, "other.txt")
+	gotOther := findBlobInTree(t, ctx, newTree, "other.txt")
 	if gotOther != origOtherBlob {
 		t.Errorf("other.txt blob changed: got %s, want %s", gotOther, origOtherBlob)
 	}
 }
 
 func TestReplaceInTreeNested(t *testing.T) {
-	dir := initTestRepo(t)
+	dir, ctx := initTestRepo(t)
 	writeFile(t, dir, "a/b/c.txt", "deep content\n")
 	writeFile(t, dir, "a/b/other.txt", "sibling\n")
 	writeFile(t, dir, "a/top.txt", "top\n")
 	writeFile(t, dir, "root.txt", "root\n")
-	sha := commitAll(t, dir, "init")
-	treeSHA := commitTreeSHA(t, sha)
+	sha := commitAll(t, dir, ctx, "init")
+	treeSHA := commitTreeSHA(t, ctx, sha)
 
-	ctx := context.Background()
-	newBlob := hashBlob(t, dir, "new deep content\n")
+	newBlob := hashBlob(t, dir, ctx, "new deep content\n")
 
-	origRootBlob := findBlobInTree(t, treeSHA, "root.txt")
-	origTopBlob := findBlobInTree(t, treeSHA, "a/top.txt")
-	origSiblingBlob := findBlobInTree(t, treeSHA, "a/b/other.txt")
+	origRootBlob := findBlobInTree(t, ctx, treeSHA, "root.txt")
+	origTopBlob := findBlobInTree(t, ctx, treeSHA, "a/top.txt")
+	origSiblingBlob := findBlobInTree(t, ctx, treeSHA, "a/b/other.txt")
 
 	cache := make(map[string]string)
 	newTree, err := replaceInTree(ctx, treeSHA, "a/b/c.txt", newBlob, cache)
@@ -224,32 +206,31 @@ func TestReplaceInTreeNested(t *testing.T) {
 	}
 
 	// Target file should have the new blob.
-	gotBlob := findBlobInTree(t, newTree, "a/b/c.txt")
+	gotBlob := findBlobInTree(t, ctx, newTree, "a/b/c.txt")
 	if gotBlob != newBlob {
 		t.Errorf("a/b/c.txt blob = %s, want %s", gotBlob, newBlob)
 	}
 
 	// Sibling, parent-level, and root files should be unchanged.
-	if got := findBlobInTree(t, newTree, "a/b/other.txt"); got != origSiblingBlob {
+	if got := findBlobInTree(t, ctx, newTree, "a/b/other.txt"); got != origSiblingBlob {
 		t.Errorf("a/b/other.txt changed: got %s, want %s", got, origSiblingBlob)
 	}
-	if got := findBlobInTree(t, newTree, "a/top.txt"); got != origTopBlob {
+	if got := findBlobInTree(t, ctx, newTree, "a/top.txt"); got != origTopBlob {
 		t.Errorf("a/top.txt changed: got %s, want %s", got, origTopBlob)
 	}
-	if got := findBlobInTree(t, newTree, "root.txt"); got != origRootBlob {
+	if got := findBlobInTree(t, ctx, newTree, "root.txt"); got != origRootBlob {
 		t.Errorf("root.txt changed: got %s, want %s", got, origRootBlob)
 	}
 }
 
 func TestReplaceInTreeRemove(t *testing.T) {
-	dir := initTestRepo(t)
+	dir, ctx := initTestRepo(t)
 	writeFile(t, dir, "keep.txt", "keep\n")
 	writeFile(t, dir, "remove.txt", "doomed\n")
-	sha := commitAll(t, dir, "init")
-	treeSHA := commitTreeSHA(t, sha)
+	sha := commitAll(t, dir, ctx, "init")
+	treeSHA := commitTreeSHA(t, ctx, sha)
 
-	ctx := context.Background()
-	origKeepBlob := findBlobInTree(t, treeSHA, "keep.txt")
+	origKeepBlob := findBlobInTree(t, ctx, treeSHA, "keep.txt")
 
 	cache := make(map[string]string)
 	newTree, err := replaceInTree(ctx, treeSHA, "remove.txt", "", cache)
@@ -262,24 +243,23 @@ func TestReplaceInTreeRemove(t *testing.T) {
 	}
 
 	// Removed file should be absent.
-	if got := findBlobInTree(t, newTree, "remove.txt"); got != "" {
+	if got := findBlobInTree(t, ctx, newTree, "remove.txt"); got != "" {
 		t.Errorf("remove.txt still present with blob %s", got)
 	}
 
 	// keep.txt should survive.
-	if got := findBlobInTree(t, newTree, "keep.txt"); got != origKeepBlob {
+	if got := findBlobInTree(t, ctx, newTree, "keep.txt"); got != origKeepBlob {
 		t.Errorf("keep.txt changed: got %s, want %s", got, origKeepBlob)
 	}
 }
 
 func TestReplaceInTreeNotFound(t *testing.T) {
-	dir := initTestRepo(t)
+	dir, ctx := initTestRepo(t)
 	writeFile(t, dir, "exists.txt", "here\n")
-	sha := commitAll(t, dir, "init")
-	treeSHA := commitTreeSHA(t, sha)
+	sha := commitAll(t, dir, ctx, "init")
+	treeSHA := commitTreeSHA(t, ctx, sha)
 
-	ctx := context.Background()
-	dummyBlob := hashBlob(t, dir, "irrelevant\n")
+	dummyBlob := hashBlob(t, dir, ctx, "irrelevant\n")
 
 	cache := make(map[string]string)
 	newTree, err := replaceInTree(ctx, treeSHA, "nonexistent.txt", dummyBlob, cache)
@@ -294,7 +274,7 @@ func TestReplaceInTreeNotFound(t *testing.T) {
 }
 
 func TestReplaceInTreePreservesMode(t *testing.T) {
-	dir := initTestRepo(t)
+	dir, ctx := initTestRepo(t)
 	writeFile(t, dir, "script.sh", "#!/bin/sh\necho hello\n")
 
 	// Make the file executable and stage it with the executable mode.
@@ -304,17 +284,16 @@ func TestReplaceInTreePreservesMode(t *testing.T) {
 	}
 
 	writeFile(t, dir, "normal.txt", "normal\n")
-	sha := commitAll(t, dir, "init")
-	treeSHA := commitTreeSHA(t, sha)
+	sha := commitAll(t, dir, ctx, "init")
+	treeSHA := commitTreeSHA(t, ctx, sha)
 
 	// Verify the file is stored as executable.
-	origMode := findEntryMode(t, treeSHA, "script.sh")
+	origMode := findEntryMode(t, ctx, treeSHA, "script.sh")
 	if origMode != "100755" {
 		t.Fatalf("expected mode 100755 for script.sh, got %s", origMode)
 	}
 
-	ctx := context.Background()
-	newBlob := hashBlob(t, dir, "#!/bin/sh\necho replaced\n")
+	newBlob := hashBlob(t, dir, ctx, "#!/bin/sh\necho replaced\n")
 
 	cache := make(map[string]string)
 	newTree, err := replaceInTree(ctx, treeSHA, "script.sh", newBlob, cache)
@@ -323,34 +302,32 @@ func TestReplaceInTreePreservesMode(t *testing.T) {
 	}
 
 	// Mode must be preserved.
-	gotMode := findEntryMode(t, newTree, "script.sh")
+	gotMode := findEntryMode(t, ctx, newTree, "script.sh")
 	if gotMode != "100755" {
 		t.Errorf("mode after replace = %s, want 100755", gotMode)
 	}
 
 	// Blob must be replaced.
-	gotBlob := findBlobInTree(t, newTree, "script.sh")
+	gotBlob := findBlobInTree(t, ctx, newTree, "script.sh")
 	if gotBlob != newBlob {
 		t.Errorf("script.sh blob = %s, want %s", gotBlob, newBlob)
 	}
 }
 
 func TestReplaceInTreeByBlobMapFlat(t *testing.T) {
-	dir := initTestRepo(t)
+	dir, ctx := initTestRepo(t)
 	writeFile(t, dir, "a.txt", "aaa\n")
 	writeFile(t, dir, "b.txt", "bbb\n")
 	writeFile(t, dir, "c.txt", "ccc\n")
-	sha := commitAll(t, dir, "init")
-	treeSHA := commitTreeSHA(t, sha)
+	sha := commitAll(t, dir, ctx, "init")
+	treeSHA := commitTreeSHA(t, ctx, sha)
 
-	ctx := context.Background()
+	origA := findBlobInTree(t, ctx, treeSHA, "a.txt")
+	origB := findBlobInTree(t, ctx, treeSHA, "b.txt")
+	origC := findBlobInTree(t, ctx, treeSHA, "c.txt")
 
-	origA := findBlobInTree(t, treeSHA, "a.txt")
-	origB := findBlobInTree(t, treeSHA, "b.txt")
-	origC := findBlobInTree(t, treeSHA, "c.txt")
-
-	newA := hashBlob(t, dir, "AAA\n")
-	newB := hashBlob(t, dir, "BBB\n")
+	newA := hashBlob(t, dir, ctx, "AAA\n")
+	newB := hashBlob(t, dir, ctx, "BBB\n")
 
 	blobMap := map[string]string{
 		origA: newA,
@@ -367,36 +344,34 @@ func TestReplaceInTreeByBlobMapFlat(t *testing.T) {
 	}
 
 	// a.txt and b.txt should be replaced.
-	if got := findBlobInTree(t, newTree, "a.txt"); got != newA {
+	if got := findBlobInTree(t, ctx, newTree, "a.txt"); got != newA {
 		t.Errorf("a.txt blob = %s, want %s", got, newA)
 	}
-	if got := findBlobInTree(t, newTree, "b.txt"); got != newB {
+	if got := findBlobInTree(t, ctx, newTree, "b.txt"); got != newB {
 		t.Errorf("b.txt blob = %s, want %s", got, newB)
 	}
 
 	// c.txt should be unchanged.
-	if got := findBlobInTree(t, newTree, "c.txt"); got != origC {
+	if got := findBlobInTree(t, ctx, newTree, "c.txt"); got != origC {
 		t.Errorf("c.txt blob changed: got %s, want %s", got, origC)
 	}
 }
 
 func TestReplaceInTreeByBlobMapNested(t *testing.T) {
-	dir := initTestRepo(t)
+	dir, ctx := initTestRepo(t)
 	writeFile(t, dir, "root.txt", "root\n")
 	writeFile(t, dir, "a/mid.txt", "mid\n")
 	writeFile(t, dir, "a/b/deep.txt", "deep\n")
 	writeFile(t, dir, "a/b/sibling.txt", "sibling\n")
-	sha := commitAll(t, dir, "init")
-	treeSHA := commitTreeSHA(t, sha)
+	sha := commitAll(t, dir, ctx, "init")
+	treeSHA := commitTreeSHA(t, ctx, sha)
 
-	ctx := context.Background()
+	origRoot := findBlobInTree(t, ctx, treeSHA, "root.txt")
+	origMid := findBlobInTree(t, ctx, treeSHA, "a/mid.txt")
+	origDeep := findBlobInTree(t, ctx, treeSHA, "a/b/deep.txt")
+	origSibling := findBlobInTree(t, ctx, treeSHA, "a/b/sibling.txt")
 
-	origRoot := findBlobInTree(t, treeSHA, "root.txt")
-	origMid := findBlobInTree(t, treeSHA, "a/mid.txt")
-	origDeep := findBlobInTree(t, treeSHA, "a/b/deep.txt")
-	origSibling := findBlobInTree(t, treeSHA, "a/b/sibling.txt")
-
-	newDeep := hashBlob(t, dir, "DEEP REPLACED\n")
+	newDeep := hashBlob(t, dir, ctx, "DEEP REPLACED\n")
 
 	blobMap := map[string]string{
 		origDeep: newDeep,
@@ -412,33 +387,31 @@ func TestReplaceInTreeByBlobMapNested(t *testing.T) {
 	}
 
 	// Deep blob should be replaced.
-	if got := findBlobInTree(t, newTree, "a/b/deep.txt"); got != newDeep {
+	if got := findBlobInTree(t, ctx, newTree, "a/b/deep.txt"); got != newDeep {
 		t.Errorf("a/b/deep.txt blob = %s, want %s", got, newDeep)
 	}
 
 	// Sibling, mid-level, and root blobs should be unchanged.
-	if got := findBlobInTree(t, newTree, "a/b/sibling.txt"); got != origSibling {
+	if got := findBlobInTree(t, ctx, newTree, "a/b/sibling.txt"); got != origSibling {
 		t.Errorf("a/b/sibling.txt changed: got %s, want %s", got, origSibling)
 	}
-	if got := findBlobInTree(t, newTree, "a/mid.txt"); got != origMid {
+	if got := findBlobInTree(t, ctx, newTree, "a/mid.txt"); got != origMid {
 		t.Errorf("a/mid.txt changed: got %s, want %s", got, origMid)
 	}
-	if got := findBlobInTree(t, newTree, "root.txt"); got != origRoot {
+	if got := findBlobInTree(t, ctx, newTree, "root.txt"); got != origRoot {
 		t.Errorf("root.txt changed: got %s, want %s", got, origRoot)
 	}
 }
 
 func TestReplaceInTreeByBlobMapNoMatch(t *testing.T) {
-	dir := initTestRepo(t)
+	dir, ctx := initTestRepo(t)
 	writeFile(t, dir, "hello.txt", "hello\n")
-	sha := commitAll(t, dir, "init")
-	treeSHA := commitTreeSHA(t, sha)
-
-	ctx := context.Background()
+	sha := commitAll(t, dir, ctx, "init")
+	treeSHA := commitTreeSHA(t, ctx, sha)
 
 	// blobMap with SHAs that don't exist in the tree.
-	bogusOld := hashBlob(t, dir, "does not exist in tree\n")
-	bogusNew := hashBlob(t, dir, "replacement\n")
+	bogusOld := hashBlob(t, dir, ctx, "does not exist in tree\n")
+	bogusNew := hashBlob(t, dir, ctx, "replacement\n")
 
 	blobMap := map[string]string{
 		bogusOld: bogusNew,
@@ -455,10 +428,10 @@ func TestReplaceInTreeByBlobMapNoMatch(t *testing.T) {
 }
 
 func TestReplaceInTreeByBlobMapWithCache(t *testing.T) {
-	dir := initTestRepo(t)
+	dir, ctx := initTestRepo(t)
 	writeFile(t, dir, "file.txt", "content\n")
-	sha1 := commitAll(t, dir, "first")
-	tree1 := commitTreeSHA(t, sha1)
+	sha1 := commitAll(t, dir, ctx, "first")
+	tree1 := commitTreeSHA(t, ctx, sha1)
 
 	// Second commit with a different file, same tree structure concept.
 	// We reuse the same tree by making a commit that doesn't change the tree.
@@ -469,20 +442,19 @@ func TestReplaceInTreeByBlobMapWithCache(t *testing.T) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git commit --allow-empty: %v\n%s", err, out)
 	}
-	ctx := context.Background()
 	sha2, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
 		t.Fatalf("rev-parse HEAD: %v", err)
 	}
-	tree2 := commitTreeSHA(t, sha2)
+	tree2 := commitTreeSHA(t, ctx, sha2)
 
 	// Both commits should have the same tree SHA.
 	if tree1 != tree2 {
 		t.Fatalf("expected same tree SHA for both commits, got %s and %s", tree1, tree2)
 	}
 
-	origBlob := findBlobInTree(t, tree1, "file.txt")
-	newBlob := hashBlob(t, dir, "replaced\n")
+	origBlob := findBlobInTree(t, ctx, tree1, "file.txt")
+	newBlob := hashBlob(t, dir, ctx, "replaced\n")
 	blobMap := map[string]string{origBlob: newBlob}
 
 	// Use built-in cache: first call populates it, second call hits it.
@@ -510,20 +482,18 @@ func TestReplaceInTreeByBlobMapWithCache(t *testing.T) {
 	}
 
 	// Verify the result is correct.
-	if got := findBlobInTree(t, result1, "file.txt"); got != newBlob {
+	if got := findBlobInTree(t, ctx, result1, "file.txt"); got != newBlob {
 		t.Errorf("file.txt blob = %s, want %s", got, newBlob)
 	}
 }
 
 func TestReplaceInTreeRemoveNested(t *testing.T) {
-	dir := initTestRepo(t)
+	dir, ctx := initTestRepo(t)
 	writeFile(t, dir, "a/b/c.txt", "target\n")
 	writeFile(t, dir, "a/b/sibling.txt", "sibling\n")
 	writeFile(t, dir, "a/top.txt", "top\n")
-	sha := commitAll(t, dir, "init")
-	treeSHA := commitTreeSHA(t, sha)
-
-	ctx := context.Background()
+	sha := commitAll(t, dir, ctx, "init")
+	treeSHA := commitTreeSHA(t, ctx, sha)
 
 	cache := make(map[string]string)
 	newTree, err := replaceInTree(ctx, treeSHA, "a/b/c.txt", "", cache)
@@ -536,23 +506,23 @@ func TestReplaceInTreeRemoveNested(t *testing.T) {
 	}
 
 	// Removed file should be absent.
-	if got := findBlobInTree(t, newTree, "a/b/c.txt"); got != "" {
+	if got := findBlobInTree(t, ctx, newTree, "a/b/c.txt"); got != "" {
 		t.Errorf("a/b/c.txt still present with blob %s", got)
 	}
 
 	// Sibling should survive -- intermediate directory "a/b" must still exist.
-	if got := findBlobInTree(t, newTree, "a/b/sibling.txt"); got == "" {
+	if got := findBlobInTree(t, ctx, newTree, "a/b/sibling.txt"); got == "" {
 		t.Error("a/b/sibling.txt missing after removing a/b/c.txt")
 	}
 
 	// Parent-level file should survive.
-	if got := findBlobInTree(t, newTree, "a/top.txt"); got == "" {
+	if got := findBlobInTree(t, ctx, newTree, "a/top.txt"); got == "" {
 		t.Error("a/top.txt missing after removing a/b/c.txt")
 	}
 
 	// Verify intermediate directories still exist at the top level of their
 	// respective trees by checking entry names.
-	rootNames := treeEntryNames(t, newTree)
+	rootNames := treeEntryNames(t, ctx, newTree)
 	found := false
 	for _, n := range rootNames {
 		if n == "a" {
@@ -569,34 +539,32 @@ func TestReplaceInTreeByBlobMapCacheBenefit(t *testing.T) {
 	// Create a repo with 3 commits sharing deep directory structure (a/b/c/).
 	// Only one blob changes between commits. The cache should accumulate entries
 	// for shared subtrees, avoiding redundant git calls.
-	dir := initTestRepo(t)
+	dir, ctx := initTestRepo(t)
 
 	writeFile(t, dir, "a/b/c/file.txt", "v1\n")
 	writeFile(t, dir, "a/b/other.txt", "stable\n")
 	writeFile(t, dir, "root.txt", "root\n")
-	sha1 := commitAll(t, dir, "commit 1")
-	tree1 := commitTreeSHA(t, sha1)
+	sha1 := commitAll(t, dir, ctx, "commit 1")
+	tree1 := commitTreeSHA(t, ctx, sha1)
 
 	writeFile(t, dir, "a/b/c/file.txt", "v2\n")
-	sha2 := commitAll(t, dir, "commit 2")
-	tree2 := commitTreeSHA(t, sha2)
+	sha2 := commitAll(t, dir, ctx, "commit 2")
+	tree2 := commitTreeSHA(t, ctx, sha2)
 
 	writeFile(t, dir, "a/b/c/file.txt", "v3\n")
-	sha3 := commitAll(t, dir, "commit 3")
-	tree3 := commitTreeSHA(t, sha3)
+	sha3 := commitAll(t, dir, ctx, "commit 3")
+	tree3 := commitTreeSHA(t, ctx, sha3)
 
 	// All three root trees should differ (the blob changed each time).
 	if tree1 == tree2 || tree2 == tree3 {
 		t.Fatal("expected distinct root tree SHAs for each commit")
 	}
 
-	ctx := context.Background()
-
 	// Build a blobMap that replaces v1, v2, and v3 with a single replacement.
-	origBlob1 := findBlobInTree(t, tree1, "a/b/c/file.txt")
-	origBlob2 := findBlobInTree(t, tree2, "a/b/c/file.txt")
-	origBlob3 := findBlobInTree(t, tree3, "a/b/c/file.txt")
-	newBlob := hashBlob(t, dir, "REDACTED\n")
+	origBlob1 := findBlobInTree(t, ctx, tree1, "a/b/c/file.txt")
+	origBlob2 := findBlobInTree(t, ctx, tree2, "a/b/c/file.txt")
+	origBlob3 := findBlobInTree(t, ctx, tree3, "a/b/c/file.txt")
+	newBlob := hashBlob(t, dir, ctx, "REDACTED\n")
 
 	blobMap := map[string]string{
 		origBlob1: newBlob,
@@ -622,7 +590,7 @@ func TestReplaceInTreeByBlobMapCacheBenefit(t *testing.T) {
 
 	// All results should have the replacement blob.
 	for i, result := range []string{result1, result2, result3} {
-		got := findBlobInTree(t, result, "a/b/c/file.txt")
+		got := findBlobInTree(t, ctx, result, "a/b/c/file.txt")
 		if got != newBlob {
 			t.Errorf("tree %d: a/b/c/file.txt blob = %s, want %s", i+1, got, newBlob)
 		}
@@ -643,10 +611,10 @@ func TestReplaceInTreeByBlobMapCacheBenefit(t *testing.T) {
 	}
 
 	// Verify that unchanged files are preserved.
-	if got := findBlobInTree(t, result1, "a/b/other.txt"); got == "" {
+	if got := findBlobInTree(t, ctx, result1, "a/b/other.txt"); got == "" {
 		t.Error("a/b/other.txt missing from result")
 	}
-	if got := findBlobInTree(t, result1, "root.txt"); got == "" {
+	if got := findBlobInTree(t, ctx, result1, "root.txt"); got == "" {
 		t.Error("root.txt missing from result")
 	}
 }

@@ -274,12 +274,11 @@ func TestTopoSortAllIndependent(t *testing.T) {
 // --- buildRecipeBlobMap tests ---
 
 func TestBuildRecipeBlobMapIndependentNonOverlapping(t *testing.T) {
-	dir := initTestRepo(t)
-	ctx := context.Background()
+	dir, ctx := initTestRepo(t)
 
 	// Create a blob with content that has 3 non-overlapping match sites.
 	content := "aaa bbb ccc"
-	blobSHA := hashBlob(t, dir, content)
+	blobSHA := hashBlob(t, dir, ctx, content)
 
 	replaceA := "AAA"
 	replaceB := "BBB"
@@ -316,13 +315,12 @@ func TestBuildRecipeBlobMapIndependentNonOverlapping(t *testing.T) {
 }
 
 func TestBuildRecipeBlobMapDependsOnChain(t *testing.T) {
-	dir := initTestRepo(t)
-	ctx := context.Background()
+	dir, ctx := initTestRepo(t)
 
 	// op0: "foo" -> "bar", op1 (depends on 0): "bar" -> "baz"
 	// Result: "foo" -> "baz"
 	content := "foo"
-	blobSHA := hashBlob(t, dir, content)
+	blobSHA := hashBlob(t, dir, ctx, content)
 
 	replaceBar := "bar"
 	replaceBaz := "baz"
@@ -356,13 +354,12 @@ func TestBuildRecipeBlobMapDependsOnChain(t *testing.T) {
 }
 
 func TestBuildRecipeBlobMapOverlappingRangesError(t *testing.T) {
-	dir := initTestRepo(t)
-	ctx := context.Background()
+	dir, ctx := initTestRepo(t)
 
 	// Two independent ops with overlapping matches on "foobar":
 	// op0 matches "foob", op1 matches "obar" -- they overlap at "ob".
 	content := "foobar"
-	blobSHA := hashBlob(t, dir, content)
+	blobSHA := hashBlob(t, dir, ctx, content)
 
 	replace1 := "XXXX"
 	replace2 := "YYYY"
@@ -490,12 +487,11 @@ replace = ""
 // --- BuildRecipeBlobContent tests ---
 
 func TestBuildRecipeBlobContentNoWrite(t *testing.T) {
-	dir := initTestRepo(t)
-	ctx := context.Background()
+	dir, ctx := initTestRepo(t)
 
 	// Create a blob with known content.
 	content := "secret_key_abc123"
-	blobSHA := hashBlob(t, dir, content)
+	blobSHA := hashBlob(t, dir, ctx, content)
 
 	// Count objects before applying the recipe.
 	countBefore := countObjects(t, dir)
