@@ -2,6 +2,25 @@
 
 # Changelog
 
+## 0.21.0
+
+Revert tracked policy file — scrub patterns are no longer committed to the repo
+
+<details>
+<summary>Context</summary>
+
+The v0.20.0 decision to track .safegit/scrub-policies.jsonl in the working tree was a security mistake: the policy file contains the literal regex patterns used to find secrets, which re-introduces the scrubbed content into the repo. Reverted to .git/safegit/ (untracked). Deleted ~250 lines of complexity: auto-commit logic, policy blob exclusion sets, migration from old to new location. Policies are now local to the machine where the scrub was performed.
+
+</details>
+
+### Breaking
+
+- **Breaking.** Scrub policy storage reverted from tracked `.safegit/` to untracked `.git/safegit/`. Tracked policies committed the literal patterns being scrubbed, re-introducing secrets into the repo. Policies are now local-only and never committed.
+
+### Features
+
+- **Improvement.** `scrub verify` prints the policy file path and explains that policies are local to the machine when no policies are found.
+
 ## 0.20.2
 
 Fix per-operation recipe scope enforcement and dry-run lock acquisition
