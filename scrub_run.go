@@ -33,7 +33,7 @@ type ScrubRunResult struct {
 // ScrubRunDiffEntry is a single blob diff in --diff preview output.
 type ScrubRunDiffEntry struct {
 	OldSHA string   `json:"old_sha"`
-	NewSHA string   `json:"new_sha"`
+	NewSHA string   `json:"new_sha,omitempty"`
 	Paths  []string `json:"paths"`
 	Diff   string   `json:"diff"`
 }
@@ -95,22 +95,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 
 	infof(flags, "Recipe loaded: %d operations\n", len(recipe.Operations))
 
-	sgDir := repo.SafegitDir(gitDir)
-
-	// Acquire rewrite lock
-	cfg, err := loadConfig(flags, gitDir)
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("loading config: %v", err))
-	}
-	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
-	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
-	lk, err := lock.Acquire(sharedDir, sgDir, "safegit/rewrite", "scrub-run", timeout)
-	if err != nil {
-		die(flags, cmd, 1, "another rewrite operation is in progress")
-	}
-	defer lk.Release()
-
-	// Resolve --from if provided
+	// Resolve --from if provided (needed by both --diff and execute paths).
 	var fromSHA string
 	if from != nil {
 		fromSHA, err = git.RevParse(ctx, *from)
@@ -131,7 +116,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 		die(flags, cmd, 2, "one of --from or --entire-history is required")
 	}
 
-	// --diff preview mode: build blob map via range-scoped scan, then show diffs.
+	// --diff preview mode: purely read-only, no lock needed.
 	if diffMode {
 		combinedPatternParts := make([]string, len(recipe.Operations))
 		for i, op := range recipe.Operations {
@@ -167,13 +152,28 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 			blobSHAList = append(blobSHAList, sha)
 		}
 
-		blobMap, err := buildRecipeBlobMap(ctx, recipe, blobSHAList)
+		contentMap, err := BuildRecipeBlobContent(ctx, recipe, blobSHAList)
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("building blob map: %v", err))
+			die(flags, cmd, 1, fmt.Sprintf("building blob content map: %v", err))
 		}
 
-		return scrubRunDiff(ctx, flags, cmd, recipe, blobMap, fromSHA, entireHistory, limit)
+		return scrubRunDiff(ctx, flags, cmd, recipe, contentMap, fromSHA, entireHistory, limit)
 	}
+
+	sgDir := repo.SafegitDir(gitDir)
+
+	// Acquire rewrite lock (only for the execute path -- diff is read-only).
+	cfg, err := loadConfig(flags, gitDir)
+	if err != nil {
+		die(flags, cmd, 1, fmt.Sprintf("loading config: %v", err))
+	}
+	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
+	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
+	lk, err := lock.Acquire(sharedDir, sgDir, "safegit/rewrite", "scrub-run", timeout)
+	if err != nil {
+		die(flags, cmd, 1, "another rewrite operation is in progress")
+	}
+	defer lk.Release()
 
 	// Resolve repo root for tracked policy storage.
 	repoRoot, err := git.RepoRoot(ctx)
@@ -306,14 +306,7 @@ func rewriteTagAnnotationsRecipe(ctx context.Context, flags globalFlags, cmd str
 // scrubRunDiff previews what a recipe would change without modifying any objects.
 // It reads old and new blob content, produces unified diffs, and also shows
 // commit message diffs for commits in the rewrite range.
-func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *ParsedRecipe, blobMap map[string]string, fromSHA string, entireHistory bool, limit int) int {
-	// Add attribution to identify file paths for each blob
-	// We do this by collecting all old blob SHAs and finding their paths.
-	oldBlobSHAs := make([]string, 0, len(blobMap))
-	for oldSHA := range blobMap {
-		oldBlobSHAs = append(oldBlobSHAs, oldSHA)
-	}
-
+func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *ParsedRecipe, contentMap map[string][]byte, fromSHA string, entireHistory bool, limit int) int {
 	// Build path attribution: SHA -> []paths
 	blobPaths, err := buildBlobPathMap(ctx)
 	if err != nil {
@@ -324,7 +317,7 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 	var blobDiffs []ScrubRunDiffEntry
 	shown := 0
 	truncated := false
-	for oldSHA, newSHA := range blobMap {
+	for oldSHA, newContent := range contentMap {
 		if shown >= limit {
 			truncated = true
 			break
@@ -333,18 +326,6 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 		oldContent, err := git.CatFileBlob(ctx, oldSHA)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: reading old blob %s: %v\n", shortSHA(oldSHA), err)
-			continue
-		}
-
-		// For --diff, we already have the new SHA in the blobMap; the new blob
-		// was written by buildRecipeBlobMap. Read it.
-		newContent, err := git.CatFileBlob(ctx, newSHA)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: reading new blob %s: %v\n", shortSHA(newSHA), err)
-			continue
-		}
-
-		if isBinaryContent(oldContent) {
 			continue
 		}
 
@@ -358,7 +339,6 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 
 		entry := ScrubRunDiffEntry{
 			OldSHA: oldSHA,
-			NewSHA: newSHA,
 			Paths:  paths,
 			Diff:   diff,
 		}
@@ -371,7 +351,7 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 			} else {
 				infof(flags, "--- blob %s\n", shortSHA(oldSHA))
 			}
-			infof(flags, "+++ blob %s\n", shortSHA(newSHA))
+			infof(flags, "+++ (replacement content)\n")
 			infof(flags, "%s\n", diff)
 		}
 	}
@@ -435,15 +415,14 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 	}
 
 	if !flags.json {
-		infof(flags, "\nDiff preview: %d blobs would change", len(blobMap))
+		infof(flags, "\nDiff preview: %d blobs would change", len(contentMap))
 		if truncated {
-			infof(flags, " (showing %d of %d)", shown, len(blobMap))
+			infof(flags, " (showing %d of %d)", shown, len(contentMap))
 		}
 		infof(flags, "\n")
 		if len(messageDiffs) > 0 {
 			infof(flags, "  %d commit messages would change\n", len(messageDiffs))
 		}
-		infof(flags, "No objects were modified.\n")
 	}
 
 	if flags.json {
@@ -453,7 +432,7 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 			OperationCount: len(recipe.Operations),
 			BlobDiffs:      blobDiffs,
 			MessageDiffs:   messageDiffs,
-			TotalBlobs:     len(blobMap),
+			TotalBlobs:     len(contentMap),
 			Shown:          shown,
 			Truncated:      truncated,
 		}

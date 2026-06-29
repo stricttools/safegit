@@ -2,6 +2,7 @@ package test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -259,8 +260,8 @@ replace = "REDACTED"
 	if !strings.Contains(combined, "SECRET_ABC") && !strings.Contains(combined, "REDACTED") {
 		t.Errorf("--diff output should contain before/after content, got: %s", combined)
 	}
-	if !strings.Contains(combined, "No objects were modified") {
-		t.Errorf("--diff output should state no objects were modified, got: %s", combined)
+	if !strings.Contains(combined, "Diff preview:") {
+		t.Errorf("--diff output should contain diff preview summary, got: %s", combined)
 	}
 
 	// Verify on-disk file is unchanged
@@ -340,4 +341,68 @@ replace = "REDACTED"
 	if result.OldHead == result.NewHead {
 		t.Errorf("old_head should differ from new_head: %s", result.OldHead)
 	}
+}
+
+// TestScrubRunDiffNoObjectWrites verifies that --diff does not write any objects
+// to the git object store.
+func TestScrubRunDiffNoObjectWrites(t *testing.T) {
+	dir := newRepo(t)
+
+	commitFileEnv(t, dir, scrubRunEnv, "secret.txt", "password=SECRET_OBJ here\n", "add secret")
+	commitFileEnv(t, dir, scrubRunEnv, "secret.txt", "password=SECRET_OBJ updated\n", "update secret")
+
+	// Count objects before --diff
+	countBefore := countGitObjects(t, dir)
+
+	recipe := writeRecipe(t, "recipe.toml", `
+[[operations]]
+pattern = "SECRET_OBJ"
+replace = "REDACTED"
+`)
+
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
+		"--yes", "scrub", "run",
+		"--diff",
+		"--reason", "test no object writes",
+		"--entire-history",
+		recipe,
+	)
+	if code != 0 {
+		t.Fatalf("scrub run --diff failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	// Count objects after --diff
+	countAfter := countGitObjects(t, dir)
+
+	if countAfter != countBefore {
+		t.Errorf("--diff wrote objects: before=%d after=%d", countBefore, countAfter)
+	}
+}
+
+// countGitObjects returns the number of objects in the git object store
+// (both loose and packed).
+func countGitObjects(t *testing.T, dir string) int {
+	t.Helper()
+	cmd := exec.Command("git", "count-objects", "-v")
+	cmd.Dir = dir
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git count-objects: %v", err)
+	}
+	// Parse "count: N" (loose) and "in-pack: M" (packed) lines
+	total := 0
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "count: ") {
+			var n int
+			fmt.Sscanf(line, "count: %d", &n)
+			total += n
+		}
+		if strings.HasPrefix(line, "in-pack: ") {
+			var n int
+			fmt.Sscanf(line, "in-pack: %d", &n)
+			total += n
+		}
+	}
+	return total
 }
