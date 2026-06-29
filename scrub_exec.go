@@ -320,6 +320,29 @@ func executeScrubRecipe(
 	return exitCode, &result
 }
 
+// estimateCommitCount returns the number of commits in the rewrite range.
+// For entireHistory, it counts all commits reachable from HEAD. For range mode,
+// it counts commits in fromSHA..HEAD plus one (inclusive of fromSHA).
+// Returns 0 if the count cannot be determined.
+func estimateCommitCount(ctx context.Context, fromSHA string, entireHistory bool) int {
+	if entireHistory {
+		out, _, err := git.Run(ctx, "rev-list", "--count", "HEAD")
+		if err == nil {
+			var n int
+			fmt.Sscanf(strings.TrimSpace(out), "%d", &n)
+			return n
+		}
+	} else if fromSHA != "" {
+		out, _, err := git.Run(ctx, "rev-list", "--count", fromSHA+"..HEAD")
+		if err == nil {
+			var n int
+			fmt.Sscanf(strings.TrimSpace(out), "%d", &n)
+			return n + 1 // inclusive of fromSHA
+		}
+	}
+	return 0
+}
+
 // TagBodyTransformFunc transforms the body of an annotated tag. It receives the
 // tag's refname, full header text, and body text. It returns the new body (or
 // the same body if no change is needed) and any error.

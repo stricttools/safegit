@@ -563,21 +563,7 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 		totalTag += tagCount
 	}
 
-	// Estimate commit count for the rewrite range.
-	estimatedCommits := 0
-	if entireHistory {
-		out, _, err := git.Run(ctx, "rev-list", "--count", "HEAD")
-		if err == nil {
-			fmt.Sscanf(strings.TrimSpace(out), "%d", &estimatedCommits)
-		}
-	} else if fromSHA != "" {
-		out, _, err := git.Run(ctx, "rev-list", "--count", fromSHA+"..HEAD")
-		if err == nil {
-			count := 0
-			fmt.Sscanf(strings.TrimSpace(out), "%d", &count)
-			estimatedCommits = count + 1 // inclusive of fromSHA
-		}
-	}
+	estimatedCommits := estimateCommitCount(ctx, fromSHA, entireHistory)
 
 	// Use the first result's scan stats (all operations scan the same objects).
 	objectsScanned := 0
