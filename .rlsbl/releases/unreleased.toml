@@ -1,0 +1,16 @@
+# Version bump type: patch, minor, major, hotfix, or prerelease
+bump = "patch"
+# Short description of this release (required)
+description = "Fix per-operation recipe scope enforcement and dry-run lock acquisition"
+# Optional context explaining why these changes were made
+context = """
+Per-operation scope fields in recipe TOML files were recorded in policies but not \
+enforced during blob filtering. scrub match and scrub file dry-run modes unnecessarily \
+acquired the exclusive rewrite lock, blocking concurrent operations during read-only preview.
+"""
+# Pre-release identifier: alpha, beta, rc, or stable
+# preid = ""
+# Set to true to generate a blog post for this release
+# blog = false
+include = ["go", "docker"]
+exclude = []
