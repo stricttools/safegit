@@ -19,7 +19,7 @@ type SubmoduleRepo struct {
 
 func initOriginRepo(t *testing.T, filename string) string {
 	t.Helper()
-	dir := t.TempDir()
+	dir := evalTempDir(t)
 
 	cmds := [][]string{
 		{"git", "init", "--initial-branch=main"},
@@ -54,7 +54,7 @@ func initOriginRepo(t *testing.T, filename string) string {
 
 func initParentRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
+	dir := evalTempDir(t)
 
 	cmds := [][]string{
 		{"git", "init", "--initial-branch=main"},
