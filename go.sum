@@ -1,8 +1,8 @@
 github.com/BurntSushi/toml v1.6.0 h1:dRaEfpa2VI55EwlIW72hMRHdWouJeRF7TPYhI+AUQjk=
 github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
-github.com/smm-h/go-toml-edit v0.1.2 h1:dhq+zXry6ETwHp7sGL8WWLhPa5aS5PT+BwSVKqQxyiA=
-github.com/smm-h/go-toml-edit v0.1.2/go.mod h1:ateUuu33c4CaaB3XUQgsyuPEsIkAWRV8nahfZqpNhm4=
-github.com/smm-h/strictcli/go v0.9.0 h1:y9fHVkZw5DI40vJ6wy8gTXgT+1goe6NHeuDB7n3NZtQ=
-github.com/smm-h/strictcli/go v0.9.0/go.mod h1:HuLPjlZFo90UJryQQM009VzfGt0EOko58jUEyDxuXwM=
+github.com/smm-h/go-toml-edit v0.2.1 h1:KXzKYuzDnw7XHCzPNtw9DQzf+PpwPISvSVDns6zekD4=
+github.com/smm-h/go-toml-edit v0.2.1/go.mod h1:ateUuu33c4CaaB3XUQgsyuPEsIkAWRV8nahfZqpNhm4=
+github.com/smm-h/strictcli/go v0.16.2 h1:BfFvKjyz68BmR/sn8zFTW7TeNH6fPWn3jdxKj07x4iQ=
+github.com/smm-h/strictcli/go v0.16.2/go.mod h1:dMXXawbT6mstBeQ9yKQaaqTkL1/qQ28FCV47TxKYWL4=
 github.com/toml-lang/toml-test/v2 v2.2.0 h1:q3ELZu7oPnpl9TClC6OOcAccXwj+jwAyFP8WvzBdK1M=
 github.com/toml-lang/toml-test/v2 v2.2.0/go.mod h1:TQdjhQItoZ0R+OODNiHUuxxxErtaE0Xsod2ENZbMvxI=
