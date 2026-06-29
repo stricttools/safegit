@@ -1,0 +1,4 @@
+{"commits":["8d0f2b956979b51da0b339f14f56f1f10df3787b"],"user_facing":true,"description":"**Bug fix.** Per-operation `scope` in recipe TOML files is now enforced during execution and dry-run. Previously, recipe scopes were recorded in policies but not used for blob filtering.","type":"fix"}
+{"commits":["64628b9ba2dbe5d6d53d802458e2f003449d9d06"],"user_facing":true,"description":"**Bug fix.** `scrub match --dry-run` no longer acquires the exclusive rewrite lock, allowing concurrent operations during preview.","type":"fix"}
+{"commits":["348b723f22a6e3bc28306e503c841ec7dbf92200"],"user_facing":true,"description":"**Bug fix.** `scrub file --dry-run` no longer acquires the exclusive rewrite lock.","type":"fix"}
+{"commits":["f0441d133d59ba9e8453194724ce9ccd52bf2f73","96ac76cbe27c9282f966ddca986eb012905c2998","53808172822804344ab9f1c179ea3b8382695d9b"],"user_facing":false}
