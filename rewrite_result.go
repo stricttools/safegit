@@ -33,6 +33,13 @@ type RewriteResult struct {
 	// Safegit paths
 	SgDir string // .git/safegit directory path
 
+	// Tagger identity for updateRefs (rewrite-author needs tagger matching;
+	// zero values mean "no tagger matching", which is the default for scrub).
+	TaggerOldName  string
+	TaggerNewName  string
+	TaggerOldEmail string
+	TaggerNewEmail string
+
 	// Oplog metadata
 	OpName     string                 // operation name ("scrub-file", "scrub-match", "rewrite-author")
 	OplogExtra map[string]interface{} // command-specific oplog fields
@@ -55,9 +62,10 @@ type RewriteResult struct {
 //  9. oplog.Append — record the operation
 //  10. Push hint — print rlsbl-aware or default push instructions
 func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd string, annotationRewriteFunc AnnotationRewriteFunc, verifyFunc VerifyFunc) error {
-	// 1. Update refs
+	// 1. Update refs (passes tagger identity for rewrite-author; zero values
+	// for scrub commands mean "no tagger matching").
 	infof(flags, "Updating refs...\n")
-	tagRewrites, err := updateRefs(ctx, r.ShaMap, "", "", "", "", flags.verbose)
+	tagRewrites, err := updateRefs(ctx, r.ShaMap, r.TaggerOldName, r.TaggerNewName, r.TaggerOldEmail, r.TaggerNewEmail, flags.verbose)
 	if err != nil {
 		return fmt.Errorf("updating refs: %w", err)
 	}

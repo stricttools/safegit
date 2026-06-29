@@ -6,12 +6,10 @@ import (
 	"os"
 	"sort"
 	"strings"
-
 	"time"
 
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/lock"
-	"github.com/smm-h/safegit/internal/oplog"
 	"github.com/smm-h/safegit/internal/repo"
 )
 
@@ -169,46 +167,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		die(flags, cmd, 1, fmt.Sprintf("rewriting commits: %v", err))
 	}
 
-	infof(flags, "Updating refs...\n")
-	tagRewrites, err := updateRefs(ctx, shaMap, oldName, newName, oldEmail, newEmail, flags.verbose)
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("updating refs: %v", err))
-	}
-
-	// Capture new HEAD after rewrite
-	newHeadSHA, err := git.RevParse(ctx, "HEAD")
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving new HEAD: %v", err))
-	}
-
-	infof(flags, "Capturing post-rewrite snapshot...\n")
-	after, err := captureSnapshot(ctx)
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("capturing post-rewrite snapshot: %v", err))
-	}
-
-	infof(flags, "Verifying...\n")
-	failures := compareSnapshots(before, after, oldName, newName, oldEmail)
-
-	// Also verify working tree is clean after rewrite
-	statusOut, _, err := git.Run(ctx, "status", "--porcelain")
-	if err != nil {
-		failures = append(failures, fmt.Sprintf("checking working tree after rewrite: %v", err))
-	} else if strings.TrimSpace(statusOut) != "" {
-		failures = append(failures, "working tree is dirty after rewrite")
-	}
-
-	if len(failures) > 0 {
-		for _, f := range failures {
-			fmt.Fprintf(os.Stderr, "  FAIL: %s\n", f)
-		}
-		die(flags, cmd, 1, "VERIFICATION FAILED")
-	}
-
-	// Count checks: compareSnapshots runs 12 categories + tag-to-message per tag + working tree = 13 base checks
-	infof(flags, "Verification passed: all checks OK\n")
-
-	// Summary
+	// Summary counts (computed before Finalize for JSON output)
 	identity := 0
 	for k, v := range shaMap {
 		if k == v {
@@ -218,16 +177,62 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	total := len(shaMap)
 	parentOnly := total - nameChanged - identity
 
-	// Oplog entry
-	_ = oplog.Append(sgDir, oplog.Entry{
-		Op: "rewrite-author",
-		Extra: map[string]interface{}{
+	// Build RewriteResult
+	result := &RewriteResult{
+		ShaMap:         shaMap,
+		RewrittenCount: total,
+		OldHeadSHA:     oldHeadSHA,
+		SgDir:          sgDir,
+		TaggerOldName:  oldName,
+		TaggerNewName:  newName,
+		TaggerOldEmail: oldEmail,
+		TaggerNewEmail: newEmail,
+		OpName:         "rewrite-author",
+		OplogExtra: map[string]interface{}{
 			"oldName":          oldName,
 			"newName":          newName,
-			"commitsRewritten": len(shaMap),
+			"oldEmail":         oldEmail,
+			"newEmail":         newEmail,
+			"commitsRewritten": total,
 			"nameChanged":      nameChanged,
 		},
-	})
+	}
+
+	// VerifyFunc: captures pre-rewrite snapshot in closure, takes post-rewrite
+	// snapshot after cleanup has run (inside Finalize), then compares.
+	verifyFunc := func(ctx context.Context) error {
+		infof(flags, "Capturing post-rewrite snapshot...\n")
+		after, err := captureSnapshot(ctx)
+		if err != nil {
+			return fmt.Errorf("capturing post-rewrite snapshot: %v", err)
+		}
+
+		infof(flags, "Verifying...\n")
+		failures := compareSnapshots(before, after, oldName, newName, oldEmail)
+
+		// Also verify working tree is clean after rewrite
+		statusOut, _, err := git.Run(ctx, "status", "--porcelain")
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("checking working tree after rewrite: %v", err))
+		} else if strings.TrimSpace(statusOut) != "" {
+			failures = append(failures, "working tree is dirty after rewrite")
+		}
+
+		if len(failures) > 0 {
+			for _, f := range failures {
+				fmt.Fprintf(os.Stderr, "  FAIL: %s\n", f)
+			}
+			return fmt.Errorf("VERIFICATION FAILED")
+		}
+
+		infof(flags, "Verification passed: all checks OK\n")
+		return nil
+	}
+
+	// Finalize: updateRefs, cleanup, verify, index sync, oplog, push hint
+	if err := result.Finalize(ctx, flags, cmd, nil, verifyFunc); err != nil {
+		die(flags, cmd, 1, err.Error())
+	}
 
 	// JSON output
 	if flags.json {
@@ -237,10 +242,11 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 				rewrites[old] = new_
 			}
 		}
+		tagRewrites := result.TagRewrites
 		if tagRewrites == nil {
 			tagRewrites = []TagRewrite{}
 		}
-		result := RewriteAuthorResult{
+		jsonResult := RewriteAuthorResult{
 			Version:          1,
 			DryRun:           false,
 			Rewrites:         rewrites,
@@ -249,17 +255,17 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 			NameChanged:      nameChanged,
 			ParentOnly:       parentOnly,
 			OldHead:          oldHeadSHA,
-			NewHead:          newHeadSHA,
+			NewHead:          result.NewHeadSHA,
 		}
 		if oldName != "" {
-			result.OldName = oldName
-			result.NewName = newName
+			jsonResult.OldName = oldName
+			jsonResult.NewName = newName
 		}
 		if oldEmail != "" {
-			result.OldEmail = oldEmail
-			result.NewEmail = newEmail
+			jsonResult.OldEmail = oldEmail
+			jsonResult.NewEmail = newEmail
 		}
-		emitJSON(result)
+		emitJSON(jsonResult)
 		return 0
 	}
 
@@ -270,9 +276,6 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		infof(flags, "Rewrote %d commits (%d had name changes, %d were inherited (ancestors changed))\n",
 			total, nameChanged, parentOnly)
 	}
-
-	infof(flags, "\nTo update the remote:\n")
-	infof(flags, "  safegit push --both-branches-and-tags --force-with-lease\n")
 
 	return 0
 }
@@ -407,8 +410,10 @@ func captureSnapshot(ctx context.Context) (rewriteSnapshot, error) {
 	}
 
 	// Full commit messages: use \x01 as a record separator before each
-	// message body (%B can contain newlines).
-	out, _, err = git.Run(ctx, "log", "--all", "--topo-order", "--format=%x01%B")
+	// message body (%B can contain newlines). Uses refGlobs (not --all) to
+	// match the same ref scope as the walker and all other snapshot queries.
+	msgArgs := append([]string{"log", "--topo-order", "--format=%x01%B"}, refGlobs...)
+	out, _, err = git.Run(ctx, msgArgs...)
 	if err != nil {
 		return snap, fmt.Errorf("reading commit messages: %w", err)
 	}
