@@ -10,7 +10,6 @@ import (
 
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/lock"
-	"github.com/smm-h/safegit/internal/oplog"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/submodule"
 )
@@ -208,82 +207,57 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		die(flags, cmd, 1, err.Error())
 	}
 
-	// Update refs: reuse updateRefs from rewrite_author.go with empty author
-	// params. When all four author strings are empty, rewriteAnnotatedTag
-	// skips tagger matching entirely and only remaps target commit SHAs,
-	// which is exactly what scrub needs.
-	infof(flags, "Updating refs...\n")
-	tagRewrites, err := updateRefs(ctx, shaMap, "", "", "", "", flags.verbose)
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("updating refs: %v", err))
-	}
-
-	// Sync main index and working tree to match rewritten HEAD
-	protectedPaths, err := git.SyncMainIndexWithWorktree(ctx, "HEAD")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to sync main index: %v\n", err)
-	}
-	untrackProtectedPaths(ctx, flags, protectedPaths)
-
-	// Post-rewrite verification
-	infof(flags, "Verifying...\n")
-	verifyFailures, verifyChecks := verifyScrub(ctx, shaMap, filePath, flags.verbose)
-	if len(verifyFailures) > 0 {
-		fmt.Fprintf(os.Stderr, "Verification warnings (%d failures):\n", len(verifyFailures))
-		for _, f := range verifyFailures {
-			fmt.Fprintf(os.Stderr, "  WARN: %s\n", f)
-		}
-	} else {
-		infof(flags, "Verification passed: %d checks across %d rewritten commits\n", verifyChecks, rewrittenCount)
-	}
-
-	// Resolve new HEAD
-	newHeadSHA, err := git.RevParse(ctx, "HEAD")
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving new HEAD: %v", err))
-	}
-
-	// Determine current ref for oplog
-	ref, _ := git.HeadRef(ctx)
-	if ref == "" {
-		ref = "HEAD (detached)"
-	}
-
-	// Oplog entry
-	_ = oplog.Append(sgDir, oplog.Entry{
-		Op: "scrub-file",
-		Extra: map[string]interface{}{
-			"ref":       ref,
-			"file":      filePath,
-			"from":      fromSHA,
-			"reason":    reason,
-			"oldHead":   oldHeadSHA,
-			"sha":       newHeadSHA,
-			"rewritten": rewrittenCount,
-		},
-	})
-
-	// Surgical post-rewrite cleanup: expire tainted reflog entries and prune old objects
-	if err := cleanupAfterRewrite(ctx, flags, cmd, shaMap, sgDir); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: post-rewrite cleanup: %v\n", err)
-	}
-
-	// Post-cleanup verification: check that old blob SHAs were pruned
+	// Populate RewriteResult for the shared post-rewrite pipeline.
 	exitCode := 0
-	if len(oldBlobSHAs) > 0 {
-		infof(flags, "Verifying old blobs removed...\n")
-		oldBlobList := make([]string, 0, len(oldBlobSHAs))
-		for sha := range oldBlobSHAs {
-			oldBlobList = append(oldBlobList, sha)
-		}
-		if err := verifyOldBlobsRemoved(ctx, oldBlobList); err != nil {
-			fmt.Fprintf(os.Stderr, "CRITICAL: %v\n", err)
-			fmt.Fprintln(os.Stderr, "Old file content may still be present in the local object store.")
-			fmt.Fprintln(os.Stderr, "Run 'git reflog expire --expire=now --all && git gc --prune=now' to force cleanup.")
-			exitCode = 1
+	result := RewriteResult{
+		ShaMap:         shaMap,
+		RewrittenCount: rewrittenCount,
+		OldHeadSHA:     oldHeadSHA,
+		SgDir:          sgDir,
+		OpName:         "scrub-file",
+		OplogExtra: map[string]interface{}{
+			"file":   filePath,
+			"from":   fromSHA,
+			"reason": reason,
+			"mode":   mode,
+		},
+	}
+
+	// VerifyFunc: runs verifyScrub (structural integrity) and
+	// verifyOldBlobsRemoved (old blobs pruned). Neither is fatal -- failures
+	// set exitCode but allow the pipeline to continue.
+	verifyFunc := func(ctx context.Context) error {
+		infof(flags, "Verifying...\n")
+		verifyFailures, verifyChecks := verifyScrub(ctx, shaMap, filePath, flags.verbose)
+		if len(verifyFailures) > 0 {
+			fmt.Fprintf(os.Stderr, "Verification warnings (%d failures):\n", len(verifyFailures))
+			for _, f := range verifyFailures {
+				fmt.Fprintf(os.Stderr, "  WARN: %s\n", f)
+			}
 		} else {
-			infof(flags, "Verification passed: all old blobs removed from object store.\n")
+			infof(flags, "Verification passed: %d checks across %d rewritten commits\n", verifyChecks, rewrittenCount)
 		}
+
+		if len(oldBlobSHAs) > 0 {
+			infof(flags, "Verifying old blobs removed...\n")
+			oldBlobList := make([]string, 0, len(oldBlobSHAs))
+			for sha := range oldBlobSHAs {
+				oldBlobList = append(oldBlobList, sha)
+			}
+			if err := verifyOldBlobsRemoved(ctx, oldBlobList); err != nil {
+				fmt.Fprintf(os.Stderr, "CRITICAL: %v\n", err)
+				fmt.Fprintln(os.Stderr, "Old file content may still be present in the local object store.")
+				fmt.Fprintln(os.Stderr, "Run 'git reflog expire --expire=now --all && git gc --prune=now' to force cleanup.")
+				exitCode = 1
+			} else {
+				infof(flags, "Verification passed: all old blobs removed from object store.\n")
+			}
+		}
+		return nil // non-fatal: exitCode tracks failures
+	}
+
+	if err := result.Finalize(ctx, flags, cmd, nil, verifyFunc); err != nil {
+		die(flags, cmd, 1, err.Error())
 	}
 
 	// JSON output
@@ -294,21 +268,22 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 				rewrites[old] = new_
 			}
 		}
-		if tagRewrites == nil {
-			tagRewrites = []TagRewrite{}
+		tags := result.TagRewrites
+		if tags == nil {
+			tags = []TagRewrite{}
 		}
-		result := ScrubFileResult{
+		jsonResult := ScrubFileResult{
 			Version:          1,
 			DryRun:           false,
 			File:             filePath,
 			Mode:             mode,
 			Rewrites:         rewrites,
-			Tags:             tagRewrites,
+			Tags:             tags,
 			CommitsRewritten: rewrittenCount,
 			OldHead:          oldHeadSHA,
-			NewHead:          newHeadSHA,
+			NewHead:          result.NewHeadSHA,
 		}
-		emitJSON(result)
+		emitJSON(jsonResult)
 		return exitCode
 	}
 
@@ -316,9 +291,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	infof(flags, "\nScrub complete:\n")
 	infof(flags, "  %d commits rewritten\n", rewrittenCount)
 	infof(flags, "  Old HEAD: %s\n", oldHeadSHA[:12])
-	infof(flags, "  New HEAD: %s\n", newHeadSHA[:12])
-	infof(flags, "\nTo update the remote:\n")
-	infof(flags, "  safegit push --both-branches-and-tags --force-with-lease\n")
+	infof(flags, "  New HEAD: %s\n", result.NewHeadSHA[:12])
 
 	return exitCode
 }
@@ -439,6 +412,13 @@ func runScrubFileInSubmodule(
 		return 0
 	}
 
+	// Capture old submodule HEAD before rewriting.
+	oldSubHeadSHA, err := git.RevParse(ctx, "HEAD")
+	if err != nil {
+		os.Chdir(parentDir)
+		die(flags, cmd, 1, fmt.Sprintf("resolving submodule HEAD: %v", err))
+	}
+
 	// Walk and rewrite submodule commits.
 	oldSubBlobSHAs := make(map[string]bool)
 	subShaMap, subRewrittenCount, err := walkAndRewrite(ctx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
@@ -461,42 +441,25 @@ func runScrubFileInSubmodule(
 		die(flags, cmd, 1, fmt.Sprintf("submodule walk and rewrite: %v", err))
 	}
 
-	// Update submodule refs.
-	infof(flags, "Updating refs in submodule [%s]...\n", sub.RelativePath)
-	subTagRewrites, err := updateRefs(ctx, subShaMap, "", "", "", "", flags.verbose)
-	if err != nil {
-		os.Chdir(parentDir)
-		die(flags, cmd, 1, fmt.Sprintf("submodule: updating refs: %v", err))
-	}
-
-	// Cleanup submodule.
-	if err := cleanupAfterRewrite(ctx, flags, cmd, subShaMap, sub.SafegitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: submodule post-rewrite cleanup: %v\n", err)
-	}
-
-	// Sync submodule worktree and index before leaving the submodule dir.
-	if subProtected, syncErr := git.SyncMainIndexWithWorktree(ctx, "HEAD"); syncErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to sync submodule worktree: %v\n", syncErr)
-	} else {
-		untrackProtectedPaths(ctx, flags, subProtected)
-	}
-
-	// Log submodule oplog.
-	subRef, _ := git.HeadRef(ctx)
-	if subRef == "" {
-		subRef = "HEAD (detached)"
-	}
-	subNewHead, _ := git.RevParse(ctx, "HEAD")
-	_ = oplog.Append(sub.SafegitDir, oplog.Entry{
-		Op: "scrub-file",
-		Extra: map[string]interface{}{
-			"ref":       subRef,
-			"file":      subFilePath,
-			"reason":    reason,
-			"sha":       subNewHead,
-			"rewritten": subRewrittenCount,
+	// Finalize submodule rewrite via shared pipeline.
+	infof(flags, "Finalizing submodule [%s] rewrite...\n", sub.RelativePath)
+	subResult := RewriteResult{
+		ShaMap:         subShaMap,
+		RewrittenCount: subRewrittenCount,
+		OldHeadSHA:     oldSubHeadSHA,
+		SgDir:          sub.SafegitDir,
+		OpName:         "scrub-file",
+		OplogExtra: map[string]interface{}{
+			"file":   subFilePath,
+			"reason": reason,
+			"mode":   mode,
 		},
-	})
+	}
+	if err := subResult.Finalize(ctx, flags, cmd, nil, nil); err != nil {
+		os.Chdir(parentDir)
+		die(flags, cmd, 1, fmt.Sprintf("submodule finalize: %v", err))
+	}
+	subTagRewrites := subResult.TagRewrites
 
 	infof(flags, "  [%s] %d commits rewritten\n", sub.RelativePath, subRewrittenCount)
 
@@ -550,72 +513,54 @@ func runScrubFileInSubmodule(
 		die(flags, cmd, 1, fmt.Sprintf("parent walk and rewrite: %v", err))
 	}
 
-	// Update parent refs.
-	infof(flags, "Updating parent refs...\n")
-	parentTagRewrites, err := updateRefs(ctx, parentShaMap, "", "", "", "", flags.verbose)
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("updating parent refs: %v", err))
-	}
-
-	// Sync parent index and working tree to match rewritten HEAD.
-	parentProtectedPaths, syncErr := git.SyncMainIndexWithWorktree(ctx, "HEAD")
-	if syncErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to sync parent main index: %v\n", syncErr)
-	}
-	untrackProtectedPaths(ctx, flags, parentProtectedPaths)
-
-	// Cleanup parent.
-	if err := cleanupAfterRewrite(ctx, flags, cmd, parentShaMap, sgDir); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: parent post-rewrite cleanup: %v\n", err)
-	}
-
-	// Resolve new parent HEAD.
-	newHeadSHA, err := git.RevParse(ctx, "HEAD")
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving new parent HEAD: %v", err))
-	}
-
-	// Parent oplog entry.
-	ref, _ := git.HeadRef(ctx)
-	if ref == "" {
-		ref = "HEAD (detached)"
-	}
-	_ = oplog.Append(sgDir, oplog.Entry{
-		Op: "scrub-file",
-		Extra: map[string]interface{}{
-			"ref":       ref,
+	// Finalize parent rewrite via shared pipeline. The VerifyFunc checks
+	// that old submodule blobs are no longer reachable.
+	exitCode := 0
+	parentResult := RewriteResult{
+		ShaMap:         parentShaMap,
+		RewrittenCount: parentRewrittenCount,
+		OldHeadSHA:     oldHeadSHA,
+		SgDir:          sgDir,
+		OpName:         "scrub-file",
+		OplogExtra: map[string]interface{}{
 			"file":      fullPath,
 			"from":      from,
 			"reason":    reason,
-			"oldHead":   oldHeadSHA,
-			"sha":       newHeadSHA,
-			"rewritten": parentRewrittenCount,
+			"mode":      mode,
 			"submodule": sub.RelativePath,
 		},
-	})
+	}
 
-	// Verification: check old blobs are not reachable from submodule refs.
-	exitCode := 0
-	if len(oldSubBlobSHAs) > 0 {
+	parentVerifyFunc := func(ctx context.Context) error {
+		if len(oldSubBlobSHAs) == 0 {
+			return nil
+		}
 		os.Chdir(sub.WorkTreePath)
+		defer os.Chdir(parentDir)
+
 		infof(flags, "Verifying old blobs unreachable in submodule...\n")
 		oldBlobList := make([]string, 0, len(oldSubBlobSHAs))
 		for sha := range oldSubBlobSHAs {
 			oldBlobList = append(oldBlobList, sha)
 		}
 		reachableBlobs, err := buildReachableBlobSet(ctx)
-		if err == nil {
-			for _, sha := range oldBlobList {
-				if reachableBlobs[sha] {
-					fmt.Fprintf(os.Stderr, "CRITICAL: old blob %s still reachable in submodule\n", shortSHA(sha))
-					exitCode = 1
-				}
-			}
-			if exitCode == 0 {
-				infof(flags, "Verification passed: old blobs unreachable in submodule.\n")
+		if err != nil {
+			return nil // can't verify, not fatal
+		}
+		for _, sha := range oldBlobList {
+			if reachableBlobs[sha] {
+				fmt.Fprintf(os.Stderr, "CRITICAL: old blob %s still reachable in submodule\n", shortSHA(sha))
+				exitCode = 1
 			}
 		}
-		os.Chdir(parentDir)
+		if exitCode == 0 {
+			infof(flags, "Verification passed: old blobs unreachable in submodule.\n")
+		}
+		return nil // non-fatal: exitCode tracks failures
+	}
+
+	if err := parentResult.Finalize(ctx, flags, cmd, nil, parentVerifyFunc); err != nil {
+		die(flags, cmd, 1, fmt.Sprintf("parent finalize: %v", err))
 	}
 
 	// JSON output
@@ -626,11 +571,11 @@ func runScrubFileInSubmodule(
 				rewrites[old] = new_
 			}
 		}
-		allTagRewrites := append(subTagRewrites, parentTagRewrites...)
+		allTagRewrites := append(subTagRewrites, parentResult.TagRewrites...)
 		if allTagRewrites == nil {
 			allTagRewrites = []TagRewrite{}
 		}
-		result := ScrubFileResult{
+		jsonResult := ScrubFileResult{
 			Version:          1,
 			DryRun:           false,
 			File:             fullPath,
@@ -639,9 +584,9 @@ func runScrubFileInSubmodule(
 			Tags:             allTagRewrites,
 			CommitsRewritten: parentRewrittenCount + subRewrittenCount,
 			OldHead:          oldHeadSHA,
-			NewHead:          newHeadSHA,
+			NewHead:          parentResult.NewHeadSHA,
 		}
-		emitJSON(result)
+		emitJSON(jsonResult)
 		return exitCode
 	}
 
@@ -650,9 +595,7 @@ func runScrubFileInSubmodule(
 	infof(flags, "  %d submodule commits rewritten\n", subRewrittenCount)
 	infof(flags, "  %d parent commits rewritten (gitlink updates)\n", parentRewrittenCount)
 	infof(flags, "  Old HEAD: %s\n", oldHeadSHA[:12])
-	infof(flags, "  New HEAD: %s\n", newHeadSHA[:12])
-	infof(flags, "\nTo update the remote:\n")
-	infof(flags, "  safegit push --both-branches-and-tags --force-with-lease\n")
+	infof(flags, "  New HEAD: %s\n", parentResult.NewHeadSHA[:12])
 
 	return exitCode
 }
