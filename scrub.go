@@ -58,19 +58,6 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 
 	sgDir := repo.SafegitDir(gitDir)
 
-	// Acquire rewrite lock to prevent concurrent scrub operations
-	cfg, err := loadConfig(flags, gitDir)
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("loading config: %v", err))
-	}
-	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
-	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
-	lk, err := lock.Acquire(sharedDir, sgDir, "safegit/rewrite", "scrub-file", timeout)
-	if err != nil {
-		die(flags, cmd, 1, "another rewrite operation is in progress")
-	}
-	defer lk.Release()
-
 	// Enumerate submodules to detect if file path targets a submodule.
 	subs, subErr := submodule.Enumerate(ctx, gitDir)
 	if subErr != nil {
@@ -158,7 +145,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		return 0
 	}
 
-	// Dry-run check
+	// Dry-run check: purely read-only, no lock needed.
 	if flags.dryRun {
 		if flags.json {
 			result := ScrubFileDryRunResult{
@@ -176,6 +163,19 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		infof(flags, "Dry run: no changes made.\n")
 		return 0
 	}
+
+	// Acquire rewrite lock to prevent concurrent scrub operations (execute path only).
+	cfg, err := loadConfig(flags, gitDir)
+	if err != nil {
+		die(flags, cmd, 1, fmt.Sprintf("loading config: %v", err))
+	}
+	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
+	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
+	lk, err := lock.Acquire(sharedDir, sgDir, "safegit/rewrite", "scrub-file", timeout)
+	if err != nil {
+		die(flags, cmd, 1, "another rewrite operation is in progress")
+	}
+	defer lk.Release()
 
 	// Write the replacement blob to the object store (execute path only).
 	if mode == "replace" {
