@@ -9,10 +9,10 @@ nav_order: 18
 
 # safegit unlock
 
-release a stale ref lock
+release a stale .lock file left behind by a crashed git process
 
 ## Arguments
 
 | Name | Required | Description |
 | --- | --- | --- |
-| `ref` | yes | the ref name to unlock |
+| `ref` | yes | the ref name (e.g. refs/heads/main) whose stale .lock file to remove |

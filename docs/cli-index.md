@@ -12,29 +12,29 @@ order: 91
 
 concurrency-safe git for multi-agent use
 
-Version: 0.14.1+dirty
+Version: dev
 
 ## Commands
 
-- [bisect](cli-bisect.html) -- bisect (guarded)
-- [checkout](cli-checkout.html) -- checkout a ref (guarded)
-- [cherry-pick](cli-cherry-pick.html) -- cherry-pick commits (guarded)
-- [commit](cli-commit.html) -- stage and commit files atomically
-- [doctor](cli-doctor.html) -- health checks and repair
-- [merge](cli-merge.html) -- merge a branch (guarded)
-- [pull](cli-pull.html) -- fetch and merge (default --ff-only)
-- [push](cli-push.html) -- push with pre-hooks and retry
-- [rebase](cli-rebase.html) -- rebase onto upstream (guarded)
-- [redo](cli-redo.html) -- restore what undo removed (one-shot)
-- [reset](cli-reset.html) -- reset HEAD (guarded for --hard)
-- [revert](cli-revert.html) -- revert commits (guarded)
-- [rewrite-author](cli-rewrite-author.html) -- rewrite author/committer across history
-- [undo](cli-undo.html) -- reverse last commit/amend/reword via oplog
-- [unlock](cli-unlock.html) -- release a stale ref lock
-- [version](cli-version.html) -- print version and build info
+- [bisect](cli-bisect.html) -- binary search through commits to find a bug, with safety guards
+- [checkout](cli-checkout.html) -- checkout a branch or ref with working-tree safety guards
+- [cherry-pick](cli-cherry-pick.html) -- cherry-pick one or more commits onto HEAD with safety guards
+- [commit](cli-commit.html) -- stage and commit specified files in a single atomic operation
+- [doctor](cli-doctor.html) -- run diagnostic health checks on the repository and optionally repair issues
+- [merge](cli-merge.html) -- merge a branch into HEAD with working-tree safety guards
+- [pull](cli-pull.html) -- fetch from remote and merge, defaulting to fast-forward-only mode
+- [push](cli-push.html) -- push refs to remote with pre-pre-push hooks and automatic retry
+- [rebase](cli-rebase.html) -- rebase current branch onto upstream with safety guards
+- [redo](cli-redo.html) -- restore the commit that undo removed, as a one-shot counterpart to undo
+- [reset](cli-reset.html) -- reset HEAD with guards that prevent accidental --hard data loss
+- [revert](cli-revert.html) -- revert one or more commits creating inverse patches, with safety guards
+- [rewrite-author](cli-rewrite-author.html) -- rewrite author and committer name or email across all commit history
+- [undo](cli-undo.html) -- reverse the last commit, amend, or reword operation using the oplog
+- [unlock](cli-unlock.html) -- release a stale .lock file left behind by a crashed git process
+- [version](cli-version.html) -- print safegit version, Go runtime version, and git version
 
 ## Command Groups
 
-- [config](cli-config.html) -- show or set configuration values
-- [hook](cli-hook.html) -- manage pre-pre-push hooks
+- [config](cli-config.html) -- show, get, or set safegit configuration key-value pairs
+- [hook](cli-hook.html) -- manage pre-pre-push hook scripts that run before every push
 - [scrub](cli-scrub.html) -- surgically rewrite git history to remove or replace sensitive content such as secrets, credentials, and private data from all commits, trees, and blobs in the repository

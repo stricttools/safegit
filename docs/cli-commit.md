@@ -9,18 +9,18 @@ nav_order: 4
 
 # safegit commit
 
-stage and commit files atomically
+stage and commit specified files in a single atomic operation
 
 ## Flags
 
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--m` | `-m` | str |  |  | commit message (repeatable) |
-| `--F` | `-F` | str |  |  | read commit message from file |
-| `--branch` |  | str |  |  | commit to a different branch |
-| `--amend` |  | bool |  |  | amend the current HEAD commit |
-| `--allow-empty` |  | bool |  |  | allow commits with no file changes |
-| `--trailer` |  | str |  |  | add a trailer (repeatable) |
+| `--m` | `-m` | str |  |  | commit message line; can be repeated to build multi-line messages |
+| `--F` | `-F` | str |  |  | read the full commit message body from a file instead of --m flags |
+| `--branch` |  | str |  |  | commit the staged files onto a different branch without switching to it |
+| `--amend` |  | bool |  |  | amend the current HEAD commit by replacing it with updated content |
+| `--allow-empty` |  | bool |  |  | allow creating a commit even when no files have been changed |
+| `--trailer` |  | str |  |  | add a key-value trailer line to the commit message (repeatable) |
 
 ## Arguments
 

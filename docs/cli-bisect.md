@@ -9,4 +9,4 @@ nav_order: 1
 
 # safegit bisect
 
-bisect (guarded)
+binary search through commits to find a bug, with safety guards

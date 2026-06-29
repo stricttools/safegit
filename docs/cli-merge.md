@@ -9,4 +9,4 @@ nav_order: 8
 
 # safegit merge
 
-merge a branch (guarded)
+merge a branch into HEAD with working-tree safety guards

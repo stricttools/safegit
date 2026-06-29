@@ -9,12 +9,12 @@ nav_order: 6
 
 # safegit doctor
 
-health checks and repair
+run diagnostic health checks on the repository and optionally repair issues
 
 ## Flags
 
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--diagnose` |  | bool |  |  | run health checks without fixing |
-| `--fix` |  | bool |  |  | run health checks and fix issues |
-| `--uninstall` |  | bool |  |  | remove safegit from this repository |
+| `--diagnose` |  | bool |  |  | run all health checks and report results without fixing any issues |
+| `--fix` |  | bool |  |  | run all health checks and automatically repair any issues found |
+| `--uninstall` |  | bool |  |  | remove all safegit hooks and metadata from this repository entirely |

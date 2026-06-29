@@ -9,4 +9,4 @@ nav_order: 19
 
 # safegit version
 
-print version and build info
+print safegit version, Go runtime version, and git version

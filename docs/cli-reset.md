@@ -9,4 +9,4 @@ nav_order: 13
 
 # safegit reset
 
-reset HEAD (guarded for --hard)
+reset HEAD with guards that prevent accidental --hard data loss

@@ -9,4 +9,4 @@ nav_order: 3
 
 # safegit cherry-pick
 
-cherry-pick commits (guarded)
+cherry-pick one or more commits onto HEAD with safety guards

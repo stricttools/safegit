@@ -9,14 +9,13 @@ nav_order: 15
 
 # safegit rewrite-author
 
-rewrite author/committer across history
+rewrite author and committer name or email across all commit history
 
 ## Flags
 
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--old-name` |  | str |  |  | current author/committer name to match |
-| `--new-name` |  | str |  |  | replacement name |
-| `--old-email` |  | str |  |  | current author/committer email to match |
-| `--new-email` |  | str |  |  | replacement email |
-| `--push` |  | bool |  |  | force-push after rewriting |
+| `--old-name` |  | str |  |  | current author or committer display name to search for and replace |
+| `--new-name` |  | str |  |  | new display name to substitute wherever the old name is found in history |
+| `--old-email` |  | str |  |  | current author or committer email address to search for and replace |
+| `--new-email` |  | str |  |  | new email address to substitute wherever the old email is found in history |

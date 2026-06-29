@@ -9,10 +9,10 @@ nav_order: 17
 
 # safegit undo
 
-reverse last commit/amend/reword via oplog
+reverse the last commit, amend, or reword operation using the oplog
 
 ## Flags
 
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--bypass-session` |  | bool |  |  | undo across all sessions, ignoring session ID |
+| `--bypass-session` |  | bool |  |  | undo across all sessions by ignoring the session ID ownership check |

@@ -9,18 +9,21 @@ nav_order: 10
 
 # safegit push
 
-push with pre-hooks and retry
+push refs to remote with pre-pre-push hooks and automatic retry
 
 ## Flags
 
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--no-pre-pre-push` |  | bool |  |  | skip pre-pre-push hooks |
-| `--force-push` |  | bool |  |  | force push to remote |
+| `--no-pre-pre-push` |  | bool |  |  | skip running pre-pre-push hook scripts before pushing to remote |
+| `--force-with-lease` |  | bool |  |  | force push using --force-with-lease to prevent overwriting others' work |
+| `--only-head` |  | bool |  |  | push only the current HEAD branch to the remote, ignoring other refs |
+| `--only-branches` |  | bool |  |  | push all local branches to the remote, ignoring tags and other refs |
+| `--only-tags` |  | bool |  |  | push all local tags to the remote without pushing any branches |
+| `--both-branches-and-tags` |  | bool |  |  | push all local branches and all tags to the remote in one operation |
 
 ## Arguments
 
 | Name | Required | Description |
 | --- | --- | --- |
-| `remote` | no | remote name |
-| `refspecs` | no | refs to push |
+| `remote` | no | name of the remote repository to push to (defaults to origin) |

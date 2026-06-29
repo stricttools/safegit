@@ -9,10 +9,10 @@ nav_order: 12
 
 # safegit redo
 
-restore what undo removed (one-shot)
+restore the commit that undo removed, as a one-shot counterpart to undo
 
 ## Flags
 
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--bypass-session` |  | bool |  |  | redo across all sessions, ignoring session ID |
+| `--bypass-session` |  | bool |  |  | redo across all sessions by ignoring the session ID ownership check |

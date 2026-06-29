@@ -9,4 +9,4 @@ nav_order: 2
 
 # safegit checkout
 
-checkout a ref (guarded)
+checkout a branch or ref with working-tree safety guards

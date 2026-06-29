@@ -9,4 +9,4 @@ nav_order: 14
 
 # safegit revert
 
-revert commits (guarded)
+revert one or more commits creating inverse patches, with safety guards

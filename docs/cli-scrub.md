@@ -19,14 +19,14 @@ replace or remove a specific file across all commits in the repository history, 
 
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--from` |  | str |  |  | first commit to include in the rewrite |
-| `--reason` |  | str |  |  | audit trail explaining why the scrub is needed |
+| `--from` |  | str |  |  | first commit hash to include when rewriting history (default: root commit) |
+| `--reason` |  | str |  |  | mandatory audit trail message explaining why this scrub operation is needed |
 
 ### Arguments
 
 | Name | Required | Description |
 | --- | --- | --- |
-| `file` | yes | repo-relative file path to scrub |
+| `file` | yes | repository-relative path to the file that should be scrubbed from history |
 
 ## scrub match
 
@@ -36,9 +36,10 @@ replace all occurrences of a regex pattern across every blob in the repository h
 
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--pattern` |  | str |  |  | regex pattern to search for |
-| `--replace` |  | str |  |  | replacement string |
-| `--reason` |  | str |  |  | audit trail explaining why the scrub is needed |
+| `--pattern` |  | str |  |  | regular expression pattern to search for across all blobs in history |
+| `--reason` |  | str |  |  | mandatory audit trail message explaining why this scrub operation is needed |
 | `--scope` |  | str |  |  | glob pattern limiting which file paths are searched (e.g. '*.env', 'config/**') |
-| `--from` |  | str |  |  | first commit to include in the rewrite |
-| `--entire-history` |  | bool |  |  | rewrite all commits |
+| `--replace` |  | str |  |  | literal string to substitute for each regex match found in history |
+| `--mangle` |  | bool |  |  | replace matches with random printable ASCII of same length |
+| `--from` |  | str |  |  | first commit hash to include when rewriting history (default: root commit) |
+| `--entire-history` |  | bool |  |  | rewrite all commits from the root of the repository to HEAD |

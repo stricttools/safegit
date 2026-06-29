@@ -9,7 +9,7 @@ nav_order: 5
 
 # safegit config
 
-show or set configuration values
+show, get, or set safegit configuration key-value pairs
 
 ## config get
 
@@ -19,7 +19,7 @@ get the current value of a single configuration key from the .git/safegit/config
 
 | Name | Required | Description |
 | --- | --- | --- |
-| `key` | yes | configuration key |
+| `key` | yes | the configuration key whose current value should be retrieved |
 
 ## config set
 
@@ -29,8 +29,8 @@ set a configuration key to a new value in the .git/safegit/config.json file, cre
 
 | Name | Required | Description |
 | --- | --- | --- |
-| `key` | yes | configuration key |
-| `value` | yes | configuration value |
+| `key` | yes | the configuration key to set to the specified value in config.json |
+| `value` | yes | the new value to assign to the specified configuration key |
 
 ## config show
 

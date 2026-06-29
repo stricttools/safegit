@@ -9,19 +9,19 @@ nav_order: 9
 
 # safegit pull
 
-fetch and merge (default --ff-only)
+fetch from remote and merge, defaulting to fast-forward-only mode
 
 ## Flags
 
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--ff-only` |  | bool |  |  | fast-forward only (fail if not possible) |
-| `--ff` |  | bool |  |  | fast-forward if possible, merge commit otherwise |
-| `--no-ff` |  | bool |  |  | always create a merge commit |
+| `--ff-only` |  | bool |  |  | fast-forward only; abort with an error if a merge commit is required |
+| `--ff` |  | bool |  |  | fast-forward when possible, otherwise create a merge commit automatically |
+| `--no-ff` |  | bool |  |  | always create a merge commit even when fast-forward is possible |
 
 ## Arguments
 
 | Name | Required | Description |
 | --- | --- | --- |
-| `remote` | no | remote name |
-| `branch` | no | branch to pull |
+| `remote` | no | name of the remote repository to pull from (defaults to origin) |
+| `branch` | no | name of the remote branch to fetch and merge into the current branch |

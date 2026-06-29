@@ -9,4 +9,4 @@ nav_order: 11
 
 # safegit rebase
 
-rebase onto upstream (guarded)
+rebase current branch onto upstream with safety guards

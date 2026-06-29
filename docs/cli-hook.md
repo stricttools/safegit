@@ -9,7 +9,7 @@ nav_order: 7
 
 # safegit hook
 
-manage pre-pre-push hooks
+manage pre-pre-push hook scripts that run before every push
 
 ## hook install
 
@@ -19,7 +19,7 @@ install a pre-pre-push hook by copying a script file into the .git/safegit/hooks
 
 | Name | Required | Description |
 | --- | --- | --- |
-| `path` | yes | path to hook script |
+| `path` | yes | filesystem path to the hook script file to install into safegit |
 
 ## hook list
 
@@ -33,4 +33,4 @@ run all installed pre-pre-push hooks (or a single named hook) immediately withou
 
 | Name | Required | Description |
 | --- | --- | --- |
-| `name` | no | hook name to run |
+| `name` | no | name of a specific hook to run; omit to run all installed hooks |
