@@ -237,13 +237,13 @@ func main() {
 			},
 		}),
 	)
-	ag := app.Group("author", "audit and rewrite commit author/committer identity")
-	ag.Command("list", "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity", func(kwargs map[string]interface{}) int {
+	ag := app.Group("author", "audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history")
+	ag.Command("list", "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite", func(kwargs map[string]interface{}) int {
 		return runAuthorList(globalsToFlags(kwargs))
 	},
 		strictcli.WithTags("json"),
 	)
-	ag.Command("check", "check that all commits use the expected author and committer identity, reporting any deviations and suggesting a rewrite command to fix them", func(kwargs map[string]interface{}) int {
+	ag.Command("check", "check that all commits use the expected author and committer identity by scanning every commit in the repository history, reporting any deviations with the exact commit hashes and mismatched fields, and suggesting the corresponding safegit author rewrite command to fix each deviation found", func(kwargs map[string]interface{}) int {
 		return runAuthorCheck(globalsToFlags(kwargs), kwargs)
 	},
 		strictcli.WithTags("json"),
@@ -252,7 +252,7 @@ func main() {
 			strictcli.StringFlag("email", "expected author and committer email address that all commits should use", strictcli.Default(nil)),
 		),
 	)
-	ag.Command("rewrite", "rewrite author and committer name or email across all commit history", func(kwargs map[string]interface{}) int {
+	ag.Command("rewrite", "rewrite author and committer name or email across all commit history using git filter-branch style rewriting, replacing every occurrence of the old identity with the new one in both author and committer fields while preserving timestamps, commit messages, tree contents, and parent relationships so the rewritten history is otherwise identical to the original", func(kwargs map[string]interface{}) int {
 		return runRewriteAuthor(globalsToFlags(kwargs), kwargs)
 	},
 		strictcli.WithTags("json"),
@@ -303,7 +303,7 @@ func main() {
 			},
 		}),
 	)
-	sg.Command("run", "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements across history in a single coordinated pass with topological ordering and overlap detection", func(kwargs map[string]interface{}) int {
+	sg.Command("run", "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite", func(kwargs map[string]interface{}) int {
 		return runScrubRun(globalsToFlags(kwargs), kwargs)
 	},
 		strictcli.WithTags("json"),
@@ -322,7 +322,7 @@ func main() {
 			strictcli.NewArg("recipe", "path to the TOML recipe file containing scrub operations"),
 		),
 	)
-	sg.Command("verify", "check all scrub policies to confirm that previously scrubbed secrets remain absent from the git object store, reporting per-policy pass or fail results", func(kwargs map[string]interface{}) int {
+	sg.Command("verify", "check all scrub policies defined in the repository configuration to confirm that previously scrubbed secrets and sensitive patterns remain completely absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-policy pass or fail results with match locations for any violations found", func(kwargs map[string]interface{}) int {
 		return runScrubVerify(globalsToFlags(kwargs))
 	},
 		strictcli.WithTags("json"),
@@ -353,7 +353,7 @@ func main() {
 	},
 		strictcli.WithArgs(strictcli.NewArg("ref", "the ref name (e.g. refs/heads/main) whose stale .lock file to remove")),
 	)
-	app.Command("scan", "search git history for regex pattern matches across all objects and working tree files", func(kwargs map[string]interface{}) int {
+	app.Command("scan", "search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection", func(kwargs map[string]interface{}) int {
 		return runScan(globalsToFlags(kwargs), kwargs)
 	},
 		strictcli.WithTags("json"),
