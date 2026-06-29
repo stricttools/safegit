@@ -1,0 +1,18 @@
+# Version bump type: patch, minor, major, hotfix, or prerelease
+bump = "minor"
+# Short description of this release (required)
+description = "Revert tracked policy file — scrub patterns are no longer committed to the repo"
+# Optional context explaining why these changes were made
+context = """
+The v0.20.0 decision to track .safegit/scrub-policies.jsonl in the working tree was a \
+security mistake: the policy file contains the literal regex patterns used to find secrets, \
+which re-introduces the scrubbed content into the repo. Reverted to .git/safegit/ (untracked). \
+Deleted ~250 lines of complexity: auto-commit logic, policy blob exclusion sets, migration \
+from old to new location. Policies are now local to the machine where the scrub was performed.
+"""
+# Pre-release identifier: alpha, beta, rc, or stable
+# preid = ""
+# Set to true to generate a blog post for this release
+# blog = false
+include = ["go", "docker"]
+exclude = []
