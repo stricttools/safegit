@@ -17,5 +17,12 @@
   "push_timeout": 120,
   "batch_limits": {
     "exclusions": []
+  },
+  "hooks": {
+    "pre_release": [
+      "go vet ./...",
+      "go build -o /dev/null .",
+      "go test ./... -race -short -count=1"
+    ]
   }
 }
