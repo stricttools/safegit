@@ -238,6 +238,17 @@ func main() {
 		}),
 	)
 	ag := app.Group("author", "audit and rewrite commit author/committer identity")
+	ag.Command("list", "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity", func(kwargs map[string]interface{}) int {
+		return runAuthorList(globalsToFlags(kwargs))
+	})
+	ag.Command("check", "check that all commits use the expected author and committer identity, reporting any deviations and suggesting a rewrite command to fix them", func(kwargs map[string]interface{}) int {
+		return runAuthorCheck(globalsToFlags(kwargs), kwargs)
+	},
+		strictcli.WithFlags(
+			strictcli.StringFlag("name", "expected author and committer display name that all commits should use", strictcli.Default(nil)),
+			strictcli.StringFlag("email", "expected author and committer email address that all commits should use", strictcli.Default(nil)),
+		),
+	)
 	ag.Command("rewrite", "rewrite author and committer name or email across all commit history", func(kwargs map[string]interface{}) int {
 		return runRewriteAuthor(globalsToFlags(kwargs), kwargs)
 	},
