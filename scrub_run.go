@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -57,12 +58,43 @@ type MessageDiffEntry struct {
 	NewMessage string `json:"new_message"`
 }
 
+// ScrubRunDryRunOpResult holds per-operation match counts for --dry-run output.
+type ScrubRunDryRunOpResult struct {
+	Index        int      `json:"index"`
+	Pattern      string   `json:"pattern"`
+	BlobMatches  int      `json:"blob_matches"`
+	CommitMatches int     `json:"commit_matches"`
+	TagMatches   int      `json:"tag_matches"`
+	AffectedFiles []string `json:"affected_files"`
+}
+
+// ScrubRunDryRunResult is the JSON output for `scrub run --dry-run`.
+type ScrubRunDryRunResult struct {
+	Version          int                      `json:"version"`
+	DryRun           bool                     `json:"dry_run"`
+	OperationCount   int                      `json:"operation_count"`
+	Operations       []ScrubRunDryRunOpResult `json:"operations"`
+	TotalBlobMatches   int                    `json:"total_blob_matches"`
+	TotalCommitMatches int                    `json:"total_commit_matches"`
+	TotalTagMatches    int                    `json:"total_tag_matches"`
+	TotalAffectedFiles int                   `json:"total_affected_files"`
+	EstimatedCommits   int                   `json:"estimated_commits"`
+	ObjectsScanned     int                   `json:"objects_scanned"`
+	BinarySkipped      int                   `json:"binary_skipped"`
+}
+
 func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	const cmd = "scrub run"
 
 	recipePath := kwargs["recipe"].(string)
 	reason := kwargs["reason"].(string)
 	diffMode := kwargs["diff"].(bool)
+
+	// --dry-run and --diff are mutually exclusive: --diff shows content diffs,
+	// --dry-run shows match count summaries. Combining them is ambiguous.
+	if flags.dryRun && diffMode {
+		die(flags, cmd, 2, "--dry-run and --diff are mutually exclusive")
+	}
 
 	var from *string
 	if v := kwargs["from"]; v != nil {
@@ -114,6 +146,12 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	// Neither --from nor --entire-history provided
 	if from == nil && !entireHistory {
 		die(flags, cmd, 2, "one of --from or --entire-history is required")
+	}
+
+	// --dry-run preview mode: scan per-operation and show match counts.
+	// Purely read-only, no lock needed, no objects written.
+	if flags.dryRun {
+		return scrubRunDryRun(ctx, flags, cmd, recipe, fromSHA, entireHistory)
 	}
 
 	// --diff preview mode: purely read-only, no lock needed.
@@ -443,6 +481,172 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 	}
 
 	return 0
+}
+
+// scrubRunDryRun scans per-operation and shows match counts without writing
+// any objects or acquiring locks. For each operation in the recipe, it compiles
+// the pattern and scans the object store, then adds attribution for file paths.
+func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *ParsedRecipe, fromSHA string, entireHistory bool) int {
+	scanOpts := scan.ScanOpts{FromSHA: fromSHA, EntireHistory: entireHistory}
+
+	// Use ScanObjectsMulti when there are multiple patterns to avoid
+	// iterating the object store once per operation.
+	patterns := recipe.Patterns
+
+	infof(flags, "Scanning objects...\n")
+
+	var allResults []*scan.ScanResults
+	if entireHistory && len(patterns) > 1 {
+		var err error
+		allResults, err = scan.ScanObjectsMulti(ctx, patterns, scanOpts)
+		if err != nil {
+			die(flags, cmd, 1, fmt.Sprintf("scanning objects: %v", err))
+		}
+	} else {
+		allResults = make([]*scan.ScanResults, len(patterns))
+		for i, pat := range patterns {
+			results, err := scan.ScanObjects(ctx, pat, scanOpts)
+			if err != nil {
+				die(flags, cmd, 1, fmt.Sprintf("scanning objects for operation %d: %v", i, err))
+			}
+			allResults[i] = results
+		}
+	}
+
+	// Add attribution to each result set for file path info.
+	for i, results := range allResults {
+		if err := scan.AddAttribution(ctx, results, scanOpts); err != nil {
+			die(flags, cmd, 1, fmt.Sprintf("adding attribution for operation %d: %v", i, err))
+		}
+	}
+
+	// Aggregate per-operation results.
+	var opResults []ScrubRunDryRunOpResult
+	totalBlob, totalCommit, totalTag := 0, 0, 0
+	allAffectedFiles := make(map[string]bool)
+
+	for i, results := range allResults {
+		var blobCount, commitCount, tagCount int
+		fileSet := make(map[string]bool)
+
+		for _, m := range results.Matches {
+			switch m.ObjectType {
+			case "blob":
+				blobCount++
+				if m.Path != "" {
+					fileSet[m.Path] = true
+				}
+			case "commit":
+				commitCount++
+			case "tag":
+				tagCount++
+			}
+		}
+
+		files := make([]string, 0, len(fileSet))
+		for f := range fileSet {
+			files = append(files, f)
+			allAffectedFiles[f] = true
+		}
+		// Sort for deterministic output.
+		sortStrings(files)
+
+		opResults = append(opResults, ScrubRunDryRunOpResult{
+			Index:         i,
+			Pattern:       recipe.Operations[i].Pattern,
+			BlobMatches:   blobCount,
+			CommitMatches: commitCount,
+			TagMatches:    tagCount,
+			AffectedFiles: files,
+		})
+
+		totalBlob += blobCount
+		totalCommit += commitCount
+		totalTag += tagCount
+	}
+
+	// Estimate commit count for the rewrite range.
+	estimatedCommits := 0
+	if entireHistory {
+		out, _, err := git.Run(ctx, "rev-list", "--count", "HEAD")
+		if err == nil {
+			fmt.Sscanf(strings.TrimSpace(out), "%d", &estimatedCommits)
+		}
+	} else if fromSHA != "" {
+		out, _, err := git.Run(ctx, "rev-list", "--count", fromSHA+"..HEAD")
+		if err == nil {
+			count := 0
+			fmt.Sscanf(strings.TrimSpace(out), "%d", &count)
+			estimatedCommits = count + 1 // inclusive of fromSHA
+		}
+	}
+
+	// Use the first result's scan stats (all operations scan the same objects).
+	objectsScanned := 0
+	binarySkipped := 0
+	if len(allResults) > 0 {
+		objectsScanned = allResults[0].Scanned
+		binarySkipped = allResults[0].Skipped
+	}
+
+	totalMatches := totalBlob + totalCommit + totalTag
+
+	if !flags.json {
+		if totalMatches == 0 {
+			infof(flags, "No matches found. Nothing to rewrite.\n")
+			return 0
+		}
+
+		infof(flags, "\nDry-run summary:\n")
+		for _, op := range opResults {
+			opMatches := op.BlobMatches + op.CommitMatches + op.TagMatches
+			if opMatches == 0 {
+				infof(flags, "  Operation %d (%s): no matches\n", op.Index, op.Pattern)
+				continue
+			}
+			infof(flags, "  Operation %d (%s): %d blob, %d commit, %d tag matches\n",
+				op.Index, op.Pattern, op.BlobMatches, op.CommitMatches, op.TagMatches)
+			if len(op.AffectedFiles) > 0 {
+				infof(flags, "    Affected files: %s\n", strings.Join(op.AffectedFiles, ", "))
+			}
+		}
+		infof(flags, "\n  Total: %d blob, %d commit, %d tag matches\n", totalBlob, totalCommit, totalTag)
+		infof(flags, "  Affected files: %d\n", len(allAffectedFiles))
+		infof(flags, "  Estimated commits in range: %d\n", estimatedCommits)
+		if binarySkipped > 0 {
+			infof(flags, "  Binary blobs skipped: %d\n", binarySkipped)
+		}
+	}
+
+	if flags.json {
+		// Ensure empty slices serialize as [] not null.
+		for i := range opResults {
+			if opResults[i].AffectedFiles == nil {
+				opResults[i].AffectedFiles = []string{}
+			}
+		}
+		result := ScrubRunDryRunResult{
+			Version:            1,
+			DryRun:             true,
+			OperationCount:     len(recipe.Operations),
+			Operations:         opResults,
+			TotalBlobMatches:   totalBlob,
+			TotalCommitMatches: totalCommit,
+			TotalTagMatches:    totalTag,
+			TotalAffectedFiles: len(allAffectedFiles),
+			EstimatedCommits:   estimatedCommits,
+			ObjectsScanned:     objectsScanned,
+			BinarySkipped:      binarySkipped,
+		}
+		emitJSON(result)
+	}
+
+	return 0
+}
+
+// sortStrings sorts a string slice in place.
+func sortStrings(s []string) {
+	sort.Strings(s)
 }
 
 // buildBlobPathMap uses `git rev-list --all --objects` to build a map from

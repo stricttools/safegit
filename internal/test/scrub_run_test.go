@@ -406,3 +406,196 @@ func countGitObjects(t *testing.T, dir string) int {
 	}
 	return total
 }
+
+// TestScrubRunDryRun verifies that --dry-run shows per-operation match counts
+// and does not write any objects to the git object store.
+func TestScrubRunDryRun(t *testing.T) {
+	dir := newRepo(t)
+
+	commitFileEnv(t, dir, scrubRunEnv, "config.txt", "api_key=secret123 db_pass=hunter2\n", "add config")
+	commitFileEnv(t, dir, scrubRunEnv, "config.txt", "api_key=secret456 db_pass=hunter3\n", "update config")
+
+	headBefore := revParseHEAD(t, dir)
+	countBefore := countGitObjects(t, dir)
+
+	recipe := writeRecipe(t, "recipe.toml", `
+[[operations]]
+pattern = "secret[0-9]+"
+replace = "REDACTED"
+
+[[operations]]
+pattern = "hunter[0-9]+"
+replace = "REDACTED"
+`)
+
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
+		"--dry-run", "--yes", "scrub", "run",
+		"--reason", "test dry-run",
+		"--entire-history",
+		recipe,
+	)
+	if code != 0 {
+		t.Fatalf("scrub run --dry-run failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	// HEAD should be unchanged.
+	headAfter := revParseHEAD(t, dir)
+	if headAfter != headBefore {
+		t.Errorf("HEAD changed during --dry-run: %s -> %s", headBefore[:12], headAfter[:12])
+	}
+
+	// No objects should be written.
+	countAfter := countGitObjects(t, dir)
+	if countAfter != countBefore {
+		t.Errorf("--dry-run wrote objects: before=%d after=%d", countBefore, countAfter)
+	}
+
+	// Output should contain per-operation match counts.
+	combined := stdout + stderr
+	if !strings.Contains(combined, "Operation 0") {
+		t.Errorf("output should contain Operation 0 summary, got: %s", combined)
+	}
+	if !strings.Contains(combined, "Operation 1") {
+		t.Errorf("output should contain Operation 1 summary, got: %s", combined)
+	}
+	if !strings.Contains(combined, "blob") {
+		t.Errorf("output should mention blob matches, got: %s", combined)
+	}
+	if !strings.Contains(combined, "Affected files") {
+		t.Errorf("output should mention affected files, got: %s", combined)
+	}
+
+	// On-disk file should be unchanged.
+	diskContent, err := os.ReadFile(filepath.Join(dir, "config.txt"))
+	if err != nil {
+		t.Fatalf("reading config.txt: %v", err)
+	}
+	if !strings.Contains(string(diskContent), "secret456") {
+		t.Errorf("on-disk config.txt should still contain secret456: %q", string(diskContent))
+	}
+}
+
+// TestScrubRunDryRunJSON verifies the JSON output structure of --dry-run,
+// including per-operation match counts.
+func TestScrubRunDryRunJSON(t *testing.T) {
+	dir := newRepo(t)
+
+	commitFileEnv(t, dir, scrubRunEnv, "config.txt", "api_key=secret123 db_pass=hunter2\n", "add config")
+	commitFileEnv(t, dir, scrubRunEnv, "config.txt", "api_key=secret456 db_pass=hunter3\n", "update config")
+
+	recipe := writeRecipe(t, "recipe.toml", `
+[[operations]]
+pattern = "secret[0-9]+"
+replace = "REDACTED"
+
+[[operations]]
+pattern = "hunter[0-9]+"
+replace = "REDACTED"
+`)
+
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
+		"--dry-run", "--json", "--yes", "scrub", "run",
+		"--reason", "test dry-run json",
+		"--entire-history",
+		recipe,
+	)
+	if code != 0 {
+		t.Fatalf("scrub run --dry-run --json failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	var result struct {
+		Version            int  `json:"version"`
+		DryRun             bool `json:"dry_run"`
+		OperationCount     int  `json:"operation_count"`
+		Operations         []struct {
+			Index         int      `json:"index"`
+			Pattern       string   `json:"pattern"`
+			BlobMatches   int      `json:"blob_matches"`
+			CommitMatches int      `json:"commit_matches"`
+			TagMatches    int      `json:"tag_matches"`
+			AffectedFiles []string `json:"affected_files"`
+		} `json:"operations"`
+		TotalBlobMatches   int `json:"total_blob_matches"`
+		TotalCommitMatches int `json:"total_commit_matches"`
+		TotalTagMatches    int `json:"total_tag_matches"`
+		TotalAffectedFiles int `json:"total_affected_files"`
+		EstimatedCommits   int `json:"estimated_commits"`
+		ObjectsScanned     int `json:"objects_scanned"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
+	}
+
+	if result.Version != 1 {
+		t.Errorf("version: got %d, want 1", result.Version)
+	}
+	if !result.DryRun {
+		t.Error("dry_run should be true")
+	}
+	if result.OperationCount != 2 {
+		t.Errorf("operation_count: got %d, want 2", result.OperationCount)
+	}
+	if len(result.Operations) != 2 {
+		t.Fatalf("expected 2 operations in output, got %d", len(result.Operations))
+	}
+
+	// Operation 0: secret[0-9]+ should have blob matches (2 versions of config.txt).
+	op0 := result.Operations[0]
+	if op0.BlobMatches == 0 {
+		t.Error("operation 0: expected blob matches for secret pattern")
+	}
+	if op0.Pattern != "secret[0-9]+" {
+		t.Errorf("operation 0 pattern: got %q, want %q", op0.Pattern, "secret[0-9]+")
+	}
+
+	// Operation 1: hunter[0-9]+ should also have blob matches.
+	op1 := result.Operations[1]
+	if op1.BlobMatches == 0 {
+		t.Error("operation 1: expected blob matches for hunter pattern")
+	}
+
+	// Total matches should be the sum of per-operation matches.
+	expectedTotalBlobs := op0.BlobMatches + op1.BlobMatches
+	if result.TotalBlobMatches != expectedTotalBlobs {
+		t.Errorf("total_blob_matches: got %d, want %d", result.TotalBlobMatches, expectedTotalBlobs)
+	}
+
+	if result.TotalAffectedFiles == 0 {
+		t.Error("total_affected_files should be > 0")
+	}
+	if result.EstimatedCommits == 0 {
+		t.Error("estimated_commits should be > 0")
+	}
+	if result.ObjectsScanned == 0 {
+		t.Error("objects_scanned should be > 0")
+	}
+}
+
+// TestScrubRunDryRunDiffMutex verifies that --dry-run and --diff cannot be used
+// together.
+func TestScrubRunDryRunDiffMutex(t *testing.T) {
+	dir := newRepo(t)
+
+	commitFileEnv(t, dir, scrubRunEnv, "file.txt", "SECRET here\n", "add file")
+
+	recipe := writeRecipe(t, "recipe.toml", `
+[[operations]]
+pattern = "SECRET"
+replace = "REDACTED"
+`)
+
+	_, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
+		"--dry-run", "--yes", "scrub", "run",
+		"--diff",
+		"--reason", "test mutex",
+		"--entire-history",
+		recipe,
+	)
+
+	if code == 0 {
+		t.Fatal("expected --dry-run --diff to fail, but exited 0")
+	}
+	if !strings.Contains(stderr, "mutually exclusive") {
+		t.Errorf("error should mention 'mutually exclusive', got: %s", stderr)
+	}
+}
