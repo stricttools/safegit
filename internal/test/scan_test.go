@@ -331,6 +331,270 @@ func TestScanNonObjectFiles(t *testing.T) {
 	}
 }
 
+// TestScanTargetBlobs verifies that --target blobs shows only blob matches,
+// excluding commit message and file matches.
+func TestScanTargetBlobs(t *testing.T) {
+	dir := newRepo(t)
+
+	// Commit a file containing TBLOB_MARKER. The commit message also
+	// contains TBLOB_MARKER so it would normally appear in commit matches.
+	commitFileEnv(t, dir, scanEnv, "data.txt", "password=TBLOB_MARKER\n", "fix TBLOB_MARKER issue")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, scanEnv,
+		"--json", "scan", "--pattern", "TBLOB_MARKER", "--target", "blobs",
+	)
+	if code != 0 {
+		t.Fatalf("scan --target blobs failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	var result struct {
+		Target        string          `json:"target"`
+		TotalMatches  int             `json:"total_matches"`
+		BlobMatches   []ScanMatchJSON `json:"blob_matches"`
+		CommitMatches []ScanMatchJSON `json:"commit_matches"`
+		TagMatches    []ScanMatchJSON `json:"tag_matches"`
+		FileMatches   []ScanMatchJSON `json:"file_matches"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, stdout)
+	}
+
+	if result.Target != "blobs" {
+		t.Errorf("expected target=blobs, got %q", result.Target)
+	}
+
+	if len(result.BlobMatches) == 0 {
+		t.Errorf("expected at least one blob match, got 0")
+	}
+	if len(result.CommitMatches) != 0 {
+		t.Errorf("expected 0 commit matches with --target blobs, got %d", len(result.CommitMatches))
+	}
+	if len(result.TagMatches) != 0 {
+		t.Errorf("expected 0 tag matches with --target blobs, got %d", len(result.TagMatches))
+	}
+	if len(result.FileMatches) != 0 {
+		t.Errorf("expected 0 file matches with --target blobs, got %d", len(result.FileMatches))
+	}
+}
+
+// TestScanTargetTrailers verifies that --target trailers shows only matches
+// that fall within the trailer portion of commit messages.
+func TestScanTargetTrailers(t *testing.T) {
+	dir := newRepo(t)
+
+	// Use a custom trailer value as the search pattern. The commit
+	// env injects Claude-Code-Session-Id: scan-test as a trailer.
+	// The commit message body does NOT contain "scan-test".
+	commitFileEnv(t, dir, scanEnv, "file.txt", "clean content\n", "add file")
+
+	// Search for the session ID which only appears in the trailer.
+	stdout, stderr, code := runSafegitEnv(t, dir, scanEnv,
+		"--json", "scan", "--pattern", "scan-test", "--target", "trailers",
+	)
+	if code != 0 {
+		t.Fatalf("scan --target trailers failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	var result struct {
+		TotalMatches   int             `json:"total_matches"`
+		CommitMatches  []ScanMatchJSON `json:"commit_matches"`
+		TrailerMatches []ScanMatchJSON `json:"trailer_matches"`
+		BlobMatches    []ScanMatchJSON `json:"blob_matches"`
+		FileMatches    []ScanMatchJSON `json:"file_matches"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, stdout)
+	}
+
+	if len(result.TrailerMatches) == 0 {
+		t.Errorf("expected at least one trailer match for 'scan-test', got 0\nraw: %s", stdout)
+	}
+	if len(result.CommitMatches) != 0 {
+		t.Errorf("expected 0 commit matches with --target trailers (no commits target), got %d", len(result.CommitMatches))
+	}
+	if len(result.BlobMatches) != 0 {
+		t.Errorf("expected 0 blob matches with --target trailers, got %d", len(result.BlobMatches))
+	}
+	if len(result.FileMatches) != 0 {
+		t.Errorf("expected 0 file matches with --target trailers, got %d", len(result.FileMatches))
+	}
+
+	// Now verify that --target commits (without trailers) would find the
+	// same pattern in commit matches (since commits includes all commit text).
+	stdout2, stderr2, code2 := runSafegitEnv(t, dir, scanEnv,
+		"--json", "scan", "--pattern", "scan-test", "--target", "commits",
+	)
+	if code2 != 0 {
+		t.Fatalf("scan --target commits failed (code %d): stdout=%s stderr=%s", code2, stdout2, stderr2)
+	}
+
+	var result2 struct {
+		CommitMatches  []ScanMatchJSON `json:"commit_matches"`
+		TrailerMatches []ScanMatchJSON `json:"trailer_matches"`
+	}
+	if err := json.Unmarshal([]byte(stdout2), &result2); err != nil {
+		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, stdout2)
+	}
+
+	if len(result2.CommitMatches) == 0 {
+		t.Errorf("expected commit matches for 'scan-test' with --target commits, got 0\nraw: %s", stdout2)
+	}
+	// Trailer matches should be nil/empty when trailers is not in target.
+	if len(result2.TrailerMatches) != 0 {
+		t.Errorf("expected 0 trailer matches with --target commits (no trailers target), got %d", len(result2.TrailerMatches))
+	}
+}
+
+// TestScanTargetMultiple verifies that --target blobs,commits shows both
+// blob and commit matches but not tags or files.
+func TestScanTargetMultiple(t *testing.T) {
+	dir := newRepo(t)
+
+	// Commit a file containing MULTI_MARKER with a commit message also
+	// containing MULTI_MARKER.
+	commitFileEnv(t, dir, scanEnv, "data.txt", "value=MULTI_MARKER\n", "fix MULTI_MARKER bug")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, scanEnv,
+		"--json", "scan", "--pattern", "MULTI_MARKER", "--target", "blobs,commits",
+	)
+	if code != 0 {
+		t.Fatalf("scan --target blobs,commits failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	var result struct {
+		Target        string          `json:"target"`
+		TotalMatches  int             `json:"total_matches"`
+		BlobMatches   []ScanMatchJSON `json:"blob_matches"`
+		CommitMatches []ScanMatchJSON `json:"commit_matches"`
+		TagMatches    []ScanMatchJSON `json:"tag_matches"`
+		FileMatches   []ScanMatchJSON `json:"file_matches"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, stdout)
+	}
+
+	if result.Target != "blobs,commits" {
+		t.Errorf("expected target=blobs,commits, got %q", result.Target)
+	}
+
+	if len(result.BlobMatches) == 0 {
+		t.Errorf("expected at least one blob match, got 0")
+	}
+	if len(result.CommitMatches) == 0 {
+		t.Errorf("expected at least one commit match, got 0")
+	}
+	if len(result.TagMatches) != 0 {
+		t.Errorf("expected 0 tag matches with --target blobs,commits, got %d", len(result.TagMatches))
+	}
+	if len(result.FileMatches) != 0 {
+		t.Errorf("expected 0 file matches with --target blobs,commits, got %d", len(result.FileMatches))
+	}
+}
+
+// TestScanJSON verifies that --json output parses correctly and has the
+// expected structure with all required fields.
+func TestScanJSON(t *testing.T) {
+	dir := newRepo(t)
+
+	commitFileEnv(t, dir, scanEnv, "secret.txt", "api_key=JSON_TEST_KEY\n", "add JSON_TEST_KEY")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, scanEnv,
+		"--json", "scan", "--pattern", "JSON_TEST_KEY",
+	)
+	if code != 0 {
+		t.Fatalf("scan --json failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	// Parse into a generic map to verify all expected fields exist.
+	var raw map[string]interface{}
+	if err := json.Unmarshal([]byte(stdout), &raw); err != nil {
+		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, stdout)
+	}
+
+	requiredFields := []string{
+		"version", "pattern", "objects_scanned", "binary_skipped",
+		"total_matches", "blob_matches", "commit_matches", "tag_matches",
+		"trailer_matches", "file_matches",
+	}
+	for _, field := range requiredFields {
+		if _, ok := raw[field]; !ok {
+			t.Errorf("missing required JSON field %q", field)
+		}
+	}
+
+	// Verify version is 1.
+	if v, ok := raw["version"].(float64); !ok || int(v) != 1 {
+		t.Errorf("expected version=1, got %v", raw["version"])
+	}
+
+	// Verify pattern is correct.
+	if p, ok := raw["pattern"].(string); !ok || p != "JSON_TEST_KEY" {
+		t.Errorf("expected pattern=JSON_TEST_KEY, got %v", raw["pattern"])
+	}
+
+	// Parse into the typed struct to verify structure.
+	var result struct {
+		Version        int             `json:"version"`
+		Pattern        string          `json:"pattern"`
+		Scope          string          `json:"scope"`
+		Target         string          `json:"target"`
+		ObjectsScanned int             `json:"objects_scanned"`
+		BinarySkipped  int             `json:"binary_skipped"`
+		TotalMatches   int             `json:"total_matches"`
+		BlobMatches    []ScanMatchJSON `json:"blob_matches"`
+		CommitMatches  []ScanMatchJSON `json:"commit_matches"`
+		TagMatches     []ScanMatchJSON `json:"tag_matches"`
+		TrailerMatches []ScanMatchJSON `json:"trailer_matches"`
+		FileMatches    []ScanMatchJSON `json:"file_matches"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("failed to parse typed JSON output: %v\nraw: %s", err, stdout)
+	}
+
+	if result.TotalMatches == 0 {
+		t.Errorf("expected at least 1 match, got 0")
+	}
+
+	// Verify blob matches have expected fields.
+	for _, m := range result.BlobMatches {
+		if m.ObjectType != "blob" {
+			t.Errorf("expected blob match object_type=blob, got %q", m.ObjectType)
+		}
+		if m.Line == 0 {
+			t.Errorf("expected blob match line > 0, got 0")
+		}
+		if m.Context == "" {
+			t.Errorf("expected non-empty context in blob match")
+		}
+	}
+
+	// Verify commit matches have expected fields.
+	for _, m := range result.CommitMatches {
+		if m.ObjectType != "commit" {
+			t.Errorf("expected commit match object_type=commit, got %q", m.ObjectType)
+		}
+	}
+
+	// When no --target specified, scope and target should be empty/omitted.
+	if result.Scope != "" {
+		t.Errorf("expected empty scope when --scope not specified, got %q", result.Scope)
+	}
+	if result.Target != "" {
+		t.Errorf("expected empty target when --target not specified, got %q", result.Target)
+	}
+}
+
+// ScanMatchJSON mirrors the JSON structure of a scan match for test parsing.
+type ScanMatchJSON struct {
+	SHA        string `json:"sha"`
+	ObjectType string `json:"object_type"`
+	Path       string `json:"path"`
+	CommitSHA  string `json:"commit_sha"`
+	Line       int    `json:"line"`
+	Reachable  bool   `json:"reachable"`
+	Context    string `json:"context"`
+}
+
 // revParseHEADScan is a local helper that calls git rev-parse HEAD.
 // We use the one from undo_session_test.go when available.
 func revParseHEADScan(t *testing.T, dir string) string {

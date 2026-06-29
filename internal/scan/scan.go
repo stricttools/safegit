@@ -18,6 +18,7 @@ type Match struct {
 	SHA            string // object SHA
 	ObjectType     string // "blob", "commit", "tag"
 	Line           int    // 1-based line number of match
+	ByteOffset     int    // 0-based byte offset of match start within the scanned content
 	Path           string // file path (for blobs; empty for commits/tags) -- reserved for future attribution
 	CommitSHA      string // which commit contains this blob -- reserved for future attribution
 	Reachable      bool   // whether this object is reachable from current refs
@@ -432,6 +433,7 @@ func findMatches(sha, objType string, content []byte, pattern *regexp.Regexp, re
 			SHA:        sha,
 			ObjectType: objType,
 			Line:       line,
+			ByteOffset: loc[0],
 			Reachable:  reachable,
 			Context:    ctx,
 		})
