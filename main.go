@@ -297,6 +297,24 @@ func main() {
 			},
 		}),
 	)
+	sg.Command("run", "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements across history in a single coordinated pass with topological ordering and overlap detection", func(kwargs map[string]interface{}) int {
+		return runScrubRun(globalsToFlags(kwargs), kwargs)
+	},
+		strictcli.WithFlags(
+			strictcli.StringFlag("reason", "mandatory audit trail message explaining why this scrub operation is needed"),
+			strictcli.BoolFlag("diff", "preview what would change without modifying any objects, showing unified diffs"),
+			strictcli.IntFlag("limit", "maximum number of blob diffs to show in --diff mode (default: 50)", strictcli.Default(50)),
+		),
+		strictcli.WithMutex(strictcli.MutexGroup{
+			Flags: []strictcli.Flag{
+				strictcli.StringFlag("from", "first commit hash to include when rewriting history", strictcli.Default(nil)),
+				strictcli.BoolFlag("entire-history", "rewrite all commits from the root of the repository to HEAD"),
+			},
+		}),
+		strictcli.WithArgs(
+			strictcli.NewArg("recipe", "path to the TOML recipe file containing scrub operations"),
+		),
+	)
 	sg.Command("verify", "check all scrub policies to confirm that previously scrubbed secrets remain absent from the git object store, reporting per-policy pass or fail results", func(kwargs map[string]interface{}) int {
 		return runScrubVerify(globalsToFlags(kwargs))
 	})
