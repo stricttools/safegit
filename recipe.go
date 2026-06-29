@@ -169,15 +169,13 @@ type byteReplacement struct {
 	newData []byte
 }
 
-// buildRecipeBlobMap applies a parsed recipe to a set of blobs, producing a
-// mapping from old blob SHA to new blob SHA. Operations are applied in
-// topological order. Independent operations (no depends_on) have their matches
-// collected against the ORIGINAL content and applied simultaneously (offset-
-// descending to preserve positions). Overlapping byte ranges across independent
-// operations are a hard error. Dependent operations match against the post-
-// dependency content.
-func buildRecipeBlobMap(ctx context.Context, recipe *ParsedRecipe, blobSHAs []string) (map[string]string, error) {
-	blobMap := make(map[string]string)
+// BuildRecipeBlobContent applies a parsed recipe to a set of blobs, producing
+// a mapping from old blob SHA to modified content bytes. It reads each blob,
+// applies recipe operations in memory, and returns only blobs whose content
+// changed. No objects are written to the object store -- this is purely
+// in-memory content computation for dry-run and diff use cases.
+func BuildRecipeBlobContent(ctx context.Context, recipe *ParsedRecipe, blobSHAs []string) (map[string][]byte, error) {
+	result := make(map[string][]byte)
 
 	for _, blobSHA := range blobSHAs {
 		content, err := git.CatFileBlob(ctx, blobSHA)
@@ -199,11 +197,32 @@ func buildRecipeBlobMap(ctx context.Context, recipe *ParsedRecipe, blobSHAs []st
 			continue
 		}
 
+		result[blobSHA] = modified
+	}
+
+	return result, nil
+}
+
+// buildRecipeBlobMap applies a parsed recipe to a set of blobs, producing a
+// mapping from old blob SHA to new blob SHA. Operations are applied in
+// topological order. Independent operations (no depends_on) have their matches
+// collected against the ORIGINAL content and applied simultaneously (offset-
+// descending to preserve positions). Overlapping byte ranges across independent
+// operations are a hard error. Dependent operations match against the post-
+// dependency content.
+func buildRecipeBlobMap(ctx context.Context, recipe *ParsedRecipe, blobSHAs []string) (map[string]string, error) {
+	contentMap, err := BuildRecipeBlobContent(ctx, recipe, blobSHAs)
+	if err != nil {
+		return nil, err
+	}
+
+	blobMap := make(map[string]string, len(contentMap))
+	for oldSHA, modified := range contentMap {
 		newSHA, err := git.HashObjectWriteBytes(ctx, modified)
 		if err != nil {
-			return nil, fmt.Errorf("writing replaced blob for %s: %w", blobSHA, err)
+			return nil, fmt.Errorf("writing replaced blob for %s: %w", oldSHA, err)
 		}
-		blobMap[blobSHA] = newSHA
+		blobMap[oldSHA] = newSHA
 	}
 
 	return blobMap, nil

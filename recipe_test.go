@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -483,6 +485,75 @@ replace = ""
 	if *recipe.Operations[0].Replace != "" {
 		t.Errorf("expected replace to be empty string, got %q", *recipe.Operations[0].Replace)
 	}
+}
+
+// --- BuildRecipeBlobContent tests ---
+
+func TestBuildRecipeBlobContentNoWrite(t *testing.T) {
+	dir := initTestRepo(t)
+	ctx := context.Background()
+
+	// Create a blob with known content.
+	content := "secret_key_abc123"
+	blobSHA := hashBlob(t, dir, content)
+
+	// Count objects before applying the recipe.
+	countBefore := countObjects(t, dir)
+
+	replaceVal := "REDACTED"
+	recipe := &ParsedRecipe{
+		Operations: []RecipeOperation{
+			{Pattern: "secret_key_\\w+", Replace: &replaceVal},
+		},
+		Patterns:  compilePatterns(t, "secret_key_\\w+"),
+		TopoOrder: []int{0},
+	}
+
+	contentMap, err := BuildRecipeBlobContent(ctx, recipe, []string{blobSHA})
+	if err != nil {
+		t.Fatalf("BuildRecipeBlobContent: %v", err)
+	}
+
+	// Verify the map contains the expected replacement.
+	if len(contentMap) != 1 {
+		t.Fatalf("expected 1 entry in contentMap, got %d", len(contentMap))
+	}
+
+	modified, ok := contentMap[blobSHA]
+	if !ok {
+		t.Fatalf("contentMap missing entry for blob %s", blobSHA)
+	}
+
+	if string(modified) != "REDACTED" {
+		t.Errorf("expected %q, got %q", "REDACTED", string(modified))
+	}
+
+	// Verify no new objects were written to the object store.
+	countAfter := countObjects(t, dir)
+	if countAfter != countBefore {
+		t.Errorf("object count changed: before=%d, after=%d; expected no new objects", countBefore, countAfter)
+	}
+}
+
+// countObjects returns the number of loose objects in the git object store.
+func countObjects(t *testing.T, dir string) int {
+	t.Helper()
+	cmd := exec.Command("git", "count-objects")
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git count-objects: %v\n%s", err, out)
+	}
+	// Output format: "N objects, M kilobytes"
+	parts := strings.Fields(string(out))
+	if len(parts) < 1 {
+		t.Fatalf("unexpected git count-objects output: %q", string(out))
+	}
+	n, err := strconv.Atoi(parts[0])
+	if err != nil {
+		t.Fatalf("parsing object count from %q: %v", string(out), err)
+	}
+	return n
 }
 
 // --- helpers ---
