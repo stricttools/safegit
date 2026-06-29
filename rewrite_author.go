@@ -14,7 +14,7 @@ import (
 )
 
 func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
-	const cmd = "rewrite-author"
+	const cmd = "author rewrite"
 
 	// Extract optional string flags (nil when not provided).
 	var oldName, newName, oldEmail, newEmail string
@@ -34,7 +34,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	// pairs could be absent).
 	if oldName == "" && oldEmail == "" {
 		fmt.Fprintf(os.Stderr, "error: at least one of --old-name or --old-email is required\n")
-		fmt.Fprintf(os.Stderr, "Run 'safegit rewrite-author --help' for usage.\n")
+		fmt.Fprintf(os.Stderr, "Run 'safegit author rewrite --help' for usage.\n")
 		return 2
 	}
 

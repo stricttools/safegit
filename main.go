@@ -237,7 +237,8 @@ func main() {
 			},
 		}),
 	)
-	app.Command("rewrite-author", "rewrite author and committer name or email across all commit history", func(kwargs map[string]interface{}) int {
+	ag := app.Group("author", "audit and rewrite commit author/committer identity")
+	ag.Command("rewrite", "rewrite author and committer name or email across all commit history", func(kwargs map[string]interface{}) int {
 		return runRewriteAuthor(globalsToFlags(kwargs), kwargs)
 	},
 		strictcli.WithFlags(
@@ -251,6 +252,7 @@ func main() {
 			strictcli.CoRequired{Flags: []string{"old-email", "new-email"}},
 		),
 	)
+	app.Deprecated("rewrite-author", "use 'safegit author rewrite' instead")
 	sg := app.Group("scrub", "surgically rewrite git history to remove or replace sensitive content such as secrets, credentials, and private data from all commits, trees, and blobs in the repository")
 	sg.Command("file", "replace or remove a specific file across all commits in the repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized version or delete the file entirely from every historical snapshot", func(kwargs map[string]interface{}) int {
 		return runScrubFile(globalsToFlags(kwargs), kwargs)
