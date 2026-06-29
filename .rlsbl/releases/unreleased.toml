@@ -1,0 +1,17 @@
+# Version bump type: patch, minor, major, hotfix, or prerelease
+bump = "hotfix"
+# Short description of this release (required)
+description = "Internal cleanup: SEO, hook migration, DRY extraction, test modernization"
+# Optional context explaining why these changes were made
+context = """
+Infrastructure-only release. Expanded CLI help texts for selfdoc SEO compliance. \
+Migrated pre-release hooks to config-driven format. Extracted duplicated commit count \
+estimation into shared helper. Migrated tree_ops_test.go from os.Chdir to git.WithDir \
+for test isolation.
+"""
+# Pre-release identifier: alpha, beta, rc, or stable
+# preid = ""
+# Set to true to generate a blog post for this release
+# blog = false
+include = ["go", "docker"]
+exclude = []
