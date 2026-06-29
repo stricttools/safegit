@@ -130,9 +130,47 @@ func executeScrubRecipe(
 		blobSHAList = append(blobSHAList, sha)
 	}
 
+	// Build per-operation scoped blob sets for operations that have a scope
+	// field in the recipe TOML. This filters which operations apply to which
+	// blobs based on the file paths where each blob appears.
+	var blobAllowedOps map[string]map[int]bool
+	hasPerOpScope := false
+	for _, op := range recipe.Operations {
+		if op.Scope != nil {
+			hasPerOpScope = true
+			break
+		}
+	}
+	if hasPerOpScope {
+		blobAllowedOps = make(map[string]map[int]bool)
+		// Pre-populate: every blob gets an empty allowed set.
+		for _, sha := range blobSHAList {
+			blobAllowedOps[sha] = make(map[int]bool)
+		}
+		for i, op := range recipe.Operations {
+			if op.Scope == nil {
+				// Unscoped operation applies to all blobs.
+				for _, sha := range blobSHAList {
+					blobAllowedOps[sha][i] = true
+				}
+			} else {
+				// Build the set of blob SHAs at paths matching this op's scope.
+				opScopedBlobs, scopeErr := buildScopedBlobSet(ctx, *op.Scope)
+				if scopeErr != nil {
+					die(flags, cmd, 1, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
+				}
+				for _, sha := range blobSHAList {
+					if opScopedBlobs[sha] {
+						blobAllowedOps[sha][i] = true
+					}
+				}
+			}
+		}
+	}
+
 	// Build the combined blob map via the recipe.
 	infof(flags, "Building blob replacement map (%d candidate blobs)...\n", len(blobSHAList))
-	blobMap, err := buildRecipeBlobMap(ctx, recipe, blobSHAList)
+	blobMap, err := buildRecipeBlobMap(ctx, recipe, blobSHAList, blobAllowedOps)
 	if err != nil {
 		die(flags, cmd, 1, fmt.Sprintf("building blob map: %v", err))
 	}

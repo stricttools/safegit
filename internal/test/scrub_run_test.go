@@ -599,3 +599,91 @@ replace = "REDACTED"
 		t.Errorf("error should mention 'mutually exclusive', got: %s", stderr)
 	}
 }
+
+// TestScrubRunPerOpScope creates a repo with two files (config.env and data.yaml),
+// each containing a different secret. A recipe with two operations scoped to
+// different file patterns verifies that only the scoped files are affected by
+// each operation.
+func TestScrubRunPerOpScope(t *testing.T) {
+	dir := newRepo(t)
+
+	// Create two files, each with a unique secret.
+	commitFileEnv(t, dir, scrubRunEnv, "config.env", "password=ENV_SECRET_1\n", "add config.env")
+	commitFileEnv(t, dir, scrubRunEnv, "data.yaml", "token: YAML_SECRET_2\n", "add data.yaml")
+	// Update both to create multiple versions in history.
+	commitFileEnv(t, dir, scrubRunEnv, "config.env", "password=ENV_SECRET_1 v2\n", "update config.env")
+	commitFileEnv(t, dir, scrubRunEnv, "data.yaml", "token: YAML_SECRET_2 v2\n", "update data.yaml")
+
+	recipe := writeRecipe(t, "recipe.toml", `
+[[operations]]
+pattern = "ENV_SECRET_1"
+replace = "REDACTED_ENV"
+scope = "*.env"
+
+[[operations]]
+pattern = "YAML_SECRET_2"
+replace = "REDACTED_YAML"
+scope = "*.yaml"
+`)
+
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
+		"--yes", "scrub", "run",
+		"--reason", "test per-op scope",
+		"--entire-history",
+		recipe,
+	)
+	if code != 0 {
+		t.Fatalf("scrub run failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	// Verify all commits: config.env should have REDACTED_ENV, data.yaml should
+	// have REDACTED_YAML. Neither original secret should remain.
+	shas := revListReverse(t, dir)
+	for i, sha := range shas {
+		envContent, envOk := gitShow(t, dir, sha, "config.env")
+		if envOk {
+			if strings.Contains(envContent, "ENV_SECRET_1") {
+				t.Errorf("commit %d (%s): config.env still contains ENV_SECRET_1: %q", i, sha[:12], envContent)
+			}
+			if strings.Contains(envContent, "REDACTED_ENV") {
+				// Expected -- the .env scope matched config.env.
+			}
+			// The YAML operation should NOT have touched config.env (even if
+			// the pattern happened to match, the scope restricts it).
+			if strings.Contains(envContent, "REDACTED_YAML") {
+				t.Errorf("commit %d (%s): config.env has REDACTED_YAML (YAML op leaked into .env scope): %q", i, sha[:12], envContent)
+			}
+		}
+
+		yamlContent, yamlOk := gitShow(t, dir, sha, "data.yaml")
+		if yamlOk {
+			if strings.Contains(yamlContent, "YAML_SECRET_2") {
+				t.Errorf("commit %d (%s): data.yaml still contains YAML_SECRET_2: %q", i, sha[:12], yamlContent)
+			}
+			if strings.Contains(yamlContent, "REDACTED_YAML") {
+				// Expected -- the .yaml scope matched data.yaml.
+			}
+			// The ENV operation should NOT have touched data.yaml.
+			if strings.Contains(yamlContent, "REDACTED_ENV") {
+				t.Errorf("commit %d (%s): data.yaml has REDACTED_ENV (ENV op leaked into .yaml scope): %q", i, sha[:12], yamlContent)
+			}
+		}
+	}
+
+	// Verify on-disk files.
+	envDisk, err := os.ReadFile(filepath.Join(dir, "config.env"))
+	if err != nil {
+		t.Fatalf("reading config.env: %v", err)
+	}
+	if strings.Contains(string(envDisk), "ENV_SECRET_1") {
+		t.Errorf("on-disk config.env still contains ENV_SECRET_1: %q", string(envDisk))
+	}
+
+	yamlDisk, err := os.ReadFile(filepath.Join(dir, "data.yaml"))
+	if err != nil {
+		t.Fatalf("reading data.yaml: %v", err)
+	}
+	if strings.Contains(string(yamlDisk), "YAML_SECRET_2") {
+		t.Errorf("on-disk data.yaml still contains YAML_SECRET_2: %q", string(yamlDisk))
+	}
+}

@@ -294,7 +294,7 @@ func TestBuildRecipeBlobMapIndependentNonOverlapping(t *testing.T) {
 		TopoOrder: []int{0, 1, 2},
 	}
 
-	blobMap, err := buildRecipeBlobMap(ctx, recipe, []string{blobSHA})
+	blobMap, err := buildRecipeBlobMap(ctx, recipe, []string{blobSHA}, nil)
 	if err != nil {
 		t.Fatalf("buildRecipeBlobMap: %v", err)
 	}
@@ -335,7 +335,7 @@ func TestBuildRecipeBlobMapDependsOnChain(t *testing.T) {
 		TopoOrder: []int{0, 1},
 	}
 
-	blobMap, err := buildRecipeBlobMap(ctx, recipe, []string{blobSHA})
+	blobMap, err := buildRecipeBlobMap(ctx, recipe, []string{blobSHA}, nil)
 	if err != nil {
 		t.Fatalf("buildRecipeBlobMap: %v", err)
 	}
@@ -375,7 +375,7 @@ func TestBuildRecipeBlobMapOverlappingRangesError(t *testing.T) {
 		TopoOrder: []int{0, 1},
 	}
 
-	_, err := buildRecipeBlobMap(ctx, recipe, []string{blobSHA})
+	_, err := buildRecipeBlobMap(ctx, recipe, []string{blobSHA}, nil)
 	if err == nil {
 		t.Fatal("expected error for overlapping byte ranges")
 	}
@@ -400,7 +400,7 @@ func TestApplyRecipeToContentIndependentSimultaneous(t *testing.T) {
 	}
 
 	content := []byte("aaa bbb")
-	result, err := applyRecipeToContent(recipe, content)
+	result, err := applyRecipeToContent(recipe, content, nil)
 	if err != nil {
 		t.Fatalf("applyRecipeToContent: %v", err)
 	}
@@ -427,7 +427,7 @@ func TestApplyRecipeToContentDependentMatchesPostDependency(t *testing.T) {
 	}
 
 	content := []byte("hello")
-	result, err := applyRecipeToContent(recipe, content)
+	result, err := applyRecipeToContent(recipe, content, nil)
 	if err != nil {
 		t.Fatalf("applyRecipeToContent: %v", err)
 	}
@@ -509,7 +509,7 @@ func TestBuildRecipeBlobContentNoWrite(t *testing.T) {
 		TopoOrder: []int{0},
 	}
 
-	contentMap, err := BuildRecipeBlobContent(ctx, recipe, []string{blobSHA})
+	contentMap, err := BuildRecipeBlobContent(ctx, recipe, []string{blobSHA}, nil)
 	if err != nil {
 		t.Fatalf("BuildRecipeBlobContent: %v", err)
 	}

@@ -190,7 +190,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 			blobSHAList = append(blobSHAList, sha)
 		}
 
-		contentMap, err := BuildRecipeBlobContent(ctx, recipe, blobSHAList)
+		contentMap, err := BuildRecipeBlobContent(ctx, recipe, blobSHAList, nil)
 		if err != nil {
 			die(flags, cmd, 1, fmt.Sprintf("building blob content map: %v", err))
 		}
@@ -520,6 +520,18 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 		}
 	}
 
+	// Build per-operation scoped blob sets for operations with scope filters.
+	opScopedBlobs := make([]map[string]bool, len(recipe.Operations))
+	for i, op := range recipe.Operations {
+		if op.Scope != nil {
+			scopedBlobs, scopeErr := buildScopedBlobSet(ctx, *op.Scope)
+			if scopeErr != nil {
+				die(flags, cmd, 1, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
+			}
+			opScopedBlobs[i] = scopedBlobs
+		}
+	}
+
 	// Aggregate per-operation results.
 	var opResults []ScrubRunDryRunOpResult
 	totalBlob, totalCommit, totalTag := 0, 0, 0
@@ -532,6 +544,10 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 		for _, m := range results.Matches {
 			switch m.ObjectType {
 			case "blob":
+				// Filter by per-operation scope when set.
+				if opScopedBlobs[i] != nil && !opScopedBlobs[i][m.SHA] {
+					continue
+				}
 				blobCount++
 				if m.Path != "" {
 					fileSet[m.Path] = true

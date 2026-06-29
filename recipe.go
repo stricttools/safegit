@@ -174,7 +174,12 @@ type byteReplacement struct {
 // applies recipe operations in memory, and returns only blobs whose content
 // changed. No objects are written to the object store -- this is purely
 // in-memory content computation for dry-run and diff use cases.
-func BuildRecipeBlobContent(ctx context.Context, recipe *ParsedRecipe, blobSHAs []string) (map[string][]byte, error) {
+//
+// blobAllowedOps optionally restricts which operations apply to each blob.
+// When nil, all operations apply to all blobs. When set, only operations
+// whose index is in blobAllowedOps[blobSHA] are applied to that blob. This
+// is used to enforce per-operation scope filters from recipe TOML files.
+func BuildRecipeBlobContent(ctx context.Context, recipe *ParsedRecipe, blobSHAs []string, blobAllowedOps map[string]map[int]bool) (map[string][]byte, error) {
 	result := make(map[string][]byte)
 
 	for _, blobSHA := range blobSHAs {
@@ -188,7 +193,12 @@ func BuildRecipeBlobContent(ctx context.Context, recipe *ParsedRecipe, blobSHAs 
 			continue
 		}
 
-		modified, err := applyRecipeToContent(recipe, content)
+		var allowedOps map[int]bool
+		if blobAllowedOps != nil {
+			allowedOps = blobAllowedOps[blobSHA]
+		}
+
+		modified, err := applyRecipeToContent(recipe, content, allowedOps)
 		if err != nil {
 			return nil, fmt.Errorf("blob %s: %w", blobSHA, err)
 		}
@@ -210,8 +220,11 @@ func BuildRecipeBlobContent(ctx context.Context, recipe *ParsedRecipe, blobSHAs 
 // descending to preserve positions). Overlapping byte ranges across independent
 // operations are a hard error. Dependent operations match against the post-
 // dependency content.
-func buildRecipeBlobMap(ctx context.Context, recipe *ParsedRecipe, blobSHAs []string) (map[string]string, error) {
-	contentMap, err := BuildRecipeBlobContent(ctx, recipe, blobSHAs)
+//
+// blobAllowedOps optionally restricts which operations apply to each blob.
+// See BuildRecipeBlobContent for details.
+func buildRecipeBlobMap(ctx context.Context, recipe *ParsedRecipe, blobSHAs []string, blobAllowedOps map[string]map[int]bool) (map[string]string, error) {
+	contentMap, err := BuildRecipeBlobContent(ctx, recipe, blobSHAs, blobAllowedOps)
 	if err != nil {
 		return nil, err
 	}
@@ -228,9 +241,15 @@ func buildRecipeBlobMap(ctx context.Context, recipe *ParsedRecipe, blobSHAs []st
 	return blobMap, nil
 }
 
-// applyRecipeToContent applies all recipe operations to content in topological
+// applyRecipeToContent applies recipe operations to content in topological
 // order, handling independent and dependent operations correctly.
-func applyRecipeToContent(recipe *ParsedRecipe, content []byte) ([]byte, error) {
+//
+// allowedOps optionally restricts which operations are applied. When nil, all
+// operations in the recipe are applied. When set, only operations whose index
+// is in the map are applied. This is used to enforce per-operation scope
+// filters: a blob at path "config.yaml" should only have operations scoped to
+// "*.yaml" (or unscoped) applied to it.
+func applyRecipeToContent(recipe *ParsedRecipe, content []byte, allowedOps map[int]bool) ([]byte, error) {
 	n := len(recipe.Operations)
 
 	// Track which operations are "independent" (no depends_on).
@@ -252,6 +271,11 @@ func applyRecipeToContent(recipe *ParsedRecipe, content []byte) ([]byte, error) 
 	// topo order since they have no dependencies).
 	independentDone := false
 	for _, idx := range recipe.TopoOrder {
+		// Skip operations not allowed for this blob (per-operation scope).
+		if allowedOps != nil && !allowedOps[idx] {
+			continue
+		}
+
 		if isIndependent[idx] {
 			op := recipe.Operations[idx]
 			pat := recipe.Patterns[idx]
