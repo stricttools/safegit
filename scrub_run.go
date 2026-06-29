@@ -131,198 +131,54 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 		die(flags, cmd, 2, "one of --from or --entire-history is required")
 	}
 
-	// Build a combined regex that matches ANY operation's pattern. This is used
-	// to find candidate blobs efficiently in one pass.
-	combinedPatternParts := make([]string, len(recipe.Operations))
-	for i, op := range recipe.Operations {
-		combinedPatternParts[i] = "(?:" + op.Pattern + ")"
-	}
-	combinedPattern, err := regexp.Compile(strings.Join(combinedPatternParts, "|"))
-	if err != nil {
-		die(flags, cmd, 2, fmt.Sprintf("compiling combined pattern: %v", err))
-	}
-
-	// Scan for matching blobs using the combined pattern
-	infof(flags, "Scanning objects...\n")
-	results, err := scan.ScanObjects(ctx, combinedPattern)
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("scanning objects: %v", err))
-	}
-
-	if len(results.Matches) == 0 {
-		infof(flags, "No matches found. Nothing to rewrite.\n")
-		return 0
-	}
-
-	// Collect unique blob SHAs from matches, respecting per-operation scope filters.
-	uniqueBlobSHAs := make(map[string]bool)
-	var commitMatchCount, tagMatchCount int
-	for _, m := range results.Matches {
-		switch m.ObjectType {
-		case "blob":
-			uniqueBlobSHAs[m.SHA] = true
-		case "commit":
-			commitMatchCount++
-		case "tag":
-			tagMatchCount++
-		}
-	}
-
-	blobSHAList := make([]string, 0, len(uniqueBlobSHAs))
-	for sha := range uniqueBlobSHAs {
-		blobSHAList = append(blobSHAList, sha)
-	}
-
-	// Build the combined blob map via the recipe.
-	infof(flags, "Building blob replacement map (%d candidate blobs)...\n", len(blobSHAList))
-	blobMap, err := buildRecipeBlobMap(ctx, recipe, blobSHAList)
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("building blob map: %v", err))
-	}
-
-	infof(flags, "Found %d blobs to replace, %d commit message matches, %d tag matches\n",
-		len(blobMap), commitMatchCount, tagMatchCount)
-
-	// --diff preview mode: show diffs without modifying anything
+	// --diff preview mode: build blob map via range-scoped scan, then show diffs.
 	if diffMode {
+		combinedPatternParts := make([]string, len(recipe.Operations))
+		for i, op := range recipe.Operations {
+			combinedPatternParts[i] = "(?:" + op.Pattern + ")"
+		}
+		combinedPattern, err := regexp.Compile(strings.Join(combinedPatternParts, "|"))
+		if err != nil {
+			die(flags, cmd, 2, fmt.Sprintf("compiling combined pattern: %v", err))
+		}
+
+		infof(flags, "Scanning objects...\n")
+		results, err := scan.ScanObjects(ctx, combinedPattern, scan.ScanOpts{
+			FromSHA:       fromSHA,
+			EntireHistory: entireHistory,
+		})
+		if err != nil {
+			die(flags, cmd, 1, fmt.Sprintf("scanning objects: %v", err))
+		}
+
+		if len(results.Matches) == 0 {
+			infof(flags, "No matches found. Nothing to rewrite.\n")
+			return 0
+		}
+
+		uniqueBlobSHAs := make(map[string]bool)
+		for _, m := range results.Matches {
+			if m.ObjectType == "blob" {
+				uniqueBlobSHAs[m.SHA] = true
+			}
+		}
+		blobSHAList := make([]string, 0, len(uniqueBlobSHAs))
+		for sha := range uniqueBlobSHAs {
+			blobSHAList = append(blobSHAList, sha)
+		}
+
+		blobMap, err := buildRecipeBlobMap(ctx, recipe, blobSHAList)
+		if err != nil {
+			die(flags, cmd, 1, fmt.Sprintf("building blob map: %v", err))
+		}
+
 		return scrubRunDiff(ctx, flags, cmd, recipe, blobMap, fromSHA, entireHistory, limit)
 	}
 
-	if len(blobMap) == 0 && commitMatchCount == 0 && tagMatchCount == 0 {
-		infof(flags, "No replacements needed. Nothing to rewrite.\n")
-		return 0
-	}
+	// Execute the recipe via the shared pipeline.
+	exitCode, _ := executeScrubRecipe(ctx, flags, cmd, recipe, reason, fromSHA, entireHistory, nil, gitDir, sgDir, nil)
 
-	// Confirmation prompt
-	if !confirmOrAbort(flags, "This will rewrite history using %d recipe operations. This cannot be undone. Proceed?", len(recipe.Operations)) {
-		infof(flags, "Aborted.\n")
-		return 0
-	}
-
-	// Capture old HEAD
-	oldHeadSHA, err := git.RevParse(ctx, "HEAD")
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving HEAD: %v", err))
-	}
-
-	// Determine commit range
-	var shas []string
-	if entireHistory {
-		out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", "HEAD")
-		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("listing commits: %v", err))
-		}
-		shas = git.SplitNonEmpty(out)
-	} else {
-		out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", fromSHA+"..HEAD")
-		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("listing commits: %v", err))
-		}
-		shas = append([]string{fromSHA}, git.SplitNonEmpty(out)...)
-	}
-
-	commitCount := len(shas)
-	infof(flags, "Rewriting %d commits...\n", commitCount)
-
-	messagesModified := 0
-	treeCache := make(map[string]string)
-
-	shaMap, rewrittenCount, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
-		var xform CommitTransform
-
-		// Replace blobs in tree
-		newTreeSHA, err := replaceInTreeByBlobMap(ctx, info.Tree, blobMap, nil, treeCache)
-		if err != nil {
-			return CommitTransform{}, fmt.Errorf("replacing blobs in tree for commit %s: %w", sha, err)
-		}
-		if newTreeSHA != info.Tree {
-			xform.TreeSHA = newTreeSHA
-		}
-
-		// Apply recipe operations to commit messages in topo order,
-		// respecting per-op target filters.
-		newMessage := info.Message
-		for _, idx := range recipe.TopoOrder {
-			op := recipe.Operations[idx]
-			// Skip if this op doesn't target commits
-			if op.Target != nil && *op.Target != "commits" {
-				continue
-			}
-			pat := recipe.Patterns[idx]
-			if !pat.MatchString(newMessage) {
-				continue
-			}
-			if op.Mangle {
-				newMessage = pat.ReplaceAllStringFunc(newMessage, func(s string) string {
-					return string(mangleBytes([]byte(s)))
-				})
-			} else {
-				newMessage = pat.ReplaceAllString(newMessage, *op.Replace)
-			}
-		}
-		if newMessage != info.Message {
-			xform.Message = newMessage
-			messagesModified++
-		}
-
-		return xform, nil
-	}, flags.verbose)
-	if err != nil {
-		die(flags, cmd, 1, err.Error())
-	}
-
-	// Oplog extra
-	oplogExtra := map[string]interface{}{
-		"recipe":           recipePath,
-		"reason":           reason,
-		"operations":       len(recipe.Operations),
-		"blobsReplaced":    len(blobMap),
-		"messagesModified": messagesModified,
-	}
-
-	// Annotation rewrite closure: applies recipe operations to tag annotations,
-	// respecting per-op target filters for "tags".
-	var annotationTagRewrites []TagRewrite
-	var tagsRewritten int
-	parentAnnotFunc := func(ctx context.Context, shaMap map[string]string) error {
-		annotationTagRewrites, tagsRewritten = rewriteTagAnnotationsRecipe(ctx, flags, cmd, recipe, shaMap)
-		oplogExtra["tagsRewritten"] = tagsRewritten
-		return nil
-	}
-
-	// Verification closure: re-scan for each operation's pattern.
-	exitCode := 0
-	parentVerifyFunc := func(ctx context.Context) error {
-		infof(flags, "Verifying secret removal...\n")
-		for i, op := range recipe.Operations {
-			pat := recipe.Patterns[i]
-			verifyErr := verifySecretRemovedScoped(ctx, pat, opScope(&op))
-			if verifyErr != nil {
-				fmt.Fprintf(os.Stderr, "CRITICAL (operation %d, pattern %q): %v\n", i, op.Pattern, verifyErr)
-				exitCode = 1
-			}
-		}
-		if exitCode == 0 {
-			infof(flags, "Verification passed: no matches found in object stores.\n")
-		} else {
-			fmt.Fprintln(os.Stderr, "Run 'git reflog expire --expire=now --all && git gc --prune=now' to force cleanup.")
-		}
-		return nil
-	}
-
-	result := RewriteResult{
-		ShaMap:         shaMap,
-		RewrittenCount: rewrittenCount,
-		OldHeadSHA:     oldHeadSHA,
-		SgDir:          sgDir,
-		OpName:         "scrub-run",
-		OplogExtra:     oplogExtra,
-	}
-	if err := result.Finalize(ctx, flags, cmd, parentAnnotFunc, parentVerifyFunc); err != nil {
-		die(flags, cmd, 1, err.Error())
-	}
-
-	// Append scrub policies for each operation
+	// Append scrub policies for each operation.
 	for _, op := range recipe.Operations {
 		policy := ScrubPolicy{
 			Type:        "match",
@@ -338,48 +194,6 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 		}
 	}
 
-	allTagRewrites := append(result.TagRewrites, annotationTagRewrites...)
-
-	// JSON output
-	if flags.json {
-		rewrites := make(map[string]string)
-		for old, new_ := range shaMap {
-			if old != new_ {
-				rewrites[old] = new_
-			}
-		}
-		combinedTagRewrites := make([]TagRewrite, 0, len(allTagRewrites))
-		combinedTagRewrites = append(combinedTagRewrites, allTagRewrites...)
-		jsonResult := ScrubRunResult{
-			Version:          1,
-			DryRun:           false,
-			Rewrites:         rewrites,
-			Tags:             combinedTagRewrites,
-			CommitsRewritten: rewrittenCount,
-			BlobsReplaced:    len(blobMap),
-			MessagesModified: messagesModified,
-			TagsRewritten:    tagsRewritten,
-			OperationCount:   len(recipe.Operations),
-			OldHead:          oldHeadSHA,
-			NewHead:          result.NewHeadSHA,
-		}
-		if jsonResult.Tags == nil {
-			jsonResult.Tags = []TagRewrite{}
-		}
-		emitJSON(jsonResult)
-		return exitCode
-	}
-
-	// Summary
-	infof(flags, "\nScrub complete:\n")
-	infof(flags, "  %d operations applied\n", len(recipe.Operations))
-	infof(flags, "  %d commits rewritten\n", rewrittenCount)
-	infof(flags, "  %d blobs replaced\n", len(blobMap))
-	infof(flags, "  %d commit messages modified\n", messagesModified)
-	infof(flags, "  %d tag annotations rewritten\n", tagsRewritten)
-	infof(flags, "  Old HEAD: %s\n", oldHeadSHA[:12])
-	infof(flags, "  New HEAD: %s\n", result.NewHeadSHA[:12])
-
 	return exitCode
 }
 
@@ -392,46 +206,7 @@ func opScope(op *RecipeOperation) *string {
 // Each operation is applied in topological order, and only operations targeting
 // "tags" (or all targets) are applied.
 func rewriteTagAnnotationsRecipe(ctx context.Context, flags globalFlags, cmd string, recipe *ParsedRecipe, shaMap map[string]string) ([]TagRewrite, int) {
-	out, _, err := git.Run(ctx, "for-each-ref", "--format=%(refname) %(objecttype) %(objectname)", "refs/tags/")
-	if err != nil {
-		if flags.verbose {
-			fmt.Fprintf(os.Stderr, "warning: failed to list tags for annotation rewriting: %v\n", err)
-		}
-		return nil, 0
-	}
-
-	var tagRewrites []TagRewrite
-	tagsRewritten := 0
-	lines := git.SplitNonEmpty(out)
-	for _, line := range lines {
-		parts := strings.SplitN(line, " ", 3)
-		if len(parts) != 3 {
-			continue
-		}
-		refname, objecttype, objectname := parts[0], parts[1], parts[2]
-
-		if objecttype != "tag" {
-			continue
-		}
-
-		// Read the tag object
-		tagContent, _, err := git.Run(ctx, "cat-file", "-p", objectname)
-		if err != nil {
-			if flags.verbose {
-				fmt.Fprintf(os.Stderr, "warning: failed to read tag object %s: %v\n", objectname, err)
-			}
-			continue
-		}
-
-		// Split into header and body
-		headerEnd := strings.Index(tagContent, "\n\n")
-		if headerEnd < 0 {
-			continue
-		}
-		header := tagContent[:headerEnd]
-		body := tagContent[headerEnd+2:]
-
-		// Apply recipe operations to tag body in topo order
+	tagRewrites, tagsRewritten, err := forEachAnnotatedTag(ctx, shaMap, func(refname, header, body string) (string, error) {
 		newBody := body
 		for _, idx := range recipe.TopoOrder {
 			op := recipe.Operations[idx]
@@ -451,30 +226,16 @@ func rewriteTagAnnotationsRecipe(ctx context.Context, flags globalFlags, cmd str
 				newBody = pat.ReplaceAllString(newBody, *op.Replace)
 			}
 		}
-
-		if newBody == body {
-			continue
-		}
-
-		// Reconstruct tag object and write it
-		newContent := header + "\n\n" + newBody
-		newTagSHA, _, err := git.RunWithEnvStdin(ctx, nil, []byte(newContent), "hash-object", "-t", "tag", "-w", "--stdin")
-		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("writing rewritten tag annotation for %s: %v", refname, err))
-		}
-		newTagSHA = strings.TrimSpace(newTagSHA)
-
-		if err := git.UpdateRef(ctx, refname, newTagSHA, objectname); err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("updating tag ref %s after annotation rewrite: %v", refname, err))
-		}
-
-		tagRewrites = append(tagRewrites, TagRewrite{Refname: refname, OldSHA: objectname, NewSHA: newTagSHA, Annotated: true})
-		tagsRewritten++
-		if flags.verbose {
-			fmt.Fprintf(os.Stderr, "  tag annotation %s: %s -> %s\n", refname, shortSHA(objectname), shortSHA(newTagSHA))
+		return newBody, nil
+	})
+	if err != nil {
+		die(flags, cmd, 1, fmt.Sprintf("rewriting tag annotations: %v", err))
+	}
+	if tagsRewritten > 0 && flags.verbose {
+		for _, tr := range tagRewrites {
+			fmt.Fprintf(os.Stderr, "  tag annotation %s: %s -> %s\n", tr.Refname, shortSHA(tr.OldSHA), shortSHA(tr.NewSHA))
 		}
 	}
-
 	return tagRewrites, tagsRewritten
 }
 
