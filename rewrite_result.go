@@ -31,8 +31,7 @@ type RewriteResult struct {
 	OldHeadSHA string // HEAD before the rewrite
 
 	// Safegit paths
-	SgDir    string // .git/safegit directory path
-	RepoRoot string // repository working tree root
+	SgDir string // .git/safegit directory path
 
 	// Tagger identity for updateRefs (rewrite-author needs tagger matching;
 	// zero values mean "no tagger matching", which is the default for scrub).
@@ -71,7 +70,7 @@ type RewriteResult struct {
 //  7. Resolve new HEAD SHA
 //  8. Resolve current ref
 //  9. oplog.Append — record the operation
-//  9.5. Append scrub policy and auto-commit the tracked policy file
+//  9.5. Append scrub policy to the untracked policy file
 //  10. Push hint — print rlsbl-aware or default push instructions
 func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd string, annotationRewriteFunc AnnotationRewriteFunc, verifyFunc VerifyFunc) error {
 	// 1. Update refs (passes tagger identity for rewrite-author; zero values
@@ -140,20 +139,9 @@ func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd str
 	})
 
 	// 9.5. Append scrub policy when explicitly provided by the caller.
-	// Uses the tracked working-tree location (<repoRoot>/.safegit/).
 	if r.PolicyData != nil {
-		if err := appendScrubPolicy(r.RepoRoot, *r.PolicyData); err != nil {
+		if err := appendScrubPolicy(r.SgDir, *r.PolicyData); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: failed to append scrub policy: %v\n", err)
-		} else {
-			// Auto-commit the tracked policy file. Since this runs
-			// after a history rewrite (not a concurrent commit), a
-			// simple git add + commit is safe.
-			policyFile := scrubPolicyPath(r.RepoRoot)
-			if _, _, addErr := git.Run(ctx, "add", policyFile); addErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: failed to stage scrub policy file: %v\n", addErr)
-			} else if _, _, commitErr := git.Run(ctx, "commit", "-m", "safegit: record scrub policy"); commitErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: failed to commit scrub policy file: %v\n", commitErr)
-			}
 		}
 	}
 

@@ -79,26 +79,6 @@ func executeScrubRecipe(
 		return 0, nil
 	}
 
-	// Exclude matches from the tracked policy file. The policy file
-	// (.safegit/scrub-policies.jsonl) contains pattern strings by design
-	// and must not be rewritten during scrub operations.
-	policyBlobSHAs, policyBlobErr := buildScopedBlobSet(ctx, ".safegit/scrub-policies.jsonl")
-	if policyBlobErr == nil && len(policyBlobSHAs) > 0 {
-		var filtered []scan.Match
-		for _, m := range results.Matches {
-			if m.ObjectType == "blob" && policyBlobSHAs[m.SHA] {
-				continue
-			}
-			filtered = append(filtered, m)
-		}
-		results.Matches = filtered
-
-		if len(results.Matches) == 0 && len(gitlinkMap) == 0 {
-			infof(flags, "No matches found (only policy file matches excluded). Nothing to rewrite.\n")
-			return 0, nil
-		}
-	}
-
 	// When --scope is set, build a scoped blob set to filter blobs by path.
 	var scopedBlobSHAs map[string]bool
 	if scope != nil {
@@ -318,18 +298,11 @@ func executeScrubRecipe(
 		policyData = &policy
 	}
 
-	// Resolve repo root for tracked policy storage.
-	repoRoot, err := git.RepoRoot(ctx)
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving repo root: %v", err))
-	}
-
 	result := RewriteResult{
 		ShaMap:         shaMap,
 		RewrittenCount: rewrittenCount,
 		OldHeadSHA:     oldHeadSHA,
 		SgDir:          sgDir,
-		RepoRoot:       repoRoot,
 		OpName:         opName,
 		OplogExtra:     oplogExtra,
 		PolicyData:     policyData,

@@ -271,23 +271,9 @@ func verifySecretRemoved(ctx context.Context, pattern *regexp.Regexp) error {
 		return nil
 	}
 
-	// Exclude matches from the tracked policy file, which legitimately
-	// contains pattern strings.
-	policyBlobs, _ := buildScopedBlobSet(ctx, ".safegit/scrub-policies.jsonl")
-	var matches []scan.Match
-	for _, m := range results.Matches {
-		if m.ObjectType == "blob" && len(policyBlobs) > 0 && policyBlobs[m.SHA] {
-			continue
-		}
-		matches = append(matches, m)
-	}
-	if len(matches) == 0 {
-		return nil
-	}
-
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("secret still present in %d object(s):\n", len(matches)))
-	for _, m := range matches {
+	sb.WriteString(fmt.Sprintf("secret still present in %d object(s):\n", len(results.Matches)))
+	for _, m := range results.Matches {
 		reachable := "unreachable"
 		if m.Reachable {
 			reachable = "reachable"
