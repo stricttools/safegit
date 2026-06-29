@@ -12,7 +12,7 @@ order: 91
 
 concurrency-safe git for multi-agent use
 
-Version: dev
+Version: 0.21.1-0.20260629205735-caa56673105e+dirty
 
 ## Commands
 
@@ -28,14 +28,14 @@ Version: dev
 - [redo](cli-redo.html) -- restore the commit that undo removed, as a one-shot counterpart to undo
 - [reset](cli-reset.html) -- reset HEAD with guards that prevent accidental --hard data loss
 - [revert](cli-revert.html) -- revert one or more commits creating inverse patches, with safety guards
-- [scan](cli-scan.html) -- search git history for regex pattern matches across all objects and working tree files
+- [scan](cli-scan.html) -- search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection
 - [undo](cli-undo.html) -- reverse the last commit, amend, or reword operation using the oplog
 - [unlock](cli-unlock.html) -- release a stale .lock file left behind by a crashed git process
 - [version](cli-version.html) -- print safegit version, Go runtime version, and git version
 
 ## Command Groups
 
-- [author](cli-author.html) -- audit and rewrite commit author/committer identity
+- [author](cli-author.html) -- audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history
 - [config](cli-config.html) -- show, get, or set safegit configuration key-value pairs
 - [hook](cli-hook.html) -- manage pre-pre-push hook scripts that run before every push
 - [scrub](cli-scrub.html) -- surgically rewrite git history to remove or replace sensitive content such as secrets, credentials, and private data from all commits, trees, and blobs in the repository

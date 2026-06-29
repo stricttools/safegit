@@ -46,7 +46,7 @@ replace all occurrences of a regex pattern across every blob in the repository h
 
 ## scrub run
 
-execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements across history in a single coordinated pass with topological ordering and overlap detection
+execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite
 
 ### Flags
 
@@ -66,4 +66,4 @@ execute a multi-operation scrub recipe from a TOML file, applying all pattern re
 
 ## scrub verify
 
-check all scrub policies to confirm that previously scrubbed secrets remain absent from the git object store, reporting per-policy pass or fail results
+check all scrub policies defined in the repository configuration to confirm that previously scrubbed secrets and sensitive patterns remain completely absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-policy pass or fail results with match locations for any violations found

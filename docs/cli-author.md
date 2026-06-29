@@ -1,6 +1,6 @@
 ---
 title: safegit author
-description: "audit and rewrite commit author/committer identity"
+description: "audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history"
 generated: true
 nav_group: "CLI Reference"
 nav_order: 1
@@ -9,11 +9,11 @@ nav_order: 1
 
 # safegit author
 
-audit and rewrite commit author/committer identity
+audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history
 
 ## author check
 
-check that all commits use the expected author and committer identity, reporting any deviations and suggesting a rewrite command to fix them
+check that all commits use the expected author and committer identity by scanning every commit in the repository history, reporting any deviations with the exact commit hashes and mismatched fields, and suggesting the corresponding safegit author rewrite command to fix each deviation found
 
 ### Flags
 
@@ -24,11 +24,11 @@ check that all commits use the expected author and committer identity, reporting
 
 ## author list
 
-list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity
+list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite
 
 ## author rewrite
 
-rewrite author and committer name or email across all commit history
+rewrite author and committer name or email across all commit history using git filter-branch style rewriting, replacing every occurrence of the old identity with the new one in both author and committer fields while preserving timestamps, commit messages, tree contents, and parent relationships so the rewritten history is otherwise identical to the original
 
 ### Flags
 
