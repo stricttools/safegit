@@ -886,7 +886,7 @@ func TestRewriteAuthorHelpFlag(t *testing.T) {
 
 	// strictcli intercepts --help and shows the command description
 	combined := stdout + stderr
-	if !strings.Contains(combined, "rewrite author/committer across history") {
+	if !strings.Contains(combined, "rewrite author and committer name or email across all commit history") {
 		t.Errorf("help output should contain command description, got: %s", combined)
 	}
 }
