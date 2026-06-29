@@ -53,10 +53,10 @@ type RewriteResult struct {
 //
 //  1. updateRefs — update branch and tag refs to point at rewritten commits
 //  2. annotationRewriteFunc — rewrite tag annotation text (nil to skip)
-//  3. cleanupAfterRewrite — expire tainted reflog entries, repack, prune
-//  4. verifyFunc — command-specific verification (nil to skip)
-//  5. SyncMainIndexWithWorktree — sync the shared index with rewritten HEAD
-//  6. untrackProtectedPaths — remove tracked-but-gitignored files from index
+//  3. SyncMainIndexWithWorktree — sync the shared index with rewritten HEAD
+//  4. untrackProtectedPaths — remove tracked-but-gitignored files from index
+//  5. cleanupAfterRewrite — expire tainted reflog entries, repack, prune
+//  6. verifyFunc — command-specific verification (nil to skip)
 //  7. Resolve new HEAD SHA
 //  8. Resolve current ref
 //  9. oplog.Append — record the operation
@@ -78,24 +78,26 @@ func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd str
 		}
 	}
 
-	// 3. Post-rewrite cleanup: expire tainted reflog entries and prune old objects
-	if err := cleanupAfterRewrite(ctx, flags, cmd, r.ShaMap, r.SgDir); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: post-rewrite cleanup: %v\n", err)
-	}
-
-	// 4. Command-specific verification
-	if verifyFunc != nil {
-		if err := verifyFunc(ctx); err != nil {
-			return fmt.Errorf("verification failed: %w", err)
-		}
-	}
-
-	// 5-6. Sync main index with working tree and untrack protected paths
+	// 3-4. Sync main index with working tree and untrack protected paths.
+	// This must happen before cleanup so that the index no longer references
+	// old (pre-rewrite) objects, allowing repack/prune to remove them.
 	protectedPaths, syncErr := git.SyncMainIndexWithWorktree(ctx, "HEAD")
 	if syncErr != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to sync main index: %v\n", syncErr)
 	}
 	untrackProtectedPaths(ctx, flags, protectedPaths)
+
+	// 5. Post-rewrite cleanup: expire tainted reflog entries and prune old objects
+	if err := cleanupAfterRewrite(ctx, flags, cmd, r.ShaMap, r.SgDir); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: post-rewrite cleanup: %v\n", err)
+	}
+
+	// 6. Command-specific verification
+	if verifyFunc != nil {
+		if err := verifyFunc(ctx); err != nil {
+			return fmt.Errorf("verification failed: %w", err)
+		}
+	}
 
 	// 7. Resolve new HEAD SHA
 	newHeadSHA, err := git.RevParse(ctx, "HEAD")
