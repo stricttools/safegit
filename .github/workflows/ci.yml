@@ -23,4 +23,4 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go vet ./...
-      - run: go test ./... -race -short -timeout=10m
+      - run: go test ./... ${{ matrix.os == 'ubuntu-latest' && '-race' || '' }} -short -timeout=10m
