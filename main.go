@@ -51,12 +51,12 @@ type globalFlags struct {
 func main() {
 	app := strictcli.NewApp("safegit", version, "concurrency-safe git for multi-agent use")
 
-	app.GlobalFlag(strictcli.BoolFlag("quiet", "suppress all informational output, only showing errors and results", strictcli.Short("q")))
-	app.GlobalFlag(strictcli.BoolFlag("verbose", "enable verbose output with detailed progress and diagnostic info"))
-	app.GlobalFlag(strictcli.BoolFlag("dry-run", "preview what would happen without writing any changes to disk", strictcli.Short("n")))
-	app.GlobalFlag(strictcli.BoolFlag("yes", "automatically confirm all interactive prompts without asking", strictcli.Short("y")))
+	app.GlobalFlag(strictcli.BoolFlag("quiet", "suppress all informational output, only showing errors and results", strictcli.Short("q"), strictcli.Default(false)))
+	app.GlobalFlag(strictcli.BoolFlag("verbose", "enable verbose output with detailed progress and diagnostic info", strictcli.Default(false)))
+	app.GlobalFlag(strictcli.BoolFlag("dry-run", "preview what would happen without writing any changes to disk", strictcli.Short("n"), strictcli.Default(false)))
+	app.GlobalFlag(strictcli.BoolFlag("yes", "automatically confirm all interactive prompts without asking", strictcli.Short("y"), strictcli.Default(false)))
 	app.GlobalFlag(strictcli.StringFlag("config", "path to a custom safegit config file instead of the default location", strictcli.Default("")))
-	app.GlobalFlag(strictcli.BoolFlag("json", "emit machine-readable JSON output to stdout instead of human text"))
+	app.GlobalFlag(strictcli.BoolFlag("json", "emit machine-readable JSON output to stdout instead of human text", strictcli.Default(false)))
 
 	pt := func(name string, args []string, globals map[string]interface{}) int {
 		gf := globalsToFlags(globals)
@@ -101,8 +101,8 @@ func main() {
 			strictcli.StringFlag("m", "commit message line; can be repeated to build multi-line messages", strictcli.Short("m"), strictcli.Repeatable(), strictcli.Unique(false)),
 			strictcli.StringFlag("F", "read the full commit message body from a file instead of --m flags", strictcli.Short("F"), strictcli.Default(nil)),
 			strictcli.StringFlag("branch", "commit the staged files onto a different branch without switching to it", strictcli.Default(nil)),
-			strictcli.BoolFlag("amend", "amend the current HEAD commit by replacing it with updated content"),
-			strictcli.BoolFlag("allow-empty", "allow creating a commit even when no files have been changed"),
+			strictcli.BoolFlag("amend", "amend the current HEAD commit by replacing it with updated content", strictcli.Default(false)),
+			strictcli.BoolFlag("allow-empty", "allow creating a commit even when no files have been changed", strictcli.Default(false)),
 			strictcli.StringFlag("trailer", "add a key-value trailer line to the commit message (repeatable)", strictcli.Repeatable(), strictcli.Unique(false)),
 		),
 		strictcli.WithArgs(
@@ -116,7 +116,7 @@ func main() {
 	app.Passthrough("bisect", "binary search through commits to find a bug, with safety guards", pt)
 	app.Command("push", "push refs to remote with pre-pre-push hooks and automatic retry", func(kwargs map[string]interface{}) int {
 		gf := globalsToFlags(kwargs)
-		noPrePrePush := kwargs["no_pre_pre_push"].(bool)
+		prePushHook := kwargs["pre_push_hook"].(bool)
 		forceWithLease := kwargs["force_with_lease"].(bool)
 		remote := "origin"
 		if v := kwargs["remote"]; v != nil {
@@ -137,18 +137,18 @@ func main() {
 		case bothBranchesAndTags:
 			mode = pushModeBoth
 		}
-		return runPush(gf, noPrePrePush, forceWithLease, remote, mode)
+		return runPush(gf, !prePushHook, forceWithLease, remote, mode)
 	},
 		strictcli.WithFlags(
-			strictcli.BoolFlag("no-pre-pre-push", "skip running pre-pre-push hook scripts before pushing to remote"),
-			strictcli.BoolFlag("force-with-lease", "force push using --force-with-lease to prevent overwriting others' work"),
+			strictcli.BoolFlag("pre-push-hook", "run pre-pre-push hook scripts before pushing to remote", strictcli.Default(true)),
+			strictcli.BoolFlag("force-with-lease", "force push using --force-with-lease to prevent overwriting others' work", strictcli.Default(false)),
 		),
 		strictcli.WithMutex(strictcli.MutexGroup{
 			Flags: []strictcli.Flag{
-				strictcli.BoolFlag("only-head", "push only the current HEAD branch to the remote, ignoring other refs"),
-				strictcli.BoolFlag("only-branches", "push all local branches to the remote, ignoring tags and other refs"),
-				strictcli.BoolFlag("only-tags", "push all local tags to the remote without pushing any branches"),
-				strictcli.BoolFlag("both-branches-and-tags", "push all local branches and all tags to the remote in one operation"),
+				strictcli.BoolFlag("only-head", "push only the current HEAD branch to the remote, ignoring other refs", strictcli.Default(false)),
+				strictcli.BoolFlag("only-branches", "push all local branches to the remote, ignoring tags and other refs", strictcli.Default(false)),
+				strictcli.BoolFlag("only-tags", "push all local tags to the remote without pushing any branches", strictcli.Default(false)),
+				strictcli.BoolFlag("both-branches-and-tags", "push all local branches and all tags to the remote in one operation", strictcli.Default(false)),
 			},
 		}),
 		strictcli.WithArgs(
@@ -157,13 +157,14 @@ func main() {
 	)
 	app.Command("pull", "fetch from remote and merge, defaulting to fast-forward-only mode", func(kwargs map[string]interface{}) int {
 		gf := globalsToFlags(kwargs)
-		// Determine merge mode from mutex group
+		// Determine merge mode from --merge-strategy
 		var mode pullMode
-		if kwargs["ff_only"].(bool) {
+		switch kwargs["merge_strategy"].(string) {
+		case "ff-only":
 			mode = pullFFOnly
-		} else if kwargs["ff"].(bool) {
+		case "ff":
 			mode = pullFF
-		} else if kwargs["no_ff"].(bool) {
+		case "no-ff":
 			mode = pullNoFF
 		}
 		remote := "origin"
@@ -176,13 +177,9 @@ func main() {
 		}
 		return runPull(gf, mode, remote, branch)
 	},
-		strictcli.WithMutex(strictcli.MutexGroup{
-			Flags: []strictcli.Flag{
-				strictcli.BoolFlag("ff-only", "fast-forward only; abort with an error if a merge commit is required"),
-				strictcli.BoolFlag("ff", "fast-forward when possible, otherwise create a merge commit automatically"),
-				strictcli.BoolFlag("no-ff", "always create a merge commit even when fast-forward is possible"),
-			},
-		}),
+		strictcli.WithFlags(
+			strictcli.StringFlag("merge-strategy", "fast-forward merge strategy: ff, ff-only, or no-ff", strictcli.Choices("ff", "ff-only", "no-ff")),
+		),
 		strictcli.WithArgs(
 			strictcli.NewArg("remote", "name of the remote repository to pull from (defaults to origin)", strictcli.ArgRequired(false)),
 			strictcli.NewArg("branch", "name of the remote branch to fetch and merge into the current branch", strictcli.ArgRequired(false)),
@@ -231,9 +228,9 @@ func main() {
 	},
 		strictcli.WithMutex(strictcli.MutexGroup{
 			Flags: []strictcli.Flag{
-				strictcli.BoolFlag("diagnose", "run all health checks and report results without fixing any issues"),
-				strictcli.BoolFlag("fix", "run all health checks and automatically repair any issues found"),
-				strictcli.BoolFlag("uninstall", "remove all safegit hooks and metadata from this repository entirely"),
+				strictcli.BoolFlag("diagnose", "run all health checks and report results without fixing any issues", strictcli.Default(false)),
+				strictcli.BoolFlag("fix", "run all health checks and automatically repair any issues found", strictcli.Default(false)),
+				strictcli.BoolFlag("uninstall", "remove all safegit hooks and metadata from this repository entirely", strictcli.Default(false)),
 			},
 		}),
 	)
@@ -293,13 +290,13 @@ func main() {
 		strictcli.WithMutex(strictcli.MutexGroup{
 			Flags: []strictcli.Flag{
 				strictcli.StringFlag("replace", "literal string to substitute for each regex match found in history", strictcli.Default(nil)),
-				strictcli.BoolFlag("mangle", "replace matches with random printable ASCII of same length"),
+				strictcli.BoolFlag("mangle", "replace matches with random printable ASCII of same length", strictcli.Default(false)),
 			},
 		}),
 		strictcli.WithMutex(strictcli.MutexGroup{
 			Flags: []strictcli.Flag{
 				strictcli.StringFlag("from", "first commit hash to include when rewriting history (default: root commit)", strictcli.Default(nil)),
-				strictcli.BoolFlag("entire-history", "rewrite all commits from the root of the repository to HEAD"),
+				strictcli.BoolFlag("entire-history", "rewrite all commits from the root of the repository to HEAD", strictcli.Default(false)),
 			},
 		}),
 	)
@@ -309,13 +306,13 @@ func main() {
 		strictcli.WithTags("json"),
 		strictcli.WithFlags(
 			strictcli.StringFlag("reason", "mandatory audit trail message explaining why this scrub operation is needed"),
-			strictcli.BoolFlag("diff", "preview what would change without modifying any objects, showing unified diffs"),
+			strictcli.BoolFlag("diff", "preview what would change without modifying any objects, showing unified diffs", strictcli.Default(false)),
 			strictcli.IntFlag("limit", "maximum number of blob diffs to show in --diff mode (default: 50)", strictcli.Default(50)),
 		),
 		strictcli.WithMutex(strictcli.MutexGroup{
 			Flags: []strictcli.Flag{
 				strictcli.StringFlag("from", "first commit hash to include when rewriting history", strictcli.Default(nil)),
-				strictcli.BoolFlag("entire-history", "rewrite all commits from the root of the repository to HEAD"),
+				strictcli.BoolFlag("entire-history", "rewrite all commits from the root of the repository to HEAD", strictcli.Default(false)),
 			},
 		}),
 		strictcli.WithArgs(
@@ -335,7 +332,7 @@ func main() {
 		return 0
 	},
 		strictcli.WithFlags(
-			strictcli.BoolFlag("bypass-session", "undo across all sessions by ignoring the session ID ownership check"),
+			strictcli.BoolFlag("bypass-session", "undo across all sessions by ignoring the session ID ownership check", strictcli.Default(false)),
 		),
 	)
 	app.Command("redo", "restore the commit that undo removed, as a one-shot counterpart to undo", func(kwargs map[string]interface{}) int {
@@ -344,7 +341,7 @@ func main() {
 		return 0
 	},
 		strictcli.WithFlags(
-			strictcli.BoolFlag("bypass-session", "redo across all sessions by ignoring the session ID ownership check"),
+			strictcli.BoolFlag("bypass-session", "redo across all sessions by ignoring the session ID ownership check", strictcli.Default(false)),
 		),
 	)
 	app.Command("unlock", "release a stale .lock file left behind by a crashed git process", func(kwargs map[string]interface{}) int {
@@ -361,7 +358,7 @@ func main() {
 			strictcli.StringFlag("pattern", "regular expression pattern to search for across all objects in history"),
 			strictcli.StringFlag("scope", "glob pattern limiting which blob file paths are included (e.g. '*.env', 'config/**')", strictcli.Default(nil)),
 			strictcli.StringFlag("from", "first commit hash to include when scanning history (mutually exclusive with --entire-history)", strictcli.Default(nil)),
-			strictcli.BoolFlag("entire-history", "scan all commits from the root of the repository to HEAD (mutually exclusive with --from)"),
+			strictcli.BoolFlag("entire-history", "scan all commits from the root of the repository to HEAD (mutually exclusive with --from)", strictcli.Default(false)),
 			strictcli.StringFlag("target", "comma-separated list of match types to include: blobs,commits,tags,trailers,files (default: all)", strictcli.Default(nil)),
 		),
 	)
