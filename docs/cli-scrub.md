@@ -9,7 +9,7 @@ nav_order: 17
 
 # safegit scrub
 
-surgically rewrite git history to remove or replace sensitive content such as secrets, credentials, and private data from all commits, trees, and blobs in the repository
+surgically rewrite git history to remove or replace sensitive content using 4 subcommands (file, match, run, verify) that operate on all commits, trees, and blobs in the repository
 
 ## scrub file
 
