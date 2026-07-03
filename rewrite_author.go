@@ -47,6 +47,13 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	sgDir := repo.SafegitDir(gitDir)
 	ctx := context.Background()
 
+	// Unorchestrated-rewrite guard: author rewrite is as destructive as a
+	// scrub, so in rlsbl-managed repos it must be coordinated with the
+	// release tooling. Dry-run stays available.
+	if !flags.dryRun {
+		requireOrchestratedAuthorRewrite(ctx, flags, cmd)
+	}
+
 	requireCleanTree(ctx, flags, cmd)
 
 	// Acquire rewrite lock to prevent concurrent history rewriting
