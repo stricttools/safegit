@@ -21,6 +21,7 @@ Concurrency-safe Git wrapper (Go CLI). When multiple AI agent sessions share one
 - `scrub file <path> --from <commit> --reason <text>` -- replace a file's blob across history with current on-disk content
 - `scrub match --pattern <regex> --replace <text> --reason <text> --entire-history` -- pattern-based secret removal across all git objects (blobs, commit messages, tag annotations) with surgical cleanup and re-scan verification; `--dry-run` to scan without rewriting; `--scope <glob>` to limit file paths
 - `scrub run <recipe.toml>` -- execute multi-operation scrub recipes from TOML files; `--diff` to preview
+- `--remap-shas-in <glob>` (repeatable, on all three destructive scrub commands) -- rewrite full 40-hex commit hashes in glob-matched files to the post-scrub SHAs during the walk, keeping hash-referencing files (e.g. JSONL changelogs) self-consistent at every commit; not applied inside submodule histories
 - `scrub verify` -- check that previously scrubbed patterns remain absent from history via persistent policies
 - `pull` -- pull with `--ff-only`, `--ff`, `--no-ff` flag support
 - `version` -- print safegit version, Go runtime, and git version
@@ -77,6 +78,8 @@ This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestrat
 - `safegit commit --amend --branch <name>` for cross-branch amend/reword
 - `safegit doctor --fix` to garbage-collect and repair (replaces gc)
 - `safegit scrub file` and `safegit scrub match` for history rewriting (repo-wide coordination lock prevents concurrent rewrites)
+- Every scrub persists crash-safe rewrite maps to `.git/safegit/rewrite-maps.jsonl` (flock-guarded JSONL, three phase records per rewrite: commit map + pre-rewrite remote-tracking state before refs move, all tag rewrites, new HEAD + cleanup status); scrub JSON output includes `pre_rewrite_remotes`, `cleanup_ok`, `cleanup_errors`
+- Destructive scrubs in rlsbl-managed repos (`.rlsbl/` or `.rlsbl-monorepo/` present) die unless run under release-tool orchestration; dry-run and `--diff` previews stay available
 - `safegit scrub run` for recipe-based multi-operation scrub from TOML files
 - `safegit scrub verify` for policy-based verification that scrubbed patterns remain absent
 - cherry-pick, revert are guarded passthroughs (coordination check before git)
