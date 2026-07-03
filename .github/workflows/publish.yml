@@ -3,16 +3,114 @@ on:
   release:
     types: [published]
   workflow_dispatch:
-
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.ref }}
+  cancel-in-progress: false
 permissions:
   contents: write
-
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-
 jobs:
+  gate:
+    name: Gate on CI
+    runs-on: ubuntu-latest
+    permissions:
+      checks: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GATE_TIMEOUT_MINUTES: '20'
+      GATE_GRACE_MINUTES: '5'
+      GATE_POLL_SECONDS: '15'
+      CI_CHECK_REGEX: ^(build|test)( \(.*\))?$
+    steps:
+      - name: Wait for CI to succeed on the release commit
+        run: |
+          set -euo pipefail
+
+          # Ref-based commit resolution: GITHUB_SHA is the tag's commit for both
+          # release-triggered runs and workflow_dispatch retries at the tag ref.
+          # Never read the release event payload -- dispatch retries have none.
+          sha="$GITHUB_SHA"
+          echo "Publish gate: waiting for CI on $GITHUB_REF_NAME (commit $sha)"
+          echo "Check-run name filter: $CI_CHECK_REGEX"
+          # Timeout, grace window, and poll interval come from the job env above;
+          # edit them there if this repository's CI needs different limits.
+
+          now() { date +%s; }
+          start="$(now)"
+          deadline=$(( start + GATE_TIMEOUT_MINUTES * 60 ))
+          grace_deadline=$(( start + GATE_GRACE_MINUTES * 60 ))
+
+          while :; do
+            if ! resp="$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$sha/check-runs?per_page=100")"; then
+              echo "Checks API request failed; retrying in ${GATE_POLL_SECONDS}s..."
+              sleep "$GATE_POLL_SECONDS"
+              continue
+            fi
+            # Match this project's CI check runs by name; exclude check runs that
+            # belong to THIS workflow run (the gate itself and the queued publish
+            # jobs would otherwise deadlock the poll loop).
+            runs="$(jq -s --arg re "$CI_CHECK_REGEX" --arg run_id "$GITHUB_RUN_ID" '
+              [ .[].check_runs[]
+                | select(.name | test($re))
+                | select((.details_url // "") | contains("/actions/runs/" + $run_id + "/") | not)
+                | {name, status, conclusion} ]' <<< "$resp")"
+            total="$(jq 'length' <<< "$runs")"
+
+            if [ "$total" -eq 0 ]; then
+              if [ "$(now)" -ge "$grace_deadline" ]; then
+                echo "::error::Publish gate: no CI check runs matching $CI_CHECK_REGEX appeared on $sha within $GATE_GRACE_MINUTES minutes."
+                echo "A scaffolded repository always has a CI workflow, so the release commit must produce CI check runs."
+                echo "If CI jobs were renamed, update CI_CHECK_REGEX in this workflow's gate job to match the new names."
+                exit 1
+              fi
+              echo "No matching CI check runs yet; retrying in ${GATE_POLL_SECONDS}s..."
+              sleep "$GATE_POLL_SECONDS"
+              continue
+            fi
+
+            pending="$(jq '[ .[] | select(.status != "completed") ] | length' <<< "$runs")"
+            if [ "$pending" -gt 0 ]; then
+              if [ "$(now)" -ge "$deadline" ]; then
+                echo "::error::Publish gate: timed out after $GATE_TIMEOUT_MINUTES minutes waiting for CI to complete on $sha."
+                jq -r '.[] | "  \(.name): status=\(.status) conclusion=\(.conclusion // "none")"' <<< "$runs"
+                exit 1
+              fi
+              echo "$pending of $total matching CI check runs still running; retrying in ${GATE_POLL_SECONDS}s..."
+              sleep "$GATE_POLL_SECONDS"
+              continue
+            fi
+
+            not_success="$(jq '[ .[] | select(.conclusion != "success") ]' <<< "$runs")"
+            if [ "$(jq 'length' <<< "$not_success")" -gt 0 ]; then
+              echo "::error::Publish gate: CI did not pass on $sha -- refusing to publish."
+              jq -r '.[] | "  \(.name): \(.conclusion)"' <<< "$not_success"
+              while IFS= read -r conclusion; do
+                case "$conclusion" in
+                  failure|timed_out)
+                    echo "CI concluded '$conclusion' on the release commit. Fix the failure, re-run the CI workflow to green on this exact commit (gh run rerun <run-id>), then re-dispatch this publish workflow at the tag ref: gh workflow run <publish workflow> --ref $GITHUB_REF_NAME"
+                    ;;
+                  cancelled)
+                    echo "A CI check run was CANCELLED. A cancelled run proves nothing about the commit, so the gate treats it as a hard failure instead of waiting for a conclusion that will never come. Re-run the cancelled CI workflow (gh run rerun <run-id>), then re-dispatch this publish workflow at the tag ref."
+                    ;;
+                  skipped)
+                    echo "A CI check run matching the filter was SKIPPED. The gate cannot treat a skipped check as passing: this project's own CI must actually run on the release commit. Check paths filters and job conditions, re-run CI on this commit, then re-dispatch this publish workflow at the tag ref."
+                    ;;
+                  *)
+                    echo "CI check concluded '$conclusion' (not success). The gate only proceeds when every matching check concluded success."
+                    ;;
+                esac
+              done <<< "$(jq -r '.[].conclusion' <<< "$not_success" | sort -u)"
+              exit 1
+            fi
+
+            echo "Publish gate: all $total matching CI check runs succeeded."
+            jq -r '.[] | "  \(.name): \(.conclusion)"' <<< "$runs"
+            exit 0
+          done
   go:
+    needs: gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -23,12 +121,14 @@ jobs:
           go-version-file: go.mod
       - uses: goreleaser/goreleaser-action@v7
         with:
-          version: "~> v2"
+          version: ~> v2
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+
   docker:
+    needs: gate
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -46,11 +146,10 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
       - uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          build-args: VERSION=${{ github.event.release.tag_name }}
+          build-args: VERSION=${{ github.ref_name }}
