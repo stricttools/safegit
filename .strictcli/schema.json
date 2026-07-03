@@ -712,13 +712,13 @@
           ]
         }
       },
-      "help": "surgically rewrite git history to remove or replace sensitive content such as secrets, credentials, and private data from all commits, trees, and blobs in the repository",
+      "help": "surgically rewrite git history to remove or replace sensitive content using 4 subcommands (file, match, run, verify) that operate on all commits, trees, and blobs in the repository",
       "name": "scrub"
     }
   },
-  "help": "concurrency-safe git for multi-agent use",
+  "help": "concurrency-safe git wrapper providing 20 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "name": "safegit",
   "project_id": "github.com/smm-h/safegit",
   "schema_version": 1,
-  "version": "dev"
+  "version": "0.22.1-0.20260703170539-b99c046d9073"
 }
