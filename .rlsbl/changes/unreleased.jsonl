@@ -1,1 +1,2 @@
 {"commits":["a89cdd3f34200d6289bcc44facbfa27e6725c4d5"],"user_facing":false}
+{"commits":["26bb26a0881aea61e983bfb43f88ea388050114f"],"user_facing":true,"description":"**Rewrite-map persistence.** Every scrub now records crash-safe rewrite maps in `.git/safegit/rewrite-maps.jsonl` (commit mappings written before refs move, all tag rewrites, pre-rewrite remote-tracking state, cleanup status), and scrub JSON output gains `pre_rewrite_remotes`, `cleanup_ok`, and `cleanup_errors` keys for release orchestrators.","type":"feature"}
