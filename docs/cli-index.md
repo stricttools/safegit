@@ -10,9 +10,9 @@ order: 91
 
 # safegit CLI Reference
 
-concurrency-safe git for multi-agent use
+concurrency-safe git wrapper providing 20 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting
 
-Version: dev
+Version: 0.22.1-0.20260703170539-b99c046d9073
 
 ## Commands
 
@@ -38,4 +38,4 @@ Version: dev
 - [author](cli-author.html) -- audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history
 - [config](cli-config.html) -- show, get, or set safegit configuration key-value pairs
 - [hook](cli-hook.html) -- manage pre-pre-push hook scripts that run before every push
-- [scrub](cli-scrub.html) -- surgically rewrite git history to remove or replace sensitive content such as secrets, credentials, and private data from all commits, trees, and blobs in the repository
+- [scrub](cli-scrub.html) -- surgically rewrite git history to remove or replace sensitive content using 4 subcommands (file, match, run, verify) that operate on all commits, trees, and blobs in the repository
