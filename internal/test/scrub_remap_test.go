@@ -371,4 +371,112 @@ func TestScrubRemapInvalidGlob(t *testing.T) {
 	if code != 2 {
 		t.Fatalf("scrub match: expected exit code 2 for invalid glob, got %d: %s", code, stderr)
 	}
+
+	// scrub run shares the same validation path; a valid committed recipe
+	// ensures the invalid glob is the only failure cause.
+	recipePath := filepath.Join(dir, "recipe.toml")
+	if err := os.WriteFile(recipePath, []byte("[[operations]]\npattern = \"hunter2\"\nreplace = \"GONE\"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr, code = runSafegitEnv(t, dir, scrubEnv, "commit", "-m", "add recipe", "--", "recipe.toml")
+	if code != 0 {
+		t.Fatalf("committing recipe failed: %s", stderr)
+	}
+	_, stderr, code = runSafegitEnv(t, dir, scrubEnv, "--yes", "scrub", "run",
+		"--reason", "bad glob", "--entire-history",
+		"--remap-shas-in", "[", "recipe.toml")
+	if code != 2 {
+		t.Fatalf("scrub run: expected exit code 2 for invalid glob, got %d: %s", code, stderr)
+	}
+	if !strings.Contains(stderr, "remap-shas-in") {
+		t.Errorf("scrub run error should mention the flag: %s", stderr)
+	}
+}
+
+// TestScrubFileInSubmoduleRemapShas: scrubbing a file inside a submodule with
+// --remap-shas-in remaps hash references in the PARENT's glob-matched files
+// (the parent history is rewritten for gitlink updates), while the
+// submodule's own glob-matched files are NOT remapped -- the documented
+// limitation -- and the whole operation completes cleanly.
+func TestScrubFileInSubmoduleRemapShas(t *testing.T) {
+	parentDir, _, subDir := newRepoWithSubmoduleSecret(t, "SUBREMAP_SECRET", "secret.txt")
+
+	subSHAs := revListReverse(t, subDir)
+	firstSubCommit := subSHAs[0]
+
+	// Submodule changelog references the submodule's secret commit. Committed
+	// with raw git (the submodule checkout has its own identity config).
+	if err := os.WriteFile(filepath.Join(subDir, "changelog.jsonl"),
+		[]byte(fmt.Sprintf("{\"commits\":[%q],\"user_facing\":false}\n", firstSubCommit)), 0644); err != nil {
+		t.Fatal(err)
+	}
+	gitCmd(t, subDir, "add", "changelog.jsonl")
+	gitCmd(t, subDir, "commit", "-m", "sub changelog")
+
+	// Parent changelog references the parent's "add submodule" commit, which
+	// carries the old gitlink and will therefore be rewritten.
+	parentSHAs := revListReverse(t, parentDir)
+	addSubCommit := parentSHAs[1]
+	appendChangelogLine(t, parentDir, "changelog.jsonl", addSubCommit)
+
+	// Commit the replacement content in the submodule, then record the new
+	// gitlink in the parent so both trees are clean.
+	if err := os.WriteFile(filepath.Join(subDir, "secret.txt"), []byte("CLEANED\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	gitCmd(t, subDir, "add", "secret.txt")
+	gitCmd(t, subDir, "commit", "-m", "commit replacement")
+	gitCmd(t, parentDir, "add", "mysub")
+	gitCmd(t, parentDir, "commit", "-m", "update submodule ref")
+
+	stdout, stderr, code := runSafegitEnv(t, parentDir, submoduleEnv,
+		"--yes", "--json", "scrub", "file",
+		"mysub/secret.txt",
+		"--from", firstSubCommit,
+		"--reason", "submodule remap test",
+		"--remap-shas-in", "changelog.jsonl")
+	if code != 0 {
+		t.Fatalf("scrub file in submodule failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	var result struct {
+		Rewrites map[string]string `json:"rewrites"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("parsing JSON: %v\n%s", err, stdout)
+	}
+	newAddSub, ok := result.Rewrites[addSubCommit]
+	if !ok {
+		t.Fatalf("parent commit %s (old gitlink) not rewritten: %v", addSubCommit[:12], result.Rewrites)
+	}
+
+	// Parent's matched file is remapped: references the rewritten parent
+	// commit, never the pre-rewrite one, at every historical version.
+	assertChangelogSelfConsistent(t, parentDir, "changelog.jsonl", result.Rewrites)
+	parentFinal, ok := gitShow(t, parentDir, "HEAD", "changelog.jsonl")
+	if !ok {
+		t.Fatal("parent changelog missing at HEAD")
+	}
+	if !strings.Contains(parentFinal, newAddSub) || strings.Contains(parentFinal, addSubCommit) {
+		t.Errorf("parent changelog should reference %s and not %s: %s",
+			newAddSub[:12], addSubCommit[:12], parentFinal)
+	}
+
+	// Submodule history was scrubbed (secret gone everywhere)...
+	for i, sha := range revListReverse(t, subDir) {
+		content, ok := gitShow(t, subDir, sha, "secret.txt")
+		if ok && strings.Contains(content, "SUBREMAP_SECRET") {
+			t.Errorf("submodule commit %d (%s): secret still present", i, sha[:12])
+		}
+	}
+	// ...but its changelog was NOT remapped: it still carries the old
+	// (pre-rewrite, now stale) submodule SHA. Documented limitation.
+	subFinal, ok := gitShow(t, subDir, "HEAD", "changelog.jsonl")
+	if !ok {
+		t.Fatal("submodule changelog missing at HEAD")
+	}
+	if !strings.Contains(subFinal, firstSubCommit) {
+		t.Errorf("submodule changelog should still reference the old SHA %s (remap must not apply inside submodules): %s",
+			firstSubCommit[:12], subFinal)
+	}
 }
