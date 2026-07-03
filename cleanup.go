@@ -19,12 +19,20 @@ import (
 // the returned cleanupErrors slice so callers can report cleanup status
 // machine-readably. Orchestrators depend on old objects being pruned, so a
 // non-empty cleanupErrors means "do not assume old SHAs are unresolvable."
-func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, shaMap map[string]string, sgDir string) (cleanupErrors []string, err error) {
+func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, shaMap map[string]string, tagRewrites []TagRewrite, sgDir string) (cleanupErrors []string, err error) {
 	// Build the set of old SHAs that were actually remapped (old != new).
+	// Tag rewrites count too: the annotation pass can rewrite tag objects
+	// even when every commit maps to itself, and the old tag object (which
+	// may contain a scrubbed secret) must be pruned like any old commit.
 	oldSHAs := make(map[string]bool)
 	for old, new_ := range shaMap {
 		if old != new_ {
 			oldSHAs[old] = true
+		}
+	}
+	for _, tr := range tagRewrites {
+		if tr.OldSHA != tr.NewSHA {
+			oldSHAs[tr.OldSHA] = true
 		}
 	}
 	if len(oldSHAs) == 0 {

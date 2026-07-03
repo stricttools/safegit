@@ -142,12 +142,36 @@ func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd str
 		r.TagsRewrittenCount = tagsRewritten
 	}
 
+	// A rewrite can move refs even when every commit maps to itself: the
+	// annotation pass rewrites tag objects whose bodies matched, and
+	// updateRefs can rewrite an annotated tag on tagger identity alone.
+	// Refs must never move unrecorded, so when the commit map is all-identity
+	// but tags were rewritten, persist the start record now (with an empty
+	// commit map) so the refs and complete records below have an ID to attach
+	// to. Pure no-ops (identity map AND no tag rewrites) stay recordless.
+	allTagRewrites := make([]TagRewrite, 0, len(r.TagRewrites)+len(r.AnnotationTagRewrites))
+	allTagRewrites = append(allTagRewrites, r.TagRewrites...)
+	allTagRewrites = append(allTagRewrites, r.AnnotationTagRewrites...)
+	if mapID == "" && len(allTagRewrites) > 0 {
+		mapID = newRewriteMapID(r.OldHeadSHA)
+		start := RewriteMapStart{
+			Phase:             rewriteMapPhaseStart,
+			ID:                mapID,
+			Op:                r.OpName,
+			Reason:            r.Reason,
+			CreatedAt:         nowRFC3339(),
+			OldHead:           r.OldHeadSHA,
+			CommitMap:         commitMap,
+			PreRewriteRemotes: preRemotes,
+		}
+		if err := appendRewriteMapRecord(r.SgDir, start); err != nil {
+			return err
+		}
+	}
+
 	// 2.5. Persist the "refs" record with every tag rewrite (ref-level from
 	// updateRefs plus annotation-pass rewrites).
 	if mapID != "" {
-		allTagRewrites := make([]TagRewrite, 0, len(r.TagRewrites)+len(r.AnnotationTagRewrites))
-		allTagRewrites = append(allTagRewrites, r.TagRewrites...)
-		allTagRewrites = append(allTagRewrites, r.AnnotationTagRewrites...)
 		refsRecord := RewriteMapRefs{
 			Phase:       rewriteMapPhaseRefs,
 			ID:          mapID,
@@ -171,7 +195,7 @@ func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd str
 	// 5. Post-rewrite cleanup: expire tainted reflog entries and prune old
 	// objects. Failures stay non-fatal (warnings) but are captured
 	// machine-readably in CleanupOK/CleanupErrors for orchestrators.
-	cleanupErrors, cleanupErr := cleanupAfterRewrite(ctx, flags, cmd, r.ShaMap, r.SgDir)
+	cleanupErrors, cleanupErr := cleanupAfterRewrite(ctx, flags, cmd, r.ShaMap, allTagRewrites, r.SgDir)
 	if cleanupErr != nil {
 		fmt.Fprintf(os.Stderr, "warning: post-rewrite cleanup: %v\n", cleanupErr)
 		cleanupErrors = append(cleanupErrors, cleanupErr.Error())
