@@ -24,7 +24,11 @@ const rewriteMapsFile = "rewrite-maps.jsonl"
 //
 //	start    — written at Finalize entry, BEFORE any refs move. Contains the
 //	           full commit map and the pre-rewrite remote-tracking state, so a
-//	           crash at any later step leaves the mapping recoverable.
+//	           crash at any later step leaves the mapping recoverable. When the
+//	           commit map is all-identity but tags were still rewritten (e.g.
+//	           the annotation pass scrubbed a tag body), the start record is
+//	           written right after the tag pass instead, with an empty commit
+//	           map — refs never move unrecorded. Pure no-ops write no records.
 //	refs     — written right after updateRefs and the tag-annotation pass.
 //	           Contains every tag rewrite (ref-level and annotation-pass).
 //	complete — written after cleanup and HEAD resolution. Contains the new

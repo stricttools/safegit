@@ -277,6 +277,114 @@ func TestScrubMatchRewriteMapsIncludeAnnotationPassTagRewrites(t *testing.T) {
 	}
 }
 
+// TestScrubMatchTagAnnotationOnlyRewriteWritesRewriteMaps: when the secret
+// appears ONLY in a tag annotation body, the commit map is all-identity but
+// the annotation pass still rewrites the tag object and moves the tag ref.
+// Refs must never move unrecorded: the rewrite map must contain the full
+// start+refs+complete sequence, with an empty commit map in the start record
+// and the tag rewrite in the refs record.
+func TestScrubMatchTagAnnotationOnlyRewriteWritesRewriteMaps(t *testing.T) {
+	dir := newRepo(t)
+
+	c1 := commitFileEnv(t, dir, scrubEnv, "notes.txt", "clean content\n", "add notes")
+	gitCmd(t, dir, "tag", "-a", "leaky-tag", "-m", "release with TAGONLYSECRET inside", c1)
+
+	headBefore := gitCmd(t, dir, "rev-parse", "HEAD")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "--json", "scrub", "match",
+		"--pattern", "TAGONLYSECRET", "--replace", "GONE", "--reason", "tag-annotation-only rewrite",
+		"--entire-history")
+	if code != 0 {
+		t.Fatalf("scrub match failed (code %d): %s", code, stderr)
+	}
+
+	var result struct {
+		Rewrites      map[string]string `json:"rewrites"`
+		TagsRewritten int               `json:"tags_rewritten"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+		t.Fatalf("parsing scrub match JSON: %v\n%s", err, stdout)
+	}
+	if len(result.Rewrites) != 0 {
+		t.Fatalf("expected all-identity commit map, got rewrites: %v", result.Rewrites)
+	}
+	if result.TagsRewritten != 1 {
+		t.Fatalf("expected 1 tag annotation rewritten, got %d", result.TagsRewritten)
+	}
+
+	// The tag ref moved and its body was scrubbed.
+	finalTagSHA := gitCmd(t, dir, "rev-parse", "refs/tags/leaky-tag")
+	tagBody := gitCmd(t, dir, "cat-file", "-p", finalTagSHA)
+	if !strings.Contains(tagBody, "GONE") || strings.Contains(tagBody, "TAGONLYSECRET") {
+		t.Fatalf("tag body not rewritten: %s", tagBody)
+	}
+
+	// HEAD is untouched (no commit was rewritten).
+	if headAfter := gitCmd(t, dir, "rev-parse", "HEAD"); headAfter != headBefore {
+		t.Errorf("HEAD moved (%s -> %s) despite identity commit map", headBefore, headAfter)
+	}
+
+	// The ref movement must be recorded: start (empty commit map) + refs
+	// (carrying the tag rewrite) + complete.
+	lines := readRewriteMaps(t, dir)
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 rewrite map lines for tag-annotation-only rewrite, got %d: %v", len(lines), lines)
+	}
+	start, refs, complete := lines[0], lines[1], lines[2]
+	if start["phase"] != "start" || refs["phase"] != "refs" || complete["phase"] != "complete" {
+		t.Fatalf("unexpected phases: %v %v %v", start["phase"], refs["phase"], complete["phase"])
+	}
+	if start["id"] != refs["id"] || start["id"] != complete["id"] {
+		t.Errorf("phase records do not share an id: %v %v %v", start["id"], refs["id"], complete["id"])
+	}
+	commitMap, ok := start["commit_map"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("start commit_map is %T (want empty object, not null)", start["commit_map"])
+	}
+	if len(commitMap) != 0 {
+		t.Errorf("start commit_map should be empty, got %v", commitMap)
+	}
+	tagRewrites, ok := refs["tag_rewrites"].([]interface{})
+	if !ok {
+		t.Fatalf("refs tag_rewrites is %T", refs["tag_rewrites"])
+	}
+	found := false
+	for _, tr := range tagRewrites {
+		m := tr.(map[string]interface{})
+		if m["refname"] == "refs/tags/leaky-tag" && m["new_sha"] == finalTagSHA {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("refs record missing tag rewrite to %s: %v", finalTagSHA, tagRewrites)
+	}
+	if complete["new_head"] != headBefore {
+		t.Errorf("complete new_head = %v, want unchanged HEAD %v", complete["new_head"], headBefore)
+	}
+}
+
+// TestScrubFilePureNoOpWritesNoRewriteMaps: a scrub whose commit map is
+// all-identity AND that rewrites no tags must stay recordless -- the
+// rewrite-map log records ref movement, and a pure no-op moves nothing.
+func TestScrubFilePureNoOpWritesNoRewriteMaps(t *testing.T) {
+	dir := newRepo(t)
+
+	// The on-disk content equals the committed content, so the replacement
+	// blob is identical and every commit maps to itself.
+	commitFileEnv(t, dir, scrubEnv, "clean.txt", "already clean\n", "add clean file")
+	headSHA := gitCmd(t, dir, "rev-parse", "HEAD")
+
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "scrub", "file",
+		"--from", headSHA, "--reason", "pure no-op", "clean.txt")
+	if code != 0 {
+		t.Fatalf("no-op scrub failed (code %d): %s", code, stderr)
+	}
+
+	if lines := readRewriteMaps(t, dir); len(lines) != 0 {
+		t.Errorf("pure no-op scrub must write no rewrite map records, got %d: %v", len(lines), lines)
+	}
+}
+
 // TestScrubRunRewriteMapsPersisted checks that scrub run also persists the
 // rewrite map and exposes the new JSON keys.
 func TestScrubRunRewriteMapsPersisted(t *testing.T) {
