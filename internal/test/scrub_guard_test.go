@@ -158,6 +158,114 @@ func TestScrubGuardDryRunAndDiffAllowed(t *testing.T) {
 	}
 }
 
+// authorNames returns the distinct author names across all commits.
+func authorNames(t *testing.T, dir string) map[string]bool {
+	t.Helper()
+	names := map[string]bool{}
+	for _, line := range strings.Split(gitCmd(t, dir, "log", "--format=%an", "--all"), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			names[line] = true
+		}
+	}
+	return names
+}
+
+// TestAuthorRewriteGuardBlocksInRlsblRepo: author rewrite is an equally
+// destructive history rewrite and must be blocked in rlsbl-managed repos
+// without orchestration, with a message pointing at rlsbl and without
+// advertising the bypass env var.
+func TestAuthorRewriteGuardBlocksInRlsblRepo(t *testing.T) {
+	dir, _ := newRlsblRepo(t)
+
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "author", "rewrite",
+		"--old-name", "Test", "--new-name", "Renamed")
+	if code != 1 {
+		t.Fatalf("expected exit code 1, got %d (stderr: %s)", code, stderr)
+	}
+	if !strings.Contains(stderr, "rlsbl") {
+		t.Errorf("guard message should point at rlsbl, got: %s", stderr)
+	}
+	if strings.Contains(stderr, "RLSBL_SCRUB_ORCHESTRATED") {
+		t.Errorf("guard message must not advertise the bypass env var, got: %s", stderr)
+	}
+
+	// No rewrite happened: the old author name is still in history.
+	names := authorNames(t, dir)
+	if !names["Test"] || names["Renamed"] {
+		t.Errorf("history should be unchanged after blocked author rewrite, got authors %v", names)
+	}
+}
+
+// TestAuthorRewriteGuardEnvVarAllows: with RLSBL_SCRUB_ORCHESTRATED=1 the
+// author rewrite proceeds normally in an rlsbl-managed repo.
+func TestAuthorRewriteGuardEnvVarAllows(t *testing.T) {
+	dir, _ := newRlsblRepo(t)
+
+	env := append([]string{}, scrubEnv...)
+	env = append(env, "RLSBL_SCRUB_ORCHESTRATED=1")
+	_, stderr, code := runSafegitEnv(t, dir, env, "--yes", "author", "rewrite",
+		"--old-name", "Test", "--new-name", "Renamed")
+	if code != 0 {
+		t.Fatalf("orchestrated author rewrite should succeed, got code %d: %s", code, stderr)
+	}
+
+	names := authorNames(t, dir)
+	if names["Test"] || !names["Renamed"] {
+		t.Errorf("author rewrite should have replaced Test with Renamed, got authors %v", names)
+	}
+}
+
+// TestAuthorRewriteGuardEnvVarWrongValueStillBlocks: only the exact value "1"
+// lifts the guard for author rewrite.
+func TestAuthorRewriteGuardEnvVarWrongValueStillBlocks(t *testing.T) {
+	dir, _ := newRlsblRepo(t)
+
+	env := append([]string{}, scrubEnv...)
+	env = append(env, "RLSBL_SCRUB_ORCHESTRATED=0")
+	_, stderr, code := runSafegitEnv(t, dir, env, "--yes", "author", "rewrite",
+		"--old-name", "Test", "--new-name", "Renamed")
+	if code != 1 {
+		t.Fatalf("expected exit code 1 with wrong env value, got %d (stderr: %s)", code, stderr)
+	}
+}
+
+// TestAuthorRewriteGuardDryRunAllowed: the read-only dry-run preview works in
+// rlsbl repos without orchestration.
+func TestAuthorRewriteGuardDryRunAllowed(t *testing.T) {
+	dir, _ := newRlsblRepo(t)
+
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "--dry-run", "author", "rewrite",
+		"--old-name", "Test", "--new-name", "Renamed")
+	if code != 0 {
+		t.Fatalf("dry-run author rewrite should succeed, got code %d: %s", code, stderr)
+	}
+
+	// Dry run changed nothing.
+	names := authorNames(t, dir)
+	if !names["Test"] || names["Renamed"] {
+		t.Errorf("dry run must not modify history, got authors %v", names)
+	}
+}
+
+// TestAuthorRewriteGuardNonRlsblRepoUnaffected: repos without .rlsbl markers
+// rewrite authors normally without the env var.
+func TestAuthorRewriteGuardNonRlsblRepoUnaffected(t *testing.T) {
+	dir := newRepo(t)
+	commitFileEnv(t, dir, scrubEnv, "file.txt", "content\n", "add file")
+
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "author", "rewrite",
+		"--old-name", "Test", "--new-name", "Renamed")
+	if code != 0 {
+		t.Fatalf("author rewrite in non-rlsbl repo should succeed, got code %d: %s", code, stderr)
+	}
+
+	names := authorNames(t, dir)
+	if names["Test"] || !names["Renamed"] {
+		t.Errorf("author rewrite should have replaced Test with Renamed, got authors %v", names)
+	}
+}
+
 // TestScrubGuardNonRlsblRepoUnaffected: repos without .rlsbl markers scrub
 // normally without the env var.
 func TestScrubGuardNonRlsblRepoUnaffected(t *testing.T) {
