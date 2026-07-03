@@ -1,0 +1,23 @@
+# Version bump type: patch, minor, major, hotfix, or prerelease
+bump = "minor"
+# Short description of this release (required)
+description = "Release orchestration integration: crash-safe rewrite maps, rlsbl orchestration guard on all destructive rewrites, and in-history SHA remapping."
+# Optional context explaining why these changes were made
+context = """
+This release makes safegit's history rewrites safe to drive from release
+tooling. Every scrub now persists crash-safe rewrite records to
+.git/safegit/rewrite-maps.jsonl before, during, and after refs move --
+including the edge case where only a tag annotation is rewritten -- so an
+orchestrator (or a crash recovery) can always reconstruct what moved where.
+Destructive scrubs and author rewrites in rlsbl-managed repositories now
+refuse to run outside release orchestration, closing the gap where an agent
+could rewrite history behind the release pipeline's back. The new
+--remap-shas-in flag keeps hash-referencing files such as JSONL changelogs
+self-consistent at every commit of the rewritten history.
+"""
+# Pre-release identifier: alpha, beta, rc, or stable
+# preid = ""
+# Set to true to generate a blog post for this release
+# blog = false
+include = ["go", "docker"]
+exclude = []
