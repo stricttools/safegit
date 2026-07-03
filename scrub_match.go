@@ -21,16 +21,19 @@ import (
 
 // ScrubMatchResult is the JSON output for `scrub match` in execute mode.
 type ScrubMatchResult struct {
-	Version          int               `json:"version"`
-	DryRun           bool              `json:"dry_run"`
-	Rewrites         map[string]string `json:"rewrites"`
-	Tags             []TagRewrite      `json:"tags"`
-	CommitsRewritten int               `json:"commits_rewritten"`
-	BlobsReplaced    int               `json:"blobs_replaced"`
-	MessagesModified int               `json:"messages_modified"`
-	TagsRewritten    int               `json:"tags_rewritten"`
-	OldHead          string            `json:"old_head"`
-	NewHead          string            `json:"new_head"`
+	Version           int               `json:"version"`
+	DryRun            bool              `json:"dry_run"`
+	Rewrites          map[string]string `json:"rewrites"`
+	Tags              []TagRewrite      `json:"tags"`
+	CommitsRewritten  int               `json:"commits_rewritten"`
+	BlobsReplaced     int               `json:"blobs_replaced"`
+	MessagesModified  int               `json:"messages_modified"`
+	TagsRewritten     int               `json:"tags_rewritten"`
+	OldHead           string            `json:"old_head"`
+	NewHead           string            `json:"new_head"`
+	PreRewriteRemotes map[string]string `json:"pre_rewrite_remotes"`
+	CleanupOK         bool              `json:"cleanup_ok"`
+	CleanupErrors     []string          `json:"cleanup_errors"`
 }
 
 // ScrubMatchDryRunResult is the JSON output for `scrub match --dry-run`.
@@ -688,12 +691,12 @@ func scrubMatchExecute(
 		subOldHead, _ := git.RevParse(subCtx, "HEAD")
 
 		// Annotation rewrite closure for submodule tags.
-		subAnnotFunc := func(ctx context.Context, shaMap map[string]string) error {
-			_, subTagsRewritten := rewriteTagAnnotations(ctx, flags, cmd, compiledPattern, replaceBytes, mangleMode, shaMap)
+		subAnnotFunc := func(ctx context.Context, shaMap map[string]string) ([]TagRewrite, int, error) {
+			subTagRewrites, subTagsRewritten := rewriteTagAnnotations(ctx, flags, cmd, compiledPattern, replaceBytes, mangleMode, shaMap)
 			if subTagsRewritten > 0 && flags.verbose {
 				fmt.Fprintf(os.Stderr, "  [%s] %d tag annotations rewritten\n", sr.sub.RelativePath, subTagsRewritten)
 			}
-			return nil
+			return subTagRewrites, subTagsRewritten, nil
 		}
 
 		// Oplog extra for submodule (ref, oldHead, sha, rewritten are
@@ -730,6 +733,7 @@ func scrubMatchExecute(
 			RewrittenCount: sr.rewrittenCount,
 			OldHeadSHA:     subOldHead,
 			SgDir:          sr.sub.SafegitDir,
+			Reason:         reason,
 			OpName:         "scrub-match",
 			OplogExtra:     subOplogExtra,
 			PolicyData:     &subPolicy,
@@ -865,16 +869,19 @@ func scrubMatchExecute(
 		combinedTagRewrites := make([]TagRewrite, 0, len(allTagRewrites))
 		combinedTagRewrites = append(combinedTagRewrites, allTagRewrites...)
 		jsonResult := ScrubMatchResult{
-			Version:          1,
-			DryRun:           false,
-			Rewrites:         rewrites,
-			Tags:             combinedTagRewrites,
-			CommitsRewritten: result.RewrittenCount,
-			BlobsReplaced:    result.BlobsReplaced,
-			MessagesModified: result.MessagesModified,
-			TagsRewritten:    result.TagsRewrittenCount,
-			OldHead:          result.OldHeadSHA,
-			NewHead:          result.NewHeadSHA,
+			Version:           1,
+			DryRun:            false,
+			Rewrites:          rewrites,
+			Tags:              combinedTagRewrites,
+			CommitsRewritten:  result.RewrittenCount,
+			BlobsReplaced:     result.BlobsReplaced,
+			MessagesModified:  result.MessagesModified,
+			TagsRewritten:     result.TagsRewrittenCount,
+			OldHead:           result.OldHeadSHA,
+			NewHead:           result.NewHeadSHA,
+			PreRewriteRemotes: nonNilStringMap(result.PreRewriteRemotes),
+			CleanupOK:         result.CleanupOK,
+			CleanupErrors:     nonNilStrings(result.CleanupErrors),
 		}
 		if jsonResult.Tags == nil {
 			jsonResult.Tags = []TagRewrite{}

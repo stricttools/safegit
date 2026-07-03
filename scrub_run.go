@@ -18,17 +18,20 @@ import (
 
 // ScrubRunResult is the JSON output for `scrub run` in execute mode.
 type ScrubRunResult struct {
-	Version          int               `json:"version"`
-	DryRun           bool              `json:"dry_run"`
-	Rewrites         map[string]string `json:"rewrites"`
-	Tags             []TagRewrite      `json:"tags"`
-	CommitsRewritten int               `json:"commits_rewritten"`
-	BlobsReplaced    int               `json:"blobs_replaced"`
-	MessagesModified int               `json:"messages_modified"`
-	TagsRewritten    int               `json:"tags_rewritten"`
-	OperationCount   int               `json:"operation_count"`
-	OldHead          string            `json:"old_head"`
-	NewHead          string            `json:"new_head"`
+	Version           int               `json:"version"`
+	DryRun            bool              `json:"dry_run"`
+	Rewrites          map[string]string `json:"rewrites"`
+	Tags              []TagRewrite      `json:"tags"`
+	CommitsRewritten  int               `json:"commits_rewritten"`
+	BlobsReplaced     int               `json:"blobs_replaced"`
+	MessagesModified  int               `json:"messages_modified"`
+	TagsRewritten     int               `json:"tags_rewritten"`
+	OperationCount    int               `json:"operation_count"`
+	OldHead           string            `json:"old_head"`
+	NewHead           string            `json:"new_head"`
+	PreRewriteRemotes map[string]string `json:"pre_rewrite_remotes"`
+	CleanupOK         bool              `json:"cleanup_ok"`
+	CleanupErrors     []string          `json:"cleanup_errors"`
 }
 
 // ScrubRunDiffEntry is a single blob diff in --diff preview output.
@@ -250,17 +253,20 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 			combinedTagRewrites := make([]TagRewrite, 0, len(allTagRewrites))
 			combinedTagRewrites = append(combinedTagRewrites, allTagRewrites...)
 			jsonResult := ScrubRunResult{
-				Version:          1,
-				DryRun:           false,
-				Rewrites:         rewrites,
-				Tags:             combinedTagRewrites,
-				CommitsRewritten: result.RewrittenCount,
-				BlobsReplaced:    result.BlobsReplaced,
-				MessagesModified: result.MessagesModified,
-				TagsRewritten:    result.TagsRewrittenCount,
-				OperationCount:   len(recipe.Operations),
-				OldHead:          result.OldHeadSHA,
-				NewHead:          result.NewHeadSHA,
+				Version:           1,
+				DryRun:            false,
+				Rewrites:          rewrites,
+				Tags:              combinedTagRewrites,
+				CommitsRewritten:  result.RewrittenCount,
+				BlobsReplaced:     result.BlobsReplaced,
+				MessagesModified:  result.MessagesModified,
+				TagsRewritten:     result.TagsRewrittenCount,
+				OperationCount:    len(recipe.Operations),
+				OldHead:           result.OldHeadSHA,
+				NewHead:           result.NewHeadSHA,
+				PreRewriteRemotes: nonNilStringMap(result.PreRewriteRemotes),
+				CleanupOK:         result.CleanupOK,
+				CleanupErrors:     nonNilStrings(result.CleanupErrors),
 			}
 			if jsonResult.Tags == nil {
 				jsonResult.Tags = []TagRewrite{}

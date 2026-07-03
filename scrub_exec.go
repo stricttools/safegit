@@ -253,13 +253,12 @@ func executeScrubRecipe(
 	oplogExtra["messagesModified"] = messagesModified
 
 	// Annotation rewrite closure: applies recipe operations to tag annotations,
-	// respecting per-op target filters for "tags".
-	var annotationTagRewrites []TagRewrite
-	var tagsRewritten int
-	parentAnnotFunc := func(ctx context.Context, shaMap map[string]string) error {
-		annotationTagRewrites, tagsRewritten = rewriteTagAnnotationsRecipe(ctx, flags, cmd, recipe, shaMap)
+	// respecting per-op target filters for "tags". Finalize stores the returned
+	// rewrites on the RewriteResult (and persists them in the rewrite map).
+	parentAnnotFunc := func(ctx context.Context, shaMap map[string]string) ([]TagRewrite, int, error) {
+		annotationTagRewrites, tagsRewritten := rewriteTagAnnotationsRecipe(ctx, flags, cmd, recipe, shaMap)
 		oplogExtra["tagsRewritten"] = tagsRewritten
-		return nil
+		return annotationTagRewrites, tagsRewritten, nil
 	}
 
 	// Verification closure: re-scan for each operation's pattern.
@@ -303,6 +302,7 @@ func executeScrubRecipe(
 		RewrittenCount: rewrittenCount,
 		OldHeadSHA:     oldHeadSHA,
 		SgDir:          sgDir,
+		Reason:         reason,
 		OpName:         opName,
 		OplogExtra:     oplogExtra,
 		PolicyData:     policyData,
@@ -311,11 +311,10 @@ func executeScrubRecipe(
 		die(flags, cmd, 1, err.Error())
 	}
 
-	// Populate post-execution metrics for callers.
+	// Populate post-execution metrics for callers. (TagsRewrittenCount and
+	// AnnotationTagRewrites are populated by Finalize.)
 	result.BlobsReplaced = len(blobMap)
 	result.MessagesModified = messagesModified
-	result.TagsRewrittenCount = tagsRewritten
-	result.AnnotationTagRewrites = annotationTagRewrites
 
 	return exitCode, &result
 }
