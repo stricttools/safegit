@@ -15,9 +15,7 @@ fetch from remote and merge, defaulting to fast-forward-only mode
 
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--ff-only` |  | bool |  |  | fast-forward only; abort with an error if a merge commit is required |
-| `--ff` |  | bool |  |  | fast-forward when possible, otherwise create a merge commit automatically |
-| `--no-ff` |  | bool |  |  | always create a merge commit even when fast-forward is possible |
+| `--merge-strategy` |  | str |  |  | fast-forward merge strategy: ff, ff-only, or no-ff |
 
 ## Arguments
 

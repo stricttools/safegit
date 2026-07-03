@@ -15,7 +15,7 @@ push refs to remote with pre-pre-push hooks and automatic retry
 
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--no-pre-pre-push` |  | bool |  |  | skip running pre-pre-push hook scripts before pushing to remote |
+| `--pre-push-hook` |  | bool | True |  | run pre-pre-push hook scripts before pushing to remote |
 | `--force-with-lease` |  | bool |  |  | force push using --force-with-lease to prevent overwriting others' work |
 | `--only-head` |  | bool |  |  | push only the current HEAD branch to the remote, ignoring other refs |
 | `--only-branches` |  | bool |  |  | push all local branches to the remote, ignoring tags and other refs |
