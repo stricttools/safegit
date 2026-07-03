@@ -124,37 +124,16 @@
           "required": false
         }
       ],
-      "constraints": [
-        {
-          "flags": [
-            "ff-only",
-            "ff",
-            "no-ff"
-          ],
-          "type": "mutex"
-        }
-      ],
       "flags": [
         {
-          "default": false,
-          "help": "fast-forward only; abort with an error if a merge commit is required",
-          "name": "ff-only",
-          "negatable": true,
-          "type": "bool"
-        },
-        {
-          "default": false,
-          "help": "fast-forward when possible, otherwise create a merge commit automatically",
-          "name": "ff",
-          "negatable": true,
-          "type": "bool"
-        },
-        {
-          "default": false,
-          "help": "always create a merge commit even when fast-forward is possible",
-          "name": "no-ff",
-          "negatable": true,
-          "type": "bool"
+          "choices": [
+            "ff",
+            "ff-only",
+            "no-ff"
+          ],
+          "help": "fast-forward merge strategy: ff, ff-only, or no-ff",
+          "name": "merge-strategy",
+          "type": "str"
         }
       ],
       "help": "fetch from remote and merge, defaulting to fast-forward-only mode",
@@ -181,9 +160,9 @@
       ],
       "flags": [
         {
-          "default": false,
-          "help": "skip running pre-pre-push hook scripts before pushing to remote",
-          "name": "no-pre-pre-push",
+          "default": true,
+          "help": "run pre-pre-push hook scripts before pushing to remote",
+          "name": "pre-push-hook",
           "negatable": true,
           "type": "bool"
         },
@@ -575,6 +554,14 @@
               "help": "mandatory audit trail message explaining why this scrub operation is needed",
               "name": "reason",
               "type": "str"
+            },
+            {
+              "default": [],
+              "help": "glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories)",
+              "name": "remap-shas-in",
+              "repeatable": true,
+              "type": "str",
+              "unique": true
             }
           ],
           "help": "replace or remove a specific file across all commits in the repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized version or delete the file entirely from every historical snapshot",
@@ -615,6 +602,14 @@
               "help": "glob pattern limiting which file paths are searched (e.g. '*.env', 'config/**')",
               "name": "scope",
               "type": "str"
+            },
+            {
+              "default": [],
+              "help": "glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories)",
+              "name": "remap-shas-in",
+              "repeatable": true,
+              "type": "str",
+              "unique": true
             },
             {
               "help": "literal string to substitute for each regex match found in history",
@@ -681,6 +676,14 @@
               "help": "maximum number of blob diffs to show in --diff mode (default: 50)",
               "name": "limit",
               "type": "int"
+            },
+            {
+              "default": [],
+              "help": "glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories)",
+              "name": "remap-shas-in",
+              "repeatable": true,
+              "type": "str",
+              "unique": true
             },
             {
               "help": "first commit hash to include when rewriting history",
