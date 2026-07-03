@@ -31,8 +31,7 @@ func scrubPolicyPath(sgDir string) string {
 }
 
 // appendScrubPolicy appends a single policy entry to the JSONL policy file.
-// Uses O_APPEND with flock for concurrency safety, following the same pattern
-// as oplog.Append. The sgDir parameter is the .git/safegit directory.
+// The sgDir parameter is the .git/safegit directory.
 func appendScrubPolicy(sgDir string, policy ScrubPolicy) error {
 	if policy.CreatedAt == "" {
 		policy.CreatedAt = time.Now().UTC().Format(time.RFC3339)
@@ -43,29 +42,39 @@ func appendScrubPolicy(sgDir string, policy ScrubPolicy) error {
 		return fmt.Errorf("marshaling scrub policy: %w", err)
 	}
 
-	line := append(data[:len(data):len(data)], '\n')
+	if err := appendJSONLLine(sgDir, scrubPolicyFile, data); err != nil {
+		return fmt.Errorf("writing scrub policy entry: %w", err)
+	}
+	return nil
+}
 
-	pp := scrubPolicyPath(sgDir)
+// appendJSONLLine appends one pre-marshaled JSON line to <sgDir>/<filename>.
+// Uses O_APPEND with flock for concurrency safety, following the same pattern
+// as oplog.Append (but without the 4096-byte line cap, since flock — not POSIX
+// append atomicity — guarantees line integrity here).
+func appendJSONLLine(sgDir, filename string, data []byte) error {
+	line := append(data[:len(data):len(data)], '\n')
 
 	// Ensure the .git/safegit/ directory exists.
 	if err := os.MkdirAll(sgDir, 0755); err != nil {
 		return fmt.Errorf("creating safegit directory: %w", err)
 	}
 
-	f, err := os.OpenFile(pp, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	path := filepath.Join(sgDir, filename)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
 	if err != nil {
-		return fmt.Errorf("opening scrub policy file: %w", err)
+		return fmt.Errorf("opening %s: %w", filename, err)
 	}
 	defer f.Close()
 
 	// Advisory lock for safety on NFS or non-POSIX filesystems.
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		return fmt.Errorf("locking scrub policy file: %w", err)
+		return fmt.Errorf("locking %s: %w", filename, err)
 	}
 	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 
 	if _, err := f.Write(line); err != nil {
-		return fmt.Errorf("writing scrub policy entry: %w", err)
+		return fmt.Errorf("appending to %s: %w", filename, err)
 	}
 
 	return nil

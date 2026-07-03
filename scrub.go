@@ -17,15 +17,18 @@ import (
 
 // ScrubFileResult is the JSON output for `scrub file` in execute mode.
 type ScrubFileResult struct {
-	Version          int               `json:"version"`
-	DryRun           bool              `json:"dry_run"`
-	File             string            `json:"file"`
-	Mode             string            `json:"mode"`
-	Rewrites         map[string]string `json:"rewrites"`
-	Tags             []TagRewrite      `json:"tags"`
-	CommitsRewritten int               `json:"commits_rewritten"`
-	OldHead          string            `json:"old_head"`
-	NewHead          string            `json:"new_head"`
+	Version           int               `json:"version"`
+	DryRun            bool              `json:"dry_run"`
+	File              string            `json:"file"`
+	Mode              string            `json:"mode"`
+	Rewrites          map[string]string `json:"rewrites"`
+	Tags              []TagRewrite      `json:"tags"`
+	CommitsRewritten  int               `json:"commits_rewritten"`
+	OldHead           string            `json:"old_head"`
+	NewHead           string            `json:"new_head"`
+	PreRewriteRemotes map[string]string `json:"pre_rewrite_remotes"`
+	CleanupOK         bool              `json:"cleanup_ok"`
+	CleanupErrors     []string          `json:"cleanup_errors"`
 }
 
 // ScrubFileDryRunResult is the JSON output for `scrub file --dry-run`.
@@ -225,6 +228,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		RewrittenCount: rewrittenCount,
 		OldHeadSHA:     oldHeadSHA,
 		SgDir:          sgDir,
+		Reason:         reason,
 		OpName:         "scrub-file",
 		OplogExtra: map[string]interface{}{
 			"file":   filePath,
@@ -284,15 +288,18 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 			tags = []TagRewrite{}
 		}
 		jsonResult := ScrubFileResult{
-			Version:          1,
-			DryRun:           false,
-			File:             filePath,
-			Mode:             mode,
-			Rewrites:         rewrites,
-			Tags:             tags,
-			CommitsRewritten: rewrittenCount,
-			OldHead:          oldHeadSHA,
-			NewHead:          result.NewHeadSHA,
+			Version:           1,
+			DryRun:            false,
+			File:              filePath,
+			Mode:              mode,
+			Rewrites:          rewrites,
+			Tags:              tags,
+			CommitsRewritten:  rewrittenCount,
+			OldHead:           oldHeadSHA,
+			NewHead:           result.NewHeadSHA,
+			PreRewriteRemotes: nonNilStringMap(result.PreRewriteRemotes),
+			CleanupOK:         result.CleanupOK,
+			CleanupErrors:     nonNilStrings(result.CleanupErrors),
 		}
 		emitJSON(jsonResult)
 		return exitCode
@@ -459,6 +466,7 @@ func runScrubFileInSubmodule(
 		RewrittenCount: subRewrittenCount,
 		OldHeadSHA:     oldSubHeadSHA,
 		SgDir:          sub.SafegitDir,
+		Reason:         reason,
 		OpName:         "scrub-file",
 		OplogExtra: map[string]interface{}{
 			"file":   subFilePath,
@@ -527,6 +535,7 @@ func runScrubFileInSubmodule(
 		RewrittenCount: parentRewrittenCount,
 		OldHeadSHA:     oldHeadSHA,
 		SgDir:          sgDir,
+		Reason:         reason,
 		OpName:         "scrub-file",
 		OplogExtra: map[string]interface{}{
 			"file":      fullPath,
@@ -580,15 +589,18 @@ func runScrubFileInSubmodule(
 			allTagRewrites = []TagRewrite{}
 		}
 		jsonResult := ScrubFileResult{
-			Version:          1,
-			DryRun:           false,
-			File:             fullPath,
-			Mode:             mode,
-			Rewrites:         rewrites,
-			Tags:             allTagRewrites,
-			CommitsRewritten: parentRewrittenCount + subRewrittenCount,
-			OldHead:          oldHeadSHA,
-			NewHead:          parentResult.NewHeadSHA,
+			Version:           1,
+			DryRun:            false,
+			File:              fullPath,
+			Mode:              mode,
+			Rewrites:          rewrites,
+			Tags:              allTagRewrites,
+			CommitsRewritten:  parentRewrittenCount + subRewrittenCount,
+			OldHead:           oldHeadSHA,
+			NewHead:           parentResult.NewHeadSHA,
+			PreRewriteRemotes: nonNilStringMap(parentResult.PreRewriteRemotes),
+			CleanupOK:         parentResult.CleanupOK,
+			CleanupErrors:     nonNilStrings(parentResult.CleanupErrors),
 		}
 		emitJSON(jsonResult)
 		return exitCode

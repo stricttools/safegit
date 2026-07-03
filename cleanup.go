@@ -14,7 +14,12 @@ import (
 // tainted reflog entries (those referencing pre-rewrite SHAs), prunes
 // unreachable objects, and warns about stash/notes/replace refs that still
 // reference old commits.
-func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, shaMap map[string]string, sgDir string) error {
+//
+// All failures are non-fatal (warnings), but each one is also collected into
+// the returned cleanupErrors slice so callers can report cleanup status
+// machine-readably. Orchestrators depend on old objects being pruned, so a
+// non-empty cleanupErrors means "do not assume old SHAs are unresolvable."
+func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, shaMap map[string]string, sgDir string) (cleanupErrors []string, err error) {
 	// Build the set of old SHAs that were actually remapped (old != new).
 	oldSHAs := make(map[string]bool)
 	for old, new_ := range shaMap {
@@ -23,13 +28,14 @@ func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, sha
 		}
 	}
 	if len(oldSHAs) == 0 {
-		return nil // nothing was rewritten
+		return nil, nil // nothing was rewritten
 	}
 
 	// Step 1+2: Identify and delete tainted reflog entries.
 	if err := expireTaintedReflogEntries(ctx, flags, oldSHAs); err != nil {
 		// Non-fatal: warn and continue to pruning.
 		fmt.Fprintf(os.Stderr, "warning: reflog cleanup: %v\n", err)
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("reflog cleanup: %v", err))
 	}
 
 	// Step 2b: Expire all remaining reflog entries. Surgical deletion (step 1+2)
@@ -40,6 +46,7 @@ func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, sha
 	// remaining references after a security-sensitive rewrite.
 	if _, _, err := git.Run(ctx, "reflog", "expire", "--expire=now", "--all"); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: reflog expire: %v\n", err)
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("reflog expire: %v", err))
 	}
 
 	// Step 3: Prune unreachable objects. git prune only removes loose objects;
@@ -51,9 +58,11 @@ func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, sha
 	}
 	if _, _, err := git.Run(ctx, "repack", "-a", "-d", "--unpack-unreachable=now"); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: git repack: %v\n", err)
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("git repack: %v", err))
 	}
 	if _, _, err := git.Run(ctx, "prune", "--expire=now"); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: git prune: %v\n", err)
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("git prune: %v", err))
 	}
 
 	// Step 4: Check stash/notes/replace refs for old SHAs.
@@ -62,9 +71,11 @@ func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, sha
 	checkReplaceRefsForOldSHAs(ctx, oldSHAs)
 
 	// Step 5: Verify old objects are gone.
-	verifyOldObjectsGone(ctx, flags, oldSHAs)
+	if surviving := verifyOldObjectsGone(ctx, flags, oldSHAs); surviving > 0 {
+		cleanupErrors = append(cleanupErrors, fmt.Sprintf("%d pre-rewrite objects survived cleanup", surviving))
+	}
 
-	return nil
+	return cleanupErrors, nil
 }
 
 // reflogEntry holds a parsed reflog line.
@@ -259,8 +270,8 @@ func checkReplaceRefsForOldSHAs(ctx context.Context, oldSHAs map[string]bool) {
 }
 
 // verifyOldObjectsGone checks that old (pre-rewrite) commit objects have been
-// pruned from the object store.
-func verifyOldObjectsGone(ctx context.Context, flags globalFlags, oldSHAs map[string]bool) {
+// pruned from the object store. Returns the number of surviving objects.
+func verifyOldObjectsGone(ctx context.Context, flags globalFlags, oldSHAs map[string]bool) int {
 	surviving := 0
 	for sha := range oldSHAs {
 		// git cat-file -e exits 0 if the object exists, non-zero if gone.
@@ -274,4 +285,5 @@ func verifyOldObjectsGone(ctx context.Context, flags globalFlags, oldSHAs map[st
 	if surviving > 0 && !flags.verbose {
 		fmt.Fprintf(os.Stderr, "warning: %d pre-rewrite objects survived cleanup (run with --verbose for details)\n", surviving)
 	}
+	return surviving
 }

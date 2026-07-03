@@ -11,8 +11,10 @@ import (
 )
 
 // AnnotationRewriteFunc rewrites tag annotation text after refs have been
-// updated. It receives the old-to-new SHA map for commit reference remapping.
-type AnnotationRewriteFunc func(ctx context.Context, shaMap map[string]string) error
+// updated. It receives the old-to-new SHA map for commit reference remapping
+// and returns the tag rewrite records it produced plus the count of tags whose
+// annotations were rewritten, so Finalize can persist and expose them.
+type AnnotationRewriteFunc func(ctx context.Context, shaMap map[string]string) ([]TagRewrite, int, error)
 
 // VerifyFunc performs command-specific post-rewrite verification (e.g.,
 // re-scanning for secrets, comparing author snapshots).
@@ -33,6 +35,10 @@ type RewriteResult struct {
 	// Safegit paths
 	SgDir string // .git/safegit directory path
 
+	// Audit reason for the persisted rewrite-map record (empty for commands
+	// without a --reason flag, e.g. author rewrite).
+	Reason string
+
 	// Tagger identity for updateRefs (rewrite-author needs tagger matching;
 	// zero values mean "no tagger matching", which is the default for scrub).
 	TaggerOldName  string
@@ -49,30 +55,74 @@ type RewriteResult struct {
 	PolicyData *ScrubPolicy
 
 	// Post-Finalize outputs (populated by Finalize for callers to read)
-	NewHeadSHA string // HEAD after the rewrite
-	Ref        string // current ref name (e.g. "refs/heads/main" or "HEAD (detached)")
+	NewHeadSHA        string            // HEAD after the rewrite
+	Ref               string            // current ref name (e.g. "refs/heads/main" or "HEAD (detached)")
+	PreRewriteRemotes map[string]string // refs/remotes/* refname -> SHA before updateRefs
+	CleanupOK         bool              // true when post-rewrite cleanup fully succeeded
+	CleanupErrors     []string          // cleanup failure descriptions (empty when CleanupOK)
+
+	// Tag-annotation pass outputs (populated by Finalize from the
+	// AnnotationRewriteFunc's return values)
+	TagsRewrittenCount    int          // number of tag annotations rewritten
+	AnnotationTagRewrites []TagRewrite // tag annotation rewrite records
 
 	// Post-execution metrics (populated by executeScrubRecipe for callers)
-	BlobsReplaced          int          // number of blobs replaced
-	MessagesModified       int          // number of commit messages modified
-	TagsRewrittenCount     int          // number of tag annotations rewritten
-	AnnotationTagRewrites  []TagRewrite // tag annotation rewrite records
+	BlobsReplaced    int // number of blobs replaced
+	MessagesModified int // number of commit messages modified
 }
 
 // Finalize runs the shared post-rewrite pipeline. The execution order is:
 //
+//  0. Persist the rewrite-map "start" record (commit map + pre-rewrite
+//     remote-tracking state) BEFORE any refs move, so a crash at any later
+//     step leaves the mapping recoverable
 //  1. updateRefs — update branch and tag refs to point at rewritten commits
 //  2. annotationRewriteFunc — rewrite tag annotation text (nil to skip)
+//  2.5. Persist the rewrite-map "refs" record (all tag rewrites)
 //  3. SyncMainIndexWithWorktree — sync the shared index with rewritten HEAD
 //  4. untrackProtectedPaths — remove tracked-but-gitignored files from index
 //  5. cleanupAfterRewrite — expire tainted reflog entries, repack, prune
 //  6. verifyFunc — command-specific verification (nil to skip)
 //  7. Resolve new HEAD SHA
 //  8. Resolve current ref
+//  8.5. Persist the rewrite-map "complete" record (new HEAD, cleanup status)
 //  9. oplog.Append — record the operation
 //  9.5. Append scrub policy to the untracked policy file
 //  10. Push hint — print rlsbl-aware or default push instructions
 func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd string, annotationRewriteFunc AnnotationRewriteFunc, verifyFunc VerifyFunc) error {
+	// 0. Persist the rewrite-map "start" record before anything moves. A
+	// failure here is a hard error: no refs have been touched yet, so
+	// aborting is safe, and orchestrators depend on this record existing.
+	preRemotes, err := captureRemoteTrackingState(ctx)
+	if err != nil {
+		return fmt.Errorf("capturing pre-rewrite remote-tracking state: %w", err)
+	}
+	r.PreRewriteRemotes = preRemotes
+
+	commitMap := make(map[string]string)
+	for old, new_ := range r.ShaMap {
+		if old != new_ {
+			commitMap[old] = new_
+		}
+	}
+	var mapID string
+	if len(commitMap) > 0 {
+		mapID = newRewriteMapID(r.OldHeadSHA)
+		start := RewriteMapStart{
+			Phase:             rewriteMapPhaseStart,
+			ID:                mapID,
+			Op:                r.OpName,
+			Reason:            r.Reason,
+			CreatedAt:         nowRFC3339(),
+			OldHead:           r.OldHeadSHA,
+			CommitMap:         commitMap,
+			PreRewriteRemotes: preRemotes,
+		}
+		if err := appendRewriteMapRecord(r.SgDir, start); err != nil {
+			return err
+		}
+	}
+
 	// 1. Update refs (passes tagger identity for rewrite-author; zero values
 	// for scrub commands mean "no tagger matching").
 	infof(flags, "Updating refs...\n")
@@ -84,8 +134,28 @@ func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd str
 
 	// 2. Annotation rewriting (e.g., scrub-match rewrites tag annotation text)
 	if annotationRewriteFunc != nil {
-		if err := annotationRewriteFunc(ctx, r.ShaMap); err != nil {
+		annotationTagRewrites, tagsRewritten, err := annotationRewriteFunc(ctx, r.ShaMap)
+		if err != nil {
 			return fmt.Errorf("rewriting tag annotations: %w", err)
+		}
+		r.AnnotationTagRewrites = annotationTagRewrites
+		r.TagsRewrittenCount = tagsRewritten
+	}
+
+	// 2.5. Persist the "refs" record with every tag rewrite (ref-level from
+	// updateRefs plus annotation-pass rewrites).
+	if mapID != "" {
+		allTagRewrites := make([]TagRewrite, 0, len(r.TagRewrites)+len(r.AnnotationTagRewrites))
+		allTagRewrites = append(allTagRewrites, r.TagRewrites...)
+		allTagRewrites = append(allTagRewrites, r.AnnotationTagRewrites...)
+		refsRecord := RewriteMapRefs{
+			Phase:       rewriteMapPhaseRefs,
+			ID:          mapID,
+			CreatedAt:   nowRFC3339(),
+			TagRewrites: allTagRewrites,
+		}
+		if err := appendRewriteMapRecord(r.SgDir, refsRecord); err != nil {
+			return err
 		}
 	}
 
@@ -98,10 +168,16 @@ func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd str
 	}
 	untrackProtectedPaths(ctx, flags, protectedPaths)
 
-	// 5. Post-rewrite cleanup: expire tainted reflog entries and prune old objects
-	if err := cleanupAfterRewrite(ctx, flags, cmd, r.ShaMap, r.SgDir); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: post-rewrite cleanup: %v\n", err)
+	// 5. Post-rewrite cleanup: expire tainted reflog entries and prune old
+	// objects. Failures stay non-fatal (warnings) but are captured
+	// machine-readably in CleanupOK/CleanupErrors for orchestrators.
+	cleanupErrors, cleanupErr := cleanupAfterRewrite(ctx, flags, cmd, r.ShaMap, r.SgDir)
+	if cleanupErr != nil {
+		fmt.Fprintf(os.Stderr, "warning: post-rewrite cleanup: %v\n", cleanupErr)
+		cleanupErrors = append(cleanupErrors, cleanupErr.Error())
 	}
+	r.CleanupErrors = cleanupErrors
+	r.CleanupOK = len(cleanupErrors) == 0
 
 	// 6. Command-specific verification
 	if verifyFunc != nil {
@@ -123,6 +199,25 @@ func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd str
 		ref = "HEAD (detached)"
 	}
 	r.Ref = ref
+
+	// 8.5. Persist the "complete" record with the new HEAD and cleanup status.
+	if mapID != "" {
+		completeErrors := r.CleanupErrors
+		if completeErrors == nil {
+			completeErrors = []string{}
+		}
+		complete := RewriteMapComplete{
+			Phase:         rewriteMapPhaseComplete,
+			ID:            mapID,
+			CreatedAt:     nowRFC3339(),
+			NewHead:       newHeadSHA,
+			CleanupOK:     r.CleanupOK,
+			CleanupErrors: completeErrors,
+		}
+		if err := appendRewriteMapRecord(r.SgDir, complete); err != nil {
+			return err
+		}
+	}
 
 	// 9. Oplog entry
 	extra := r.OplogExtra
