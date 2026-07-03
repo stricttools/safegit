@@ -7,7 +7,9 @@
     "go": {
       "type": "go",
       "local": true,
-      "install_paths": ["."]
+      "install_paths": [
+        "."
+      ]
     },
     "docker": {
       "type": "docker",

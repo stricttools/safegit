@@ -1,16 +1,18 @@
 {
   ".github/workflows/ci.yml": "9159718143e1cef4273bb58c3111540031ef93e40d7275d2c41cad5b0e54e296",
-  ".github/workflows/publish.yml": "0d21cec870cac1709cfe7cb2429e35e0b2c00da94a15b0e9fb80b5b48f62772c",
-  ".goreleaser.yml": "cbe0473dcc675e3eb507ec9f0ffcfe3cefacb6e754e553af4e3c9339d2480523",
-  "CHANGELOG.md": "fca781960bc4a70fce00e622926810542c6c62b34357a1228fa2e8432108c013",
+  ".github/workflows/publish.yml": "4cee487e3fd9c102c05eaa1dce953e2c60a93944968339d5bde0fe9856f96207",
+  ".goreleaser.yml": "eae46399d48bd4d75707517f55a6e94b6602a7fe17ee4e8aa5671e56b0b011d0",
+  "CHANGELOG.md": "4fb3d616fa42e61e5827d887d330fbf765663aed02016141fd9fc034a29c27c8",
   "CLAUDE.md": "03740c2f920cc79711453ee400363716c5f510a4439bc681dc91b0786aad2be2",
   ".claude/settings.json": "99ee3041446e119611136c7c0f1955c1eef7e12ff21350e3da3380351dc25ef4",
-  "VERSION": "a466ef209f5c3aee5ff0c702e2e9d5cced4783d2a655e8ab66330f21a5557b3f",
-  ".gitignore": "e1155e3bdb8c8b0977d82d5d040dde60ef4895e15aa8881b14f62bef3aa08434",
+  "VERSION": "464863ee696ca862f6ae2bfee9728ebbd84463597825442efc62838d945b00fb",
+  ".gitignore": "597db0a5eaf96fcaa63f93bdb899dc114ec1cd7c3242c37523f5e5e579ec86d8",
   ".rlsbl/hooks/pre-checks.sh": "60c57d4563263124530e6f33aca77550ea2161ad3b33b3ba6ad1c03fea9eb6e2",
   ".rlsbl/lint/python.toml": "9cfbcef2e010d5fad243437bf2fd8df54a1fae70ee0762f9d11da70fe207501c",
   ".rlsbl/lint/go.toml": "807d5cf760baad6d571a5bfd43cb163efe356f7462ba9f1918d72de45f62339f",
   ".rlsbl/lint/npm.toml": "baa36014e65923d8cc5c8b83c77fa651da79351627570476402da66840027645",
   ".rlsbl/changes/unreleased.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  ".rlsbl/hooks/pre-release.sh": "5ed18052eb3f3656490e64bf605e5d44787fe38759fb779e105fb25610799b2a"
+  ".rlsbl/hooks/pre-release.sh": "5ed18052eb3f3656490e64bf605e5d44787fe38759fb779e105fb25610799b2a",
+  ".github/workflows/ci-go.yml": "a4eb37a8927ffda2aa646e45ac6f849648a53ea7fb4efe0df4fda3c9946c28f9",
+  ".github/workflows/ci-docker.yml": "213de70d38a3f92b1db6a053e8a8b0c04eed9ea45d5ddd60195b97fb2f0a02e0"
 }

@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Per-SHA group: re-runs of the same commit dedupe, but a new commit never
+# cancels an earlier commit's in-flight run (release CI conclusions stay intact).
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # go.mod: go 1.25.7
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./... -race -short -timeout=10m
