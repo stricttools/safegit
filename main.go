@@ -49,7 +49,7 @@ type globalFlags struct {
 }
 
 func main() {
-	app := strictcli.NewApp("safegit", version, "concurrency-safe git for multi-agent use")
+	app := strictcli.NewApp("safegit", version, "concurrency-safe git wrapper providing 20 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting")
 
 	app.GlobalFlag(strictcli.BoolFlag("quiet", "suppress all informational output, only showing errors and results", strictcli.Short("q"), strictcli.Default(false)))
 	app.GlobalFlag(strictcli.BoolFlag("verbose", "enable verbose output with detailed progress and diagnostic info", strictcli.Default(false)))
@@ -265,7 +265,7 @@ func main() {
 		),
 	)
 	app.Deprecated("rewrite-author", "use 'safegit author rewrite' instead")
-	sg := app.Group("scrub", "surgically rewrite git history to remove or replace sensitive content such as secrets, credentials, and private data from all commits, trees, and blobs in the repository")
+	sg := app.Group("scrub", "surgically rewrite git history to remove or replace sensitive content using 4 subcommands (file, match, run, verify) that operate on all commits, trees, and blobs in the repository")
 	sg.Command("file", "replace or remove a specific file across all commits in the repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized version or delete the file entirely from every historical snapshot", func(kwargs map[string]interface{}) int {
 		return runScrubFile(globalsToFlags(kwargs), kwargs)
 	},
