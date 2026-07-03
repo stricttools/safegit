@@ -273,6 +273,7 @@ func main() {
 		strictcli.WithFlags(
 			strictcli.StringFlag("from", "first commit hash to include when rewriting history (default: root commit)"),
 			strictcli.StringFlag("reason", "mandatory audit trail message explaining why this scrub operation is needed"),
+			strictcli.StringFlag("remap-shas-in", "glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories)", strictcli.Repeatable(), strictcli.Unique(true)),
 		),
 		strictcli.WithArgs(
 			strictcli.NewArg("file", "repository-relative path to the file that should be scrubbed from history"),
@@ -286,6 +287,7 @@ func main() {
 			strictcli.StringFlag("pattern", "regular expression pattern to search for across all blobs in history"),
 			strictcli.StringFlag("reason", "mandatory audit trail message explaining why this scrub operation is needed"),
 			strictcli.StringFlag("scope", "glob pattern limiting which file paths are searched (e.g. '*.env', 'config/**')", strictcli.Default(nil)),
+			strictcli.StringFlag("remap-shas-in", "glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories)", strictcli.Repeatable(), strictcli.Unique(true)),
 		),
 		strictcli.WithMutex(strictcli.MutexGroup{
 			Flags: []strictcli.Flag{
@@ -308,6 +310,7 @@ func main() {
 			strictcli.StringFlag("reason", "mandatory audit trail message explaining why this scrub operation is needed"),
 			strictcli.BoolFlag("diff", "preview what would change without modifying any objects, showing unified diffs", strictcli.Default(false)),
 			strictcli.IntFlag("limit", "maximum number of blob diffs to show in --diff mode (default: 50)", strictcli.Default(50)),
+			strictcli.StringFlag("remap-shas-in", "glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories)", strictcli.Repeatable(), strictcli.Unique(true)),
 		),
 		strictcli.WithMutex(strictcli.MutexGroup{
 			Flags: []strictcli.Flag{
