@@ -113,6 +113,9 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 		limit = 50
 	}
 
+	remapGlobs := kwargsStrSlice(kwargs["remap_shas_in"])
+	validateRemapGlobs(flags, cmd, remapGlobs)
+
 	// Validation
 	gitDir := mustGitDir(flags, cmd)
 	if err := repo.EnsureInitialized(gitDir); err != nil {
@@ -224,7 +227,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	defer lk.Release()
 
 	// Execute the recipe via the shared pipeline.
-	exitCode, result := executeScrubRecipe(ctx, flags, cmd, recipe, reason, fromSHA, entireHistory, nil, gitDir, sgDir, nil, "scrub-run", nil, false)
+	exitCode, result := executeScrubRecipe(ctx, flags, cmd, recipe, reason, fromSHA, entireHistory, nil, remapGlobs, gitDir, sgDir, nil, "scrub-run", nil, false)
 
 	// For multi-operation recipes, append scrub policies per-operation.
 	// Single-operation recipes have their policy appended by executeScrubRecipe

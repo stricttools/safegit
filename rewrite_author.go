@@ -694,7 +694,7 @@ func rewriteCommits(ctx context.Context, oldName, newName, oldEmail, newEmail st
 	shas := git.SplitNonEmpty(out)
 	nameChanged := 0
 
-	shaMap, _, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
+	shaMap, _, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 		author := info.Author
 		committer := info.Committer
 		thisNameChanged := false

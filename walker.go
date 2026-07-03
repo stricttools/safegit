@@ -26,9 +26,12 @@ type CommitTransform struct {
 }
 
 // TransformFunc is called for each commit during a rewrite walk. It receives
-// the original commit SHA, its parsed info, and the already-remapped parent
-// SHAs. It returns a CommitTransform describing what (if anything) to change.
-type TransformFunc func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error)
+// the original commit SHA, its parsed info, the already-remapped parent SHAs,
+// and the growing old-to-new SHA map (which includes identity entries for
+// already-walked unchanged commits; transforms must treat it as read-only —
+// the walker owns it). It returns a CommitTransform describing what (if
+// anything) to change.
+type TransformFunc func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error)
 
 // walkAndRewrite iterates commits in the provided topo-order slice, remaps
 // parents through earlier rewrites, calls the transform function, and creates
@@ -57,7 +60,7 @@ func walkAndRewrite(ctx context.Context, shas []string, transform TransformFunc,
 		}
 
 		// Ask the caller what to change.
-		xform, err := transform(ctx, sha, info, remappedParents)
+		xform, err := transform(ctx, sha, info, remappedParents, shaMap)
 		if err != nil {
 			return nil, 0, fmt.Errorf("transforming commit %s: %w", sha, err)
 		}

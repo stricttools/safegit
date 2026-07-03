@@ -49,6 +49,8 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	from := kwargs["from"].(string)
 	reason := kwargs["reason"].(string)
 	filePath := kwargs["file"].(string)
+	remapGlobs := kwargsStrSlice(kwargs["remap_shas_in"])
+	validateRemapGlobs(flags, cmd, remapGlobs)
 
 	// Validation
 	gitDir := mustGitDir(flags, cmd)
@@ -91,7 +93,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 
 	if targetSub != nil {
-		return runScrubFileInSubmodule(ctx, flags, cmd, filePath, subFilePath, targetSub, from, reason, gitDir, sgDir)
+		return runScrubFileInSubmodule(ctx, flags, cmd, filePath, subFilePath, targetSub, from, reason, remapGlobs, gitDir, sgDir)
 	}
 
 	// Resolve --from to a full SHA
@@ -205,8 +207,13 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	// Track old blob SHAs that get replaced, for post-cleanup verification.
 	oldBlobSHAs := make(map[string]bool)
 
+	var remap *remapState
+	if len(remapGlobs) > 0 {
+		remap = newRemapState(remapGlobs, shas)
+	}
+
 	treeCache := make(map[string]string)
-	shaMap, rewrittenCount, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
+	shaMap, rewrittenCount, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 		// Look up the old blob SHA at the target path before replacing.
 		oldBlobSHA := lookupBlobAtPath(ctx, info.Tree, filePath)
 
@@ -214,19 +221,31 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		if err != nil {
 			return CommitTransform{}, fmt.Errorf("replacing in tree for commit %s: %w", sha, err)
 		}
-		var xform CommitTransform
 		if newTreeSHA != info.Tree {
-			xform.TreeSHA = newTreeSHA
 			// Tree changed, so the old blob was replaced. Track it.
 			if oldBlobSHA != "" && oldBlobSHA != newBlobSHA {
 				oldBlobSHAs[oldBlobSHA] = true
 			}
+		}
+		// Remap full commit hashes in glob-matched files against the
+		// growing SHA map (time-varying: no shared tree cache).
+		if remap != nil {
+			remappedTreeSHA, err := remap.remapTree(ctx, newTreeSHA, "", shaMap)
+			if err != nil {
+				return CommitTransform{}, fmt.Errorf("commit %s: %w", sha, err)
+			}
+			newTreeSHA = remappedTreeSHA
+		}
+		var xform CommitTransform
+		if newTreeSHA != info.Tree {
+			xform.TreeSHA = newTreeSHA
 		}
 		return xform, nil
 	}, flags.verbose)
 	if err != nil {
 		die(flags, cmd, 1, err.Error())
 	}
+	remap.reportStale(flags)
 
 	// Populate RewriteResult for the shared post-rewrite pipeline.
 	exitCode := 0
@@ -334,6 +353,7 @@ func runScrubFileInSubmodule(
 	sub *submodule.SubmoduleInfo,
 	from string,
 	reason string,
+	remapGlobs []string,
 	gitDir string,
 	sgDir string,
 ) int {
@@ -444,10 +464,11 @@ func runScrubFileInSubmodule(
 		die(flags, cmd, 1, fmt.Sprintf("resolving submodule HEAD: %v", err))
 	}
 
-	// Walk and rewrite submodule commits.
+	// Walk and rewrite submodule commits. Note: --remap-shas-in is not
+	// applied inside submodule histories (documented limitation).
 	oldSubBlobSHAs := make(map[string]bool)
 	subTreeCache := make(map[string]string)
-	subShaMap, subRewrittenCount, err := walkAndRewrite(subCtx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
+	subShaMap, subRewrittenCount, err := walkAndRewrite(subCtx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 		oldBlobSHA := lookupBlobAtPath(ctx, info.Tree, subFilePath)
 		newTreeSHA, err := replaceInTree(ctx, info.Tree, subFilePath, newBlobSHA, subTreeCache)
 		if err != nil {
@@ -517,12 +538,25 @@ func runScrubFileInSubmodule(
 
 	infof(flags, "Rewriting %d parent commits (gitlink updates)...\n", len(parentSHAs))
 
-	// Walk parent, only updating gitlinks (no blob changes, no message changes).
+	// Walk parent, updating gitlinks (no blob changes, no message changes)
+	// and remapping commit hashes in glob-matched parent files when
+	// --remap-shas-in is set.
+	var parentRemap *remapState
+	if len(remapGlobs) > 0 {
+		parentRemap = newRemapState(remapGlobs, parentSHAs)
+	}
 	parentTreeCache := make(map[string]string)
-	parentShaMap, parentRewrittenCount, err := walkAndRewrite(ctx, parentSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
+	parentShaMap, parentRewrittenCount, err := walkAndRewrite(ctx, parentSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 		newTreeSHA, err := replaceInTreeByBlobMap(ctx, info.Tree, nil, gitlinkMap, parentTreeCache)
 		if err != nil {
 			return CommitTransform{}, fmt.Errorf("updating gitlinks in tree for commit %s: %w", sha, err)
+		}
+		if parentRemap != nil {
+			remappedTreeSHA, err := parentRemap.remapTree(ctx, newTreeSHA, "", shaMap)
+			if err != nil {
+				return CommitTransform{}, fmt.Errorf("commit %s: %w", sha, err)
+			}
+			newTreeSHA = remappedTreeSHA
 		}
 		var xform CommitTransform
 		if newTreeSHA != info.Tree {
@@ -533,6 +567,7 @@ func runScrubFileInSubmodule(
 	if err != nil {
 		die(flags, cmd, 1, fmt.Sprintf("parent walk and rewrite: %v", err))
 	}
+	parentRemap.reportStale(flags)
 
 	// Finalize parent rewrite via shared pipeline. The VerifyFunc checks
 	// that old submodule blobs are no longer reachable.

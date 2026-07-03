@@ -74,7 +74,7 @@ func setupFinalizeRepo(t *testing.T) (string, context.Context, string, *RewriteR
 	gitInDir(t, dir, "update-ref", "refs/remotes/origin/main", c2)
 
 	shas := []string{c1, c2}
-	shaMap, rewritten, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
+	shaMap, rewritten, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 		var xform CommitTransform
 		if strings.Contains(info.Message, "SECRET") {
 			xform.Message = strings.ReplaceAll(info.Message, "SECRET", "REDACTED")

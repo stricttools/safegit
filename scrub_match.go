@@ -84,6 +84,9 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 	entireHistory := kwargs["entire_history"].(bool)
 
+	remapGlobs := kwargsStrSlice(kwargs["remap_shas_in"])
+	validateRemapGlobs(flags, cmd, remapGlobs)
+
 	// Validation
 	gitDir := mustGitDir(flags, cmd)
 	if err := repo.EnsureInitialized(gitDir); err != nil {
@@ -149,7 +152,7 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 	defer lk.Release()
 
 	// Execution mode
-	return scrubMatchExecute(ctx, flags, cmd, compiledPattern, replace, mangleMode, reason, fromSHA, entireHistory, scope, gitDir, sgDir)
+	return scrubMatchExecute(ctx, flags, cmd, compiledPattern, replace, mangleMode, reason, fromSHA, entireHistory, scope, remapGlobs, gitDir, sgDir)
 }
 
 // scrubMatchDryRun scans all objects and non-object files, prints categorized
@@ -414,6 +417,7 @@ func scrubMatchExecute(
 	fromSHA string,
 	entireHistory bool,
 	scope *string,
+	remapGlobs []string,
 	gitDir string,
 	sgDir string,
 ) int {
@@ -641,9 +645,11 @@ func scrubMatchExecute(
 			subSHAs = git.SplitNonEmpty(out)
 		}
 
+		// Note: --remap-shas-in is not applied inside submodule histories
+		// (documented limitation).
 		subMessagesModified := 0
 		subTreeCache := make(map[string]string)
-		subShaMap, subRewrittenCount, err := walkAndRewrite(subCtx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
+		subShaMap, subRewrittenCount, err := walkAndRewrite(subCtx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 			var xform CommitTransform
 
 			newTreeSHA, err := replaceInTreeByBlobMap(ctx, info.Tree, subBlobMap, nil, subTreeCache)
@@ -802,7 +808,7 @@ func scrubMatchExecute(
 	execFlags := flags
 	execFlags.yes = true
 
-	exitCode, result := executeScrubRecipe(ctx, execFlags, cmd, recipe, reason, fromSHA, entireHistory, scope, gitDir, sgDir, gitlinkMap, "scrub-match", parentOplogExtra, true)
+	exitCode, result := executeScrubRecipe(ctx, execFlags, cmd, recipe, reason, fromSHA, entireHistory, scope, remapGlobs, gitDir, sgDir, gitlinkMap, "scrub-match", parentOplogExtra, true)
 
 	// Post-execution submodule verification.
 	if result != nil && len(subScrubResults) > 0 {

@@ -40,6 +40,7 @@ func executeScrubRecipe(
 	fromSHA string,
 	entireHistory bool,
 	scope *string,
+	remapGlobs []string,
 	gitDir string,
 	sgDir string,
 	gitlinkMap map[string]string,
@@ -197,13 +198,28 @@ func executeScrubRecipe(
 	messagesModified := 0
 	treeCache := make(map[string]string)
 
-	shaMap, rewrittenCount, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string) (CommitTransform, error) {
+	var remap *remapState
+	if len(remapGlobs) > 0 {
+		remap = newRemapState(remapGlobs, shas)
+	}
+
+	shaMap, rewrittenCount, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 		var xform CommitTransform
 
 		// Replace blobs in tree
 		newTreeSHA, err := replaceInTreeByBlobMap(ctx, info.Tree, blobMap, gitlinkMap, treeCache)
 		if err != nil {
 			return CommitTransform{}, fmt.Errorf("replacing blobs in tree for commit %s: %w", sha, err)
+		}
+		// Remap full commit hashes in glob-matched files against the growing
+		// SHA map (time-varying transform: runs after the static blob map and
+		// never shares the static tree cache).
+		if remap != nil {
+			remappedTreeSHA, err := remap.remapTree(ctx, newTreeSHA, "", shaMap)
+			if err != nil {
+				return CommitTransform{}, fmt.Errorf("commit %s: %w", sha, err)
+			}
+			newTreeSHA = remappedTreeSHA
 		}
 		if newTreeSHA != info.Tree {
 			xform.TreeSHA = newTreeSHA
@@ -240,6 +256,7 @@ func executeScrubRecipe(
 	if err != nil {
 		die(flags, cmd, 1, err.Error())
 	}
+	remap.reportStale(flags)
 
 	// Oplog extra: use caller-provided base or build a default.
 	oplogExtra := baseOplogExtra
