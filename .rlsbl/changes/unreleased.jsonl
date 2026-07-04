@@ -1,2 +1,3 @@
 {"commits":["45af4f4c31453726746dfadc3433733b6ef78a0f"],"user_facing":false}
 {"commits":["b99c046d9073eb0e2d74aaa3e3bded86fb774ad4","0835d8b7281985766e783006bf84eeb4f17bd4bb"],"user_facing":true,"description":"**Improved CLI help text.** App and scrub group help text now includes numeric data points for documentation quality compliance.","type":"fix"}
+{"commits":["a47d5315adfa0f119f873a76df794a4ba834877c"],"user_facing":true,"description":"**New: undo --count N.** Undo multiple commits in a single invocation by specifying a count. Walk-back logic replays N undo steps sequentially.","type":"feature"}
