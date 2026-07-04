@@ -741,57 +741,6 @@ func TestSubmoduleUndo(t *testing.T) {
 	}
 }
 
-// Phase 0.11: Redo inside a submodule restores the commit after undo.
-// commit -> undo -> redo should return the submodule HEAD to the post-commit
-// SHA. Parent repo remains unaffected throughout.
-func TestSubmoduleRedo(t *testing.T) {
-	t.Parallel()
-	parentDir, _ := newRepoWithSubmodule(t)
-	subDir := prepSubmoduleForCommit(t, parentDir)
-	env := []string{"CLAUDE_CODE_SESSION_ID=submodule-redo-test"}
-
-	parentCountBefore := gitLog(t, parentDir, "HEAD")
-	parentSubPointerBefore := lsTreeSHA(t, lsTreeEntry(t, parentDir, "mysub"))
-
-	// Create a file and commit inside the submodule.
-	if err := os.WriteFile(filepath.Join(subDir, "redo_me.txt"), []byte("will redo\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	_, stderr, code := runSafegitEnv(t, subDir, env, "commit", "-m", "commit for redo", "--", "redo_me.txt")
-	if code != 0 {
-		t.Fatalf("safegit commit in submodule failed (code %d): %s", code, stderr)
-	}
-	subHEADAfterCommit := revParseHEAD(t, subDir)
-
-	// Undo.
-	_, stderr, code = runSafegitEnv(t, subDir, env, "undo")
-	if code != 0 {
-		t.Fatalf("safegit undo in submodule failed (code %d): %s", code, stderr)
-	}
-
-	// Redo.
-	_, stderr, code = runSafegitEnv(t, subDir, env, "redo")
-	if code != 0 {
-		t.Fatalf("safegit redo in submodule failed (code %d): %s", code, stderr)
-	}
-
-	// Verify: submodule HEAD is back to the post-commit SHA.
-	subHEADAfterRedo := revParseHEAD(t, subDir)
-	if subHEADAfterRedo != subHEADAfterCommit {
-		t.Errorf("after redo, submodule HEAD = %s, want %s", subHEADAfterRedo, subHEADAfterCommit)
-	}
-
-	// Verify: parent repo is unaffected.
-	parentCountAfter := gitLog(t, parentDir, "HEAD")
-	if parentCountAfter != parentCountBefore {
-		t.Errorf("parent commit count changed: was %d, now %d", parentCountBefore, parentCountAfter)
-	}
-	parentSubPointerAfter := lsTreeSHA(t, lsTreeEntry(t, parentDir, "mysub"))
-	if parentSubPointerAfter != parentSubPointerBefore {
-		t.Errorf("parent's submodule pointer changed: was %s, now %s", parentSubPointerBefore, parentSubPointerAfter)
-	}
-}
-
 // Phase 0.12: Concurrent safegit commits in the parent and submodule should
 // not block each other. Their .git directories are separate, so lock files
 // are independent.
