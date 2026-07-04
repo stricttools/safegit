@@ -22,8 +22,12 @@ var undoableOps = map[string]string{
 	"reword": "oldSha",
 }
 
-func runUndo(flags globalFlags, bypassSession bool) {
+func runUndo(flags globalFlags, bypassSession bool, count int) {
 	const cmd = "undo"
+
+	if count <= 0 {
+		die(flags, cmd, 1, fmt.Sprintf("--count must be positive, got %d", count))
+	}
 
 	gitDir := mustGitDir(flags, cmd)
 	if err := repo.EnsureInitialized(gitDir); err != nil {
@@ -45,53 +49,111 @@ func runUndo(flags globalFlags, bypassSession bool) {
 		die(flags, cmd, 1, "HEAD is detached; undo requires a branch")
 	}
 
-	// Find the last ref-updating oplog entry for this branch, scoped by session
-	sessionID := os.Getenv("CLAUDE_CODE_SESSION_ID")
-	var entry *oplog.Entry
-	if bypassSession {
-		entry, err = oplog.LastRefUpdate(sgDir, ref)
-	} else if sessionID != "" {
-		entry, err = oplog.LastRefUpdateForSession(sgDir, ref, sessionID)
-	} else {
-		die(flags, cmd, 1, "no session ID found (CLAUDE_CODE_SESSION_ID not set); pass --bypass-session to undo across all sessions")
-	}
+	// Read all oplog entries
+	allEntries, err := oplog.Read(sgDir)
 	if err != nil {
 		die(flags, cmd, 1, fmt.Sprintf("reading oplog: %v", err))
 	}
-	if entry == nil {
-		die(flags, cmd, 1, fmt.Sprintf("no operations found for %s in the oplog", refShortName(ref)))
+
+	// Filter to entries for this ref (and session, unless bypass-session)
+	sessionID := os.Getenv("CLAUDE_CODE_SESSION_ID")
+	if !bypassSession && sessionID == "" {
+		die(flags, cmd, 1, "no session ID found (CLAUDE_CODE_SESSION_ID not set); pass --bypass-session to undo across all sessions")
 	}
 
-	// Check if the op is undoable
-	if entry.Op == "rewrite-author" {
-		die(flags, cmd, 1, "cannot undo rewrite-author: this operation rewrites all repository history")
-	}
-	if entry.Op == "scrub-file" {
-		die(flags, cmd, 1, "cannot undo scrub-file: this operation rewrites repository history")
-	}
-	if entry.Op == "scrub-match" {
-		die(flags, cmd, 1, "cannot undo scrub-match: this operation rewrites repository history")
-	}
-	targetKey, ok := undoableOps[entry.Op]
-	if !ok {
-		die(flags, cmd, 1, fmt.Sprintf("cannot undo %q", entry.Op))
-	}
-
-	// Extract the rollback target SHA
-	targetSHA, ok := entry.Extra[targetKey].(string)
-	if !ok || targetSHA == "" {
-		die(flags, cmd, 1, fmt.Sprintf("oplog entry for %q is missing %q field", entry.Op, targetKey))
+	var entries []oplog.Entry
+	for _, e := range allEntries {
+		if e.Extra == nil {
+			continue
+		}
+		entryRef, ok := e.Extra["ref"].(string)
+		if !ok || entryRef != ref {
+			continue
+		}
+		if !bypassSession && e.SessionID != sessionID {
+			continue
+		}
+		entries = append(entries, e)
 	}
 
-	// The current tip SHA (what we expect the ref to point to now)
-	currentSHA := oplog.TipSHA(entry.Extra)
-	if currentSHA == "" {
-		die(flags, cmd, 1, "oplog entry has no resolvable tip SHA")
+	// Walk backwards through entries to find the Nth undoable entry.
+	// "undo" entries in the oplog cancel one preceding undoable entry each.
+	cancelled := 0
+	liveSteps := 0
+	var targetEntry *oplog.Entry
+
+	for i := len(entries) - 1; i >= 0; i-- {
+		e := entries[i]
+
+		if e.Op == "undo" {
+			// Each undo entry means one preceding undoable was already undone
+			cancelled++
+			continue
+		}
+
+		// Check if this op is undoable
+		if _, isUndoable := undoableOps[e.Op]; !isUndoable {
+			// Non-undoable ops (redo, rewrite-author, scrub-*, etc.) are simply skipped
+			continue
+		}
+
+		// This is an undoable op
+		if cancelled > 0 {
+			// Already undone by a later undo entry, skip it
+			cancelled--
+			continue
+		}
+
+		// This is a live undoable step
+		liveSteps++
+		if liveSteps == count {
+			targetEntry = &entries[i]
+			break
+		}
+	}
+
+	if targetEntry == nil {
+		if liveSteps == 0 {
+			die(flags, cmd, 1, fmt.Sprintf("no undoable operations found for %s in the oplog", refShortName(ref)))
+		}
+		die(flags, cmd, 1, fmt.Sprintf("only %d undoable operations available, requested %d", liveSteps, count))
+	}
+
+	// Determine the target key and SHA for the rollback
+	targetKey := undoableOps[targetEntry.Op]
+	targetSHARaw, fieldPresent := targetEntry.Extra[targetKey]
+	if !fieldPresent {
+		die(flags, cmd, 1, fmt.Sprintf("oplog entry for %q is missing %q field", targetEntry.Op, targetKey))
+	}
+
+	targetSHA, _ := targetSHARaw.(string)
+
+	// Handle empty target SHA based on target key
+	isRootUndo := false
+	if targetSHA == "" {
+		if targetKey == "parent" {
+			// Root commit undo: the commit had no parent
+			isRootUndo = true
+		} else {
+			// amend/reword can't have empty oldSha
+			die(flags, cmd, 1, fmt.Sprintf("oplog entry for %q has empty %q field", targetEntry.Op, targetKey))
+		}
+	}
+
+	// Get the actual current SHA from git (not from oplog, which may be stale
+	// when undoing N > 1 steps)
+	currentSHA, err := git.RevParse(ctx, "HEAD")
+	if err != nil {
+		die(flags, cmd, 1, fmt.Sprintf("resolving HEAD: %v", err))
 	}
 
 	if flags.dryRun {
-		fmt.Printf("would undo %s on %s\n", entry.Op, refShortName(ref))
-		fmt.Printf("  %s -> %s\n", currentSHA[:8], targetSHA[:8])
+		fmt.Printf("would undo %d operation(s) on %s\n", count, refShortName(ref))
+		if isRootUndo {
+			fmt.Printf("  %s -> (empty, delete ref)\n", currentSHA[:8])
+		} else {
+			fmt.Printf("  %s -> %s\n", currentSHA[:8], targetSHA[:8])
+		}
 		return
 	}
 
@@ -104,19 +166,29 @@ func runUndo(flags globalFlags, bypassSession bool) {
 	}
 	defer lk.Release()
 
-	// CAS update the ref
-	if err := git.UpdateRef(ctx, ref, targetSHA, currentSHA); err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("update-ref failed (ref may have moved): %v", err))
+	// Perform the ref update
+	if isRootUndo {
+		if err := git.DeleteRef(ctx, ref, currentSHA); err != nil {
+			die(flags, cmd, 1, fmt.Sprintf("delete-ref failed (ref may have moved): %v", err))
+		}
+	} else {
+		if err := git.UpdateRef(ctx, ref, targetSHA, currentSHA); err != nil {
+			die(flags, cmd, 1, fmt.Sprintf("update-ref failed (ref may have moved): %v", err))
+		}
 	}
 
 	// Sync main index so git status/diff reflect the change
-	if err := git.SyncMainIndex(ctx, targetSHA); err != nil {
+	// For root undo, pass "" to trigger read-tree --empty
+	syncTreeish := targetSHA
+	if isRootUndo {
+		syncTreeish = ""
+	}
+	if err := git.SyncMainIndex(ctx, syncTreeish); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: failed to sync main index: %v\n", err)
 	}
 
 	// If the commit being undone triggered a parent bump, inform the user.
-	// The auto-bump call below will re-bump the parent to the restored SHA.
-	if bumpSHA := findAssociatedParentBump(sgDir, entry); bumpSHA != "" {
+	if bumpSHA := findAssociatedParentBump(sgDir, targetEntry); bumpSHA != "" {
 		fmt.Fprintf(os.Stderr, "note: undoing commit that triggered parent bump %s\n", bumpSHA[:8])
 	}
 
@@ -129,16 +201,25 @@ func runUndo(flags globalFlags, bypassSession bool) {
 	_ = oplog.Append(sgDir, oplog.Entry{
 		Op: "undo",
 		Extra: map[string]interface{}{
-			"ref":       ref,
-			"undoneOp":  entry.Op,
-			"sha":       targetSHA,
-			"oldSha":    currentSHA,
+			"ref":      ref,
+			"undoneOp": targetEntry.Op,
+			"sha":      targetSHA,
+			"oldSha":   currentSHA,
+			"count":    count,
 		},
 	})
 
 	if !flags.quiet {
-		fmt.Printf("undid %s on %s\n", entry.Op, refShortName(ref))
-		fmt.Printf("  %s -> %s\n", currentSHA[:8], targetSHA[:8])
+		if count == 1 {
+			fmt.Printf("undid %s on %s\n", targetEntry.Op, refShortName(ref))
+		} else {
+			fmt.Printf("undid %d operations on %s (last: %s)\n", count, refShortName(ref), targetEntry.Op)
+		}
+		if isRootUndo {
+			fmt.Printf("  %s -> (empty)\n", currentSHA[:8])
+		} else {
+			fmt.Printf("  %s -> %s\n", currentSHA[:8], targetSHA[:8])
+		}
 	}
 }
 
