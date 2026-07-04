@@ -7,7 +7,6 @@ Concurrency-safe Git wrapper (Go CLI). When multiple AI agent sessions share one
 - `commit -m "msg" -- file1 file2` -- atomic commit (handles tracked and untracked files)
 - `commit --amend --branch <name>` -- cross-branch amend/reword
 - `undo` -- reverse last commit/amend/reword via oplog (session-scoped by default; `--bypass-session` for cross-session)
-- `redo` -- restore what undo removed (one-shot; prevents oscillation)
 - `push` -- push with pre-pre-push hooks and retry
 - `doctor --fix` -- health checks, garbage collection, repair
 - `config` -- show/set configuration
@@ -73,8 +72,7 @@ This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestrat
 - Oplog entries must be < 4096 bytes (POSIX atomic append guarantee)
 - Tests in internal/test/ are integration tests that build and run the safegit binary as a subprocess
 - CGO_ENABLED=0 for all builds (static binary, no C dependencies)
-- `safegit undo` reverses the last commit/amend/reword via oplog (session-scoped by default)
-- `safegit redo` restores what undo removed (one-shot to prevent oscillation)
+- `safegit undo` reverses the last commit/amend/reword via oplog (session-scoped by default; `--count N` to undo multiple)
 - `safegit commit --amend --branch <name>` for cross-branch amend/reword
 - `safegit doctor --fix` to garbage-collect and repair (replaces gc)
 - `safegit scrub file` and `safegit scrub match` for history rewriting (repo-wide coordination lock prevents concurrent rewrites)
