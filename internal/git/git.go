@@ -183,6 +183,13 @@ func UpdateRef(ctx context.Context, ref, newSHA, oldSHA string) error {
 	return err
 }
 
+// DeleteRef atomically deletes a ref using compare-and-swap.
+// oldSHA is the expected current value of the ref.
+func DeleteRef(ctx context.Context, ref, oldSHA string) error {
+	_, _, err := Run(ctx, "update-ref", "-d", ref, oldSHA)
+	return err
+}
+
 // AddFile stages a file into a custom index.
 func AddFile(ctx context.Context, indexPath, filePath string) error {
 	env := []string{"GIT_INDEX_FILE=" + indexPath}
@@ -263,15 +270,23 @@ func syncMainIndexInner(ctx context.Context, treeish string, updateWorktree bool
 		skipFiles = nil
 	}
 
-	args := []string{"read-tree"}
-	if updateWorktree {
-		args = append(args, "--reset", "-u")
-	}
-	args = append(args, treeish)
+	// Empty treeish means root commit undo: clear the index entirely.
+	if treeish == "" {
+		_, _, err = Run(ctx, "read-tree", "--empty")
+		if err != nil {
+			return err
+		}
+	} else {
+		args := []string{"read-tree"}
+		if updateWorktree {
+			args = append(args, "--reset", "-u")
+		}
+		args = append(args, treeish)
 
-	_, _, err = Run(ctx, args...)
-	if err != nil {
-		return err
+		_, _, err = Run(ctx, args...)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Restore skip-worktree flags.
