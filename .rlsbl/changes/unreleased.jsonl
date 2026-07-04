@@ -1,0 +1,1 @@
+{"commits":["0805a39c8c7f91964be9c420063fdae146b1d40f"],"user_facing":true,"description":"Windows process-alive check now uses OpenProcess API instead of broken Signal(0), fixing lock contention and premature tmp directory cleanup on Windows.","type":"fix"}
