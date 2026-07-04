@@ -1,1 +1,2 @@
 {"commits":["798384bd381ddf7d89fd911d7af9bd066b674414"],"user_facing":false}
+{"commits":["798384bd381ddf7d89fd911d7af9bd066b674414"],"user_facing":true,"description":"**Fix.** Add missing protocol.file.allow environment to ci-go.yml workflow, completing the CI submodule test fix.","type":"fix"}
