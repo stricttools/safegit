@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
+
+	"github.com/smm-h/safegit/internal/filelock"
 )
 
 // scrubPolicyFile is the filename for the JSONL policy log.
@@ -49,35 +50,13 @@ func appendScrubPolicy(sgDir string, policy ScrubPolicy) error {
 }
 
 // appendJSONLLine appends one pre-marshaled JSON line to <sgDir>/<filename>.
-// Uses O_APPEND with flock for concurrency safety, following the same pattern
-// as oplog.Append (but without the 4096-byte line cap, since flock — not POSIX
-// append atomicity — guarantees line integrity here).
+// Uses O_APPEND with advisory locking for concurrency safety, following the same
+// pattern as oplog.Append (but without the 4096-byte line cap, since the lock —
+// not POSIX append atomicity — guarantees line integrity here).
 func appendJSONLLine(sgDir, filename string, data []byte) error {
 	line := append(data[:len(data):len(data)], '\n')
-
-	// Ensure the .git/safegit/ directory exists.
-	if err := os.MkdirAll(sgDir, 0755); err != nil {
-		return fmt.Errorf("creating safegit directory: %w", err)
-	}
-
 	path := filepath.Join(sgDir, filename)
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-	if err != nil {
-		return fmt.Errorf("opening %s: %w", filename, err)
-	}
-	defer f.Close()
-
-	// Advisory lock for safety on NFS or non-POSIX filesystems.
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		return fmt.Errorf("locking %s: %w", filename, err)
-	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-
-	if _, err := f.Write(line); err != nil {
-		return fmt.Errorf("appending to %s: %w", filename, err)
-	}
-
-	return nil
+	return filelock.LockedAppend(path, line, true)
 }
 
 // readScrubPolicies reads all policy entries from the JSONL file.

@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
+
+	"github.com/smm-h/safegit/internal/filelock"
 )
 
 // maxLineBytes is the POSIX guarantee for atomic O_APPEND writes.
@@ -54,20 +55,8 @@ func Append(safegitDir string, entry Entry) error {
 	}
 
 	lp := logPath(safegitDir)
-	f, err := os.OpenFile(lp, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
-	if err != nil {
-		return fmt.Errorf("opening log file: %w", err)
-	}
-	defer f.Close()
-
-	// Advisory lock for extra safety on NFS or non-POSIX filesystems
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		return fmt.Errorf("locking log file: %w", err)
-	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-
-	if _, err := f.Write(line); err != nil {
-		return fmt.Errorf("writing log entry: %w", err)
+	if err := filelock.LockedAppend(lp, line, false); err != nil {
+		return fmt.Errorf("appending to log file: %w", err)
 	}
 
 	return nil
