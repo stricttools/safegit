@@ -1,0 +1,12 @@
+# Version bump type: patch, minor, major, hotfix, or prerelease
+bump = ""
+# Short description of this release (required)
+description = ""
+# Optional context explaining why these changes were made
+context = ""
+# Pre-release identifier: alpha, beta, rc, or stable
+# preid = ""
+# Set to true to generate a blog post for this release
+# blog = false
+include = ["go", "docker"]
+exclude = []
