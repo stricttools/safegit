@@ -428,6 +428,17 @@ func CommonGitDir(ctx context.Context) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// CommonGitDirOf returns the common git directory for a given gitDir.
+// Unlike CommonGitDir, this does not depend on the process working directory;
+// it sets GIT_DIR explicitly so the result is always relative to gitDir.
+func CommonGitDirOf(ctx context.Context, gitDir string) (string, error) {
+	out, _, err := RunWithEnv(ctx, []string{"GIT_DIR=" + gitDir}, "rev-parse", "--git-common-dir")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
 // IsIgnored checks whether a file matches a gitignore rule.
 func IsIgnored(ctx context.Context, filePath string) (bool, error) {
 	_, _, err := Run(ctx, "check-ignore", "-q", "--", filePath)
