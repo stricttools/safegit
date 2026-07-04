@@ -12,11 +12,13 @@ order: 90
 
 - [internal/commit](internal-commit.html)
 - [internal/coord](internal-coord.html)
+- [internal/filelock](internal-filelock.html)
 - [internal/git](internal-git.html)
 - [internal/hooks](internal-hooks.html)
 - [internal/index](internal-index.html)
 - [internal/lock](internal-lock.html)
 - [internal/oplog](internal-oplog.html)
+- [internal/procutil](internal-procutil.html)
 - [internal/repo](internal-repo.html)
 - [internal/scan](internal-scan.html)
 - [internal/stage](internal-stage.html)
