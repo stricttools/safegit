@@ -12,7 +12,7 @@ order: 91
 
 concurrency-safe git wrapper providing 20 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting
 
-Version: 0.22.1-0.20260703170539-b99c046d9073
+Version: dev
 
 ## Commands
 
@@ -25,7 +25,6 @@ Version: 0.22.1-0.20260703170539-b99c046d9073
 - [pull](cli-pull.html) -- fetch from remote and merge, defaulting to fast-forward-only mode
 - [push](cli-push.html) -- push refs to remote with pre-pre-push hooks and automatic retry
 - [rebase](cli-rebase.html) -- rebase current branch onto upstream with safety guards
-- [redo](cli-redo.html) -- restore the commit that undo removed, as a one-shot counterpart to undo
 - [reset](cli-reset.html) -- reset HEAD with guards that prevent accidental --hard data loss
 - [revert](cli-revert.html) -- revert one or more commits creating inverse patches, with safety guards
 - [scan](cli-scan.html) -- search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection
