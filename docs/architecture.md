@@ -67,7 +67,7 @@ If the process is killed mid-invocation, the tmp directory leaks. `safegit docto
 
 ### Operation log schema
 
-The operation log at `.git/safegit/log` is an append-only JSON-lines file recording every mutating operation safegit performs. Each line captures a timestamp, process ID, operation type, and operation-specific metadata such as ref names and commit SHAs. This log serves as the source of truth for `safegit undo`, `safegit redo`, and `safegit doctor`, enabling reliable rollback and bypass detection.
+The operation log at `.git/safegit/log` is an append-only JSON-lines file recording every mutating operation safegit performs. Each line captures a timestamp, process ID, operation type, and operation-specific metadata such as ref names and commit SHAs. This log serves as the source of truth for `safegit undo` and `safegit doctor`, enabling reliable rollback and bypass detection.
 
 ```jsonl
 {"ts":"2026-04-26T11:39:42.123Z","pid":12345,"op":"commit","extra":{"ref":"refs/heads/main","tree":"<sha>","parent":"<sha>","sha":"<sha>","attempts":1}}
