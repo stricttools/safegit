@@ -331,20 +331,13 @@ func main() {
 	app.Passthrough("revert", "revert one or more commits creating inverse patches, with safety guards", pt)
 	app.Command("undo", "reverse the last commit, amend, or reword operation using the oplog", func(kwargs map[string]interface{}) int {
 		bypassSession := kwargs["bypass_session"].(bool)
-		runUndo(globalsToFlags(kwargs), bypassSession)
+		count := kwargs["count"].(int)
+		runUndo(globalsToFlags(kwargs), bypassSession, count)
 		return 0
 	},
 		strictcli.WithFlags(
 			strictcli.BoolFlag("bypass-session", "undo across all sessions by ignoring the session ID ownership check", strictcli.Default(false)),
-		),
-	)
-	app.Command("redo", "restore the commit that undo removed, as a one-shot counterpart to undo", func(kwargs map[string]interface{}) int {
-		bypassSession := kwargs["bypass_session"].(bool)
-		runRedo(globalsToFlags(kwargs), bypassSession)
-		return 0
-	},
-		strictcli.WithFlags(
-			strictcli.BoolFlag("bypass-session", "redo across all sessions by ignoring the session ID ownership check", strictcli.Default(false)),
+			strictcli.IntFlag("count", "number of operations to undo", strictcli.Default(1)),
 		),
 	)
 	app.Command("unlock", "release a stale .lock file left behind by a crashed git process", func(kwargs map[string]interface{}) int {
