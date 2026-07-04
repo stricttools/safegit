@@ -1,0 +1,10 @@
+{"commits":["45af4f4c31453726746dfadc3433733b6ef78a0f"],"user_facing":false}
+{"commits":["b99c046d9073eb0e2d74aaa3e3bded86fb774ad4","0835d8b7281985766e783006bf84eeb4f17bd4bb"],"user_facing":true,"description":"**Improved CLI help text.** App and scrub group help text now includes numeric data points for documentation quality compliance.","type":"fix"}
+{"commits":["a47d5315adfa0f119f873a76df794a4ba834877c"],"user_facing":true,"description":"**New: undo --count N.** Undo multiple commits in a single invocation by specifying a count. Walk-back logic replays N undo steps sequentially.","type":"feature"}
+{"commits":["cc7bc1070a0f3856d1ec1ec5981535dcc46269c9"],"user_facing":true,"description":"**Breaking: removed redo command.** Redo is replaced by undo --count N. To recover from over-undo, re-commit instead of redo.","type":"breaking"}
+{"commits":["a47d5315adfa0f119f873a76df794a4ba834877c","cc7bc1070a0f3856d1ec1ec5981535dcc46269c9"],"user_facing":true,"description":"**Fixed undo on root commits.** Undoing the first commit in a repository no longer crashes; the branch ref is deleted and the index cleared to match git-init state.","type":"fix"}
+{"commits":["bea5edd83848e22760bc8716152d544f0a3d7242"],"user_facing":false}
+{"commits":["7f4d1294456a38f8ff7a82dedc32787d81614e34"],"user_facing":false}
+{"commits":["82658f854ee22b0cade7c0a21a08eaede2b8d203","5fbfe5e2f1a5c14a1a0772b71ff3f3634b835f4a"],"user_facing":false}
+{"commits":["5cf9b75413e8eb41de0618c22824d988f399a4c2","7c7a70cf17af85cd1d592e87b3aa9506284f7937"],"user_facing":false}
+{"commits":["000e468b959b80f8a03e163d25066b2c829f1934"],"user_facing":false}
