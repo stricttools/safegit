@@ -69,6 +69,7 @@ func initRepoWithSubmodule(t *testing.T) (string, string, string, string) {
 	for _, args := range [][]string{
 		{"git", "add", "parent.txt"},
 		{"git", "commit", "-m", "parent initial"},
+		{"git", "config", "protocol.file.allow", "always"},
 		{"git", "submodule", "add", subSrc, "mysub"},
 		{"git", "commit", "-m", "add submodule"},
 	} {
