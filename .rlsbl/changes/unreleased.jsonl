@@ -5,3 +5,4 @@
 {"commits":["a47d5315adfa0f119f873a76df794a4ba834877c","cc7bc1070a0f3856d1ec1ec5981535dcc46269c9"],"user_facing":true,"description":"**Fixed undo on root commits.** Undoing the first commit in a repository no longer crashes; the branch ref is deleted and the index cleared to match git-init state.","type":"fix"}
 {"commits":["bea5edd83848e22760bc8716152d544f0a3d7242"],"user_facing":false}
 {"commits":["7f4d1294456a38f8ff7a82dedc32787d81614e34"],"user_facing":false}
+{"commits":["82658f854ee22b0cade7c0a21a08eaede2b8d203","5fbfe5e2f1a5c14a1a0772b71ff3f3634b835f4a"],"user_facing":false}
