@@ -82,6 +82,7 @@ func createParentWithSubmodule(t *testing.T) (string, string, string) {
 	seedCommit(t, parent, "root.txt", "root\n", "initial parent")
 
 	// Add submodule.
+	gitRun(t, parent, "config", "protocol.file.allow", "always")
 	gitRun(t, parent, "submodule", "add", remote, "sub")
 	gitRun(t, parent, "commit", "-m", "add submodule")
 
