@@ -1,5 +1,6 @@
 # Build output
 /safegit
+*.exe
 
 # Added by rlsbl
 node_modules/
