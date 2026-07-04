@@ -2,6 +2,14 @@
 
 # Changelog
 
+## 0.23.5
+
+Fix Windows process-alive detection (locks and GC now work correctly on Windows).
+
+### Fixes
+
+- Windows process-alive check now uses OpenProcess API instead of broken Signal(0), fixing lock contention and premature tmp directory cleanup on Windows.
+
 ## 0.23.4
 
 Fix flaky TestCleanRepo: SharedSafegitDir resolves git-common-dir from the correct repository.
