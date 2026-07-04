@@ -2,6 +2,21 @@
 
 # Changelog
 
+## 0.23.2
+
+Fix CI workflow missing protocol.file.allow env
+
+<details>
+<summary>Context</summary>
+
+The ci-go.yml workflow was missing GIT_CONFIG env vars that ci.yml already had, causing submodule tests to fail on that runner.
+
+</details>
+
+### Fixes
+
+- **Fix.** Add missing protocol.file.allow environment to ci-go.yml workflow, completing the CI submodule test fix.
+
 ## 0.23.1
 
 Fix CI submodule test failures on GitHub Actions
