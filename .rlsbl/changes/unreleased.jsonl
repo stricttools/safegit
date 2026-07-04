@@ -3,3 +3,4 @@
 {"commits":["a47d5315adfa0f119f873a76df794a4ba834877c"],"user_facing":true,"description":"**New: undo --count N.** Undo multiple commits in a single invocation by specifying a count. Walk-back logic replays N undo steps sequentially.","type":"feature"}
 {"commits":["cc7bc1070a0f3856d1ec1ec5981535dcc46269c9"],"user_facing":true,"description":"**Breaking: removed redo command.** Redo is replaced by undo --count N. To recover from over-undo, re-commit instead of redo.","type":"breaking"}
 {"commits":["a47d5315adfa0f119f873a76df794a4ba834877c","cc7bc1070a0f3856d1ec1ec5981535dcc46269c9"],"user_facing":true,"description":"**Fixed undo on root commits.** Undoing the first commit in a repository no longer crashes; the branch ref is deleted and the index cleared to match git-init state.","type":"fix"}
+{"commits":["bea5edd83848e22760bc8716152d544f0a3d7242"],"user_facing":false}
