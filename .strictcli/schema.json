@@ -210,19 +210,6 @@
       "name": "rebase",
       "passthrough": true
     },
-    "redo": {
-      "flags": [
-        {
-          "default": false,
-          "help": "redo across all sessions by ignoring the session ID ownership check",
-          "name": "bypass-session",
-          "negatable": true,
-          "type": "bool"
-        }
-      ],
-      "help": "restore the commit that undo removed, as a one-shot counterpart to undo",
-      "name": "redo"
-    },
     "reset": {
       "help": "reset HEAD with guards that prevent accidental --hard data loss",
       "name": "reset",
@@ -277,6 +264,12 @@
           "name": "bypass-session",
           "negatable": true,
           "type": "bool"
+        },
+        {
+          "default": 1,
+          "help": "number of operations to undo",
+          "name": "count",
+          "type": "int"
         }
       ],
       "help": "reverse the last commit, amend, or reword operation using the oplog",
@@ -720,5 +713,5 @@
   "name": "safegit",
   "project_id": "github.com/smm-h/safegit",
   "schema_version": 1,
-  "version": "0.22.1-0.20260703170539-b99c046d9073"
+  "version": "dev"
 }
