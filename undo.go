@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/smm-h/safegit/internal/git"
@@ -78,9 +79,11 @@ func runUndo(flags globalFlags, bypassSession bool, count int) {
 
 	// Walk backwards through entries to find the Nth undoable entry.
 	// "undo" entries in the oplog cancel one preceding undoable entry each.
+	// We also track the most recent live entry's TipSHA for the CAS old value.
 	cancelled := 0
 	liveSteps := 0
 	var targetEntry *oplog.Entry
+	var mostRecentTipSHA string // TipSHA of the most recent live undoable entry
 
 	for i := len(entries) - 1; i >= 0; i-- {
 		e := entries[i]
@@ -93,7 +96,12 @@ func runUndo(flags globalFlags, bypassSession bool, count int) {
 
 		// Check if this op is undoable
 		if _, isUndoable := undoableOps[e.Op]; !isUndoable {
-			// Non-undoable ops (redo, rewrite-author, scrub-*, etc.) are simply skipped
+			// Scrub and rewrite-author operations invalidate all prior SHAs in
+			// the oplog. We cannot safely undo anything before them.
+			if strings.HasPrefix(e.Op, "scrub-") || e.Op == "rewrite-author" {
+				die(flags, cmd, 1, fmt.Sprintf("cannot undo %s — history rewrite invalidated prior oplog entries", e.Op))
+			}
+			// Other non-undoable ops are simply skipped.
 			continue
 		}
 
@@ -106,6 +114,10 @@ func runUndo(flags globalFlags, bypassSession bool, count int) {
 
 		// This is a live undoable step
 		liveSteps++
+		if liveSteps == 1 {
+			// Record the TipSHA of the most recent live entry for CAS.
+			mostRecentTipSHA = oplog.TipSHA(e.Extra)
+		}
 		if liveSteps == count {
 			targetEntry = &entries[i]
 			break
@@ -140,11 +152,16 @@ func runUndo(flags globalFlags, bypassSession bool, count int) {
 		}
 	}
 
-	// Get the actual current SHA from git (not from oplog, which may be stale
-	// when undoing N > 1 steps)
-	currentSHA, err := git.RevParse(ctx, "HEAD")
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving HEAD: %v", err))
+	// Use the oplog's recorded TipSHA as the CAS old value. This detects
+	// concurrent branch moves: if another session committed on top, the ref
+	// won't match the oplog's expectation and the CAS fails.
+	currentSHA := mostRecentTipSHA
+	if currentSHA == "" {
+		// Fallback: resolve HEAD directly (shouldn't happen for well-formed oplog)
+		currentSHA, err = git.RevParse(ctx, "HEAD")
+		if err != nil {
+			die(flags, cmd, 1, fmt.Sprintf("resolving HEAD: %v", err))
+		}
 	}
 
 	if flags.dryRun {
