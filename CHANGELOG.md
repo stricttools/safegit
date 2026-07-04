@@ -2,6 +2,30 @@
 
 # Changelog
 
+## 0.23.0
+
+Undo overhaul: --count N, redo removal, root commit fix
+
+<details>
+<summary>Context</summary>
+
+The redo command is removed in favor of undo --count N, which provides a simpler mental model for multi-step undo. Root commit undo is fixed by introducing DeleteRef and ReadTreeEmpty to properly handle the branch-less state after undoing a first commit.
+
+</details>
+
+### Breaking
+
+- **Breaking: removed redo command.** Redo is replaced by undo --count N. To recover from over-undo, re-commit instead of redo.
+
+### Features
+
+- **New: undo --count N.** Undo multiple commits in a single invocation by specifying a count. Walk-back logic replays N undo steps sequentially.
+
+### Fixes
+
+- **Improved CLI help text.** App and scrub group help text now includes numeric data points for documentation quality compliance.
+- **Fixed undo on root commits.** Undoing the first commit in a repository no longer crashes; the branch ref is deleted and the index cleared to match git-init state.
+
 ## 0.22.0
 
 Release orchestration integration: crash-safe rewrite maps, rlsbl orchestration guard on all destructive rewrites, and in-history SHA remapping.
