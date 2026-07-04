@@ -159,8 +159,8 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 	if len(env) > 0 {
 		cmd.Env = append(os.Environ(), env...)
 	}
-	// Set process group so we can signal the entire group
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// Set process group so we can signal the entire group (Unix only)
+	setProcGroup(cmd)
 
 	// Pipe stdout to check the first line for timeout override
 	stdoutPipe, err := cmd.StdoutPipe()
@@ -231,7 +231,7 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 	case <-time.After(timeout):
 		// Timeout: SIGTERM the process group
 		if cmd.Process != nil {
-			syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			killGroup(cmd, syscall.SIGTERM)
 		}
 
 		// Grace period: 5 seconds
@@ -241,7 +241,7 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		case <-time.After(5 * time.Second):
 			// SIGKILL the process group
 			if cmd.Process != nil {
-				syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				killGroup(cmd, syscall.SIGKILL)
 			}
 			<-procDone
 		}
@@ -252,7 +252,7 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 	case <-ctx.Done():
 		// Parent context cancelled
 		if cmd.Process != nil {
-			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			killGroup(cmd, syscall.SIGKILL)
 		}
 		<-procDone
 		<-ioDone
