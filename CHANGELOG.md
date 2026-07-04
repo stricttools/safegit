@@ -2,6 +2,14 @@
 
 # Changelog
 
+## 0.23.4
+
+Fix flaky TestCleanRepo: SharedSafegitDir resolves git-common-dir from the correct repository.
+
+### Fixes
+
+- **Fix.** SharedSafegitDir now resolves git-common-dir from the correct repository, fixing a race where parallel tests modified the host project's .git/safegit/ instead of the test repo's.
+
 ## 0.23.3
 
 Fix Windows cross-compilation in goreleaser builds.
