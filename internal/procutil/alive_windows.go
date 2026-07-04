@@ -3,20 +3,16 @@
 // Package procutil provides cross-platform process liveness checks.
 package procutil
 
-import (
-	"os"
-	"syscall"
-)
+import "golang.org/x/sys/windows"
 
 // ProcessAlive checks if a process with the given PID exists.
-// On Windows, os.FindProcess always succeeds, so we probe with Signal(0)
-// for a real liveness check.
+// Uses OpenProcess with PROCESS_QUERY_LIMITED_INFORMATION (least-privilege
+// access right) to probe whether the process handle is obtainable.
 func ProcessAlive(pid int) bool {
-	p, err := os.FindProcess(pid)
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 	if err != nil {
 		return false
 	}
-	// Signal(0) checks liveness without actually sending a signal.
-	err = p.Signal(syscall.Signal(0))
-	return err == nil
+	windows.CloseHandle(h)
+	return true
 }

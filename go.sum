@@ -6,3 +6,5 @@ github.com/smm-h/strictcli/go v0.17.0 h1:w42f1UZwZzIK6EUa9RitB2O/KvEw3M21E/sU2D8
 github.com/smm-h/strictcli/go v0.17.0/go.mod h1:dMXXawbT6mstBeQ9yKQaaqTkL1/qQ28FCV47TxKYWL4=
 github.com/toml-lang/toml-test/v2 v2.2.0 h1:q3ELZu7oPnpl9TClC6OOcAccXwj+jwAyFP8WvzBdK1M=
 github.com/toml-lang/toml-test/v2 v2.2.0/go.mod h1:TQdjhQItoZ0R+OODNiHUuxxxErtaE0Xsod2ENZbMvxI=
+golang.org/x/sys v0.46.0 h1:noSf2Fq6F8DBgS+LysIkx7rIExoNHJsxOAtPp4rthXw=
+golang.org/x/sys v0.46.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
