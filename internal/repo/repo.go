@@ -74,14 +74,22 @@ func SafegitDir(gitDir string) string {
 // For normal repos this is identical to SafegitDir(gitDir). For worktrees it
 // returns <common-git-dir>/safegit so that lock files are shared across all
 // worktrees, ensuring proper serialization of ref updates.
+//
+// The parameter accepts either the git directory (.git) or the safegit
+// directory (.git/safegit); callers use both forms.
 func SharedSafegitDir(ctx context.Context, gitDir string) string {
-	commonDir, err := git.CommonGitDir(ctx)
+	// Normalize: some callers pass the safegit dir instead of the git dir.
+	actualGitDir := gitDir
+	if filepath.Base(gitDir) == "safegit" {
+		actualGitDir = filepath.Dir(gitDir)
+	}
+	commonDir, err := git.CommonGitDirOf(ctx, actualGitDir)
 	if err != nil {
-		return SafegitDir(gitDir)
+		return filepath.Join(actualGitDir, "safegit")
 	}
 	abs, err := filepath.Abs(commonDir)
 	if err != nil {
-		return SafegitDir(gitDir)
+		return filepath.Join(actualGitDir, "safegit")
 	}
 	return filepath.Join(abs, "safegit")
 }
