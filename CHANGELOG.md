@@ -2,6 +2,14 @@
 
 # Changelog
 
+## 0.23.3
+
+Fix Windows cross-compilation in goreleaser builds.
+
+### Fixes
+
+- **Fix.** Windows cross-compilation now succeeds (extracted platform-specific syscalls into shared filelock, procutil, and hooks packages with build constraints).
+
 ## 0.23.2
 
 Fix CI workflow missing protocol.file.allow env
