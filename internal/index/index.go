@@ -12,9 +12,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/procutil"
 )
 
 // TmpIndex represents a per-invocation temporary index directory.
@@ -166,7 +166,5 @@ func parsePIDFromDirName(name string) (int, bool) {
 
 // processAlive checks if a process with the given PID exists.
 func processAlive(pid int) bool {
-	err := syscall.Kill(pid, 0)
-	// ESRCH = no such process; EPERM = exists but we can't signal it (still alive)
-	return err == nil || err == syscall.EPERM
+	return procutil.ProcessAlive(pid)
 }

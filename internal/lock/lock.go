@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/smm-h/safegit/internal/oplog"
+	"github.com/smm-h/safegit/internal/procutil"
 )
 
 // RefLock represents an acquired lock on a git ref.
@@ -165,12 +165,9 @@ func IsStale(path string) (bool, error) {
 		}
 	}
 
-	// kill(pid, 0) checks existence without sending a signal
-	err = syscall.Kill(pid, 0)
-	if err == syscall.ESRCH {
+	if !procutil.ProcessAlive(pid) {
 		return true, nil // process does not exist
 	}
-	// EPERM means process exists but we can't signal it -- still alive.
 
 	// On Linux, detect PID reuse: if /proc/<pid> was created after the lock
 	// file, a different process now occupies the PID and the lock is stale.
