@@ -2,6 +2,14 @@
 
 # Changelog
 
+## 0.23.1
+
+Fix CI submodule test failures on GitHub Actions
+
+### Fixes
+
+- **Fix.** CI submodule tests no longer fail on GitHub Actions runners with restricted file transport protocol.
+
 ## 0.23.0
 
 Undo overhaul: --count N, redo removal, root commit fix
