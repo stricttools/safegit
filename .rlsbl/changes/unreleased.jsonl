@@ -1,0 +1,1 @@
+{"commits":["94d07b86e7e9cc93b7d5a5130416ab073541ac72"],"user_facing":true,"description":"**Fix.** SharedSafegitDir now resolves git-common-dir from the correct repository, fixing a race where parallel tests modified the host project's .git/safegit/ instead of the test repo's.","type":"fix"}
