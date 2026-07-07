@@ -55,7 +55,7 @@ func main() {
 	app.GlobalFlag(strictcli.BoolFlag("verbose", "enable verbose output with detailed progress and diagnostic info", strictcli.Default(false)))
 	app.GlobalFlag(strictcli.BoolFlag("dry-run", "preview what would happen without writing any changes to disk", strictcli.Short("n"), strictcli.Default(false)))
 	app.GlobalFlag(strictcli.BoolFlag("yes", "automatically confirm all interactive prompts without asking", strictcli.Short("y"), strictcli.Default(false)))
-	app.GlobalFlag(strictcli.StringFlag("config", "path to a custom safegit config file instead of the default location", strictcli.Default("")))
+	app.GlobalFlag(strictcli.StringFlag("config-file", "path to a custom safegit config file instead of the default location", strictcli.Default("")))
 	app.GlobalFlag(strictcli.BoolFlag("json", "emit machine-readable JSON output to stdout instead of human text", strictcli.Default(false)))
 
 	pt := func(name string, args []string, globals map[string]interface{}) int {
@@ -388,7 +388,7 @@ func globalsToFlags(globals map[string]interface{}) globalFlags {
 		verbose:    globals["verbose"].(bool),
 		dryRun:     globals["dry_run"].(bool),
 		yes:        globals["yes"].(bool),
-		configPath: globals["config"].(string),
+		configPath: globals["config_file"].(string),
 		json:       globals["json"].(bool),
 	}
 	if gf.json {
@@ -413,7 +413,7 @@ func gitVersion() string {
 	return strings.TrimSpace(string(out))
 }
 
-// loadConfig loads the safegit config, using the override path if --config was set.
+// loadConfig loads the safegit config, using the override path if --config-file was set.
 func loadConfig(flags globalFlags, gitDir string) (*repo.Config, error) {
 	if flags.configPath != "" {
 		return repo.LoadConfigFrom(flags.configPath)
