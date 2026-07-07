@@ -663,8 +663,8 @@ func TestConfigOverride(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Read the config via --config flag
-	stdout, _, code := runSafegit(t, dir, "--config", customCfg, "config", "get", "commit.casMaxAttempts")
+	// Read the config via --config-file flag
+	stdout, _, code := runSafegit(t, dir, "--config-file", customCfg, "config", "get", "commit.casMaxAttempts")
 	if code != 0 {
 		t.Fatalf("config read failed (code %d)", code)
 	}

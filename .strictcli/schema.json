@@ -374,7 +374,7 @@
     {
       "default": "",
       "help": "path to a custom safegit config file instead of the default location",
-      "name": "config",
+      "name": "config-file",
       "type": "str"
     },
     {
