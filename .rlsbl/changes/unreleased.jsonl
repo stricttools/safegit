@@ -1,1 +1,0 @@
-{"id":"18c02042c2a3f5d5410941017f2343e99501b766499bb0d4","commits":["d0345485e9a6b07a1b09ef1fefd0907b1d32b04a"],"user_facing":true,"description":"**Breaking.** `--config` renamed to `--config-file` (strictcli now reserves the global name `config`).","type":"breaking"}
