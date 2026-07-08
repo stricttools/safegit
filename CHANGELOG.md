@@ -2,6 +2,14 @@
 
 # Changelog
 
+## 0.24.0
+
+Breaking: --config renamed to --config-file (strictcli reserves the global name 'config'); go-strictcli 0.20.0.
+
+### Breaking
+
+- **Breaking.** `--config` renamed to `--config-file` (strictcli now reserves the global name `config`).
+
 ## 0.23.5
 
 Fix Windows process-alive detection (locks and GC now work correctly on Windows).
