@@ -2,6 +2,7 @@
 title: safegit author
 description: "audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history"
 generated: true
+seeded: true
 nav_group: "CLI Reference"
 nav_order: 1
 ---
