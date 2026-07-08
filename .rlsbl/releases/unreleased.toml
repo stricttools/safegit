@@ -1,7 +1,7 @@
 # Version bump type: patch, minor, major, hotfix, or prerelease
-bump = ""
+bump = "minor"
 # Short description of this release (required)
-description = ""
+description = "Breaking: --config renamed to --config-file (strictcli reserves the global name 'config'); go-strictcli 0.20.0."
 # Optional context explaining why these changes were made
 context = ""
 # Pre-release identifier: alpha, beta, rc, or stable
