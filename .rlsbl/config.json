@@ -27,5 +27,6 @@
       "go build -o /dev/null .",
       "go test ./... -race -short -count=1"
     ]
-  }
+  },
+  "coverage_unit": "commit"
 }
