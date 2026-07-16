@@ -16,7 +16,7 @@
       "local": false
     }
   },
-  "private": false,
+  "publish_mode": "ci",
   "push_timeout": 120,
   "batch_limits": {
     "exclusions": []

@@ -32,3 +32,6 @@ docs/_build/
 .bench-*
 
 .rlsbl-monorepo/lock
+
+build/
+target/
