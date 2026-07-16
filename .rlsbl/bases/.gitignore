@@ -4,7 +4,9 @@ __pycache__/
 *.log
 .DS_Store
 coverage/
+build/
 dist/
+target/
 *.egg-info/
 .rlsbl-notes-*.tmp
 .rlsbl/lock

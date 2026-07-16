@@ -1,14 +1,14 @@
 {
   "version": 1,
   "files": {
-    ".github/workflows/ci-go.yml": "a4eb37a8927ffda2aa646e45ac6f849648a53ea7fb4efe0df4fda3c9946c28f9",
+    ".github/workflows/ci-go.yml": "f66a03abcd457371dbfabc3e5d5a69526e67224b9e9dc3a08704c84e51c1bea7",
     ".github/workflows/ci-docker.yml": "213de70d38a3f92b1db6a053e8a8b0c04eed9ea45d5ddd60195b97fb2f0a02e0",
-    "VERSION": "464863ee696ca862f6ae2bfee9728ebbd84463597825442efc62838d945b00fb",
+    "VERSION": "dbf81d3754264f6dce22444d551ef30913c3959a2ecc784a786162df068d5435",
     ".goreleaser.yml": "a028e8e5c368c11dd22915732bdc4f914674cc6bd478db248ee0cf65983b9a63",
-    ".github/workflows/publish.yml": "5256262e2aff2c55ef84ee183a7161f74774a47f1980ffe4a24a9e7f25517288",
-    "CHANGELOG.md": "4fb3d616fa42e61e5827d887d330fbf765663aed02016141fd9fc034a29c27c8",
-    ".gitignore": "597db0a5eaf96fcaa63f93bdb899dc114ec1cd7c3242c37523f5e5e579ec86d8",
-    ".rlsbl/changes/unreleased.jsonl": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    ".github/workflows/publish.yml": "ec1929bc589d31acc8b83121682f239e0b8c0336b9196993a4844d10e23b9f02",
+    "CHANGELOG.md": "3b4aab9dd7fabb3754e192b4003c4cbb8f975e8caa1ae93214b81e13cf585cbb",
+    ".gitignore": "a101d756cc60276b0340fa44ed4bd11312413008ebbe31a8d458675f1a039286",
+    ".rlsbl/changes/unreleased.jsonl": "fe64a659c0c9a0878e67d8ac482d7fe6bb8344ef3064f96d8c5a058c74834685",
     ".rlsbl/lint/go.toml": "807d5cf760baad6d571a5bfd43cb163efe356f7462ba9f1918d72de45f62339f"
   }
 }
