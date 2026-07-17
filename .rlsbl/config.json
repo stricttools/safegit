@@ -10,7 +10,8 @@
       "local": true,
       "install_paths": [
         "."
-      ]
+      ],
+      "artifact": "binary"
     },
     "docker": {
       "type": "docker",
