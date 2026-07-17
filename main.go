@@ -58,7 +58,7 @@ func main() {
 	app.GlobalFlag(strictcli.StringFlag("config-file", "path to a custom safegit config file instead of the default location", strictcli.Default("")))
 	app.GlobalFlag(strictcli.BoolFlag("json", "emit machine-readable JSON output to stdout instead of human text", strictcli.Default(false)))
 
-	pt := func(name string, args []string, globals map[string]interface{}) int {
+	pt := func(ctx *strictcli.Context, name string, args []string, globals map[string]interface{}) int {
 		gf := globalsToFlags(globals)
 		switch name {
 		case "checkout":
@@ -79,7 +79,7 @@ func main() {
 		return 1
 	}
 
-	app.Command("commit", "stage and commit specified files in a single atomic operation", func(kwargs map[string]interface{}) int {
+	app.Command("commit", "stage and commit specified files in a single atomic operation", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		gf := globalsToFlags(kwargs)
 		messages := kwargsStrSlice(kwargs["m"])
 		var messageFile string
@@ -95,7 +95,7 @@ func main() {
 		trailers := kwargsStrSlice(kwargs["trailer"])
 		files := kwargsStrSlice(kwargs["files"])
 		runCommit(gf, messages, messageFile, branch, amend, allowEmpty, trailers, files)
-		return 0
+		return strictcli.Exit(0)
 	},
 		strictcli.WithFlags(
 			strictcli.StringFlag("m", "commit message line; can be repeated to build multi-line messages", strictcli.Short("m"), strictcli.Repeatable(), strictcli.Unique(false)),
@@ -114,7 +114,7 @@ func main() {
 	app.Passthrough("rebase", "rebase current branch onto upstream with safety guards", pt)
 	app.Passthrough("reset", "reset HEAD with guards that prevent accidental --hard data loss", pt)
 	app.Passthrough("bisect", "binary search through commits to find a bug, with safety guards", pt)
-	app.Command("push", "push refs to remote with pre-pre-push hooks and automatic retry", func(kwargs map[string]interface{}) int {
+	app.Command("push", "push refs to remote with pre-pre-push hooks and automatic retry", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		gf := globalsToFlags(kwargs)
 		prePushHook := kwargs["pre_push_hook"].(bool)
 		forceWithLease := kwargs["force_with_lease"].(bool)
@@ -137,7 +137,7 @@ func main() {
 		case bothBranchesAndTags:
 			mode = pushModeBoth
 		}
-		return runPush(gf, !prePushHook, forceWithLease, remote, mode)
+		return strictcli.Exit(runPush(gf, !prePushHook, forceWithLease, remote, mode))
 	},
 		strictcli.WithFlags(
 			strictcli.BoolFlag("pre-push-hook", "run pre-pre-push hook scripts before pushing to remote", strictcli.Default(true)),
@@ -155,7 +155,7 @@ func main() {
 			strictcli.NewArg("remote", "name of the remote repository to push to (defaults to origin)", strictcli.ArgRequired(false)),
 		),
 	)
-	app.Command("pull", "fetch from remote and merge, defaulting to fast-forward-only mode", func(kwargs map[string]interface{}) int {
+	app.Command("pull", "fetch from remote and merge, defaulting to fast-forward-only mode", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		gf := globalsToFlags(kwargs)
 		// Determine merge mode from --merge-strategy
 		var mode pullMode
@@ -175,7 +175,7 @@ func main() {
 		if v := kwargs["branch"]; v != nil {
 			branch = v.(string)
 		}
-		return runPull(gf, mode, remote, branch)
+		return strictcli.Exit(runPull(gf, mode, remote, branch))
 	},
 		strictcli.WithFlags(
 			strictcli.StringFlag("merge-strategy", "fast-forward merge strategy: ff, ff-only, or no-ff", strictcli.Choices("ff", "ff-only", "no-ff")),
@@ -186,45 +186,45 @@ func main() {
 		),
 	)
 	cg := app.Group("config", "show, get, or set safegit configuration key-value pairs")
-	cg.Command("show", "show all configuration values currently in effect for this repository, including built-in defaults and any user overrides from the .git/safegit/config.json file, printed as key-value pairs to stdout for inspection and debugging purposes", func(kwargs map[string]interface{}) int {
-		return runConfigShow(globalsToFlags(kwargs))
+	cg.Command("show", "show all configuration values currently in effect for this repository, including built-in defaults and any user overrides from the .git/safegit/config.json file, printed as key-value pairs to stdout for inspection and debugging purposes", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+		return strictcli.Exit(runConfigShow(globalsToFlags(kwargs)))
 	})
-	cg.Command("get", "get the current value of a single configuration key from the .git/safegit/config.json file, printing the raw value to stdout so it can be captured by scripts or used in automation pipelines", func(kwargs map[string]interface{}) int {
+	cg.Command("get", "get the current value of a single configuration key from the .git/safegit/config.json file, printing the raw value to stdout so it can be captured by scripts or used in automation pipelines", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		key := kwargs["key"].(string)
-		return runConfigGet(globalsToFlags(kwargs), key)
+		return strictcli.Exit(runConfigGet(globalsToFlags(kwargs), key))
 	},
 		strictcli.WithArgs(strictcli.NewArg("key", "the configuration key whose current value should be retrieved")),
 	)
-	cg.Command("set", "set a configuration key to a new value in the .git/safegit/config.json file, creating the file if it does not exist yet, and persisting the change for all future safegit invocations in this repository", func(kwargs map[string]interface{}) int {
+	cg.Command("set", "set a configuration key to a new value in the .git/safegit/config.json file, creating the file if it does not exist yet, and persisting the change for all future safegit invocations in this repository", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		key := kwargs["key"].(string)
 		value := kwargs["value"].(string)
-		return runConfigSet(globalsToFlags(kwargs), key, value)
+		return strictcli.Exit(runConfigSet(globalsToFlags(kwargs), key, value))
 	},
 		strictcli.WithArgs(strictcli.NewArg("key", "the configuration key to set to the specified value in config.json"), strictcli.NewArg("value", "the new value to assign to the specified configuration key")),
 	)
 
 	hg := app.Group("hook", "manage pre-pre-push hook scripts that run before every push")
-	hg.Command("list", "list all pre-pre-push hooks currently installed in the .git/safegit/hooks directory, showing each hook name, file path, and whether it is executable, so you can audit which checks run before every push", func(kwargs map[string]interface{}) int {
-		return hookList(globalsToFlags(kwargs))
+	hg.Command("list", "list all pre-pre-push hooks currently installed in the .git/safegit/hooks directory, showing each hook name, file path, and whether it is executable, so you can audit which checks run before every push", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+		return strictcli.Exit(hookList(globalsToFlags(kwargs)))
 	})
-	hg.Command("run", "run all installed pre-pre-push hooks (or a single named hook) immediately without performing an actual push, so you can verify that all configured hooks pass before committing to a real push operation", func(kwargs map[string]interface{}) int {
+	hg.Command("run", "run all installed pre-pre-push hooks (or a single named hook) immediately without performing an actual push, so you can verify that all configured hooks pass before committing to a real push operation", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		var name string
 		if v := kwargs["name"]; v != nil {
 			name = v.(string)
 		}
-		return hookRun(globalsToFlags(kwargs), name)
+		return strictcli.Exit(hookRun(globalsToFlags(kwargs), name))
 	},
 		strictcli.WithArgs(strictcli.NewArg("name", "name of a specific hook to run; omit to run all installed hooks", strictcli.ArgRequired(false))),
 	)
-	hg.Command("install", "install a pre-pre-push hook by copying a script file into the .git/safegit/hooks directory, making it executable, and registering it so that safegit push will run it before any network I/O occurs", func(kwargs map[string]interface{}) int {
+	hg.Command("install", "install a pre-pre-push hook by copying a script file into the .git/safegit/hooks directory, making it executable, and registering it so that safegit push will run it before any network I/O occurs", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		path := kwargs["path"].(string)
-		return hookInstall(globalsToFlags(kwargs), path)
+		return strictcli.Exit(hookInstall(globalsToFlags(kwargs), path))
 	},
 		strictcli.WithArgs(strictcli.NewArg("path", "filesystem path to the hook script file to install into safegit")),
 	)
-	app.Command("doctor", "run diagnostic health checks on the repository and optionally repair issues", func(kwargs map[string]interface{}) int {
+	app.Command("doctor", "run diagnostic health checks on the repository and optionally repair issues", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		runDoctor(globalsToFlags(kwargs), kwargs)
-		return 0
+		return strictcli.Exit(0)
 	},
 		strictcli.WithMutex(strictcli.MutexGroup{
 			Flags: []strictcli.Flag{
@@ -235,13 +235,13 @@ func main() {
 		}),
 	)
 	ag := app.Group("author", "audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history")
-	ag.Command("list", "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite", func(kwargs map[string]interface{}) int {
-		return runAuthorList(globalsToFlags(kwargs))
+	ag.Command("list", "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+		return strictcli.Exit(runAuthorList(globalsToFlags(kwargs)))
 	},
 		strictcli.WithTags("json"),
 	)
-	ag.Command("check", "check that all commits use the expected author and committer identity by scanning every commit in the repository history, reporting any deviations with the exact commit hashes and mismatched fields, and suggesting the corresponding safegit author rewrite command to fix each deviation found", func(kwargs map[string]interface{}) int {
-		return runAuthorCheck(globalsToFlags(kwargs), kwargs)
+	ag.Command("check", "check that all commits use the expected author and committer identity by scanning every commit in the repository history, reporting any deviations with the exact commit hashes and mismatched fields, and suggesting the corresponding safegit author rewrite command to fix each deviation found", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+		return strictcli.Exit(runAuthorCheck(globalsToFlags(kwargs), kwargs))
 	},
 		strictcli.WithTags("json"),
 		strictcli.WithFlags(
@@ -249,8 +249,8 @@ func main() {
 			strictcli.StringFlag("email", "expected author and committer email address that all commits should use", strictcli.Default(nil)),
 		),
 	)
-	ag.Command("rewrite", "rewrite author and committer name or email across all commit history using git filter-branch style rewriting, replacing every occurrence of the old identity with the new one in both author and committer fields while preserving timestamps, commit messages, tree contents, and parent relationships so the rewritten history is otherwise identical to the original", func(kwargs map[string]interface{}) int {
-		return runRewriteAuthor(globalsToFlags(kwargs), kwargs)
+	ag.Command("rewrite", "rewrite author and committer name or email across all commit history using git filter-branch style rewriting, replacing every occurrence of the old identity with the new one in both author and committer fields while preserving timestamps, commit messages, tree contents, and parent relationships so the rewritten history is otherwise identical to the original", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+		return strictcli.Exit(runRewriteAuthor(globalsToFlags(kwargs), kwargs))
 	},
 		strictcli.WithTags("json"),
 		strictcli.WithFlags(
@@ -266,8 +266,8 @@ func main() {
 	)
 	app.Deprecated("rewrite-author", "use 'safegit author rewrite' instead")
 	sg := app.Group("scrub", "surgically rewrite git history to remove or replace sensitive content using 4 subcommands (file, match, run, verify) that operate on all commits, trees, and blobs in the repository")
-	sg.Command("file", "replace or remove a specific file across all commits in the repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized version or delete the file entirely from every historical snapshot", func(kwargs map[string]interface{}) int {
-		return runScrubFile(globalsToFlags(kwargs), kwargs)
+	sg.Command("file", "replace or remove a specific file across all commits in the repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized version or delete the file entirely from every historical snapshot", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+		return strictcli.Exit(runScrubFile(globalsToFlags(kwargs), kwargs))
 	},
 		strictcli.WithTags("json"),
 		strictcli.WithFlags(
@@ -279,8 +279,8 @@ func main() {
 			strictcli.NewArg("file", "repository-relative path to the file that should be scrubbed from history"),
 		),
 	)
-	sg.Command("match", "replace all occurrences of a regex pattern across every blob in the repository history, rewriting commit trees to substitute matched text with a replacement string so that sensitive values like secrets and credentials are permanently removed from all historical snapshots", func(kwargs map[string]interface{}) int {
-		return runScrubMatch(globalsToFlags(kwargs), kwargs)
+	sg.Command("match", "replace all occurrences of a regex pattern across every blob in the repository history, rewriting commit trees to substitute matched text with a replacement string so that sensitive values like secrets and credentials are permanently removed from all historical snapshots", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+		return strictcli.Exit(runScrubMatch(globalsToFlags(kwargs), kwargs))
 	},
 		strictcli.WithTags("json"),
 		strictcli.WithFlags(
@@ -302,8 +302,8 @@ func main() {
 			},
 		}),
 	)
-	sg.Command("run", "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite", func(kwargs map[string]interface{}) int {
-		return runScrubRun(globalsToFlags(kwargs), kwargs)
+	sg.Command("run", "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+		return strictcli.Exit(runScrubRun(globalsToFlags(kwargs), kwargs))
 	},
 		strictcli.WithTags("json"),
 		strictcli.WithFlags(
@@ -322,32 +322,32 @@ func main() {
 			strictcli.NewArg("recipe", "path to the TOML recipe file containing scrub operations"),
 		),
 	)
-	sg.Command("verify", "check all scrub policies defined in the repository configuration to confirm that previously scrubbed secrets and sensitive patterns remain completely absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-policy pass or fail results with match locations for any violations found", func(kwargs map[string]interface{}) int {
-		return runScrubVerify(globalsToFlags(kwargs))
+	sg.Command("verify", "check all scrub policies defined in the repository configuration to confirm that previously scrubbed secrets and sensitive patterns remain completely absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-policy pass or fail results with match locations for any violations found", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+		return strictcli.Exit(runScrubVerify(globalsToFlags(kwargs)))
 	},
 		strictcli.WithTags("json"),
 	)
 	app.Passthrough("cherry-pick", "cherry-pick one or more commits onto HEAD with safety guards", pt)
 	app.Passthrough("revert", "revert one or more commits creating inverse patches, with safety guards", pt)
-	app.Command("undo", "reverse the last commit, amend, or reword operation using the oplog", func(kwargs map[string]interface{}) int {
+	app.Command("undo", "reverse the last commit, amend, or reword operation using the oplog", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		bypassSession := kwargs["bypass_session"].(bool)
 		count := kwargs["count"].(int)
 		runUndo(globalsToFlags(kwargs), bypassSession, count)
-		return 0
+		return strictcli.Exit(0)
 	},
 		strictcli.WithFlags(
 			strictcli.BoolFlag("bypass-session", "undo across all sessions by ignoring the session ID ownership check", strictcli.Default(false)),
 			strictcli.IntFlag("count", "number of operations to undo", strictcli.Default(1)),
 		),
 	)
-	app.Command("unlock", "release a stale .lock file left behind by a crashed git process", func(kwargs map[string]interface{}) int {
+	app.Command("unlock", "release a stale .lock file left behind by a crashed git process", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		ref := kwargs["ref"].(string)
-		return runUnlock(globalsToFlags(kwargs), ref)
+		return strictcli.Exit(runUnlock(globalsToFlags(kwargs), ref))
 	},
 		strictcli.WithArgs(strictcli.NewArg("ref", "the ref name (e.g. refs/heads/main) whose stale .lock file to remove")),
 	)
-	app.Command("scan", "search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection", func(kwargs map[string]interface{}) int {
-		return runScan(globalsToFlags(kwargs), kwargs)
+	app.Command("scan", "search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+		return strictcli.Exit(runScan(globalsToFlags(kwargs), kwargs))
 	},
 		strictcli.WithTags("json"),
 		strictcli.WithFlags(
@@ -358,9 +358,9 @@ func main() {
 			strictcli.StringFlag("target", "comma-separated list of match types to include: blobs,commits,tags,trailers,files (default: all)", strictcli.Default(nil)),
 		),
 	)
-	app.Command("version", "print safegit version, Go runtime version, and git version", func(kwargs map[string]interface{}) int {
+	app.Command("version", "print safegit version, Go runtime version, and git version", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		runVersion(globalsToFlags(kwargs))
-		return 0
+		return strictcli.Exit(0)
 	})
 
 	app.Run()
