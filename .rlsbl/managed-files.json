@@ -5,10 +5,10 @@
     ".github/workflows/ci-docker.yml": "213de70d38a3f92b1db6a053e8a8b0c04eed9ea45d5ddd60195b97fb2f0a02e0",
     "VERSION": "dbf81d3754264f6dce22444d551ef30913c3959a2ecc784a786162df068d5435",
     ".goreleaser.yml": "a028e8e5c368c11dd22915732bdc4f914674cc6bd478db248ee0cf65983b9a63",
-    ".github/workflows/publish.yml": "ec1929bc589d31acc8b83121682f239e0b8c0336b9196993a4844d10e23b9f02",
+    ".github/workflows/publish.yml": "01e7187135cde5057fd6e102d7d9bb6af4d977e27295c80a1dbd3abb205a9a4d",
     "CHANGELOG.md": "3b4aab9dd7fabb3754e192b4003c4cbb8f975e8caa1ae93214b81e13cf585cbb",
     ".gitignore": "a101d756cc60276b0340fa44ed4bd11312413008ebbe31a8d458675f1a039286",
-    ".rlsbl/changes/unreleased.jsonl": "fe64a659c0c9a0878e67d8ac482d7fe6bb8344ef3064f96d8c5a058c74834685",
+    ".rlsbl/changes/unreleased.jsonl": "2ac9cd56f5aea7c8b03013de034423b6ea5953cb69dcb8689e022e0cd1737a46",
     ".rlsbl/lint/go.toml": "807d5cf760baad6d571a5bfd43cb163efe356f7462ba9f1918d72de45f62339f"
   }
 }
