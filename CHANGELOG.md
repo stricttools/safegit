@@ -2,6 +2,10 @@
 
 # Changelog
 
+## Unreleased
+
+- No user-facing changes.
+
 ## 0.24.0
 
 Breaking: --config renamed to --config-file (strictcli reserves the global name 'config'); go-strictcli 0.20.0.
@@ -123,7 +127,7 @@ Infrastructure-only release. Expanded CLI help texts for selfdoc SEO compliance.
 
 </details>
 
-### Hotfix
+### Infrastructure
 
 - Internal cleanup: SEO, hook migration, DRY extraction, test modernization
 
