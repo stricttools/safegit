@@ -1,13 +1,13 @@
-{"commits":["20cb93dd78eb122167e95afc6ad5d4925a9f4b75","9e1bc91e3da661257b1283e191919bff5ae09790","7cb88fe8bc523d272cfdfd60545595aa820fc7ae","5a621a09bb3f96d19c2fe3cc79bd4288f29e2cdf","2b1bb4322ee88a8e92873990c26b6133dae95670"],"user_facing":true,"description":"**New feature.** Auto-detect file moves on commit. When committing a file that was moved (via `mv`), safegit now automatically stages the deletion of the old path, so the commit records a proper rename. Works with both `commit` and `commit --amend`. Uses exact content matching (move+edit requires listing both paths explicitly).","type":"feature"}
-{"commits":["92db1c36ab960f1f7215996f9d4abfd150f10bdf"],"user_facing":false}
-{"commits":["dd8828b786779825ad56d74de15866ff8b8cfa0e","efd94d1f95021e78e36f00f11f138b494e0acdb7"],"user_facing":false}
-{"commits":["2a4a8a3b763378376704cb175f8a3cb4f26f7cd9"],"user_facing":false}
-{"commits":["94a603308d67a62513eaadec02f3f776d5e80fe1","f8b34147e1fa1f2910fa04d3b436791d54e0722c","6e78440e159ef93aa705dce074173f1b0a3349c6"],"user_facing":false}
-{"commits":["0a73de87b185186432894a3e123b6decc120f523","e93ea5207c8333ed856b7e0b9c656145ed89e532","12d4abf9b67adb4f72b4789c8068b06bb63801ee","260918ac374057acbf6e5f143d048f8de6f26fce"],"user_facing":false}
-{"commits":["5e1c177c79311927f5fe09f6856cba69d3bc2552"],"user_facing":false}
-{"commits":["71790e34c15ef7494bd4c5125885ca768955dacb"],"user_facing":false}
-{"commits":["9e87c2b923a9b74f14bbb41bbc12b920bcb9b61c","1af7aec0091fa2cc50132db23afc09a5056741ca"],"user_facing":false}
-{"commits":["fe0cc0431099b9947315a647cd16d3d4e88acc6d","3d16785ad6e2793cf2b0c2a3a209a16ed1f348cc"],"user_facing":false}
-{"commits":["58eee1cb736bb158dcf346d4480bfc4e708a2a96"],"user_facing":false}
-{"commits":["2a4c98f2ba75fd7f69ff3570781300c183ff6c20"],"user_facing":false}
-{"commits":["56fed887a47914cb0e90e60d489494e7038b17a8"],"user_facing":false}
+{"format_version":1,"commits":["20cb93dd78eb122167e95afc6ad5d4925a9f4b75","9e1bc91e3da661257b1283e191919bff5ae09790","7cb88fe8bc523d272cfdfd60545595aa820fc7ae","5a621a09bb3f96d19c2fe3cc79bd4288f29e2cdf","2b1bb4322ee88a8e92873990c26b6133dae95670"],"user_facing":true,"description":"**New feature.** Auto-detect file moves on commit. When committing a file that was moved (via `mv`), safegit now automatically stages the deletion of the old path, so the commit records a proper rename. Works with both `commit` and `commit --amend`. Uses exact content matching (move+edit requires listing both paths explicitly).","type":"feature"}
+{"format_version":1,"commits":["92db1c36ab960f1f7215996f9d4abfd150f10bdf"],"user_facing":false}
+{"format_version":1,"commits":["dd8828b786779825ad56d74de15866ff8b8cfa0e","efd94d1f95021e78e36f00f11f138b494e0acdb7"],"user_facing":false}
+{"format_version":1,"commits":["2a4a8a3b763378376704cb175f8a3cb4f26f7cd9"],"user_facing":false}
+{"format_version":1,"commits":["94a603308d67a62513eaadec02f3f776d5e80fe1","f8b34147e1fa1f2910fa04d3b436791d54e0722c","6e78440e159ef93aa705dce074173f1b0a3349c6"],"user_facing":false}
+{"format_version":1,"commits":["0a73de87b185186432894a3e123b6decc120f523","e93ea5207c8333ed856b7e0b9c656145ed89e532","12d4abf9b67adb4f72b4789c8068b06bb63801ee","260918ac374057acbf6e5f143d048f8de6f26fce"],"user_facing":false}
+{"format_version":1,"commits":["5e1c177c79311927f5fe09f6856cba69d3bc2552"],"user_facing":false}
+{"format_version":1,"commits":["71790e34c15ef7494bd4c5125885ca768955dacb"],"user_facing":false}
+{"format_version":1,"commits":["9e87c2b923a9b74f14bbb41bbc12b920bcb9b61c","1af7aec0091fa2cc50132db23afc09a5056741ca"],"user_facing":false}
+{"format_version":1,"commits":["fe0cc0431099b9947315a647cd16d3d4e88acc6d","3d16785ad6e2793cf2b0c2a3a209a16ed1f348cc"],"user_facing":false}
+{"format_version":1,"commits":["58eee1cb736bb158dcf346d4480bfc4e708a2a96"],"user_facing":false}
+{"format_version":1,"commits":["2a4c98f2ba75fd7f69ff3570781300c183ff6c20"],"user_facing":false}
+{"format_version":1,"commits":["56fed887a47914cb0e90e60d489494e7038b17a8"],"user_facing":false}

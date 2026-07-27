@@ -1,2 +1,2 @@
-{"commits":["b4925f8882b1870dd2221485d17b936fed05d9b7"],"user_facing":true,"description":"**Fix: docs deploy in post-release hook.** Environment variables are now exported so selfdoc/wrangler can read Cloudflare credentials.","type":"fix"}
-{"commits":["998bdf1ab4513fd60b2cd089b04f8833e63c2fd7","04f7652d127e556f50a05df984fbdc13f0201d5d","691c4536f5d40827c3c7027cd3f405174e3b3467"],"user_facing":false}
+{"format_version":1,"commits":["b4925f8882b1870dd2221485d17b936fed05d9b7"],"user_facing":true,"description":"**Fix: docs deploy in post-release hook.** Environment variables are now exported so selfdoc/wrangler can read Cloudflare credentials.","type":"fix"}
+{"format_version":1,"commits":["998bdf1ab4513fd60b2cd089b04f8833e63c2fd7","04f7652d127e556f50a05df984fbdc13f0201d5d","691c4536f5d40827c3c7027cd3f405174e3b3467"],"user_facing":false}

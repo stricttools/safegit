@@ -1,3 +1,3 @@
-{"commits":["c2f39b03f87494f8742bb4d3b7c620f3886d6646"],"user_facing":true,"description":"**`commit --amend` now works on root commits.** Previously failed with 'is a root commit (no parent)'. The fix matches the existing pattern used by `reword`.","type":"fix"}
-{"commits":["1895f4c0b49c68ca31439aab6b92eac7531ac185","2a4495cc353ee6466478fc7d420cabdd057fed83"],"user_facing":false}
-{"commits":["3e31769681eb1897765a7b8dd806124d638f37e6","899af7831a062b1382cb2a79551d850a3731d414"],"user_facing":false}
+{"format_version":1,"commits":["c2f39b03f87494f8742bb4d3b7c620f3886d6646"],"user_facing":true,"description":"**`commit --amend` now works on root commits.** Previously failed with 'is a root commit (no parent)'. The fix matches the existing pattern used by `reword`.","type":"fix"}
+{"format_version":1,"commits":["1895f4c0b49c68ca31439aab6b92eac7531ac185","2a4495cc353ee6466478fc7d420cabdd057fed83"],"user_facing":false}
+{"format_version":1,"commits":["3e31769681eb1897765a7b8dd806124d638f37e6","899af7831a062b1382cb2a79551d850a3731d414"],"user_facing":false}

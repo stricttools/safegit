@@ -1,4 +1,4 @@
-{"commits":["3fb7afe53bf82201f64753664921353b1f32c6bc","2d00faf3d423fcc5e760ef00dba0a0d8b6a23d96"],"user_facing":false}
-{"commits":["6e8b317bf31cb20fe5d4f077e4486d726a1ad03e"],"user_facing":true,"description":"**`rewrite-author` respects `--quiet`.** Summary output is suppressed when `--quiet` is passed.","type":"fix"}
-{"commits":["fe852e70e256c81be4dc9003830502aaaa270af8"],"user_facing":true,"description":"**Submodule-aware range-scoped scanning.** Added `ScanObjectsInRangeWithDir` and `CatFileBatchSHAsWithDir` for future submodule range-scoped dry-run support.","type":"feature"}
-{"commits":["3d325b395d82979b88af6486ca40391beb94fbb4","0322ab55b40cc036ba48b5273b127806aa4702b5"],"user_facing":false}
+{"format_version":1,"commits":["3fb7afe53bf82201f64753664921353b1f32c6bc","2d00faf3d423fcc5e760ef00dba0a0d8b6a23d96"],"user_facing":false}
+{"format_version":1,"commits":["6e8b317bf31cb20fe5d4f077e4486d726a1ad03e"],"user_facing":true,"description":"**`rewrite-author` respects `--quiet`.** Summary output is suppressed when `--quiet` is passed.","type":"fix"}
+{"format_version":1,"commits":["fe852e70e256c81be4dc9003830502aaaa270af8"],"user_facing":true,"description":"**Submodule-aware range-scoped scanning.** Added `ScanObjectsInRangeWithDir` and `CatFileBatchSHAsWithDir` for future submodule range-scoped dry-run support.","type":"feature"}
+{"format_version":1,"commits":["3d325b395d82979b88af6486ca40391beb94fbb4","0322ab55b40cc036ba48b5273b127806aa4702b5"],"user_facing":false}

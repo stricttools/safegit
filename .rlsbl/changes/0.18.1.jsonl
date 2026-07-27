@@ -1,4 +1,4 @@
-{"commits":["d2ccb98e0ab721de9f37b07bd364d33ef8f0ac7c"],"user_facing":false}
-{"commits":["5480f5f61562c5f37e99eb369c4d775d25d05ee2"],"user_facing":false}
-{"commits":["d2ccb98e0ab721de9f37b07bd364d33ef8f0ac7c"],"user_facing":true,"description":"**Fixed CI test failure for push commands.** Tests now use explicit branch names for bare remote verification, fixing failures on systems where the default branch is not `main`.","type":"fix"}
-{"commits":["d6948eefd2817b1a5fe163643fb1ec7c8076e4e6"],"user_facing":false}
+{"format_version":1,"commits":["d2ccb98e0ab721de9f37b07bd364d33ef8f0ac7c"],"user_facing":false}
+{"format_version":1,"commits":["5480f5f61562c5f37e99eb369c4d775d25d05ee2"],"user_facing":false}
+{"format_version":1,"commits":["d2ccb98e0ab721de9f37b07bd364d33ef8f0ac7c"],"user_facing":true,"description":"**Fixed CI test failure for push commands.** Tests now use explicit branch names for bare remote verification, fixing failures on systems where the default branch is not `main`.","type":"fix"}
+{"format_version":1,"commits":["d6948eefd2817b1a5fe163643fb1ec7c8076e4e6"],"user_facing":false}

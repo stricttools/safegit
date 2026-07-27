@@ -1,3 +1,3 @@
-{"commits":["c91781899660bbfa64ecadbd700216eb4c5fd58a"],"user_facing":true,"description":"**Fix.** CI matrix updated to Go 1.25+1.26 to match go.mod requirement.","type":"fix"}
-{"commits":["52575a485c84ada0a74f2227982f6ee57150ff11"],"user_facing":true,"description":"**Fix.** Dockerfile updated to Go 1.25 to match go.mod requirement.","type":"fix"}
-{"commits":["0f454a66c805ceffcc1bf6e11dc40bafc059b3f6"],"user_facing":false}
+{"format_version":1,"commits":["c91781899660bbfa64ecadbd700216eb4c5fd58a"],"user_facing":true,"description":"**Fix.** CI matrix updated to Go 1.25+1.26 to match go.mod requirement.","type":"fix"}
+{"format_version":1,"commits":["52575a485c84ada0a74f2227982f6ee57150ff11"],"user_facing":true,"description":"**Fix.** Dockerfile updated to Go 1.25 to match go.mod requirement.","type":"fix"}
+{"format_version":1,"commits":["0f454a66c805ceffcc1bf6e11dc40bafc059b3f6"],"user_facing":false}

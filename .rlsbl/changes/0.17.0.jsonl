@@ -1,8 +1,8 @@
-{"commits":["b977fdc7536b0a51a56e72e8c2fe1bc816953f3f"],"user_facing":false}
-{"commits":["1ce68d56619b932655c8a5072b847e73460fd31a"],"user_facing":true,"description":"**Removed stash suggestion from dirty-tree error.** `requireCleanTree` no longer suggests `git stash` as a workaround.","type":"fix"}
-{"commits":["9d4c4a6c58098b37bd521a9c440470aadf5e4004"],"user_facing":true,"description":"**`doctor --fix` now cleans stale locks in the main repo.** Previously only cleaned submodule stale locks. The diagnostic check also now scans the full lock tree recursively instead of just `refs/heads/`.","type":"fix"}
-{"commits":["5fe31097b59f604b93469ef5d93aabec54c19144","86230b9d54c8463f7428697cdb3e5d9e96cff0d5"],"user_facing":false}
-{"commits":["db57b90c22a859d554fff5a043e4330b94278e2a"],"user_facing":true,"description":"**Renamed `--force-push` to `--force-with-lease` on `push`.** The flag name now matches what it actually does.","type":"breaking"}
-{"commits":["7ccab7684cdcf0133c8c180eef5827764b64796f"],"user_facing":true,"description":"**Removed `--push` flag from `rewrite-author`.** After rewriting, safegit now prints the git commands to push manually instead of pushing directly.","type":"breaking"}
-{"commits":["ec934ed51abaa60e2522e17421f134e04a911789"],"user_facing":false}
-{"commits":["14c30ef1b6fbb04d0f11770516a8d0f5d00d52fb","b13e1743b79a6c0ceb9f60e4eca883fdfb22cc9f"],"user_facing":false}
+{"format_version":1,"commits":["b977fdc7536b0a51a56e72e8c2fe1bc816953f3f"],"user_facing":false}
+{"format_version":1,"commits":["1ce68d56619b932655c8a5072b847e73460fd31a"],"user_facing":true,"description":"**Removed stash suggestion from dirty-tree error.** `requireCleanTree` no longer suggests `git stash` as a workaround.","type":"fix"}
+{"format_version":1,"commits":["9d4c4a6c58098b37bd521a9c440470aadf5e4004"],"user_facing":true,"description":"**`doctor --fix` now cleans stale locks in the main repo.** Previously only cleaned submodule stale locks. The diagnostic check also now scans the full lock tree recursively instead of just `refs/heads/`.","type":"fix"}
+{"format_version":1,"commits":["5fe31097b59f604b93469ef5d93aabec54c19144","86230b9d54c8463f7428697cdb3e5d9e96cff0d5"],"user_facing":false}
+{"format_version":1,"commits":["db57b90c22a859d554fff5a043e4330b94278e2a"],"user_facing":true,"description":"**Renamed `--force-push` to `--force-with-lease` on `push`.** The flag name now matches what it actually does.","type":"breaking"}
+{"format_version":1,"commits":["7ccab7684cdcf0133c8c180eef5827764b64796f"],"user_facing":true,"description":"**Removed `--push` flag from `rewrite-author`.** After rewriting, safegit now prints the git commands to push manually instead of pushing directly.","type":"breaking"}
+{"format_version":1,"commits":["ec934ed51abaa60e2522e17421f134e04a911789"],"user_facing":false}
+{"format_version":1,"commits":["14c30ef1b6fbb04d0f11770516a8d0f5d00d52fb","b13e1743b79a6c0ceb9f60e4eca883fdfb22cc9f"],"user_facing":false}

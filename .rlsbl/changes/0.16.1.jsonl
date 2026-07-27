@@ -1,2 +1,2 @@
-{"commits":["a13a08f469fa152d87eadf092accca5ebb8ddb9d"],"user_facing":true,"description":"**Fixed macOS symlink bug in submodule detection.** `DetectParent` now resolves symlinks on both `parentWorkTree` and `cwd`, fixing autobump and push-hook-cascade on macOS where `/var` is a symlink to `/private/var`.","type":"fix"}
-{"commits":["5099d1f137bfa1d3dd2398272ea976b86b3a8709"],"user_facing":false}
+{"format_version":1,"commits":["a13a08f469fa152d87eadf092accca5ebb8ddb9d"],"user_facing":true,"description":"**Fixed macOS symlink bug in submodule detection.** `DetectParent` now resolves symlinks on both `parentWorkTree` and `cwd`, fixing autobump and push-hook-cascade on macOS where `/var` is a symlink to `/private/var`.","type":"fix"}
+{"format_version":1,"commits":["5099d1f137bfa1d3dd2398272ea976b86b3a8709"],"user_facing":false}
