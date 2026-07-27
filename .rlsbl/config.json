@@ -1,4 +1,5 @@
 {
+  "changelog_format_version_enforced": true,
   "targets": [
     "go",
     "docker"
