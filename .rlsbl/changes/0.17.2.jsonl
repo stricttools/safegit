@@ -1,2 +1,2 @@
-{"commits":["391dad79b8293dcd3a388960358aaa133d08b622"],"user_facing":true,"description":"**Scrub now syncs submodule working trees after rewriting history.** Previously only the parent repo's working tree was updated; submodule files on disk could still contain pre-scrub content.","type":"fix"}
-{"commits":["a88299bc5213df361848bec9f3a1848b9c7268bb"],"user_facing":false}
+{"format_version":1,"commits":["391dad79b8293dcd3a388960358aaa133d08b622"],"user_facing":true,"description":"**Scrub now syncs submodule working trees after rewriting history.** Previously only the parent repo's working tree was updated; submodule files on disk could still contain pre-scrub content.","type":"fix"}
+{"format_version":1,"commits":["a88299bc5213df361848bec9f3a1848b9c7268bb"],"user_facing":false}

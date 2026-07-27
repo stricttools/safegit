@@ -1,2 +1,2 @@
-{"commits":["39d33b2a31caa787c92223f22b87237dc02a5d72"],"user_facing":true,"description":"**Fix:** submodule path resolution now handles macOS `/tmp` symlinks correctly.","type":"fix"}
-{"commits":["199ebeef717c8a468520e6b3bcb73458a3b6e111"],"user_facing":false}
+{"format_version":1,"commits":["39d33b2a31caa787c92223f22b87237dc02a5d72"],"user_facing":true,"description":"**Fix:** submodule path resolution now handles macOS `/tmp` symlinks correctly.","type":"fix"}
+{"format_version":1,"commits":["199ebeef717c8a468520e6b3bcb73458a3b6e111"],"user_facing":false}

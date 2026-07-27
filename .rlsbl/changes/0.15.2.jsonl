@@ -1,2 +1,2 @@
-{"commits": ["bab97639eba4d1e069e445af4293dac38e42a8d1"], "user_facing": true, "description": "**Fix:** submodule tests now pass on macOS CI (portable git config via environment variables).", "type": "fix"}
-{"commits":["6dccde9780de1c11b0bfd15b353af0b833b931cc"],"user_facing":false}
+{"format_version":1,"commits": ["bab97639eba4d1e069e445af4293dac38e42a8d1"], "user_facing": true, "description": "**Fix:** submodule tests now pass on macOS CI (portable git config via environment variables).", "type": "fix"}
+{"format_version":1,"commits":["6dccde9780de1c11b0bfd15b353af0b833b931cc"],"user_facing":false}

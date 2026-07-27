@@ -1,4 +1,4 @@
-{"commits":["462f97fe7fd1949f3861381682e6eb2bbaa89692"],"user_facing":true,"description":"**Rewrite-author now uses the repo-wide rewrite lock.** Prevents concurrent rewrite-author and scrub operations from corrupting history.","type":"fix"}
-{"commits":["a1eed9cc4b1c0ed4c295b8ca70a84c60d76bc7ad"],"user_facing":true,"description":"**New flag: scrub match --scope.** Glob pattern limiting which file paths are searched (e.g. `--scope '*.env'`). Blobs at paths outside scope are left untouched.","type":"feature"}
-{"commits":["199e029bbd8695b2e8c8ab99ca00ffa11371ae2d","92838d116de560742aed0b5599ecd3b7cbb3d429","7d5e4b3676b164249511812e9bead0b1306ce97d"],"user_facing":false}
-{"commits":["f85ea7fc2287be8711b8241656fd9c167d6aba35"],"user_facing":false}
+{"format_version":1,"commits":["462f97fe7fd1949f3861381682e6eb2bbaa89692"],"user_facing":true,"description":"**Rewrite-author now uses the repo-wide rewrite lock.** Prevents concurrent rewrite-author and scrub operations from corrupting history.","type":"fix"}
+{"format_version":1,"commits":["a1eed9cc4b1c0ed4c295b8ca70a84c60d76bc7ad"],"user_facing":true,"description":"**New flag: scrub match --scope.** Glob pattern limiting which file paths are searched (e.g. `--scope '*.env'`). Blobs at paths outside scope are left untouched.","type":"feature"}
+{"format_version":1,"commits":["199e029bbd8695b2e8c8ab99ca00ffa11371ae2d","92838d116de560742aed0b5599ecd3b7cbb3d429","7d5e4b3676b164249511812e9bead0b1306ce97d"],"user_facing":false}
+{"format_version":1,"commits":["f85ea7fc2287be8711b8241656fd9c167d6aba35"],"user_facing":false}
