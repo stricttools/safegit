@@ -337,7 +337,7 @@ func main() {
 	},
 		strictcli.WithFlags(
 			strictcli.BoolFlag("bypass-session", "undo across all sessions by ignoring the session ID ownership check", strictcli.Default(false)),
-			strictcli.IntFlag("count", "number of operations to undo", strictcli.Default(1)),
+			strictcli.IntFlag("count", "number of oplog operations to undo in a single invocation", strictcli.Default(1)),
 		),
 	)
 	app.Command("unlock", "release a stale .lock file left behind by a crashed git process", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
