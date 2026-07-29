@@ -16,4 +16,4 @@ reverse the last commit, amend, or reword operation using the oplog
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
 | `--bypass-session` |  | bool |  |  | undo across all sessions by ignoring the session ID ownership check |
-| `--count` |  | int | 1 |  | number of operations to undo |
+| `--count` |  | int | 1 |  | number of oplog operations to undo in a single invocation |
