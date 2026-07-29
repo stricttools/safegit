@@ -8,6 +8,7 @@ import (
 	"testing"
 )
 
+// SubmoduleRepo holds paths for a test repo with a submodule.
 type SubmoduleRepo struct {
 	ParentDir    string
 	ParentGitDir string
@@ -127,6 +128,7 @@ func addSubmodule(t *testing.T, parentDir, originDir, name string) SubmoduleRepo
 	}
 }
 
+// InitRepoWithSubmodule creates a test repo containing one submodule.
 func InitRepoWithSubmodule(t *testing.T) SubmoduleRepo {
 	t.Helper()
 
@@ -135,6 +137,7 @@ func InitRepoWithSubmodule(t *testing.T) SubmoduleRepo {
 	return addSubmodule(t, parentDir, originDir, "mysub")
 }
 
+// InitRepoWithTwoSubmodules creates a test repo containing two submodules.
 func InitRepoWithTwoSubmodules(t *testing.T) (SubmoduleRepo, SubmoduleRepo) {
 	t.Helper()
 
