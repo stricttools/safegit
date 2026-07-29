@@ -22,6 +22,7 @@
       "default": true
     }
   ],
+  "root_files": ["docs/_README.md", "docs/_CLAUDE.md"],
   "deploy": {
     "provider": "cloudflare-pages",
     "project": "safegit"
