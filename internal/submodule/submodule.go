@@ -19,6 +19,7 @@ import (
 // ErrNestedSubmodules is returned when a submodule itself contains submodules.
 var ErrNestedSubmodules = errors.New("nested submodules detected")
 
+// SubmoduleInfo describes a discovered submodule within a parent repository.
 type SubmoduleInfo struct {
 	Name          string
 	RelativePath  string
