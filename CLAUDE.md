@@ -2,7 +2,7 @@
 
 # safegit
 
-unknown
+Concurrency-safe Git wrapper (Go CLI). When multiple AI agent sessions share one repo, standard git races on `.git/index` -- files leak between commits. safegit isolates each commit via per-invocation temporary indexes and CAS-retry ref updates. Output is standard git commits, transparent to CI and teammates.
 
 ## Commands
 
