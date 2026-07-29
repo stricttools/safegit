@@ -1,6 +1,6 @@
 ---
 title: Commands Guide
-description: Detailed reference for all safegit commands with flags, examples, and safety guarantees.
+description: "Complete reference for every safegit command including commit, undo, push, pull, scan, scrub, doctor, and author with flags, examples, and guarantees."
 ---
 
 # Commands Guide
@@ -9,7 +9,7 @@ safegit is a concurrency-safe git wrapper providing atomic commits, oplog-based 
 
 ## Global Flags
 
-Every safegit command accepts these global flags:
+Every safegit command accepts these global flags, which control output verbosity, dry-run previewing, interactive prompt behavior, configuration file location, and machine-readable JSON output mode. These flags can be placed before the subcommand name on the command line.
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
@@ -26,7 +26,7 @@ Stage and commit specified files in a single atomic operation. This is safegit's
 
 ### When to Use
 
-Use `safegit commit` instead of `git add` + `git commit` whenever multiple sessions might share the same worktree. It prevents index races and file leaks between commits.
+Use `safegit commit` instead of `git add` + `git commit` whenever multiple sessions might share the same worktree. It prevents index races and file leaks between commits by staging files into an isolated temporary index and updating the branch ref with compare-and-swap retries, so concurrent commits never corrupt each other.
 
 ### Flags
 
@@ -89,7 +89,7 @@ safegit commit --allow-empty -m "trigger CI rebuild"
 
 ## undo
 
-Reverse the last commit, amend, or reword operation using the operation log (oplog). Supports undoing multiple operations in one invocation.
+Reverse the last commit, amend, or reword operation by reading the append-only operation log (oplog) and restoring the previous branch ref value. Supports undoing multiple operations in one invocation and is session-scoped by default to prevent one session from accidentally rolling back another session's work.
 
 ### When to Use
 
@@ -128,11 +128,11 @@ safegit --dry-run undo
 
 ## push
 
-Push refs to a remote with pre-pre-push hooks and automatic retry on transport errors.
+Push refs to a remote with pre-pre-push hooks that run before any network I/O, automatic retry with exponential backoff on transient transport errors, and oplog recording of every push operation for audit purposes.
 
 ### When to Use
 
-Use `safegit push` instead of `git push` to benefit from pre-pre-push hooks (custom checks that run before git's built-in pre-push hook) and automatic retries for transient network failures.
+Use `safegit push` instead of `git push` to benefit from pre-pre-push hooks (custom checks that run before git's built-in pre-push hook), automatic retries for transient network failures with exponential backoff, submodule hook cascading from parent repositories, and full oplog recording of every push attempt and result.
 
 ### Flags
 
@@ -197,11 +197,11 @@ safegit push --both-branches-and-tags
 
 ## pull
 
-Fetch from a remote and merge, with explicit merge strategy selection.
+Fetch from a remote and merge into the current branch, requiring an explicit merge strategy selection so the behavior is always predictable and never depends on git's default configuration settings.
 
 ### When to Use
 
-Use `safegit pull` as a safer alternative to `git pull`. It requires an explicit merge strategy and runs coordination guards to prevent pulling into a dirty worktree.
+Use `safegit pull` as a safer alternative to `git pull` when you need to incorporate upstream changes. It requires an explicit merge strategy flag, runs coordination guards to prevent pulling into a dirty worktree, and separates the fetch and merge into distinct steps for clarity and control.
 
 ### Flags
 
@@ -237,7 +237,7 @@ safegit pull --merge-strategy ff-only origin main
 
 ## scan
 
-Search git history for regex pattern matches across all objects and working tree files.
+Search git history for regex pattern matches across all reachable objects and working tree files, covering blobs, commit messages, tag annotations, trailers, and non-object files like git config and hooks.
 
 ### When to Use
 
@@ -281,7 +281,7 @@ safegit --json scan --pattern "token" --entire-history
 
 ## scrub file
 
-Replace or remove a specific file across all commits in repository history.
+Replace or remove a specific file across all commits in repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized on-disk version or delete the file entirely from every historical snapshot.
 
 ### When to Use
 
@@ -331,11 +331,11 @@ safegit scrub file --from abc1234 --reason "leaked key" --remap-shas-in "*.jsonl
 
 ## scrub match
 
-Replace all occurrences of a regex pattern across every blob in repository history.
+Replace all occurrences of a regex pattern across every blob, commit message, and tag annotation in repository history, rewriting commit trees so that sensitive values like secrets and credentials are permanently removed from all historical snapshots.
 
 ### When to Use
 
-Use `safegit scrub match` when a secret or sensitive value appears across multiple files in history and needs to be replaced everywhere (not just in one file).
+Use `safegit scrub match` when a secret or sensitive value appears across multiple files in history and needs to be replaced everywhere, not just in one file. This command handles blobs, commit messages, and tag annotations in a single pass, with optional scope filtering and mangle mode for randomized replacements.
 
 ### Flags
 
@@ -396,7 +396,7 @@ safegit scrub match --pattern "secret_value" --replace "REDACTED" \
 
 ## scrub run
 
-Execute a multi-operation scrub recipe from a TOML file, applying all operations in a single coordinated pass.
+Execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological ordering, overlap detection, and automatic post-scrub verification.
 
 ### When to Use
 
@@ -475,15 +475,15 @@ safegit scrub run --diff --limit 20 --entire-history -- recipe.toml
 
 ## scrub verify
 
-Check all scrub policies to confirm previously scrubbed patterns remain absent from the object store.
+Check all scrub policies recorded in the repository configuration to confirm that previously scrubbed secrets and sensitive patterns remain completely absent from every blob, commit message, and tag annotation in the git object store.
 
 ### When to Use
 
-Run `safegit scrub verify` periodically or in CI to confirm that scrubbed secrets have not been reintroduced. Policies are created automatically by `scrub match` and `scrub run`.
+Run `safegit scrub verify` periodically or in CI to confirm that scrubbed secrets have not been reintroduced into the repository. Policies are created automatically by `scrub match` and `scrub run`, and verification scans all blobs, commit messages, and tag annotations using batched multi-pattern scanning for efficiency.
 
 ### Flags
 
-No command-specific flags. Uses global flags only.
+No command-specific flags beyond the global flags described above. Use `--json` for machine-readable output that can be parsed by CI pipelines, and `--quiet` to suppress informational messages while still reporting verification failures.
 
 ### Examples
 
@@ -504,11 +504,11 @@ safegit --json scrub verify
 
 ## doctor
 
-Run diagnostic health checks on the repository and optionally repair issues.
+Run diagnostic health checks on the repository and optionally repair issues such as stale lock files from crashed processes, orphan temporary index directories, configuration schema problems, hook script permission errors, and bypass detection where raw git commits were made outside safegit's isolation guarantees. Supports diagnose-only, fix, and full uninstall modes.
 
 ### When to Use
 
-Use `safegit doctor` to diagnose problems (stale locks, orphan temp directories, config issues, hook permission errors) and optionally fix them.
+Use `safegit doctor` to diagnose and optionally repair repository health problems including stale lock files left by crashed processes, orphan temporary index directories, configuration file corruption, hook permission errors, and raw git commit bypass detection via oplog comparison.
 
 ### Flags (Mutex Group -- pick at most one)
 
@@ -554,7 +554,7 @@ safegit doctor --uninstall
 
 ## unlock
 
-Release a stale `.lock` file left behind by a crashed git or safegit process.
+Release a stale `.lock` file left behind by a crashed git or safegit process, after verifying that the lock's owning process is actually dead via PID liveness checks to prevent releasing locks held by live processes.
 
 ### When to Use
 
@@ -586,11 +586,11 @@ safegit --dry-run unlock main
 
 ## author list
 
-List all distinct author and committer identities across the entire commit history.
+List all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity to help audit repositories for identity variations before performing a rewrite.
 
 ### When to Use
 
-Use `safegit author list` to audit a repository for identity variations (typos, old email addresses, bot accounts) before performing a rewrite.
+Use `safegit author list` to audit a repository for identity variations such as typos, old email addresses, bot accounts, and duplicate identities that should be consolidated before performing a rewrite. The output is sorted by frequency, making the most prolific identities easy to identify.
 
 ### Examples
 
@@ -604,15 +604,15 @@ safegit --json author list
 
 ### Output Format
 
-A table showing Name, Email, Role (author/committer/both), and Count, sorted by frequency.
+A table showing Name, Email, Role (author/committer/both), and Count columns, sorted by frequency so the most common identities appear first. In JSON mode, each identity is emitted as a separate object with all fields.
 
 ## author check
 
-Check that all commits use the expected author and committer identity.
+Check that all commits in the repository history use the expected author and committer identity, scanning every commit and reporting deviations with exact commit hashes, mismatched fields, and suggested rewrite commands.
 
 ### When to Use
 
-Use `safegit author check` to find commits that deviate from the expected identity. The command suggests the appropriate `safegit author rewrite` command to fix deviations.
+Use `safegit author check` to find commits that deviate from the expected identity by scanning the entire commit history and comparing each commit's author and committer fields against the specified name and email. The command suggests the appropriate `safegit author rewrite` command to fix each deviation found.
 
 ### Flags
 
@@ -641,11 +641,11 @@ safegit --json author check --name "Alice Smith"
 
 ## author rewrite
 
-Rewrite author and committer name or email across all commit history.
+Rewrite author and committer name or email across all commits in the repository history, replacing every occurrence of the old identity with the new one while preserving timestamps, commit messages, tree contents, and parent relationships.
 
 ### When to Use
 
-Use `safegit author rewrite` to correct identity mistakes (wrong name, old email) across the entire repository history.
+Use `safegit author rewrite` to correct identity mistakes such as wrong names, old email addresses, or bot account identities across the entire repository history, including identity-bearing trailers like Signed-off-by and Co-authored-by, and tagger fields on annotated tags.
 
 ### Flags
 
@@ -687,15 +687,15 @@ safegit --dry-run author rewrite --old-name "alice" --new-name "Alice Smith"
 
 ## checkout
 
-Checkout a branch or ref with working-tree safety guards.
+Checkout a branch or ref with working-tree safety guards that prevent checking out while another safegit operation is in progress, syncing the main index after checkout and recording the operation in the oplog.
 
 ### When to Use
 
-Use `safegit checkout` instead of `git checkout` to get coordination guards that prevent checking out while another safegit operation is in progress.
+Use `safegit checkout` instead of `git checkout` to get coordination guards that prevent checking out while another safegit operation is in progress, protecting uncommitted work from other sessions that may be sharing the same worktree and ensuring the main index stays consistent after the checkout completes.
 
 ### Arguments
 
-All arguments are passed through to `git checkout`.
+All arguments are passed through to `git checkout` after the coordination guard passes. Any flag or positional argument that `git checkout` accepts can be used, including branch names, commit hashes, `--create` (`-b`), and path specs.
 
 ### Examples
 
@@ -713,15 +713,15 @@ safegit checkout v1.0.0
 
 ## merge
 
-Merge a branch into HEAD with working-tree safety guards.
+Merge a branch into the current HEAD with working-tree safety guards that check for in-progress safegit operations, sync the main index after completion, and record the merge in the oplog for audit purposes.
 
 ### When to Use
 
-Use `safegit merge` instead of `git merge` for coordination-guarded merges.
+Use `safegit merge` instead of `git merge` for coordination-guarded merges that verify no other safegit operation is in progress before proceeding, preventing data loss when multiple sessions share a worktree and one session's uncommitted work could be clobbered by the merge.
 
 ### Arguments
 
-All arguments are passed through to `git merge`.
+All arguments are passed through to `git merge` after the coordination guard passes. Any flag or positional argument that `git merge` accepts can be used, including branch names, `--no-ff`, `--squash`, and merge strategy options.
 
 ### Examples
 
@@ -738,15 +738,15 @@ safegit merge --no-ff feature-branch
 
 ## rebase
 
-Rebase the current branch onto upstream with safety guards.
+Rebase the current branch onto an upstream ref with coordination safety guards that check for in-progress operations, sync the main index after completion, and record the rebase in the oplog for audit trail purposes.
 
 ### When to Use
 
-Use `safegit rebase` instead of `git rebase` for coordination-guarded rebasing.
+Use `safegit rebase` instead of `git rebase` for coordination-guarded rebasing that verifies no other safegit operation is in progress before proceeding, preventing data loss when multiple sessions share a worktree and one session has uncommitted edits in the working tree.
 
 ### Arguments
 
-All arguments are passed through to `git rebase`.
+All arguments are passed through to `git rebase` after the coordination guard passes. Any flag or positional argument that `git rebase` accepts can be used, including upstream refs, `--interactive`, `--onto`, and `--autosquash`.
 
 ### Examples
 
@@ -763,15 +763,15 @@ safegit rebase --interactive HEAD~5
 
 ## reset
 
-Reset HEAD with guards that prevent accidental `--hard` data loss.
+Reset HEAD with selective guards that activate only for `--hard` resets to prevent accidental data loss from tree-mutating operations, while allowing soft and mixed resets to pass through without coordination checks.
 
 ### When to Use
 
-Use `safegit reset` instead of `git reset`. The coordination guard only activates for `--hard` resets (tree-mutating operations); soft and mixed resets pass through without the guard.
+Use `safegit reset` instead of `git reset` to get selective coordination guards. The guard only activates for `--hard` resets because those are tree-mutating operations that can destroy uncommitted work from other sessions. Soft and mixed resets pass through without the coordination guard since they do not modify the working tree.
 
 ### Arguments
 
-All arguments are passed through to `git reset`.
+All arguments are passed through to `git reset` after the coordination guard passes (for `--hard` only). Any flag or positional argument that `git reset` accepts can be used, including `--soft`, `--mixed`, `--hard`, commit refs, and path specs.
 
 ### Examples
 
@@ -791,15 +791,15 @@ safegit reset --hard HEAD~3
 
 ## bisect
 
-Binary search through commits to find a bug, with safety guards.
+Binary search through commits to find the commit that introduced a bug, with selective coordination guards that activate only for tree-moving subcommands like good, bad, reset, and start to protect the working tree from concurrent modification.
 
 ### When to Use
 
-Use `safegit bisect` instead of `git bisect` for coordination-guarded bisecting.
+Use `safegit bisect` instead of `git bisect` for coordination-guarded bisecting that protects the working tree from concurrent modification by other sessions sharing the same worktree, with selective guards that only activate for tree-moving subcommands.
 
 ### Arguments
 
-All arguments are passed through to `git bisect`.
+All arguments are passed through to `git bisect` after the coordination guard passes (for tree-moving subcommands only). Any subcommand that `git bisect` accepts can be used, including start, good, bad, old, new, reset, skip, log, and replay.
 
 ### Examples
 
@@ -817,15 +817,15 @@ safegit bisect reset
 
 ## cherry-pick
 
-Cherry-pick one or more commits onto HEAD with safety guards.
+Cherry-pick one or more commits onto the current HEAD with coordination safety guards that check for in-progress safegit operations, sync the main index after completion, and record the cherry-pick in the oplog.
 
 ### When to Use
 
-Use `safegit cherry-pick` instead of `git cherry-pick` for coordination-guarded cherry-picks.
+Use `safegit cherry-pick` instead of `git cherry-pick` for coordination-guarded cherry-picks that verify no other safegit operation is in progress before applying commits, protecting uncommitted work from other sessions sharing the same worktree.
 
 ### Arguments
 
-All arguments are passed through to `git cherry-pick`.
+All arguments are passed through to `git cherry-pick` after the coordination guard passes. Any flag or positional argument that `git cherry-pick` accepts can be used, including multiple commit hashes, ranges, `--no-commit`, and `--mainline`.
 
 ### Examples
 
@@ -842,15 +842,15 @@ safegit cherry-pick abc1234 def5678
 
 ## revert
 
-Revert one or more commits, creating inverse patches, with safety guards.
+Revert one or more commits by creating inverse patches, with coordination safety guards that check for in-progress safegit operations, sync the main index after completion, and record the revert in the oplog for audit purposes.
 
 ### When to Use
 
-Use `safegit revert` instead of `git revert` for coordination-guarded reverts.
+Use `safegit revert` instead of `git revert` for coordination-guarded reverts that verify no other safegit operation is in progress before applying inverse patches, protecting uncommitted work from other sessions sharing the same worktree.
 
 ### Arguments
 
-All arguments are passed through to `git revert`.
+All arguments are passed through to `git revert` after the coordination guard passes. Any flag or positional argument that `git revert` accepts can be used, including commit hashes, ranges, `--no-commit`, and `--mainline` for merge reverts.
 
 ### Examples
 
@@ -861,11 +861,11 @@ safegit revert HEAD~3..HEAD
 
 ### Safety Guarantees
 
-Same as `cherry-pick`.
+Same safety guarantees as the cherry-pick command: the coordination guard checks for in-progress safegit operations before proceeding to prevent data loss in shared worktrees, the main index is synced with HEAD after completion to keep it consistent, and the operation is recorded in the oplog for audit trail and undo purposes.
 
 ## config show
 
-Show all configuration values currently in effect.
+Show all configuration values currently in effect for this repository, including built-in defaults and any user overrides from the `.git/safegit/config.json` file. Values are printed as key-value pairs to stdout for inspection and debugging, with each key showing its current effective value whether from the config file or a built-in default.
 
 ### Examples
 
@@ -877,7 +877,7 @@ Prints all config keys with their current values (including defaults).
 
 ## config get
 
-Get the current value of a single configuration key.
+Get the current value of a single configuration key from the `.git/safegit/config.json` file, printing the raw value to stdout so it can be captured by scripts or used in automation pipelines.
 
 ### Arguments
 
@@ -894,7 +894,7 @@ safegit config get push.retryAttempts
 
 ## config set
 
-Set a configuration key to a new value.
+Set a configuration key to a new value in the `.git/safegit/config.json` file, creating the file if it does not exist yet and persisting the change for all future safegit invocations in this repository.
 
 ### Arguments
 
@@ -915,7 +915,7 @@ Configuration is stored in `.git/safegit/config.json`.
 
 ## hook list
 
-List all pre-pre-push hooks installed in the repository.
+List all pre-pre-push hooks currently installed in the `.git/safegit/hooks/` directory, showing each hook's name, file path, and whether it is executable, so you can audit which checks run before every push.
 
 ### Examples
 
@@ -927,7 +927,7 @@ Shows each hook's name and file path.
 
 ## hook run
 
-Run all installed pre-pre-push hooks (or a single named hook) without performing an actual push.
+Run all installed pre-pre-push hooks (or a single named hook) immediately without performing an actual push, so you can verify that all configured hook checks pass before committing to a real push operation.
 
 ### Arguments
 
@@ -947,7 +947,7 @@ safegit hook run my-check.sh
 
 ## hook install
 
-Install a pre-pre-push hook by copying a script file into the hooks directory.
+Install a pre-pre-push hook by copying a script file into the `.git/safegit/hooks/` directory and making it executable, so it will run automatically before every `safegit push` operation performs any network I/O.
 
 ### Arguments
 
@@ -965,7 +965,7 @@ The script is copied to `.git/safegit/hooks/` and made executable.
 
 ## version
 
-Print safegit version, Go runtime version, and git version.
+Print the safegit binary version, Go runtime version with platform architecture, and the installed git version in a human-readable format. This command provides all the version information needed for bug reports, compatibility checks, and verifying that the correct safegit binary is installed on the system.
 
 ### Examples
 
@@ -983,7 +983,7 @@ git     git version 2.47.0
 
 ## Configuration Reference
 
-Configuration is stored in `.git/safegit/config.json` with the following defaults:
+All safegit configuration is stored in `.git/safegit/config.json` and managed via the `config show`, `config get`, and `config set` subcommands. The configuration controls commit CAS retry behavior, lock acquisition timeouts, pre-pre-push hook execution timeouts, push retry attempts for transport errors, and oplog rotation size limits. The following keys are available with their default values:
 
 | Key | Default | Description |
 |-----|---------|-------------|

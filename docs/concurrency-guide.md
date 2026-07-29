@@ -1,6 +1,6 @@
 ---
 title: Concurrency Guide
-description: "How safegit enables multiple AI agent sessions to share a single git worktree without corrupting each other's commits, and the mechanisms that make this safe."
+description: "How safegit enables multiple AI agent sessions to share a single git worktree without corrupting each other's commits or leaking files."
 order: 3
 ---
 
@@ -10,19 +10,19 @@ This guide explains safegit's concurrency model: what problems arise when multip
 
 ## The problem: multiple agents, one worktree
 
-When multiple Claude Code sessions (or any concurrent processes) work in the same git repository, standard git commands race on the shared `.git/index` file. The index is a single mutable staging area -- every `git add` and `git commit` reads and writes it. Two sessions running `git add` and `git commit` at the same time can produce commits containing files from both sessions, silently leaking one session's work into another's commit. The commit message says "fix auth bug" but the tree includes an unrelated config change staged by a parallel session.
+When multiple Claude Code sessions (or any concurrent processes) work in the same git repository, standard git commands race on the shared `.git/index` file. The index is a single mutable staging area that every `git add` and `git commit` reads and writes. Two sessions running these commands at the same time can produce commits containing files from both sessions, silently leaking one session's work into another's commit.
 
 This is not a theoretical concern. AI agent orchestration systems routinely run multiple sessions against the same checkout, and the race window is wide enough that it triggers regularly under normal workloads.
 
 ## Two-phase commit pipeline
 
-safegit splits the commit operation into two distinct phases. Phase A is fully parallel-safe; Phase B is serialized per-branch.
+safegit splits the commit operation into two distinct phases to achieve both parallelism and correctness. Phase A builds the commit object using a private temporary index, fully isolated from other sessions. Phase B acquires a per-branch lock and updates the ref via compare-and-swap.
 
 :-: ref path="internal/commit" lang="go"
 
 ### Phase A: parallel-safe object construction
 
-Every `safegit commit` invocation creates its own temporary index file, isolated from the shared `.git/index` and from every other concurrent invocation.
+Every `safegit commit` invocation creates its own temporary index file in a unique directory under `.git/safegit/tmp/`, completely isolated from the shared `.git/index` and from every other concurrent invocation, so multiple sessions can stage files simultaneously without interference.
 
 :-: ref path="internal/index" lang="go"
 
@@ -38,7 +38,7 @@ At the end of Phase A, a valid commit object exists in the object store, but no 
 
 ### Phase B: serialized ref update
 
-Phase B acquires a per-branch lock, verifies the branch tip has not moved since Phase A, and atomically updates the ref.
+Phase B acquires a per-branch lock file using atomic exclusive creation, verifies the branch tip has not moved since Phase A via compare-and-swap, and atomically updates the ref to point at the new commit object.
 
 :-: ref path="internal/lock" lang="go"
 
@@ -52,7 +52,7 @@ Phase B acquires a per-branch lock, verifies the branch tip has not moved since 
 
 ### CAS retry on miss
 
-When the branch tip moves between Phase A and Phase B, the entire pipeline retries from Phase A: a new temporary index is seeded from the updated branch tip, files are re-staged, and new tree and commit objects are built. This retry loop runs up to `commit.casMaxAttempts` times (default 5, configurable up to 200 for high-contention scenarios). Random jitter (1-10ms) is injected between retries to break thundering-herd stampedes where all CAS-miss processes would otherwise retry simultaneously and resolve the same stale parent.
+When the branch tip moves between Phase A and Phase B, the entire pipeline retries from Phase A: a new temporary index is seeded from the updated branch tip, files are re-staged, and new tree and commit objects are built. This retry loop runs up to `commit.casMaxAttempts` times (default 5, configurable up to 200). Random jitter (1-10ms) is injected between retries to break thundering-herd stampedes.
 
 The stress tests verify that 100 parallel commits to the same branch all succeed with linear history and no lost files.
 
@@ -62,7 +62,7 @@ safegit uses per-ref file locks, not a global repository lock. This means commit
 
 ### Lock file format
 
-Each lock file is a plain text file recording the holder's identity:
+Each lock file is a plain text file recording the holder's identity with PID, timestamp, operation type, and hostname fields that enable liveness checks and diagnostics when a lock appears stale or is held longer than expected:
 
 ```
 pid=12345
@@ -75,7 +75,7 @@ The `pid` and `host` fields enable liveness checks. The `op` field is informatio
 
 ### Stale lock recovery
 
-When a process crashes while holding a lock (e.g., killed by the OS, power failure), the lock file persists on disk. safegit detects and recovers from this automatically:
+When a process crashes while holding a lock (killed by the OS, power failure, or OOM), the lock file persists on disk and blocks all other sessions from committing to that branch. safegit detects stale locks and recovers from them automatically using PID liveness checks, host verification, and PID reuse detection:
 
 1. **PID liveness check.** On each poll iteration, the lock holder's PID is checked via `kill(pid, 0)`. If the process is dead, the lock is stale.
 
@@ -158,11 +158,11 @@ History rewriting (`safegit scrub`) is an inherently non-concurrent operation --
 
 ### Rewrite lock
 
-Scrub operations acquire a coordination lock on `safegit/rewrite` (not a per-ref lock) before modifying any refs. This prevents two scrub operations from running simultaneously and producing inconsistent history.
+Scrub operations acquire a repository-wide coordination lock on `safegit/rewrite` (not a per-ref lock like commits use) before modifying any refs. This prevents two scrub operations from running simultaneously and producing inconsistent history, since history rewriting changes every commit SHA downstream of the rewrite point.
 
 ### Crash-safe rewrite maps
 
-Every scrub persists a three-phase record to `.git/safegit/rewrite-maps.jsonl`, a flock-guarded JSONL file:
+Every scrub persists a three-phase record to `.git/safegit/rewrite-maps.jsonl`, a flock-guarded JSONL file that enables crash recovery and post-scrub orchestration by recording the full old-to-new commit SHA mapping, tag rewrites, and cleanup status:
 
 1. **`start` record.** Written before any refs move. Contains the full old-to-new commit SHA mapping and the pre-rewrite state of all remote-tracking refs. If the process crashes after this point, the mapping is recoverable.
 
@@ -190,7 +190,7 @@ This is the most common case. Each session runs `safegit commit -m "message" -- 
 
 ### Multiple sessions working on different branches
 
-Commits to different branches proceed in full parallel with zero lock contention, since each branch has its own lock file. This is the ideal workflow for multi-agent orchestration.
+Commits to different branches proceed in full parallel with zero lock contention, since each branch has its own independent lock file under `.git/safegit/locks/refs/heads/`. This is the ideal workflow for multi-agent orchestration where each session can be assigned its own feature branch for maximum throughput.
 
 ### Cross-branch commits
 
@@ -202,7 +202,7 @@ A session can commit to a branch other than the one currently checked out using 
 
 ### Cleanup after crashes
 
-`safegit doctor --fix` performs three cleanup tasks relevant to concurrency:
+`safegit doctor --fix` performs three cleanup tasks relevant to concurrency: removing orphan temporary index directories left by crashed processes via PID liveness checks, releasing stale lock files whose owning processes are no longer alive, and detecting raw git commits that bypassed safegit's isolation guarantees by comparing the oplog against actual branch ref state:
 
 - **Orphan tmp directories.** Temporary index directories from crashed processes are identified by checking PID liveness and removed.
 - **Stale lock files.** Lock files held by dead processes are removed.
