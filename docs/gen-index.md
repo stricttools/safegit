@@ -1,7 +1,8 @@
 ---
 title: API Reference
-description: "Complete auto-generated API reference index — browse all modules, classes, and functions with their signatures and docstrings."
+description: "API reference index for safegit covering 16 modules"
 generated: true
+seeded: true
 nav_group: "API Reference"
 nav_order: 0
 order: 90
