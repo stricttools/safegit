@@ -267,7 +267,7 @@
         },
         {
           "default": 1,
-          "help": "number of operations to undo",
+          "help": "number of oplog operations to undo in a single invocation",
           "name": "count",
           "type": "int"
         }
@@ -713,5 +713,5 @@
   "name": "safegit",
   "project_id": "github.com/smm-h/safegit",
   "schema_version": 1,
-  "version": "dev"
+  "version": "0.24.1-0.20260729153824-9e99a02e9d87+dirty"
 }
