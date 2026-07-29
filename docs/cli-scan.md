@@ -1,6 +1,6 @@
 ---
 title: safegit scan
-description: "search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with"
+description: "search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection"
 generated: true
 seeded: true
 nav_group: "CLI Reference"
