@@ -35,6 +35,7 @@ Version: :-: var key="project.version"
 ## Command Groups
 
 - [author](cli-author.html) -- audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history
+- [backup](cli-backup.html) -- push, list, and restore per-branch history backups held in the tool-owned refs/backups namespace on a remote, so uncommitted-to-the-world work survives a lost machine without ever touching refs/heads
 - [config](cli-config.html) -- show, get, or set safegit configuration key-value pairs
 - [hook](cli-hook.html) -- manage pre-pre-push hook scripts that run before every push
 - [scrub](cli-scrub.html) -- surgically rewrite git history to remove or replace sensitive content using 4 subcommands (file, match, run, verify) that operate on all commits, trees, and blobs in the repository
