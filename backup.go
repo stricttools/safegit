@@ -198,9 +198,21 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup boo
 		die(flags, cmd, 1, fmt.Sprintf("resolving remote URL: %v", err))
 	}
 
+	// A dry run previews from local state alone. Classifying the remote, reading
+	// the slot, and the ancestry check all need the network, so a preview would
+	// otherwise prompt about exposure and fail outright on an unreachable
+	// remote -- neither of which a preview may do.
+	if flags.dryRun {
+		infof(flags, "Would back up %s (%s) to backup slot %s on %s\n", branch, headSHA[:12], slot, remote)
+		infof(flags, "  equivalent git command: git push --no-verify --force-with-lease=%s:<slot sha observed at run time> %s HEAD:%s\n", slot, remote, slot)
+		infof(flags, "  the slot's current SHA, the ancestry check against it, and the lease pinned to it are resolved when the backup runs; no remote was contacted\n")
+		infof(flags, "Dry run: no changes made.\n")
+		return 0
+	}
+
 	// Ask before touching a remote we cannot prove is private: a backup pushes
 	// the whole branch, so the decision belongs before any network contact.
-	if !flags.dryRun && !confirmExposure(ctx, flags, remote, remoteURL) {
+	if !confirmExposure(ctx, flags, remote, remoteURL) {
 		infof(flags, "Aborted.\n")
 		return 0
 	}
@@ -233,17 +245,6 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup boo
 	// meaning "this ref must not exist yet".
 	lease := "--force-with-lease=" + slot + ":" + slotSHA
 	pushArgs := []string{"push", "--no-verify", lease, remote, "HEAD:" + slot}
-
-	if flags.dryRun {
-		if slotExists {
-			infof(flags, "Would replace backup slot %s on %s (%s -> %s)\n", slot, remote, slotSHA[:12], headSHA[:12])
-		} else {
-			infof(flags, "Would create backup slot %s on %s (%s)\n", slot, remote, headSHA[:12])
-		}
-		infof(flags, "  equivalent git command: git %s\n", strings.Join(pushArgs, " "))
-		infof(flags, "Dry run: no changes made.\n")
-		return 0
-	}
 
 	if err := execGitPush(ctx, pushArgs); err != nil {
 		fmt.Fprintf(os.Stderr, "backup push failed: %v\n", err)

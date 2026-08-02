@@ -355,8 +355,8 @@ func TestBackupDryRunTouchesNothing(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("dry-run backup failed (code %d): %s", code, stderr)
 	}
-	if !strings.Contains(stdout, "Would create backup slot") {
-		t.Errorf("expected a preview line, got: %s", stdout)
+	if !strings.Contains(stdout, "Would back up") || !strings.Contains(stdout, "refs/backups/main") {
+		t.Errorf("expected a preview line naming the slot, got: %s", stdout)
 	}
 	if !strings.Contains(stdout, "force-with-lease") {
 		t.Errorf("expected the plain-git equivalent in the preview, got: %s", stdout)
