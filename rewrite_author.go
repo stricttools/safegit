@@ -56,20 +56,8 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 
 	requireCleanTree(ctx, flags, cmd)
 
-	// Acquire rewrite lock to prevent concurrent history rewriting
-	cfg, err := loadConfig(flags, gitDir)
-	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("loading config: %v", err))
-	}
-	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
-	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
-	lk, err := lock.Acquire(sharedDir, sgDir, "safegit/rewrite", "rewrite-author", timeout)
-	if err != nil {
-		die(flags, cmd, 1, "another rewrite operation is in progress")
-	}
-	defer lk.Release()
-
-	// Dry-run mode
+	// Dry-run mode: purely read-only, so it returns before the config load and
+	// before contending for the rewrite lock (same shape as the scrub siblings).
 	if flags.dryRun {
 		dryArgs := append([]string{"rev-list", "--topo-order", "--reverse"}, refGlobs...)
 		out, _, err := git.Run(ctx, dryArgs...)
@@ -140,6 +128,19 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		}
 		return 0
 	}
+
+	// Acquire rewrite lock to prevent concurrent history rewriting (execute path only)
+	cfg, err := loadConfig(flags, gitDir)
+	if err != nil {
+		die(flags, cmd, 1, fmt.Sprintf("loading config: %v", err))
+	}
+	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
+	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
+	lk, err := lock.Acquire(sharedDir, sgDir, "safegit/rewrite", "rewrite-author", timeout)
+	if err != nil {
+		die(flags, cmd, 1, "another rewrite operation is in progress")
+	}
+	defer lk.Release()
 
 	// Confirmation prompt (skipped with --yes)
 	{
