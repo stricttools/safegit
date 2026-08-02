@@ -76,24 +76,12 @@ func TestSessionTrailer_CommitWithoutEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Commit without CLAUDE_CODE_SESSION_ID -- ensure it's not inherited
-	// Build an env without CLAUDE_CODE_SESSION_ID
-	cleanEnv := []string{}
-	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "CLAUDE_CODE_SESSION_ID=") {
-			cleanEnv = append(cleanEnv, e)
-		}
-	}
-
-	cmd := exec.Command(safegitBin, "commit", "-m", "no trailer", "--", "notrailer.txt")
-	cmd.Dir = dir
-	cmd.Env = cleanEnv
-
-	var outBuf, errBuf strings.Builder
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("commit failed: %v\nstdout=%s\nstderr=%s", err, outBuf.String(), errBuf.String())
+	// Commit with no CLAUDE_CODE_SESSION_ID anywhere in the environment.
+	// controlledEnv is a stronger guarantee than filtering the parent env: the
+	// child sees only the allowlist, so nothing ambient can supply a session id.
+	stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "no trailer", "--", "notrailer.txt")
+	if code != 0 {
+		t.Fatalf("commit failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
 
 	msg := commitMessage(t, dir, "HEAD")
