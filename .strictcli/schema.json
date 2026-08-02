@@ -463,6 +463,54 @@
       "help": "audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history",
       "name": "author"
     },
+    "backup": {
+      "commands": {
+        "backup": {
+          "args": [
+            {
+              "help": "name of the remote repository holding the backup slots (defaults to origin)",
+              "name": "remote",
+              "required": false
+            }
+          ],
+          "flags": [
+            {
+              "default": false,
+              "help": "replace a backup slot whose commits are missing from your current history, leasing on the SHA observed during this run; without this flag such a slot is a hard error because overwriting it would drop work backed up from elsewhere",
+              "name": "overwrite-remote-backup",
+              "negatable": true,
+              "type": "bool"
+            }
+          ],
+          "help": "push the current branch to its backup slot refs/backups/\u003cbranch\u003e on the remote, after fetching that slot and refusing when it holds commits your history does not contain; the push is pinned with --force-with-lease to the exact SHA that was just observed (or to \"this ref must not exist\" for a first backup), so a concurrent backup from another machine is rejected rather than clobbered; plain git equivalent: git push --force-with-lease=refs/backups/\u003cbranch\u003e:\u003cobserved-sha\u003e \u003cremote\u003e HEAD:refs/backups/\u003cbranch\u003e",
+          "name": "backup"
+        },
+        "list": {
+          "args": [
+            {
+              "help": "name of the remote repository holding the backup slots (defaults to origin)",
+              "name": "remote",
+              "required": false
+            }
+          ],
+          "help": "list every backup slot present on the remote with the branch name and the commit each slot points at, so you can see which branches are backed up from which machine before restoring one; plain git equivalent: git ls-remote \u003cremote\u003e 'refs/backups/*'",
+          "name": "list"
+        },
+        "restore": {
+          "args": [
+            {
+              "help": "name of the remote repository holding the backup slots (defaults to origin)",
+              "name": "remote",
+              "required": false
+            }
+          ],
+          "help": "fetch the current branch's backup slot from the remote and fast-forward the branch onto it, refusing when the local branch carries commits the backup does not contain so no local work is ever discarded; plain git equivalent: git fetch \u003cremote\u003e refs/backups/\u003cbranch\u003e \u0026\u0026 git merge --ff-only FETCH_HEAD",
+          "name": "restore"
+        }
+      },
+      "help": "push, list, and restore per-branch history backups held in the tool-owned refs/backups namespace on a remote, so uncommitted-to-the-world work survives a lost machine without ever touching refs/heads",
+      "name": "backup"
+    },
     "config": {
       "commands": {
         "get": {
@@ -710,8 +758,16 @@
     }
   },
   "help": "concurrency-safe git wrapper providing 20 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
+  "infra": {
+    "handshakes": [
+      {
+        "env_var": "CLAUDE_CODE_SESSION_ID",
+        "help": "Claude Code session identifier set by the invoking agent session; scopes 'safegit undo' to operations this session performed and is recorded as a commit trailer"
+      }
+    ]
+  },
   "name": "safegit",
   "project_id": "github.com/smm-h/safegit",
   "schema_version": 1,
-  "version": "0.24.1-0.20260729153824-9e99a02e9d87+dirty"
+  "version": "0.24.1-0.20260802150042-60880d5139b9"
 }
