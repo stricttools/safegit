@@ -269,7 +269,7 @@ safegit backup backup mymachines
 # See every backed-up branch on the remote
 safegit backup list
 
-# Preview without pushing anything
+# Preview without pushing anything (local state only, no network contact)
 safegit --dry-run backup backup
 
 # Bring a lost branch back (fast-forward only)
@@ -303,7 +303,8 @@ git merge --ff-only FETCH_HEAD
 
 - **Ancestry check before every backup**: the slot is fetched first, and a slot holding commits that are not reachable from the local HEAD is a hard error (exit code 22) naming both SHAs. Overwriting it requires `--overwrite-remote-backup`.
 - **Leased push**: the push is pinned with `--force-with-lease` to the SHA observed moments earlier -- or, for a first backup, to "this ref must not exist". A backup pushed from another machine in between is rejected, never clobbered.
-- **Public-remote confirmation**: pushing a backup to a public repository (or to a networked remote whose visibility cannot be determined) asks first, before any network contact.
+- **Public-remote confirmation**: a real backup to a public repository (or to a networked remote whose visibility cannot be determined) asks first, before any network contact. Only an explicit `--yes` answers that question; under `--json` the backup refuses instead.
+- **Dry runs never touch the network**: `--dry-run` builds its preview from local state alone -- no `ls-remote`, no `fetch`, no prompt -- so previewing against an unreachable remote succeeds. The slot's current SHA, the ancestry check against it, and the lease pinned to it are all resolved when the backup actually runs.
 - **Hooks bypassed on purpose**: backup pushes run with `--no-verify`. `refs/backups` is a tool-owned namespace, and pre-push policies exist to police branches and tags.
 - **Restore never discards work**: the restore is `merge --ff-only`, so a branch carrying commits the backup lacks is refused with the range to inspect.
 - **Coordination guard on restore**: a restore refuses to run while another safegit operation holds the worktree.
