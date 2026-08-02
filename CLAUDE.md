@@ -94,6 +94,7 @@ This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestrat
 - `safegit undo` reverses the last commit/amend/reword via oplog (session-scoped by default; `--count N` to undo multiple)
 - `safegit commit --amend --branch <name>` for cross-branch amend/reword
 - `safegit doctor --fix` to garbage-collect and repair (replaces gc)
+- `safegit backup backup` / `backup list` / `backup restore` keep one slot per branch at `refs/backups/<branch>` on a remote: ancestry-checked, pushed under a `--force-with-lease` pinned to the SHA just observed (empty expectation for a first backup), `--no-verify` because the namespace is tool-owned, confirmation required on public or unclassifiable remotes, restore is `merge --ff-only`
 - `safegit scrub file` and `safegit scrub match` for history rewriting (repo-wide coordination lock prevents concurrent rewrites)
 - Every scrub persists crash-safe rewrite maps to `.git/safegit/rewrite-maps.jsonl` (flock-guarded JSONL, three phase records per rewrite: commit map + pre-rewrite remote-tracking state before refs move, all tag rewrites, new HEAD + cleanup status); scrub JSON output includes `pre_rewrite_remotes`, `cleanup_ok`, `cleanup_errors`
 - Destructive scrubs in rlsbl-managed repos (`.rlsbl/` or `.rlsbl-monorepo/` present) die unless run under release-tool orchestration; dry-run and `--diff` previews stay available
