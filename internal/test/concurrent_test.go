@@ -117,12 +117,54 @@ func parallel(n int, fn func(i int)) {
 	wg.Wait()
 }
 
+// envAllowlist names the only parent-process variables a spawned safegit is
+// allowed to see. Everything else about the child environment is constructed
+// here, so ambient state in the shell running `go test` (a real
+// CLAUDE_CODE_SESSION_ID, RLSBL_* handshake signals, credentials, a personal
+// git config) can never change what a test exercises.
+var envAllowlist = []string{
+	"PATH",
+	"SYSTEMROOT", // git on Windows fails without it
+	"TMPDIR",
+	"TMP",
+	"TEMP",
+}
+
+// controlledEnv builds the environment for a spawned safegit process:
+// the allowlisted parent variables, a throwaway HOME with no usable git
+// config, deterministic locale and prompt settings, plus any explicit
+// key=value overrides the caller supplies (which win over everything above).
+func controlledEnv(t *testing.T, extra ...string) []string {
+	t.Helper()
+
+	home := t.TempDir()
+	env := make([]string, 0, len(envAllowlist)+len(extra)+8)
+	for _, name := range envAllowlist {
+		if v, ok := os.LookupEnv(name); ok {
+			env = append(env, name+"="+v)
+		}
+	}
+	env = append(env,
+		"HOME="+home,
+		"USERPROFILE="+home,
+		"XDG_CONFIG_HOME="+filepath.Join(home, ".config"),
+		// Point git at files that do not exist: no global/system config is read.
+		"GIT_CONFIG_GLOBAL="+filepath.Join(home, "absent-gitconfig"),
+		"GIT_CONFIG_SYSTEM="+filepath.Join(home, "absent-gitconfig-system"),
+		"GIT_TERMINAL_PROMPT=0",
+		"LANG=C",
+		"LC_ALL=C",
+	)
+	return append(env, extra...)
+}
+
 // runSafegit executes the safegit binary in repoDir with the given args.
 // Returns stdout, stderr, and exit code.
 func runSafegit(t *testing.T, repoDir string, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
 	cmd := exec.Command(safegitBin, args...)
 	cmd.Dir = repoDir
+	cmd.Env = controlledEnv(t)
 
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout = &outBuf

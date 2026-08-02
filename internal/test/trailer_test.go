@@ -8,12 +8,14 @@ import (
 	"testing"
 )
 
-// runSafegitEnv executes the safegit binary with extra environment variables.
+// runSafegitEnv executes the safegit binary with extra environment variables
+// layered on the controlled test environment (nothing is inherited from the
+// parent process beyond the allowlist in controlledEnv).
 func runSafegitEnv(t *testing.T, repoDir string, env []string, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
 	cmd := exec.Command(safegitBin, args...)
 	cmd.Dir = repoDir
-	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = controlledEnv(t, env...)
 
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout = &outBuf
