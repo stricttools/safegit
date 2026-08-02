@@ -56,6 +56,81 @@ func TestAuthorRewriteDryRunSkipsRewriteLock(t *testing.T) {
 	}
 }
 
+// TestSubmoduleCommitDryRunDoesNotBumpParent: a dry-run commit inside a
+// submodule must leave the parent repository completely untouched, even when
+// commit.autoBumpParent is enabled there.
+func TestSubmoduleCommitDryRunDoesNotBumpParent(t *testing.T) {
+	parentDir, _ := newRepoWithSubmodule(t)
+	subDir := prepSubmoduleForCommit(t, parentDir)
+	enableAutoBump(t, parentDir)
+
+	// Land a real submodule commit while auto-bump is still disabled, so the
+	// parent's gitlink is stale: this is exactly the state in which the parent
+	// bump would produce a real commit.
+	if err := os.WriteFile(filepath.Join(subDir, "file.txt"), []byte("real content\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, stderr, code := runSafegit(t, subDir, "commit", "-m", "real sub change", "--", "file.txt"); code != 0 {
+		t.Fatalf("submodule commit failed (code %d): %s", code, stderr)
+	}
+
+	enableAutoBump(t, parentDir)
+
+	parentCountBefore := gitLog(t, parentDir, "HEAD")
+	parentHeadBefore := revParseHEAD(t, parentDir)
+	subHeadBefore := revParseHEAD(t, subDir)
+
+	if err := os.WriteFile(filepath.Join(subDir, "file.txt"), []byte("dry content\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr, code := runSafegit(t, subDir, "--dry-run", "commit", "-m", "dry sub change", "--", "file.txt")
+	if code != 0 {
+		t.Fatalf("dry-run commit in submodule failed (code %d): %s", code, stderr)
+	}
+
+	if got := revParseHEAD(t, parentDir); got != parentHeadBefore {
+		t.Errorf("parent HEAD moved during a dry run: %s -> %s", parentHeadBefore[:12], got[:12])
+	}
+	if got := gitLog(t, parentDir, "HEAD"); got != parentCountBefore {
+		t.Errorf("parent commit count changed during a dry run: %d -> %d", parentCountBefore, got)
+	}
+	if got := revParseHEAD(t, subDir); got != subHeadBefore {
+		t.Errorf("submodule HEAD moved during a dry run: %s -> %s", subHeadBefore[:12], got[:12])
+	}
+}
+
+// TestSubmoduleRewordDryRunDoesNotBumpParent covers the amend/reword autobump
+// call site: a dry-run message reword inside a submodule must not commit in
+// the parent either.
+func TestSubmoduleRewordDryRunDoesNotBumpParent(t *testing.T) {
+	parentDir, _ := newRepoWithSubmodule(t)
+	subDir := prepSubmoduleForCommit(t, parentDir)
+
+	if err := os.WriteFile(filepath.Join(subDir, "file.txt"), []byte("real content\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, stderr, code := runSafegit(t, subDir, "commit", "-m", "real sub change", "--", "file.txt"); code != 0 {
+		t.Fatalf("submodule commit failed (code %d): %s", code, stderr)
+	}
+
+	enableAutoBump(t, parentDir)
+
+	parentCountBefore := gitLog(t, parentDir, "HEAD")
+	parentHeadBefore := revParseHEAD(t, parentDir)
+
+	_, stderr, code := runSafegit(t, subDir, "--dry-run", "commit", "--amend", "-m", "reworded in dry run")
+	if code != 0 {
+		t.Fatalf("dry-run reword in submodule failed (code %d): %s", code, stderr)
+	}
+
+	if got := revParseHEAD(t, parentDir); got != parentHeadBefore {
+		t.Errorf("parent HEAD moved during a dry-run reword: %s -> %s", parentHeadBefore[:12], got[:12])
+	}
+	if got := gitLog(t, parentDir, "HEAD"); got != parentCountBefore {
+		t.Errorf("parent commit count changed during a dry-run reword: %d -> %d", parentCountBefore, got)
+	}
+}
+
 // TestAuthorRewriteDryRunSkipsConfigLoad: the preview needs neither config nor
 // lock, so an unreadable config file must not block it.
 func TestAuthorRewriteDryRunSkipsConfigLoad(t *testing.T) {
