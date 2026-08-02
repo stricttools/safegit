@@ -280,6 +280,71 @@ func TestBackupUnknownVisibilityRequiresConfirmation(t *testing.T) {
 	}
 }
 
+// TestBackupJSONDoesNotBypassExposureConfirmation: --json makes safegit
+// non-interactive, but it must never stand in for the deliberate consent the
+// exposure confirmation asks for. The remote is unreachable, so a bypass shows
+// up as a network error instead of a clean decline.
+func TestBackupJSONDoesNotBypassExposureConfirmation(t *testing.T) {
+	dir := newRepo(t)
+	gitIn(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
+
+	stdout, stderr, code := runSafegit(t, dir, "--json", "backup", "backup", "cloudy")
+	if code != 0 {
+		t.Fatalf("--json must decline the exposure confirmation, not answer it (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "cannot determine") {
+		t.Errorf("expected the visibility warning, got: %s", stderr)
+	}
+	if strings.Contains(stderr, "listing ") || strings.Contains(stderr, "fetching ") {
+		t.Errorf("--json bypassed the confirmation and contacted the remote: %s", stderr)
+	}
+}
+
+// TestBackupExplicitYesSatisfiesExposureConfirmation: --yes is the deliberate
+// non-interactive consent flag, so it still answers the confirmation. The
+// remote refuses connections instantly, so reaching a network error is the
+// proof that the confirmation was satisfied rather than declined.
+func TestBackupExplicitYesSatisfiesExposureConfirmation(t *testing.T) {
+	dir := newRepo(t)
+	gitIn(t, dir, "remote", "add", "refused", "git://127.0.0.1:1/owner/repo.git")
+
+	stdout, stderr, code := runSafegit(t, dir, "--yes", "backup", "backup", "refused")
+	if code == 0 {
+		t.Fatalf("--yes should proceed past the confirmation and fail on the unreachable remote; stdout=%s stderr=%s", stdout, stderr)
+	}
+	if !strings.Contains(stderr, "listing ") {
+		t.Errorf("expected a remote-listing failure (proving the confirmation was passed), got: %s", stderr)
+	}
+	if strings.Contains(stdout, "Aborted") {
+		t.Errorf("--yes must not decline the confirmation, got: %s", stdout)
+	}
+}
+
+// TestBackupDryRunMakesNoNetworkContact: the preview is built from local state
+// only, so an unreachable remote previews cleanly, nothing is asked, and no
+// network call is made.
+func TestBackupDryRunMakesNoNetworkContact(t *testing.T) {
+	dir := newRepo(t)
+	gitIn(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
+
+	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "backup", "backup", "cloudy")
+	if code != 0 {
+		t.Fatalf("dry run against an unreachable remote must preview, not fail (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "refs/backups/main") {
+		t.Errorf("expected the slot ref in the preview, got: %s", stdout)
+	}
+	if strings.Contains(stdout, "[y/N]") {
+		t.Errorf("dry run must not prompt, got: %s", stdout)
+	}
+	if strings.Contains(stderr, "cannot determine") {
+		t.Errorf("dry run must not run the exposure classification, got: %s", stderr)
+	}
+	if strings.Contains(stderr, "listing ") || strings.Contains(stderr, "fetching ") {
+		t.Errorf("dry run contacted the remote: %s", stderr)
+	}
+}
+
 // TestBackupDryRunTouchesNothing: the preview reports the push and the plain
 // git equivalent, and creates no slot.
 func TestBackupDryRunTouchesNothing(t *testing.T) {

@@ -155,17 +155,19 @@ func classifyRemote(ctx context.Context, remoteURL string) remoteExposure {
 
 // confirmExposure asks for confirmation when a backup would leave this machine
 // for a remote that is public (or that we cannot prove is private). Returns
-// false when the user declines.
+// false when the user declines. The prompt is deliberate: --json (which implies
+// --yes elsewhere) must never publish a branch on the operator's behalf, so only
+// an explicit --yes answers it.
 func confirmExposure(ctx context.Context, flags globalFlags, remote, remoteURL string) bool {
 	switch classifyRemote(ctx, remoteURL) {
 	case exposurePublic:
 		fmt.Fprintf(os.Stderr, "warning: %s (%s) is a PUBLIC repository\n", remote, remoteURL)
 		fmt.Fprintf(os.Stderr, "         a backup pushes your entire current branch there, including work you have not published\n")
-		return confirmOrAbort(flags, "Push a backup of this branch to a PUBLIC repository?")
+		return confirmDeliberate(flags, "Push a backup of this branch to a PUBLIC repository?")
 	case exposureUnknown:
 		fmt.Fprintf(os.Stderr, "warning: cannot determine whether %s (%s) is public\n", remote, remoteURL)
 		fmt.Fprintf(os.Stderr, "         a backup pushes your entire current branch there\n")
-		return confirmOrAbort(flags, "Push a backup of this branch to a remote of unknown visibility?")
+		return confirmDeliberate(flags, "Push a backup of this branch to a remote of unknown visibility?")
 	default:
 		return true
 	}

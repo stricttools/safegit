@@ -7,6 +7,45 @@ import (
 	"github.com/smm-h/safegit/internal/commit"
 )
 
+// TestGlobalsToFlagsJSONImpliesYesButNotExplicitYes pins the distinction the
+// deliberate confirmations rely on: --json pre-approves ordinary prompts, but
+// only a real --yes counts as explicit consent.
+func TestGlobalsToFlagsJSONImpliesYesButNotExplicitYes(t *testing.T) {
+	globals := func(yes, jsonOut bool) map[string]interface{} {
+		return map[string]interface{}{
+			"quiet":       false,
+			"verbose":     false,
+			"dry_run":     false,
+			"yes":         yes,
+			"config_file": "",
+			"json":        jsonOut,
+		}
+	}
+
+	tests := []struct {
+		name            string
+		yes, jsonOut    bool
+		wantYes         bool
+		wantYesExplicit bool
+	}{
+		{"neither", false, false, false, false},
+		{"json only", false, true, true, false},
+		{"yes only", true, false, true, true},
+		{"both", true, true, true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gf := globalsToFlags(globals(tt.yes, tt.jsonOut))
+			if gf.yes != tt.wantYes {
+				t.Errorf("yes = %v, want %v", gf.yes, tt.wantYes)
+			}
+			if gf.yesExplicit != tt.wantYesExplicit {
+				t.Errorf("yesExplicit = %v, want %v", gf.yesExplicit, tt.wantYesExplicit)
+			}
+		})
+	}
+}
+
 func TestIsHunkSpec(t *testing.T) {
 	tests := []struct {
 		input string

@@ -20,6 +20,8 @@ Every safegit command accepts these global flags, which control output verbosity
 | `--config-file` | | `""` | Path to a custom safegit config file instead of the default location |
 | `--json` | | `false` | Emit machine-readable JSON output to stdout (implies `--quiet` and `--yes`) |
 
+`--json` implies `--yes` for ordinary prompts, because a machine-readable run has nobody to answer them. It never answers a *deliberate* confirmation -- the one the backup command asks before pushing a branch to a public or unclassifiable remote. Those refuse under `--json` and name `--yes` as the flag that consents, so adding `--json` can never quietly publish anything.
+
 ## commit
 
 Stage and commit specified files in a single atomic operation. This is safegit's core command -- it uses a per-invocation temporary index to isolate each commit from concurrent sessions, then updates the branch ref with compare-and-swap (CAS) retries.
