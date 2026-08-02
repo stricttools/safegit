@@ -1,6 +1,6 @@
 ---
 title: Commands Guide
-description: "Complete reference for every safegit command including commit, undo, push, pull, scan, scrub, doctor, and author with flags, examples, and guarantees."
+description: "Complete reference for every safegit command: commit, undo, push, pull, backup, scan, scrub, doctor and author, with flags, examples and safety guarantees."
 ---
 
 # Commands Guide
@@ -279,7 +279,7 @@ safegit backup backup --overwrite-remote-backup
 
 ### Plain git equivalents
 
-Nothing here needs safegit to undo. The same operations in raw git:
+Nothing in a backup slot needs safegit to read back: the slot is an ordinary ref holding an ordinary commit chain, so any git client can fetch it, inspect it, and merge it. That property is deliberate -- if safegit is unavailable on the machine where the backup is needed, the three commands below recover the work by hand. The same operations in raw git are:
 
 ```bash
 # What "backup backup" does
