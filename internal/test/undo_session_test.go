@@ -8,23 +8,13 @@ import (
 	"testing"
 )
 
-// cleanSessionEnv returns os.Environ() with CLAUDE_CODE_SESSION_ID removed.
-func cleanSessionEnv() []string {
-	var env []string
-	for _, e := range os.Environ() {
-		if !strings.HasPrefix(e, "CLAUDE_CODE_SESSION_ID=") {
-			env = append(env, e)
-		}
-	}
-	return env
-}
-
-// runSafegitCleanEnv runs safegit with a clean environment (no CLAUDE_CODE_SESSION_ID).
+// runSafegitCleanEnv runs safegit with the controlled test environment, which
+// never carries CLAUDE_CODE_SESSION_ID unless a caller passes it explicitly.
 func runSafegitCleanEnv(t *testing.T, repoDir string, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
 	cmd := exec.Command(safegitBin, args...)
 	cmd.Dir = repoDir
-	cmd.Env = cleanSessionEnv()
+	cmd.Env = controlledEnv(t)
 
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout = &outBuf
