@@ -49,7 +49,9 @@ type globalFlags struct {
 }
 
 func main() {
-	app := strictcli.NewApp("safegit", version, "concurrency-safe git wrapper providing 20 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting")
+	app := strictcli.NewApp("safegit", version, "concurrency-safe git wrapper providing 20 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
+		strictcli.WithHandshakeEnv(sessionIDEnvVar, "Claude Code session identifier set by the invoking agent session; scopes 'safegit undo' to operations this session performed and is recorded as a commit trailer"),
+	)
 
 	app.GlobalFlag(strictcli.BoolFlag("quiet", "suppress all informational output, only showing errors and results", strictcli.Short("q"), strictcli.Default(false)))
 	app.GlobalFlag(strictcli.BoolFlag("verbose", "enable verbose output with detailed progress and diagnostic info", strictcli.Default(false)))
@@ -332,7 +334,10 @@ func main() {
 	app.Command("undo", "reverse the last commit, amend, or reword operation using the oplog", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		bypassSession := kwargs["bypass_session"].(bool)
 		count := kwargs["count"].(int)
-		runUndo(globalsToFlags(kwargs), bypassSession, count)
+		// Read the session handshake through the framework accessor so the
+		// dependency is declared rather than an ambient os.Getenv.
+		sessionID, _ := ctx.InfraValue(sessionIDEnvVar)
+		runUndo(globalsToFlags(kwargs), bypassSession, count, sessionID)
 		return strictcli.Exit(0)
 	},
 		strictcli.WithFlags(
