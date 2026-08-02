@@ -39,6 +39,12 @@ func autoBumpParent(flags globalFlags, parentWorkTree, subRelPath, newSubSHA, op
 		return "", nil // already up to date
 	}
 
+	// Defense in depth: maybeAutoBumpParent already returns before reaching
+	// this function under --dry-run. Never spawn a real parent commit here.
+	if flags.dryRun {
+		return "", nil
+	}
+
 	// Build commit message
 	var subject string
 	if firstLine != "" {
@@ -107,6 +113,16 @@ func maybeAutoBumpParent(ctx context.Context, flags globalFlags, gitDir, newHead
 	parentGitDir, subRelPath, ok := submodule.DetectParent(ctx)
 	if !ok {
 		return nil // not in a submodule
+	}
+
+	// A dry run must leave the parent repository entirely alone: no safegit
+	// directory created there, no config read-modify, and above all no commit.
+	// The preview says what the real run would attempt.
+	if flags.dryRun {
+		if !flags.quiet {
+			fmt.Fprintf(os.Stderr, "  parent: would bump %s pointer (dry run; parent repo untouched)\n", subRelPath)
+		}
+		return nil
 	}
 
 	// Ensure parent's safegit dir exists
