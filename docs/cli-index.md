@@ -12,7 +12,7 @@ order: 91
 
 concurrency-safe git wrapper providing 20 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting
 
-Version: 0.24.1-0.20260729153824-9e99a02e9d87+dirty
+Version: :-: var key="project.version"
 
 ## Commands
 
