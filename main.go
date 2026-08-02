@@ -40,12 +40,19 @@ func init() {
 
 // globalFlags holds flags parsed before command dispatch.
 type globalFlags struct {
-	quiet      bool
-	verbose    bool
-	dryRun     bool
-	yes        bool
-	configPath string
-	json       bool
+	quiet   bool
+	verbose bool
+	dryRun  bool
+	// yes pre-approves ordinary prompts. --json implies it, because a
+	// machine-readable run has nobody to answer them.
+	yes bool
+	// yesExplicit records whether --yes was actually passed. Decisions that
+	// only a human (or an agent that deliberately said so) may make -- such as
+	// publishing a whole branch to a remote we cannot prove is private -- are
+	// gated on this, so adding --json can never disarm them.
+	yesExplicit bool
+	configPath  string
+	json        bool
 }
 
 func main() {
@@ -427,12 +434,13 @@ func kwargsStrSlice(v interface{}) []string {
 // strictcli converts flag names like "dry-run" to map keys "dry_run".
 func globalsToFlags(globals map[string]interface{}) globalFlags {
 	gf := globalFlags{
-		quiet:      globals["quiet"].(bool),
-		verbose:    globals["verbose"].(bool),
-		dryRun:     globals["dry_run"].(bool),
-		yes:        globals["yes"].(bool),
-		configPath: globals["config_file"].(string),
-		json:       globals["json"].(bool),
+		quiet:       globals["quiet"].(bool),
+		verbose:     globals["verbose"].(bool),
+		dryRun:      globals["dry_run"].(bool),
+		yes:         globals["yes"].(bool),
+		yesExplicit: globals["yes"].(bool),
+		configPath:  globals["config_file"].(string),
+		json:        globals["json"].(bool),
 	}
 	if gf.json {
 		gf.quiet = true
@@ -482,7 +490,29 @@ func mustGitDir(flags globalFlags, cmd string) string {
 // confirmOrAbort prompts the user for confirmation, returning true if
 // confirmed (via --yes or interactive y/Y) and false otherwise.
 func confirmOrAbort(flags globalFlags, format string, args ...interface{}) bool {
-	if flags.yes {
+	return confirmWith(flags.yes, format, args...)
+}
+
+// confirmDeliberate is confirmOrAbort for decisions that a machine-readable run
+// must never answer on the operator's behalf: only an explicit --yes
+// pre-approves them, never the --yes that --json implies.
+func confirmDeliberate(flags globalFlags, format string, args ...interface{}) bool {
+	if flags.yesExplicit {
+		return true
+	}
+	if flags.json {
+		// A --json run has nobody to prompt, and a dangling prompt would land
+		// in the JSON stream. Refuse, and name the flag that consents.
+		fmt.Fprintf(os.Stderr, "refusing: "+format+"\n", args...)
+		fmt.Fprintf(os.Stderr, "          --json does not answer this confirmation; pass --yes to consent deliberately\n")
+		return false
+	}
+	return confirmWith(false, format, args...)
+}
+
+// confirmWith prompts unless the decision was already pre-approved.
+func confirmWith(preApproved bool, format string, args ...interface{}) bool {
+	if preApproved {
 		return true
 	}
 	fmt.Printf("\n"+format+" [y/N] ", args...)
