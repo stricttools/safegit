@@ -125,6 +125,24 @@ func isNetworkRemote(remoteURL string) bool {
 	return false
 }
 
+// ghRepoVisibility reports what the forge says about a github.com repository's
+// visibility ("PUBLIC", "PRIVATE", "INTERNAL"), or an error when it cannot be
+// asked. It is a variable so tests can drive every classification branch
+// without gh installed and without touching the network.
+var ghRepoVisibility = ghRepoVisibilityViaCLI
+
+// ghRepoVisibilityViaCLI is the real probe: the gh CLI, if it is installed.
+func ghRepoVisibilityViaCLI(ctx context.Context, slug string) (string, error) {
+	if _, err := exec.LookPath("gh"); err != nil {
+		return "", err
+	}
+	out, err := exec.CommandContext(ctx, "gh", "repo", "view", slug, "--json", "visibility", "-q", ".visibility").Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
 // classifyRemote decides whether pushing a branch snapshot to this remote is a
 // publication. github.com remotes are probed with gh; any other networked
 // remote is unknown, and unknown is treated as "ask", never as "safe".
@@ -136,14 +154,11 @@ func classifyRemote(ctx context.Context, remoteURL string) remoteExposure {
 	if !ok {
 		return exposureUnknown
 	}
-	if _, err := exec.LookPath("gh"); err != nil {
-		return exposureUnknown
-	}
-	out, err := exec.CommandContext(ctx, "gh", "repo", "view", slug, "--json", "visibility", "-q", ".visibility").Output()
+	out, err := ghRepoVisibility(ctx, slug)
 	if err != nil {
 		return exposureUnknown
 	}
-	switch strings.ToUpper(strings.TrimSpace(string(out))) {
+	switch strings.ToUpper(strings.TrimSpace(out)) {
 	case "PUBLIC":
 		return exposurePublic
 	case "PRIVATE", "INTERNAL":
