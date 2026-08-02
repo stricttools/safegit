@@ -235,6 +235,87 @@ safegit pull --merge-strategy ff-only origin main
 - **Explicit merge strategy**: No implicit default merge behavior -- you must choose `ff`, `ff-only`, or `no-ff`.
 - **Two-phase**: Runs `git fetch` then `git merge` as separate steps for clarity and control.
 
+## backup
+
+Keep a copy of the current branch on a remote without touching `refs/heads`. Each branch gets exactly one slot, `refs/backups/<branch>`, in a namespace that only safegit writes to. The subcommands are `backup backup` (push the slot), `backup list` (see what is stored), and `backup restore` (fast-forward the branch back onto its slot).
+
+### When to Use
+
+Use it when work exists only on one machine and losing that machine would lose the work, but the work is not ready to publish on a branch. Backups never appear as branches or tags, so nothing about the repository's visible history changes; a backed-up branch is still an ordinary chain of commits that plain git can fetch and merge.
+
+### Arguments
+
+| Name | Required | Default | Description |
+|------|----------|---------|-------------|
+| `remote` | No | `origin` | Remote holding the backup slots |
+
+### Flags
+
+| Flag | Command | Default | Description |
+|------|---------|---------|-------------|
+| `--overwrite-remote-backup` | `backup backup` | `false` | Replace a slot whose commits are missing from the local history |
+
+### Examples
+
+```bash
+# Back the current branch up to origin
+safegit backup backup
+
+# Back up to a different remote
+safegit backup backup mymachines
+
+# See every backed-up branch on the remote
+safegit backup list
+
+# Preview without pushing anything
+safegit --dry-run backup backup
+
+# Bring a lost branch back (fast-forward only)
+safegit backup restore
+
+# Replace a slot that was written from another machine (deliberate data loss)
+safegit backup backup --overwrite-remote-backup
+```
+
+### Plain git equivalents
+
+Nothing here needs safegit to undo. The same operations in raw git:
+
+```bash
+# What "backup backup" does
+git ls-remote origin refs/backups/main            # observe the slot
+git fetch origin refs/backups/main                # bring its objects local
+git merge-base --is-ancestor FETCH_HEAD HEAD      # refuse if it holds foreign work
+git push --force-with-lease=refs/backups/main:<observed-sha> \
+    origin HEAD:refs/backups/main
+
+# What "backup list" does
+git ls-remote origin 'refs/backups/*'
+
+# What "backup restore" does
+git fetch origin refs/backups/main
+git merge --ff-only FETCH_HEAD
+```
+
+### Safety Guarantees
+
+- **Ancestry check before every backup**: the slot is fetched first, and a slot holding commits that are not reachable from the local HEAD is a hard error (exit code 22) naming both SHAs. Overwriting it requires `--overwrite-remote-backup`.
+- **Leased push**: the push is pinned with `--force-with-lease` to the SHA observed moments earlier -- or, for a first backup, to "this ref must not exist". A backup pushed from another machine in between is rejected, never clobbered.
+- **Public-remote confirmation**: pushing a backup to a public repository (or to a networked remote whose visibility cannot be determined) asks first, before any network contact.
+- **Hooks bypassed on purpose**: backup pushes run with `--no-verify`. `refs/backups` is a tool-owned namespace, and pre-push policies exist to police branches and tags.
+- **Restore never discards work**: the restore is `merge --ff-only`, so a branch carrying commits the backup lacks is refused with the range to inspect.
+- **Coordination guard on restore**: a restore refuses to run while another safegit operation holds the worktree.
+- **Oplog recording**: every backup and restore is logged with the remote, slot ref, previous SHA, and new SHA.
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success (including a declined confirmation) |
+| 22 | The remote slot holds work missing from the local history |
+| 23 | The branch has no backup slot on the remote |
+| 40 | Git push failed |
+
 ## scan
 
 Search git history for regex pattern matches across all reachable objects and working tree files, covering blobs, commit messages, tag annotations, trailers, and non-object files like git config and hooks.
