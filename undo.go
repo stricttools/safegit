@@ -23,7 +23,12 @@ var undoableOps = map[string]string{
 	"reword": "oldSha",
 }
 
-func runUndo(flags globalFlags, bypassSession bool, count int) {
+// sessionIDEnvVar is the Claude Code session handshake variable. It is declared
+// on the app (WithHandshakeEnv) and read through ctx.InfraValue, so callers pass
+// the resolved value in rather than reaching for the environment here.
+const sessionIDEnvVar = "CLAUDE_CODE_SESSION_ID"
+
+func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string) {
 	const cmd = "undo"
 
 	if count <= 0 {
@@ -57,9 +62,8 @@ func runUndo(flags globalFlags, bypassSession bool, count int) {
 	}
 
 	// Filter to entries for this ref (and session, unless bypass-session)
-	sessionID := os.Getenv("CLAUDE_CODE_SESSION_ID")
 	if !bypassSession && sessionID == "" {
-		die(flags, cmd, 1, "no session ID found (CLAUDE_CODE_SESSION_ID not set); pass --bypass-session to undo across all sessions")
+		die(flags, cmd, 1, "no session ID found ("+sessionIDEnvVar+" not set); pass --bypass-session to undo across all sessions")
 	}
 
 	var entries []oplog.Entry
