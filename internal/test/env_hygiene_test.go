@@ -15,7 +15,7 @@ import (
 
 func TestControlledEnvIsAllowlisted(t *testing.T) {
 	t.Setenv("CLAUDE_CODE_SESSION_ID", "ambient-poison-session")
-	t.Setenv("RLSBL_SCRUB_ORCHESTRATED", "1")
+	t.Setenv("RLSBL_DIST_DIR", "/ambient/dist")
 	t.Setenv("GH_TOKEN", "ambient-token")
 
 	env := controlledEnv(t)

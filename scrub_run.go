@@ -124,12 +124,6 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 
 	ctx := context.Background()
 
-	// Unorchestrated-scrub guard: destructive scrubs in rlsbl-managed repos
-	// must go through the release tooling. Dry-run and --diff stay available.
-	if !flags.dryRun && !diffMode {
-		requireOrchestratedScrub(ctx, flags, cmd)
-	}
-
 	requireCleanTree(ctx, flags, cmd)
 
 	// Parse recipe
