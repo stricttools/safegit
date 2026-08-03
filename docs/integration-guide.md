@@ -50,7 +50,7 @@ safegit provides guarded passthroughs for `checkout`, `merge`, `rebase`, `reset`
 
 ## rlsbl release workflow
 
-safegit integrates with [rlsbl](https://github.com/smm-h/rlsbl) for release orchestration, with the integration surfacing in three areas: push handling with pre-pre-push hooks, scrub orchestration with the `RLSBL_SCRUB_ORCHESTRATED` environment variable, and context-aware post-rewrite hints.
+safegit integrates with [rlsbl](https://github.com/smm-h/rlsbl) for release orchestration, with the integration surfacing in three areas: push handling with pre-pre-push hooks, the rewrite journal that lets rlsbl repair release metadata after a history rewrite, and context-aware post-rewrite hints.
 
 ### Push handling
 
@@ -64,11 +64,9 @@ In rlsbl-managed projects, pushes happen exclusively through `rlsbl release run`
 
 ### rlsbl detection
 
-safegit detects rlsbl-managed repositories by checking for `.rlsbl/` or `.rlsbl-monorepo/` directories at the repository root, and this detection enables two safeguards: blocking destructive history rewrites without orchestration, and showing context-appropriate push instructions after rewrites:
+safegit detects rlsbl-managed repositories by checking for `.rlsbl/` or `.rlsbl-monorepo/` directories at the repository root. The detection is advisory, not a gate: destructive rewrites run in these repositories exactly as they do anywhere else. What it changes is the guidance printed afterwards.
 
-1. **Scrub guard:** destructive history rewrites (`scrub file`, `scrub match`, `scrub run`, `author rewrite`) are blocked in rlsbl-managed repos unless the `RLSBL_SCRUB_ORCHESTRATED` environment variable is set to `"1"`. Dry-run and `--diff` previews remain available.
-
-2. **Push hints:** after a history rewrite, safegit prints context-appropriate instructions. In rlsbl-managed repos, it says "Complete the rewrite via your release tooling" instead of showing a raw `safegit push` command.
+**Push hints:** after a history rewrite, safegit prints context-appropriate instructions. In rlsbl-managed repos, it says "Complete the rewrite via your release tooling" instead of showing a raw `safegit push` command.
 
 ## Pre-push hooks (pre-pre-push)
 
@@ -132,24 +130,22 @@ If either layer rejects the push, the operation fails.
 
 ## Scrub orchestration protocol
 
-When rlsbl needs to rewrite history to remove a leaked secret or correct author identities, it coordinates with safegit through a handshake protocol using the `RLSBL_SCRUB_ORCHESTRATED` environment variable to authorize destructive rewrites in rlsbl-managed repositories.
+A history rewrite moves every commit it touches, which invalidates three things that live outside the commit graph: changelog entries that name commit hashes, the remote's tags, and the forge releases attached to those tags. safegit does not require permission to rewrite. It rewrites, journals what moved, and leaves the repair to the release tooling, which detects the damage loudly and heals it from that journal.
 
-### The handshake
+### The orchestrated path
 
 1. The user runs `rlsbl release scrub`
-2. rlsbl sets `RLSBL_SCRUB_ORCHESTRATED=1` in the environment
-3. rlsbl invokes `safegit scrub` as a subprocess
-4. safegit checks for the environment variable and allows the destructive rewrite
-5. safegit writes rewrite maps to `.git/safegit/rewrite-maps.jsonl`
-6. rlsbl reads the rewrite maps and performs post-scrub work:
+2. rlsbl invokes `safegit scrub` as a subprocess, passing `--remap-shas-in` for the changelog globs and `--yes` for the destructive confirmation
+3. safegit rewrites history and writes rewrite maps to `.git/safegit/rewrite-maps.jsonl`
+4. rlsbl reads the rewrite maps and performs post-scrub work:
    - Remaps commit hashes in JSONL changelog files (via `--remap-shas-in`)
    - Regenerates `CHANGELOG.md`
    - Updates tags
    - Recreates GitHub Releases
 
-### Without orchestration
+### The unorchestrated path
 
-Without `RLSBL_SCRUB_ORCHESTRATED=1`, safegit refuses destructive scrubs in rlsbl-managed repos with a hard error directing the user to `rlsbl release scrub`. Non-destructive operations (`--diff` preview, `scrub verify`, `scan`) always work regardless.
+A raw `safegit scrub` in a release-managed repository is allowed and does the same rewrite, minus the post-scrub work. The result is detected rather than prevented: rlsbl's changelog hash-resolution check fails on the now-dangling hashes, `rlsbl changelog remap --from-journal` rewrites them from the journal safegit left behind, and `rlsbl release reconcile` re-pushes the moved tags and recreates their GitHub Releases. Nothing about the recovery depends on the rewrite having been announced in advance.
 
 ### Rewrite maps
 
@@ -179,7 +175,6 @@ safegit scrub match --pattern "SECRET_KEY" --replace "REDACTED" \
 | Variable | Used by | Purpose |
 |----------|---------|---------|
 | `CLAUDE_CODE_SESSION_ID` | `commit`, `undo`, oplog | Session scoping for undo operations and commit trailer injection. When set, commits get a `Claude-Code-Session-Id` trailer. `undo` filters oplog entries to the current session. |
-| `RLSBL_SCRUB_ORCHESTRATED` | `scrub file`, `scrub match`, `scrub run`, `author rewrite` | Must be `"1"` to allow destructive history rewrites in rlsbl-managed repos. Set by rlsbl during orchestrated scrubs. |
 
 ### Variables safegit sets (for hooks)
 
