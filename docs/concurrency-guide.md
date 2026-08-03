@@ -172,9 +172,9 @@ Every scrub persists a three-phase record to `.git/safegit/rewrite-maps.jsonl`, 
 
 These three phases ensure that no matter when a crash occurs, an orchestrator (like `rlsbl release scrub`) can determine exactly what state the repository is in and resume or roll back appropriately.
 
-### Orchestration guard
+### Rewrites in release-managed repositories
 
-In repositories managed by release tooling (detected by the presence of `.rlsbl/` or `.rlsbl-monorepo/`), destructive scrub operations are blocked unless the `RLSBL_SCRUB_ORCHESTRATED` environment variable is set. This forces history rewrites through the release pipeline, which handles changelog hash remapping, tag updates, and GitHub Release recreation. Dry-run and `--diff` previews remain available without the guard.
+A history rewrite invalidates metadata that lives outside the commit graph: changelog entries that name commit hashes, remote tags, and the forge releases attached to them. safegit does not try to prevent that by refusing the rewrite. It performs the rewrite and records the full old-to-new mapping in the journal, and the release tooling repairs the damage afterwards: its changelog hash-resolution check fails loudly on the dangling hashes, `rlsbl changelog remap --from-journal` rewrites them from this journal, and `rlsbl release reconcile` re-pushes the moved tags and recreates their GitHub Releases. Detection and repair are the contract; the journal is the interface.
 
 ### The rewrite walk
 

@@ -405,8 +405,7 @@ safegit scrub file --from abc1234 --reason "leaked key" --remap-shas-in "*.jsonl
 
 - **Clean tree required**: Refuses to run if the working tree has uncommitted changes.
 - **Rewrite lock**: Acquires a repository-wide rewrite lock to prevent concurrent scrub operations.
-- **Orchestration guard**: In rlsbl-managed repositories, destructive scrubs must run under release-tool orchestration (set `RLSBL_SCRUB_ORCHESTRATED=1`). Dry-run stays available.
-- **Interactive confirmation**: Prompts for confirmation before rewriting (skippable with `--yes`).
+- **Deliberate confirmation**: Prompts for confirmation before rewriting. Only an explicit `--yes` skips the prompt -- `--json` does not answer it, and refuses instead.
 - **Structural verification**: After rewriting, verifies that commit messages, author/committer identity, parent topology, and non-target files are preserved. Only the target file should change.
 - **Old blob verification**: Verifies that old (pre-scrub) blob objects are no longer reachable after cleanup.
 - **Post-rewrite cleanup**: Expires tainted reflog entries, repacks objects, and prunes unreachable objects.
@@ -763,7 +762,7 @@ safegit --dry-run author rewrite --old-name "alice" --new-name "Alice Smith"
 
 - **Clean tree required**: Refuses to run with uncommitted changes.
 - **Rewrite lock**: Acquires a repository-wide rewrite lock.
-- **Orchestration guard**: In rlsbl-managed repos, must be coordinated with the release tooling.
+- **Deliberate confirmation**: Prompts before rewriting; only an explicit `--yes` skips it, and `--json` refuses rather than answering it.
 - **Snapshot verification**: Takes a full snapshot of repository state (commit count, tag count, branch names, tag names, messages, dates, tree hashes, parent topology) before and after the rewrite, then compares them. All invariants except the target identity fields must match exactly.
 - **Trailer rewriting**: Also rewrites identity-bearing trailers (Signed-off-by, Co-authored-by, etc.) to match the new identity.
 - **Tag rewriting**: Annotated tag objects are rewritten when their tagger name/email matches the old identity.
