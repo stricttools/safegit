@@ -30,8 +30,8 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) {
 
 	// --uninstall: remove safegit from this repo and exit.
 	if uninstall {
-		if !confirmOrAbort(flags, "Remove safegit from this repository?") {
-			fmt.Println("Aborted.")
+		if !confirmDeliberate(flags, "Remove safegit from this repository?") {
+			infof(flags, "Aborted.\n")
 			return
 		}
 		if err := repo.Uninstall(gitDir); err != nil {
