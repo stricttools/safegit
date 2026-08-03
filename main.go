@@ -43,16 +43,13 @@ type globalFlags struct {
 	quiet   bool
 	verbose bool
 	dryRun  bool
-	// yes pre-approves ordinary prompts. --json implies it, because a
-	// machine-readable run has nobody to answer them.
-	yes bool
-	// yesExplicit records whether --yes was actually passed. Decisions that
-	// only a human (or an agent that deliberately said so) may make -- such as
-	// publishing a whole branch to a remote we cannot prove is private -- are
-	// gated on this, so adding --json can never disarm them.
-	yesExplicit bool
-	configPath  string
-	json        bool
+	// yes records that --yes was actually passed. Every prompt safegit raises
+	// gates something irreversible, so this is the ONLY thing that
+	// pre-approves one: --json never implies it, and adding --json to a
+	// command line can never disarm a confirmation.
+	yes        bool
+	configPath string
+	json       bool
 }
 
 func main() {
@@ -434,17 +431,17 @@ func kwargsStrSlice(v interface{}) []string {
 // strictcli converts flag names like "dry-run" to map keys "dry_run".
 func globalsToFlags(globals map[string]interface{}) globalFlags {
 	gf := globalFlags{
-		quiet:       globals["quiet"].(bool),
-		verbose:     globals["verbose"].(bool),
-		dryRun:      globals["dry_run"].(bool),
-		yes:         globals["yes"].(bool),
-		yesExplicit: globals["yes"].(bool),
-		configPath:  globals["config_file"].(string),
-		json:        globals["json"].(bool),
+		quiet:      globals["quiet"].(bool),
+		verbose:    globals["verbose"].(bool),
+		dryRun:     globals["dry_run"].(bool),
+		yes:        globals["yes"].(bool),
+		configPath: globals["config_file"].(string),
+		json:       globals["json"].(bool),
 	}
 	if gf.json {
+		// Human-readable chatter would corrupt the JSON stream. Consent is a
+		// separate question and --json does not answer it.
 		gf.quiet = true
-		gf.yes = true
 	}
 	return gf
 }
@@ -487,17 +484,14 @@ func mustGitDir(flags globalFlags, cmd string) string {
 	return abs
 }
 
-// confirmOrAbort prompts the user for confirmation, returning true if
-// confirmed (via --yes or interactive y/Y) and false otherwise.
-func confirmOrAbort(flags globalFlags, format string, args ...interface{}) bool {
-	return confirmWith(flags.yes, format, args...)
-}
-
-// confirmDeliberate is confirmOrAbort for decisions that a machine-readable run
-// must never answer on the operator's behalf: only an explicit --yes
-// pre-approves them, never the --yes that --json implies.
+// confirmDeliberate asks for confirmation of a decision that a machine-readable
+// run must never answer on the operator's behalf -- destroying history,
+// uninstalling the tool, publishing a branch to a remote we cannot prove is
+// private. Only an explicit --yes pre-approves them, never the --yes that
+// --json implies. It is the only confirmation helper: every prompt safegit
+// raises gates something irreversible.
 func confirmDeliberate(flags globalFlags, format string, args ...interface{}) bool {
-	if flags.yesExplicit {
+	if flags.yes {
 		return true
 	}
 	if flags.json {
@@ -506,14 +500,6 @@ func confirmDeliberate(flags globalFlags, format string, args ...interface{}) bo
 		fmt.Fprintf(os.Stderr, "refusing: "+format+"\n", args...)
 		fmt.Fprintf(os.Stderr, "          --json does not answer this confirmation; pass --yes to consent deliberately\n")
 		return false
-	}
-	return confirmWith(false, format, args...)
-}
-
-// confirmWith prompts unless the decision was already pre-approved.
-func confirmWith(preApproved bool, format string, args ...interface{}) bool {
-	if preApproved {
-		return true
 	}
 	fmt.Printf("\n"+format+" [y/N] ", args...)
 	var answer string

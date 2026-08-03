@@ -145,8 +145,10 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	infof(flags, "  Commits: %d\n", commitCount)
 	infof(flags, "  Reason:  %s\n", reason)
 
-	// Confirmation prompt (skipped with --yes)
-	if !confirmOrAbort(flags, "This will rewrite %d commits. This cannot be undone. Proceed?", commitCount) {
+	// Confirmation prompt (skipped with an explicit --yes). A dry run destroys
+	// nothing, so it never asks -- same shape as the scrub siblings, which
+	// return their preview before reaching this point.
+	if !flags.dryRun && !confirmDeliberate(flags, "This will rewrite %d commits. This cannot be undone. Proceed?", commitCount) {
 		infof(flags, "Aborted.\n")
 		return 0
 	}
@@ -419,8 +421,8 @@ func runScrubFileInSubmodule(
 	infof(flags, "  Sub commits: %d\n", subCommitCount)
 	infof(flags, "  Reason:     %s\n", reason)
 
-	// Confirmation prompt (skipped with --yes)
-	if !confirmOrAbort(flags, "This will rewrite submodule + parent history. This cannot be undone. Proceed?") {
+	// Confirmation prompt (skipped with an explicit --yes); a dry run never asks.
+	if !flags.dryRun && !confirmDeliberate(flags, "This will rewrite submodule + parent history. This cannot be undone. Proceed?") {
 		infof(flags, "Aborted.\n")
 		return 0
 	}

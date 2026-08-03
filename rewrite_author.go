@@ -135,7 +135,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 	defer lk.Release()
 
-	// Confirmation prompt (skipped with --yes)
+	// Confirmation prompt (skipped with an explicit --yes)
 	{
 		countArgs := append([]string{"rev-list", "--topo-order", "--reverse"}, refGlobs...)
 		out, _, err := git.Run(ctx, countArgs...)
@@ -144,8 +144,8 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		}
 		total := len(git.SplitNonEmpty(out))
 
-		if !confirmOrAbort(flags, "About to rewrite %d commits. This cannot be undone. Proceed?", total) {
-			fmt.Println("Aborted.")
+		if !confirmDeliberate(flags, "About to rewrite %d commits. This cannot be undone. Proceed?", total) {
+			infof(flags, "Aborted.\n")
 			return 0
 		}
 	}

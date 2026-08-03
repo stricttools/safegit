@@ -164,8 +164,8 @@ func executeScrubRecipe(
 		return 0, nil
 	}
 
-	// Confirmation prompt
-	if !confirmOrAbort(flags, "This will rewrite history using %d recipe operations. This cannot be undone. Proceed?", len(recipe.Operations)) {
+	// Confirmation prompt (skipped with an explicit --yes)
+	if !confirmDeliberate(flags, "This will rewrite history using %d recipe operations. This cannot be undone. Proceed?", len(recipe.Operations)) {
 		infof(flags, "Aborted.\n")
 		return 0, nil
 	}

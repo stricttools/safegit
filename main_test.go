@@ -7,10 +7,10 @@ import (
 	"github.com/smm-h/safegit/internal/commit"
 )
 
-// TestGlobalsToFlagsJSONImpliesYesButNotExplicitYes pins the distinction the
-// deliberate confirmations rely on: --json pre-approves ordinary prompts, but
-// only a real --yes counts as explicit consent.
-func TestGlobalsToFlagsJSONImpliesYesButNotExplicitYes(t *testing.T) {
+// TestGlobalsToFlagsJSONDoesNotImplyYes pins what the deliberate
+// confirmations rely on: --json silences human-readable output but never
+// stands in for consent. Only a real --yes sets it.
+func TestGlobalsToFlagsJSONDoesNotImplyYes(t *testing.T) {
 	globals := func(yes, jsonOut bool) map[string]interface{} {
 		return map[string]interface{}{
 			"quiet":       false,
@@ -23,14 +23,14 @@ func TestGlobalsToFlagsJSONImpliesYesButNotExplicitYes(t *testing.T) {
 	}
 
 	tests := []struct {
-		name            string
-		yes, jsonOut    bool
-		wantYes         bool
-		wantYesExplicit bool
+		name         string
+		yes, jsonOut bool
+		wantYes      bool
+		wantQuiet    bool
 	}{
 		{"neither", false, false, false, false},
-		{"json only", false, true, true, false},
-		{"yes only", true, false, true, true},
+		{"json only", false, true, false, true},
+		{"yes only", true, false, true, false},
 		{"both", true, true, true, true},
 	}
 	for _, tt := range tests {
@@ -39,8 +39,8 @@ func TestGlobalsToFlagsJSONImpliesYesButNotExplicitYes(t *testing.T) {
 			if gf.yes != tt.wantYes {
 				t.Errorf("yes = %v, want %v", gf.yes, tt.wantYes)
 			}
-			if gf.yesExplicit != tt.wantYesExplicit {
-				t.Errorf("yesExplicit = %v, want %v", gf.yesExplicit, tt.wantYesExplicit)
+			if gf.quiet != tt.wantQuiet {
+				t.Errorf("quiet = %v, want %v", gf.quiet, tt.wantQuiet)
 			}
 		})
 	}

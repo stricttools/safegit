@@ -18,9 +18,9 @@ Every safegit command accepts these global flags, which control output verbosity
 | `--dry-run` | `-n` | `false` | Preview what would happen without writing any changes to disk |
 | `--yes` | `-y` | `false` | Automatically confirm all interactive prompts |
 | `--config-file` | | `""` | Path to a custom safegit config file instead of the default location |
-| `--json` | | `false` | Emit machine-readable JSON output to stdout (implies `--quiet` and `--yes`) |
+| `--json` | | `false` | Emit machine-readable JSON output to stdout (implies `--quiet`) |
 
-`--json` implies `--yes` for ordinary prompts, because a machine-readable run has nobody to answer them. It never answers a *deliberate* confirmation -- the one the backup command asks before pushing a branch to a public or unclassifiable remote. Those refuse under `--json` and name `--yes` as the flag that consents, so adding `--json` can never quietly publish anything.
+`--json` implies `--quiet` -- human-readable chatter would corrupt the JSON stream -- but it does not imply `--yes`. Every prompt safegit raises gates something irreversible: rewriting history (`scrub file`, `scrub match`, `scrub run`, `author rewrite`), removing safegit from a repository (`doctor --uninstall`), or publishing a branch to a public or unclassifiable remote (`backup backup`). Under `--json` those refuse and name `--yes` as the flag that consents, so adding `--json` can never quietly destroy or publish anything. Previews (`--dry-run`, `scrub run --diff`) destroy nothing and never ask.
 
 ## commit
 
