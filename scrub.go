@@ -60,12 +60,6 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 
 	ctx := context.Background()
 
-	// Unorchestrated-scrub guard: destructive scrubs in rlsbl-managed repos
-	// must go through the release tooling. Dry-run stays available.
-	if !flags.dryRun {
-		requireOrchestratedScrub(ctx, flags, cmd)
-	}
-
 	requireCleanTree(ctx, flags, cmd)
 
 	sgDir := repo.SafegitDir(gitDir)
