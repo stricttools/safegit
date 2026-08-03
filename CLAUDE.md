@@ -97,7 +97,8 @@ This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestrat
 - `safegit backup backup` / `backup list` / `backup restore` keep one slot per branch at `refs/backups/<branch>` on a remote: ancestry-checked, pushed under a `--force-with-lease` pinned to the SHA just observed (empty expectation for a first backup), `--no-verify` because the namespace is tool-owned, confirmation required on public or unclassifiable remotes (only an explicit `--yes` answers it -- `--json` refuses), `--dry-run` previews from local state with no network contact at all, restore is `merge --ff-only`
 - `safegit scrub file` and `safegit scrub match` for history rewriting (repo-wide coordination lock prevents concurrent rewrites)
 - Every scrub persists crash-safe rewrite maps to `.git/safegit/rewrite-maps.jsonl` (flock-guarded JSONL, three phase records per rewrite: commit map + pre-rewrite remote-tracking state before refs move, all tag rewrites, new HEAD + cleanup status); scrub JSON output includes `pre_rewrite_remotes`, `cleanup_ok`, `cleanup_errors`
-- Destructive scrubs in rlsbl-managed repos (`.rlsbl/` or `.rlsbl-monorepo/` present) die unless run under release-tool orchestration; dry-run and `--diff` previews stay available
+- Destructive rewrites in release-managed repos (`.rlsbl/` or `.rlsbl-monorepo/` present) are ordinary operations: safegit rewrites and journals, and the release tooling detects the dangling references afterwards (hard error) and heals them from the journal
+- Destructive confirmations (`scrub file`/`match`/`run`, `author rewrite`, `doctor --uninstall`, `backup backup` on a public remote) are deliberate: `--json` does not answer them, only an explicit `--yes` does
 - `safegit scrub run` for recipe-based multi-operation scrub from TOML files
 - `safegit scrub verify` for policy-based verification that scrubbed patterns remain absent
 - cherry-pick, revert are guarded passthroughs (coordination check before git)
