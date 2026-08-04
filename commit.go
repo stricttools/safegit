@@ -8,6 +8,7 @@ import (
 
 	"github.com/smm-h/safegit/internal/commit"
 	"github.com/smm-h/safegit/internal/repo"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
 func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, trailers []string, files []string) {
@@ -102,9 +103,15 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		os.Exit(1)
 	}
 
+	recordCommitRefUpdate(flags, result.Ref, result.SHA, result.Parent)
+
 	if !flags.quiet {
 		fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msg))
-		fmt.Printf(" %d file(s) committed", len(files)+len(result.AutoStagedDeletions))
+		if flags.dryRun {
+			fmt.Printf(" %d file(s) would be committed", len(files)+len(result.AutoStagedDeletions))
+		} else {
+			fmt.Printf(" %d file(s) committed", len(files)+len(result.AutoStagedDeletions))
+		}
 		if result.Attempts > 1 {
 			fmt.Printf(" (%d CAS retries)", result.Attempts-1)
 		}
@@ -116,6 +123,30 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 }
 
 // runCommitAmend handles the --amend path: amend with files, or reword without.
+// recordCommitRefUpdate puts the commit pipeline's ref move into the
+// framework's would-do log.
+//
+// The pipeline (internal/commit) owns its own dry-run seam: it builds the tree
+// and the commit object, then returns WITHOUT the compare-and-swap ref update
+// that would make the commit real. That seam predates the effects regime and
+// cannot move onto the handle without breaking the CAS retry loop the update
+// sits inside, so the mint here is deliberately dry-mode-only -- in a real run
+// the pipeline performs the update itself. Without it a `commit --dry-run`
+// would print an empty would-do log, which reads as "this would change
+// nothing".
+func recordCommitRefUpdate(flags globalFlags, ref, newSHA, oldSHA string) {
+	if !flags.dryRun {
+		return
+	}
+	if oldSHA == "" {
+		oldSHA = "0000000000000000000000000000000000000000"
+	}
+	_, _ = flags.effects().Run(
+		[]interface{}{"git", "update-ref", ref, newSHA, oldSHA},
+		strictcli.Resource("ref:"+ref),
+	)
+}
+
 func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch string, trailers []string, files []string) {
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
@@ -173,13 +204,19 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			os.Exit(1)
 		}
 
+		recordCommitRefUpdate(flags, result.Ref, result.SHA, result.OldSHA)
+
 		if !flags.quiet {
 			msgDisplay := msg
 			if msgDisplay == "" {
 				msgDisplay = "(message preserved)"
 			}
 			fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msgDisplay))
-			fmt.Printf(" amended (was %s)", result.OldSHA[:8])
+			if flags.dryRun {
+				fmt.Printf(" would amend (was %s)", result.OldSHA[:8])
+			} else {
+				fmt.Printf(" amended (was %s)", result.OldSHA[:8])
+			}
 			if result.Attempts > 1 {
 				fmt.Printf(" (%d CAS retries)", result.Attempts-1)
 			}
@@ -229,9 +266,15 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			os.Exit(1)
 		}
 
+		recordCommitRefUpdate(flags, result.Ref, result.SHA, result.OldSHA)
+
 		if !flags.quiet {
 			fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msg))
-			fmt.Printf(" reworded (was %s)\n", result.OldSHA[:8])
+			if flags.dryRun {
+				fmt.Printf(" would reword (was %s)\n", result.OldSHA[:8])
+			} else {
+				fmt.Printf(" reworded (was %s)\n", result.OldSHA[:8])
+			}
 		}
 	}
 }

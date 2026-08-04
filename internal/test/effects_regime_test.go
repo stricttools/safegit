@@ -152,3 +152,27 @@ func TestPushDryRunDoesNotPush(t *testing.T) {
 		t.Errorf("a dry run pushed for real; remote now holds %v", branches)
 	}
 }
+
+// TestCommitDryRunRecordsAndCommitsNothing: the commit pipeline's own dry-run
+// seam builds the objects and stops before the ref moves. The would-do log must
+// still say what the run would do -- an empty log reads as "this would change
+// nothing" -- and the output must not claim a commit landed.
+func TestCommitDryRunRecordsAndCommitsNothing(t *testing.T) {
+	dir := newRepo(t)
+	writeFile(t, dir, "a.txt", "one\n")
+	before := gitLog(t, dir, "HEAD")
+
+	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "commit", "-m", "preview", "--", "a.txt")
+	if code != 0 {
+		t.Fatalf("commit --dry-run failed (%d): %s", code, stderr)
+	}
+	if log := wouldDoLog(stdout); !strings.Contains(log, "run: git update-ref") {
+		t.Errorf("the would-do log must record the ref update, got: %s", log)
+	}
+	if !strings.Contains(stdout, "would be committed") {
+		t.Errorf("a preview must not claim files were committed, got: %s", stdout)
+	}
+	if after := gitLog(t, dir, "HEAD"); after != before {
+		t.Errorf("a dry-run commit landed: %d -> %d", before, after)
+	}
+}
