@@ -4,6 +4,8 @@ github.com/smm-h/go-toml-edit v0.2.2 h1:z+eR3WuVbZhJiJ1TprX4HwB+UI8/VT7wr5bItwGI
 github.com/smm-h/go-toml-edit v0.2.2/go.mod h1:ateUuu33c4CaaB3XUQgsyuPEsIkAWRV8nahfZqpNhm4=
 github.com/smm-h/strictcli/go v0.28.2 h1:y8TqxMQHjP4H/GaLl5cAmhTdhAqo27SnuGqTQ6SKCU8=
 github.com/smm-h/strictcli/go v0.28.2/go.mod h1:CFDJB7rDMon5TFSn5JqCy7I2PYv43j/KQDs1OlE2Ezg=
+github.com/smm-h/strictcli/go v0.29.0 h1:n0+NckMikyL/b3omhv2pSVKQOeGrMI505JkDLblcbVc=
+github.com/smm-h/strictcli/go v0.29.0/go.mod h1:CFDJB7rDMon5TFSn5JqCy7I2PYv43j/KQDs1OlE2Ezg=
 github.com/smm-h/stricttest/go v0.1.1 h1:z3N7RPoeLjrWTrcudxNJh2W5PVYZPJ/WsqX8ssXTkNE=
 github.com/smm-h/stricttest/go v0.1.1/go.mod h1:/rFaWmnLgp6wY9Ne+/kZIMUdOOGTPjjTHDgJjxyaYTs=
 github.com/toml-lang/toml-test/v2 v2.2.0 h1:q3ELZu7oPnpl9TClC6OOcAccXwj+jwAyFP8WvzBdK1M=
