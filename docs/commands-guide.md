@@ -9,18 +9,33 @@ safegit is a concurrency-safe git wrapper providing atomic commits, oplog-based 
 
 ## Global Flags
 
-Every safegit command accepts these global flags, which control output verbosity, dry-run previewing, interactive prompt behavior, configuration file location, and machine-readable JSON output mode. These flags can be placed before the subcommand name on the command line.
+Every safegit command accepts these global flags, which control output verbosity, dry-run previewing, interactive prompt behavior, configuration file location, and machine-readable JSON output mode.
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--quiet` | `-q` | `false` | Suppress informational output, only showing errors and results |
-| `--verbose` | | `false` | Enable verbose output with detailed progress and diagnostic info |
-| `--dry-run` | `-n` | `false` | Preview what would happen without writing any changes to disk |
-| `--yes` | `-y` | `false` | Automatically confirm all interactive prompts |
-| `--config-file` | | `""` | Path to a custom safegit config file instead of the default location |
-| `--json` | | `false` | Emit machine-readable JSON output to stdout (implies `--quiet`) |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--quiet` | `false` | Suppress informational output, only showing errors and results |
+| `--verbose` | `false` | Enable verbose output with detailed progress and diagnostic info |
+| `--dry-run` | `false` | Preview what would happen without writing any changes to disk |
+| `--yes` | `false` | Consent to a mutating command without being asked |
+| `--config-file` | `""` | Path to a custom safegit config file instead of the default location |
+| `--json` | `false` | Emit machine-readable JSON output to stdout (implies `--quiet`) |
 
-`--json` implies `--quiet` -- human-readable chatter would corrupt the JSON stream -- but it does not imply `--yes`. Every prompt safegit raises gates something irreversible: rewriting history (`scrub file`, `scrub match`, `scrub run`, `author rewrite`), removing safegit from a repository (`doctor --uninstall`), or publishing a branch to a public or unclassifiable remote (`backup backup`). Under `--json` those refuse and name `--yes` as the flag that consents, so adding `--json` can never quietly destroy or publish anything. Previews (`--dry-run`, `scrub run --diff`) destroy nothing and never ask.
+The first four are owned by the CLI framework, not by safegit. Three consequences follow, and all three are breaking changes from safegit 0.24:
+
+- **They have no short forms.** `-q`, `-n` and `-y` are gone; write `--quiet`, `--dry-run` and `--yes`.
+- **They are recognized anywhere in the command line.** `safegit --dry-run push` and `safegit push --dry-run` are the same run. (`--config-file` and `--json` are safegit's own and stay before the subcommand.)
+- **Every mutating command asks before it runs.** Commands are classified `read_only` or `mutating`; a `mutating` one prompts `about to run mutating command '<name>'. Proceed? [y/N]` on a terminal, and refuses outright with `error: stdin is not interactive; pass --yes to confirm` when there is no terminal to ask at. **Scripts and agents must pass `--yes`**: `safegit --yes commit -m "msg" -- file`. `--dry-run` also satisfies the gate, because a preview changes nothing.
+
+`--json` implies `--quiet` -- human-readable chatter would corrupt the JSON stream -- but it never implies `--yes`. `--json` says how to format output; it says nothing about consent. Adding it to a command line can therefore never destroy or publish anything on its own.
+
+Under `--dry-run` the framework writes a **would-do log** to stdout after the command's own output, listing every mutation the run would have performed:
+
+```
+DRY RUN — no changes were made. Would do:
+  1. run: git push origin refs/heads/main:refs/heads/main (granted: push — publishing local refs to a remote is what this command is for)
+```
+
+The log is never suppressed -- not by `--quiet`, not by `--json` -- so a machine-readable dry run's stdout is safegit's JSON payload followed by the log. Cut at the `DRY RUN` line before decoding.
 
 ## commit
 

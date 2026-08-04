@@ -48,6 +48,8 @@ This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestrat
 ## Conventions
 
 - Always use `safegit commit` (not raw `git commit`) when committing to this repo, if safegit is installed
+- Every mutating command is gated by the CLI framework's confirm protocol: pass `--yes` (`safegit --yes commit -m "msg" -- file`) from any script, hook or agent, because a run with no terminal to prompt at refuses instead of proceeding. `--dry-run` also satisfies the gate
+- `--quiet`, `--verbose`, `--dry-run` and `--yes` are framework-owned: no short forms (`-q`/`-n`/`-y` are gone) and recognized anywhere in the command line
 - All git plumbing calls go through internal/git (never shell out to git directly from other packages)
 - Per-invocation tmp indexes: never write to the shared .git/index
 - All ref updates use CAS (compare-and-swap) via git update-ref with old-value argument
@@ -62,7 +64,8 @@ This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestrat
 - `safegit scrub file` and `safegit scrub match` for history rewriting (repo-wide coordination lock prevents concurrent rewrites)
 - Every scrub persists crash-safe rewrite maps to `.git/safegit/rewrite-maps.jsonl` (flock-guarded JSONL, three phase records per rewrite: commit map + pre-rewrite remote-tracking state before refs move, all tag rewrites, new HEAD + cleanup status); scrub JSON output includes `pre_rewrite_remotes`, `cleanup_ok`, `cleanup_errors`
 - Destructive rewrites in release-managed repos (`.rlsbl/` or `.rlsbl-monorepo/` present) are ordinary operations: safegit rewrites and journals, and the release tooling detects the dangling references afterwards (hard error) and heals them from the journal
-- Destructive confirmations (`scrub file`/`match`/`run`, `author rewrite`, `doctor --uninstall`, `backup backup` on a public remote) are deliberate: `--json` does not answer them, only an explicit `--yes` does
+- Destructive confirmations (`scrub file`/`match`/`run`, `author rewrite`, `doctor --uninstall`, `backup backup` on a public remote) are deliberate: `--json` does not answer them, only an explicit `--yes` does. The framework's own confirm protocol now sits in front of them and enforces the same rule for every mutating command
+- `--dry-run` is honest across the board: the framework records each mutation in a would-do log on stdout instead of performing it. `push`, `pull`, `checkout`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick`, `revert`, `config set` and `hook install` all ignored `--dry-run` before 0.25 and mutated anyway
 - `safegit scrub run` for recipe-based multi-operation scrub from TOML files
 - `safegit scrub verify` for policy-based verification that scrubbed patterns remain absent
 - cherry-pick, revert are guarded passthroughs (coordination check before git)

@@ -208,7 +208,7 @@ When safegit detects it is running inside a git submodule, two additional behavi
 
 ## JSON output mode
 
-All commands support `--json` for machine-readable output. When `--json` is active, safegit automatically enables `--quiet` (suppresses informational stderr) and `--yes` (auto-confirms prompts). If a command fails before producing JSON output, an error envelope is written to stdout:
+All commands support `--json` for machine-readable output. When `--json` is active, safegit automatically enables `--quiet` (suppresses informational stderr). It does **not** imply `--yes`: consent is a separate question and `--json` does not answer it, so a non-interactive `--json` run of a mutating command must pass `--yes` explicitly. If a command fails before producing JSON output, an error envelope is written to stdout:
 
 ```json
 {
