@@ -52,14 +52,7 @@ func captureConfirm(t *testing.T, fn func() bool) (bool, string) {
 // testFlags builds globalFlags the way the CLI does, so the --json/--yes
 // coupling under test is the real one.
 func testFlags(yes, jsonOut bool) globalFlags {
-	return globalsToFlags(map[string]interface{}{
-		"quiet":       false,
-		"verbose":     false,
-		"dry_run":     false,
-		"yes":         yes,
-		"config_file": "",
-		"json":        jsonOut,
-	})
+	return newGlobalFlags(reservedFlags{yes: yes}, "", jsonOut)
 }
 
 func TestClassifyRemoteGithubVisibility(t *testing.T) {

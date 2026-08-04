@@ -524,66 +524,26 @@ func TestScrubReasonInOplog(t *testing.T) {
 
 // TestScrubConfirmationAbort runs scrub without --yes and pipes "n" to stdin.
 // Verifies the command exits without rewriting anything.
-func TestScrubConfirmationAbort(t *testing.T) {
+func TestScrubUnconsentedRewritesNothing(t *testing.T) {
 	dir := newRepo(t)
-
-	commitFileEnv(t, dir, scrubEnv, "secret.txt", "sensitive\n", "add secret")
-
-	shas := revListReverse(t, dir)
-	initialSHA := shas[0]
-
-	if err := os.WriteFile(filepath.Join(dir, "secret.txt"), []byte("REDACTED\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Commit the replacement content so the working tree is clean.
-	// The dirty-tree guard would block scrub before the confirmation prompt.
-	_, cstderr, ccode := runSafegitEnv(t, dir, scrubEnv, "commit", "-m", "replace secret", "--", "secret.txt")
-	if ccode != 0 {
-		t.Fatalf("commit replacement failed (code %d): %s", ccode, cstderr)
-	}
-
-	// Capture HEAD after committing the replacement (this is the state
-	// we expect to be preserved when the user aborts).
+	commitFileEnv(t, dir, scrubEnv, "secret.txt", "hunter2\n", "add secret")
+	initialSHA := revListReverse(t, dir)[0]
+	commitFileEnv(t, dir, scrubEnv, "secret.txt", "REDACTED\n", "commit replacement")
 	headBefore := revParseHEAD(t, dir)
 
-	// Run WITHOUT --yes, pipe "n" to stdin
-	cmd := exec.Command(safegitBin, "scrub", "file", "--from", initialSHA, "--reason", "should abort", "secret.txt")
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "CLAUDE_CODE_SESSION_ID=scrub-test")
-	cmd.Stdin = strings.NewReader("n\n")
-
-	var outBuf, errBuf strings.Builder
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-
-	err := cmd.Run()
-	exitCode := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			t.Fatalf("running safegit scrub: %v", err)
-		}
+	// `scrub file` is `mutating`: without consent strictcli refuses before the
+	// handler runs. Piping "n" is not consent, and history is left alone.
+	_, stderr, exitCode := runSafegitNoConsent(t, dir, scrubEnv,
+		"scrub", "file", "--from", initialSHA, "--reason", "should abort", "secret.txt")
+	if exitCode == 0 {
+		t.Errorf("an unconsented scrub must not succeed; stderr: %s", stderr)
 	}
 
-	if exitCode != 0 {
-		t.Errorf("expected exit code 0 on abort, got %d: stdout=%s stderr=%s", exitCode, outBuf.String(), errBuf.String())
-	}
-
-	combined := outBuf.String() + errBuf.String()
-	if !strings.Contains(combined, "Aborted") {
-		t.Errorf("output should contain 'Aborted', got: %s", combined)
-	}
-
-	// HEAD should not have changed
-	headAfter := revParseHEAD(t, dir)
-	if headAfter != headBefore {
-		t.Errorf("HEAD changed despite abort: %s -> %s", headBefore, headAfter)
+	if headAfter := revParseHEAD(t, dir); headAfter != headBefore {
+		t.Errorf("HEAD changed despite the refusal: %s -> %s", headBefore, headAfter)
 	}
 }
 
-// TestScrubDryRun verifies --dry-run previews without making changes.
 func TestScrubDryRun(t *testing.T) {
 	dir := newRepo(t)
 
@@ -1330,7 +1290,7 @@ func TestScrubFileJSON(t *testing.T) {
 		OldHead          string            `json:"old_head"`
 		NewHead          string            `json:"new_head"`
 	}
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 
@@ -1427,7 +1387,7 @@ func TestScrubFileDryRunShowsSHA(t *testing.T) {
 	var result struct {
 		NewBlobSHA string `json:"new_blob_sha"`
 	}
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON: %v\nstdout: %s", err, stdout)
 	}
 	if result.NewBlobSHA == "" {
@@ -1474,7 +1434,7 @@ func TestScrubFileJSONDryRun(t *testing.T) {
 		OldHead     string `json:"old_head"`
 		NewBlobSHA  string `json:"new_blob_sha"`
 	}
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 

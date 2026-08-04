@@ -310,7 +310,7 @@ replace = "REDACTED"
 		OldHead          string            `json:"old_head"`
 		NewHead          string            `json:"new_head"`
 	}
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 
@@ -504,10 +504,10 @@ replace = "REDACTED"
 	}
 
 	var result struct {
-		Version            int  `json:"version"`
-		DryRun             bool `json:"dry_run"`
-		OperationCount     int  `json:"operation_count"`
-		Operations         []struct {
+		Version        int  `json:"version"`
+		DryRun         bool `json:"dry_run"`
+		OperationCount int  `json:"operation_count"`
+		Operations     []struct {
 			Index         int      `json:"index"`
 			Pattern       string   `json:"pattern"`
 			BlobMatches   int      `json:"blob_matches"`
@@ -522,7 +522,7 @@ replace = "REDACTED"
 		EstimatedCommits   int `json:"estimated_commits"`
 		ObjectsScanned     int `json:"objects_scanned"`
 	}
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 

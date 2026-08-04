@@ -281,6 +281,17 @@ func isExecutable(info os.FileInfo) bool {
 	return info.Mode()&0111 != 0
 }
 
+// PlanInstall reads the hook source and resolves the destination path, without
+// mutating anything. Callers mint the mkdir/write/chmod themselves so a dry run
+// can record the install instead of performing it.
+func PlanInstall(gitDir, srcPath string) (data []byte, dest string, err error) {
+	data, err = os.ReadFile(srcPath)
+	if err != nil {
+		return nil, "", fmt.Errorf("reading hook file: %w", err)
+	}
+	return data, filepath.Join(gitDir, "hooks", filepath.Base(srcPath)), nil
+}
+
 // Install copies a hook file to .git/hooks/ and makes it executable.
 func Install(gitDir, srcPath string) error {
 	hooksDir := filepath.Join(gitDir, "hooks")

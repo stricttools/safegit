@@ -13,6 +13,7 @@ import (
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/submodule"
 	"github.com/smm-h/safegit/internal/trailer"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
 // autoBumpParent performs the actual parent bump: checks the current pointer,
@@ -63,19 +64,22 @@ func autoBumpParent(flags globalFlags, parentWorkTree, subRelPath, newSubSHA, op
 		return "", fmt.Errorf("resolving safegit binary: %v", err)
 	}
 
-	// Run safegit commit in the parent
-	var commitOut, commitErr bytes.Buffer
-	commitCmd := exec.Command(safegitBin, "commit", "-m", msg, "--", subRelPath)
-	commitCmd.Dir = parentWorkTree
-	commitCmd.Env = os.Environ()
-	commitCmd.Stdout = &commitOut
-	commitCmd.Stderr = &commitErr
-	if err := commitCmd.Run(); err != nil {
-		return "", fmt.Errorf("safegit commit in parent: %v\nstderr: %s", err, strings.TrimSpace(commitErr.String()))
+	// Run safegit commit in the parent through the effects handle, so the
+	// self-spawn is a recorded PROC_MUTATE rather than a bare subprocess.
+	// --yes is mandatory: the child is a mutating command dispatched with no
+	// terminal to confirm at, and the operator already consented to this run.
+	completed, err := flags.effects().Run(
+		[]interface{}{safegitBin, "--yes", "commit", "-m", msg, "--", subRelPath},
+		strictcli.Cwd(parentWorkTree),
+		strictcli.UseGrant("parent-bump"),
+		strictcli.Resource("parent-pointer:"+subRelPath),
+	)
+	if err != nil {
+		return "", fmt.Errorf("safegit commit in parent: %v", err)
 	}
 
 	// Parse commit SHA from stdout: "[branch sha] message"
-	output := strings.TrimSpace(commitOut.String())
+	output := strings.TrimSpace(completed.Stdout())
 	sha := parseCommitSHA(output)
 	if sha == "" {
 		return "", fmt.Errorf("could not parse commit SHA from parent output: %q", output)

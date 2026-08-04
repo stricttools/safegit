@@ -94,7 +94,7 @@ func TestScrubFileRemapShas(t *testing.T) {
 	}
 
 	var result scrubFileJSON
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
 		t.Fatalf("parsing JSON: %v\n%s", err, stdout)
 	}
 	if _, ok := result.Rewrites[c1]; !ok {
@@ -143,7 +143,7 @@ func TestScrubFileRemapPartialRange(t *testing.T) {
 	}
 
 	var result scrubFileJSON
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
 		t.Fatalf("parsing JSON: %v\n%s", err, stdout)
 	}
 	newC3, ok := result.Rewrites[c3]
@@ -220,7 +220,7 @@ func TestScrubFileRemapLeavesAbbreviatedAndLongerHex(t *testing.T) {
 	}
 
 	var result scrubFileJSON
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
 		t.Fatalf("parsing JSON: %v\n%s", err, stdout)
 	}
 	newC1 := result.Rewrites[c1]
@@ -257,7 +257,7 @@ func TestScrubMatchRemapShas(t *testing.T) {
 	var result struct {
 		Rewrites map[string]string `json:"rewrites"`
 	}
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
 		t.Fatalf("parsing JSON: %v\n%s", err, stdout)
 	}
 	newC1, ok := result.Rewrites[c1]
@@ -301,7 +301,7 @@ func TestScrubRunRemapShas(t *testing.T) {
 	var result struct {
 		Rewrites map[string]string `json:"rewrites"`
 	}
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
 		t.Fatalf("parsing JSON: %v\n%s", err, stdout)
 	}
 	newC1, ok := result.Rewrites[c1]
@@ -442,7 +442,7 @@ func TestScrubFileInSubmoduleRemapShas(t *testing.T) {
 	var result struct {
 		Rewrites map[string]string `json:"rewrites"`
 	}
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
 		t.Fatalf("parsing JSON: %v\n%s", err, stdout)
 	}
 	newAddSub, ok := result.Rewrites[addSubCommit]

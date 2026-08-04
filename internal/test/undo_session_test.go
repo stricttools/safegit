@@ -10,28 +10,10 @@ import (
 
 // runSafegitCleanEnv runs safegit with the controlled test environment, which
 // never carries CLAUDE_CODE_SESSION_ID unless a caller passes it explicitly.
+// It consents to the confirm protocol on the caller's behalf (see withConsent).
 func runSafegitCleanEnv(t *testing.T, repoDir string, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
-	cmd := exec.Command(safegitBin, args...)
-	cmd.Dir = repoDir
-	cmd.Env = controlledEnv(t)
-
-	var outBuf, errBuf strings.Builder
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-
-	err := cmd.Run()
-	stdout = outBuf.String()
-	stderr = errBuf.String()
-
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			exitCode = 1
-		}
-	}
-	return
+	return runSafegitNoConsent(t, repoDir, nil, withConsent(args)...)
 }
 
 // revParseHEAD returns the current HEAD SHA in the given repo.

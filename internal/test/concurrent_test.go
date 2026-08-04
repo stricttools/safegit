@@ -158,13 +158,15 @@ func controlledEnv(t *testing.T, extra ...string) []string {
 	return append(env, extra...)
 }
 
-// runSafegit executes the safegit binary in repoDir with the given args.
-// Returns stdout, stderr, and exit code.
-func runSafegit(t *testing.T, repoDir string, args ...string) (stdout, stderr string, exitCode int) {
+// runSafegitNoConsent executes the safegit binary in repoDir with exactly the
+// given args and nothing added. Use it when the test is ABOUT consent -- when
+// it must observe what safegit does when nobody has approved a mutating
+// command. Every other helper here consents on the caller's behalf.
+func runSafegitNoConsent(t *testing.T, repoDir string, env []string, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
 	cmd := exec.Command(safegitBin, args...)
 	cmd.Dir = repoDir
-	cmd.Env = controlledEnv(t)
+	cmd.Env = controlledEnv(t, env...)
 
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout = &outBuf
@@ -182,6 +184,29 @@ func runSafegit(t *testing.T, repoDir string, args ...string) (stdout, stderr st
 		}
 	}
 	return
+}
+
+// withConsent returns args with a leading --yes when the caller has not
+// already expressed an intent about consent. strictcli's confirm protocol
+// stops every `mutating` command that nobody approved, and a spawned test
+// process has no terminal to approve one at, so a test that means to exercise
+// the command rather than the prompt has to say so. --dry-run already means
+// "change nothing", which the protocol accepts on its own.
+func withConsent(args []string) []string {
+	for _, a := range args {
+		if a == "--yes" || a == "--dry-run" || a == "--help" || a == "-h" {
+			return args
+		}
+	}
+	return append([]string{"--yes"}, args...)
+}
+
+// runSafegit executes the safegit binary in repoDir with the given args,
+// consenting to the confirm protocol (see withConsent).
+// Returns stdout, stderr, and exit code.
+func runSafegit(t *testing.T, repoDir string, args ...string) (stdout, stderr string, exitCode int) {
+	t.Helper()
+	return runSafegitNoConsent(t, repoDir, nil, withConsent(args)...)
 }
 
 // gitLog returns the number of commits on the given ref.
