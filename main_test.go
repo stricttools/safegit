@@ -7,26 +7,26 @@ import (
 	"github.com/smm-h/safegit/internal/commit"
 )
 
-// TestGlobalsToFlagsJSONDoesNotImplyYes pins what the deliberate
+// TestGlobalsToFlagsJSONDoesNotImplyApproval pins what the deliberate
 // confirmations rely on: --json silences human-readable output but never
-// stands in for consent. Only a real --yes sets it.
-func TestGlobalsToFlagsJSONDoesNotImplyYes(t *testing.T) {
+// stands in for consent. Only a real --approve-consequential sets it.
+func TestGlobalsToFlagsJSONDoesNotImplyApproval(t *testing.T) {
 	tests := []struct {
-		name         string
-		yes, jsonOut bool
-		wantYes      bool
-		wantQuiet    bool
+		name              string
+		approved, jsonOut bool
+		wantApproved      bool
+		wantQuiet         bool
 	}{
 		{"neither", false, false, false, false},
 		{"json only", false, true, false, true},
-		{"yes only", true, false, true, false},
+		{"approved only", true, false, true, false},
 		{"both", true, true, true, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gf := newGlobalFlags(reservedFlags{yes: tt.yes}, "", tt.jsonOut)
-			if gf.yes != tt.wantYes {
-				t.Errorf("yes = %v, want %v", gf.yes, tt.wantYes)
+			gf := newGlobalFlags(reservedFlags{approved: tt.approved}, "", tt.jsonOut)
+			if gf.approved != tt.wantApproved {
+				t.Errorf("approved = %v, want %v", gf.approved, tt.wantApproved)
 			}
 			if gf.quiet != tt.wantQuiet {
 				t.Errorf("quiet = %v, want %v", gf.quiet, tt.wantQuiet)

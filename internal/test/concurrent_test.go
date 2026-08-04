@@ -221,27 +221,18 @@ func runSafegitNoConsent(t *testing.T, repoDir string, env []string, args ...str
 	return
 }
 
-// withConsent returns args with a leading --yes when the caller has not
-// already expressed an intent about consent. strictcli's confirm protocol
-// stops every `mutating` command that nobody approved, and a spawned test
-// process has no terminal to approve one at, so a test that means to exercise
-// the command rather than the prompt has to say so. --dry-run already means
-// "change nothing", which the protocol accepts on its own.
-func withConsent(args []string) []string {
-	for _, a := range args {
-		if a == "--yes" || a == "--dry-run" || a == "--help" || a == "-h" {
-			return args
-		}
-	}
-	return append([]string{"--yes"}, args...)
-}
-
-// runSafegit executes the safegit binary in repoDir with the given args,
-// consenting to the confirm protocol (see withConsent).
+// runSafegit executes the safegit binary in repoDir with the given args.
 // Returns stdout, stderr, and exit code.
+//
+// It adds nothing to argv. strictcli's confirm protocol prompts only for
+// commands that declare themselves `consequential` (safegit: the three scrub
+// rewrites and `author rewrite`), so an ordinary command runs untouched in a
+// spawned test process. A test that exercises a consequential command passes
+// --approve-consequential itself, which keeps the approval visible at the call
+// site instead of hidden in a helper.
 func runSafegit(t *testing.T, repoDir string, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
-	return runSafegitNoConsent(t, repoDir, nil, withConsent(args)...)
+	return runSafegitNoConsent(t, repoDir, nil, args...)
 }
 
 // gitLog returns the number of commits on the given ref.
@@ -745,8 +736,8 @@ func TestDoctorFixCleansMainRepoStaleLocks(t *testing.T) {
 		t.Fatal("stale lock file not created")
 	}
 
-	// Run doctor --fix --yes.
-	stdout, stderr, code := runSafegit(t, dir, "doctor", "--fix", "--yes")
+	// Run doctor --fix --approve-consequential.
+	stdout, stderr, code := runSafegit(t, dir, "doctor", "--fix", "--approve-consequential")
 	if code != 0 {
 		t.Fatalf("doctor --fix failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}

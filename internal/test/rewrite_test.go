@@ -123,7 +123,7 @@ func TestRewriteAuthorBasic(t *testing.T) {
 	beforeCount := getCommitCount(t, dir)
 	beforeTrees := getTreeHashes(t, dir)
 
-	stdout, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
+	stdout, stderr, code := runSafegit(t, dir, "--approve-consequential", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
 	if code != 0 {
 		t.Fatalf("rewrite-author failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -159,7 +159,7 @@ func TestRewriteAuthorMixedAuthors(t *testing.T) {
 	makeCommits(t, dir, "alice", "alice@test.com", 5, "alice")
 	makeCommits(t, dir, "bob", "bob@test.com", 5, "bob")
 
-	stdout, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite", "--old-name", "alice", "--new-name", "alice-new")
+	stdout, stderr, code := runSafegit(t, dir, "--approve-consequential", "author", "rewrite", "--old-name", "alice", "--new-name", "alice-new")
 	if code != 0 {
 		t.Fatalf("rewrite-author failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -222,7 +222,7 @@ func TestRewriteAuthorWithTags(t *testing.T) {
 
 	beforeCount := getCommitCount(t, dir)
 
-	stdout, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
+	stdout, stderr, code := runSafegit(t, dir, "--approve-consequential", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
 	if code != 0 {
 		t.Fatalf("rewrite-author failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -312,7 +312,7 @@ func TestRewriteAuthorMerge(t *testing.T) {
 	beforeCount := getCommitCount(t, dir)
 	beforeTrees := getTreeHashes(t, dir)
 
-	stdout, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
+	stdout, stderr, code := runSafegit(t, dir, "--approve-consequential", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
 	if code != 0 {
 		t.Fatalf("rewrite-author failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -379,7 +379,7 @@ func TestRewriteAuthorMultipleBranches(t *testing.T) {
 
 	beforeCount := getCommitCount(t, dir)
 
-	stdout, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
+	stdout, stderr, code := runSafegit(t, dir, "--approve-consequential", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
 	if code != 0 {
 		t.Fatalf("rewrite-author failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -414,7 +414,7 @@ func TestRewriteAuthorNoOp(t *testing.T) {
 	beforeTrees := getTreeHashes(t, dir)
 	beforeNames := getAuthorNames(t, dir)
 
-	stdout, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite", "--old-name", "nonexistent", "--new-name", "something")
+	stdout, stderr, code := runSafegit(t, dir, "--approve-consequential", "author", "rewrite", "--old-name", "nonexistent", "--new-name", "something")
 	if code != 0 {
 		t.Fatalf("rewrite-author failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -440,7 +440,7 @@ func TestRewriteAuthorIdempotent(t *testing.T) {
 	makeCommits(t, dir, "oldname", "old@test.com", 5, "idem")
 
 	// First rewrite
-	stdout, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
+	stdout, stderr, code := runSafegit(t, dir, "--approve-consequential", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
 	if code != 0 {
 		t.Fatalf("first rewrite-author failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -449,7 +449,7 @@ func TestRewriteAuthorIdempotent(t *testing.T) {
 	afterFirstTrees := getTreeHashes(t, dir)
 
 	// Second rewrite (same arguments -- should be a no-op)
-	stdout, stderr, code = runSafegit(t, dir, "--yes", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
+	stdout, stderr, code = runSafegit(t, dir, "--approve-consequential", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
 	if code != 0 {
 		t.Fatalf("second rewrite-author failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -515,7 +515,7 @@ func TestRewriteAuthorRootCommit(t *testing.T) {
 	// Initialize safegit in the repo (rewrite-author requires it)
 	runSafegit(t, dir, "config", "set", "commit.casMaxAttempts", "200")
 
-	stdout, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
+	stdout, stderr, code := runSafegit(t, dir, "--approve-consequential", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
 	if code != 0 {
 		t.Fatalf("rewrite-author failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -597,7 +597,7 @@ func TestRewriteAuthorAnnotatedTags(t *testing.T) {
 	cmd.Dir = dir
 	beforeMsg, _ := cmd.Output()
 
-	_, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
+	_, stderr, code := runSafegit(t, dir, "--approve-consequential", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
 	if code != 0 {
 		t.Fatalf("rewrite-author failed (exit %d): %s", code, stderr)
 	}
@@ -674,8 +674,8 @@ func TestRewriteAuthorFlagEquals(t *testing.T) {
 	dir := newRepo(t)
 	makeCommits(t, dir, "oldname", "old@test.com", 5, "eq")
 
-	// --yes skips the interactive confirmation prompt (runSafegit has no stdin)
-	stdout, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite", "--old-name=oldname", "--new-name=newname")
+	// --approve-consequential skips the interactive confirmation prompt (runSafegit has no stdin)
+	stdout, stderr, code := runSafegit(t, dir, "--approve-consequential", "author", "rewrite", "--old-name=oldname", "--new-name=newname")
 	if code != 0 {
 		t.Fatalf("rewrite-author failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -693,8 +693,8 @@ func TestRewriteAuthorEmailOnly(t *testing.T) {
 	dir := newRepo(t)
 	makeCommits(t, dir, "alice", "old@test.com", 5, "email")
 
-	// --yes skips the interactive confirmation prompt (runSafegit has no stdin)
-	stdout, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite", "--old-email=old@test.com", "--new-email=new@test.com")
+	// --approve-consequential skips the interactive confirmation prompt (runSafegit has no stdin)
+	stdout, stderr, code := runSafegit(t, dir, "--approve-consequential", "author", "rewrite", "--old-email=old@test.com", "--new-email=new@test.com")
 	if code != 0 {
 		t.Fatalf("rewrite-author failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -723,7 +723,7 @@ func TestRewriteAuthorANDMatching(t *testing.T) {
 	makeCommits(t, dir, "alice", "alice@work.com", 3, "work")
 	makeCommits(t, dir, "alice", "alice@home.com", 3, "home")
 
-	stdout, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite",
+	stdout, stderr, code := runSafegit(t, dir, "--approve-consequential", "author", "rewrite",
 		"--old-name=alice", "--new-name=alice-new",
 		"--old-email=alice@work.com", "--new-email=new@work.com")
 	if code != 0 {
@@ -764,19 +764,19 @@ func TestRewriteAuthorDirtyTreeAlwaysRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Even with --yes, should fail due to dirty tree (dirty check is unconditional)
-	_, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite", "--old-name=oldname", "--new-name=newname")
+	// Even with --approve-consequential, should fail due to dirty tree (dirty check is unconditional)
+	_, stderr, code := runSafegit(t, dir, "--approve-consequential", "author", "rewrite", "--old-name=oldname", "--new-name=newname")
 	if code == 0 {
-		t.Error("rewrite-author with --yes should still fail on dirty tree, but exited 0")
+		t.Error("rewrite-author with --approve-consequential should still fail on dirty tree, but exited 0")
 	}
 	if !strings.Contains(stderr, "working tree is dirty") {
 		t.Errorf("expected dirty-tree error message, got stderr: %s", stderr)
 	}
 }
 
-// TestRewriteAuthorUnconsentedRewritesNothing: `author rewrite` is `mutating`,
-// so strictcli's confirm protocol stops it before dispatch when nobody
-// consented. Feeding "n" (or anything) down a pipe is not consent, and history
+// TestRewriteAuthorUnconsentedRewritesNothing: `author rewrite` declares itself
+// `consequential`, so strictcli's confirm protocol stops it before dispatch
+// when nobody approved it. Feeding "n" (or anything) down a pipe is not consent, and history
 // is left alone.
 func TestRewriteAuthorUnconsentedRewritesNothing(t *testing.T) {
 	dir := newRepo(t)
@@ -794,14 +794,14 @@ func TestRewriteAuthorUnconsentedRewritesNothing(t *testing.T) {
 	}
 }
 
-// TestRewriteAuthorConsentedProceeds: an explicit --yes is the deliberate
+// TestRewriteAuthorConsentedProceeds: an explicit --approve-consequential is the deliberate
 // consent, and the rewrite runs.
 func TestRewriteAuthorConsentedProceeds(t *testing.T) {
 	dir := newRepo(t)
 	makeCommits(t, dir, "oldname", "old@test.com", 3, "proceed")
 
 	_, stderr, exitCode := runSafegitNoConsent(t, dir, nil,
-		"--yes", "author", "rewrite", "--old-name=oldname", "--new-name=newname")
+		"--approve-consequential", "author", "rewrite", "--old-name=oldname", "--new-name=newname")
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d: stderr=%s", exitCode, stderr)
 	}
@@ -816,7 +816,7 @@ func TestRewriteAuthorYesSkipsPrompt(t *testing.T) {
 	dir := newRepo(t)
 	makeCommits(t, dir, "oldname", "old@test.com", 3, "noprompt")
 
-	cmd := exec.Command(safegitBin, "--yes", "author", "rewrite", "--old-name=oldname", "--new-name=newname")
+	cmd := exec.Command(safegitBin, "--approve-consequential", "author", "rewrite", "--old-name=oldname", "--new-name=newname")
 	cmd.Dir = dir
 	cmd.Stdin = strings.NewReader("")
 
@@ -835,12 +835,12 @@ func TestRewriteAuthorYesSkipsPrompt(t *testing.T) {
 	}
 
 	if exitCode != 0 {
-		t.Fatalf("expected exit code 0 with --yes, got %d: stdout=%s stderr=%s", exitCode, outBuf.String(), errBuf.String())
+		t.Fatalf("expected exit code 0 with --approve-consequential, got %d: stdout=%s stderr=%s", exitCode, outBuf.String(), errBuf.String())
 	}
 
 	names := getAuthorNames(t, dir)
 	if containsName(names, "oldname") {
-		t.Errorf("author name 'oldname' still present after --yes rewrite: %v", names)
+		t.Errorf("author name 'oldname' still present after --approve-consequential rewrite: %v", names)
 	}
 }
 
@@ -863,7 +863,7 @@ func TestRewriteAuthorJSON(t *testing.T) {
 	dir := newRepo(t)
 	makeCommits(t, dir, "oldname", "old@test.com", 5, "json")
 
-	stdout, stderr, code := runSafegit(t, dir, "--json", "--yes", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
+	stdout, stderr, code := runSafegit(t, dir, "--json", "--approve-consequential", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
 	if code != 0 {
 		t.Fatalf("rewrite-author --json failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -932,7 +932,7 @@ func TestRewriteAuthorQuiet(t *testing.T) {
 	dir := newRepo(t)
 	makeCommits(t, dir, "oldname", "old@test.com", 3, "quiet")
 
-	stdout, stderr, code := runSafegit(t, dir, "--quiet", "--yes", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
+	stdout, stderr, code := runSafegit(t, dir, "--quiet", "--approve-consequential", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
 	if code != 0 {
 		t.Fatalf("rewrite-author --quiet failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -957,7 +957,7 @@ func TestRewriteAuthorJSONDryRun(t *testing.T) {
 
 	headBefore := revParseHEAD(t, dir)
 
-	stdout, stderr, code := runSafegit(t, dir, "--json", "--dry-run", "--yes", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
+	stdout, stderr, code := runSafegit(t, dir, "--json", "--dry-run", "--approve-consequential", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
 	if code != 0 {
 		t.Fatalf("rewrite-author --json --dry-run failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -1078,7 +1078,7 @@ func TestRewriteAuthorTrailerRewrite(t *testing.T) {
 		"Co-authored-by: Other Person <other@test.com>")
 
 	// Run rewrite with email-only change
-	stdout, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite",
+	stdout, stderr, code := runSafegit(t, dir, "--approve-consequential", "author", "rewrite",
 		"--old-email=old@test.com", "--new-email=new@test.com")
 	if code != 0 {
 		t.Fatalf("rewrite-author failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
@@ -1123,7 +1123,7 @@ func TestRewriteAuthorTrailerBothNameAndEmail(t *testing.T) {
 	makeCommitWithTrailer(t, dir, "oldname", "old@test.com", "both", 0,
 		"Signed-off-by: oldname <old@test.com>")
 
-	stdout, stderr, code := runSafegit(t, dir, "--yes", "author", "rewrite",
+	stdout, stderr, code := runSafegit(t, dir, "--approve-consequential", "author", "rewrite",
 		"--old-name=oldname", "--new-name=newname",
 		"--old-email=old@test.com", "--new-email=new@test.com")
 	if code != 0 {

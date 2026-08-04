@@ -579,7 +579,7 @@ func scrubMatchExecute(
 	// Confirmation prompt (skipped with an explicit --yes)
 	if !confirmDeliberate(flags, "This will rewrite history to replace pattern matches. This cannot be undone. Proceed?") {
 		infof(flags, "Aborted.\n")
-		return 0
+		return 1
 	}
 
 	// Phase 1: Process submodules (blob map, walkAndRewrite, Finalize per submodule).
@@ -800,7 +800,7 @@ func scrubMatchExecute(
 
 	// Skip confirmation in executeScrubRecipe (already confirmed above).
 	execFlags := flags
-	execFlags.yes = true // carries the consent already given, not a bypass
+	execFlags.approved = true // carries the consent already given, not a bypass
 
 	exitCode, result := executeScrubRecipe(ctx, execFlags, cmd, recipe, reason, fromSHA, entireHistory, scope, remapGlobs, gitDir, sgDir, gitlinkMap, "scrub-match", parentOplogExtra, true)
 

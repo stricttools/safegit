@@ -22,7 +22,10 @@ type checkResult struct {
 	Detail string
 }
 
-func runDoctor(flags globalFlags, kwargs map[string]interface{}) {
+// runDoctor returns the process exit code. A declined confirmation is a
+// refusal, not a success: it exits nonzero so a script or agent cannot read
+// "aborted" as "done".
+func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 	fix := kwargs["fix"].(bool)
 	uninstall := kwargs["uninstall"].(bool)
 
@@ -32,7 +35,7 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) {
 	if uninstall {
 		if !confirmDeliberate(flags, "Remove safegit from this repository?") {
 			infof(flags, "Aborted.\n")
-			return
+			return 1
 		}
 		if err := repo.Uninstall(gitDir); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -41,7 +44,7 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) {
 		if !flags.quiet {
 			fmt.Println("safegit uninstalled")
 		}
-		return
+		return 0
 	}
 
 	ctx := context.Background()
@@ -217,6 +220,7 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) {
 	if fix && repo.IsInitialized(gitDir) {
 		doctorFix(ctx, flags, gitDir)
 	}
+	return 0
 }
 
 // doctorFix performs cleanup: orphan tmp dirs, legacy queue dir, and oplog

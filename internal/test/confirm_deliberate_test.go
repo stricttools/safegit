@@ -9,21 +9,23 @@ import (
 
 // Destructive confirmations are DELIBERATE: `--json` produces machine-readable
 // output but says nothing about consent, so it must never answer "yes" to a
-// prompt that destroys history or uninstalls the tool. Only an explicit --yes
+// prompt that destroys history or uninstalls the tool. Only an explicit --approve-consequential
 // does. These tests pin both halves at every destructive confirmation site.
 //
 // Since the strictcli effects regime landed, the FIRST gate is the framework's
-// own confirm protocol: every `mutating` command is stopped before dispatch
-// unless --yes was passed. safegit's own confirmDeliberate seam sits behind it.
-// The property under test is unchanged and now holds by construction -- --json
-// is not --yes -- so these tests assert the refusal and, above all, that
-// nothing was destroyed.
+// own confirm protocol -- but it fires only for commands that declare
+// themselves `consequential` (the three scrub rewrites and `author rewrite`).
+// safegit's own confirmDeliberate seam sits behind it, and it is the ONLY gate
+// for `doctor --uninstall` and the public-remote backup, which are guarded at
+// flag/remote granularity rather than command granularity. The property under
+// test is unchanged either way -- --json is not --approve-consequential -- so
+// these tests assert the refusal and, above all, that nothing was destroyed.
 
 var confirmEnv = []string{"CLAUDE_CODE_SESSION_ID=confirm-test"}
 
 // assertRefusedForConsent checks the shape of a refusal: the run failed to do
 // the thing, and it made clear that consent was missing. Both the framework's
-// non-interactive refusal ("pass --yes to confirm") and its declined prompt
+// non-interactive refusal ("pass --approve-consequential to confirm") and its declined prompt
 // ("Proceed? [y/N] aborted") qualify -- which of the two a spawned process gets
 // depends on whether its stdin happens to be a character device.
 func assertRefusedForConsent(t *testing.T, code int, stderr string) {
@@ -31,7 +33,7 @@ func assertRefusedForConsent(t *testing.T, code int, stderr string) {
 	if code == 0 {
 		t.Errorf("an unconsented destructive run must not succeed; stderr: %s", stderr)
 	}
-	if !strings.Contains(stderr, "--yes") && !strings.Contains(stderr, "aborted") {
+	if !strings.Contains(stderr, "--approve-consequential") && !strings.Contains(stderr, "aborted") {
 		t.Errorf("the refusal must show that consent was missing, got: %s", stderr)
 	}
 }
@@ -68,10 +70,10 @@ func TestScrubFileJSONDoesNotConfirm(t *testing.T) {
 		t.Error("--json must not answer the scrub confirmation; history was rewritten")
 	}
 
-	_, stderr, code = runSafegitNoConsent(t, dir, confirmEnv, "--json", "--yes", "scrub", "file",
+	_, stderr, code = runSafegitNoConsent(t, dir, confirmEnv, "--json", "--approve-consequential", "scrub", "file",
 		"--from", initialSHA, "--reason", "explicit consent", "secret.txt")
 	if code != 0 {
-		t.Fatalf("an explicit --yes must run the scrub, got code %d: %s", code, stderr)
+		t.Fatalf("an explicit --approve-consequential must run the scrub, got code %d: %s", code, stderr)
 	}
 	if secretSurvives(t, dir) {
 		t.Error("the consented scrub did not rewrite history")
@@ -107,11 +109,11 @@ func TestScrubMatchJSONDoesNotConfirm(t *testing.T) {
 		t.Error("--json must not answer the scrub match confirmation; history was rewritten")
 	}
 
-	_, stderr, code = runSafegitNoConsent(t, dir, confirmEnv, "--json", "--yes", "scrub", "match",
+	_, stderr, code = runSafegitNoConsent(t, dir, confirmEnv, "--json", "--approve-consequential", "scrub", "match",
 		"--pattern", "hunter2", "--replace", "GONE", "--reason", "explicit consent",
 		"--entire-history")
 	if code != 0 {
-		t.Fatalf("an explicit --yes must run the scrub match, got code %d: %s", code, stderr)
+		t.Fatalf("an explicit --approve-consequential must run the scrub match, got code %d: %s", code, stderr)
 	}
 	if secretSurvives(t, dir) {
 		t.Error("the consented scrub match did not rewrite history")
@@ -136,10 +138,10 @@ func TestScrubRunJSONDoesNotConfirm(t *testing.T) {
 		t.Error("--json must not answer the scrub run confirmation; history was rewritten")
 	}
 
-	_, stderr, code = runSafegitNoConsent(t, dir, confirmEnv, "--json", "--yes", "scrub", "run",
+	_, stderr, code = runSafegitNoConsent(t, dir, confirmEnv, "--json", "--approve-consequential", "scrub", "run",
 		"--reason", "explicit consent", "--entire-history", "recipe.toml")
 	if code != 0 {
-		t.Fatalf("an explicit --yes must run the recipe scrub, got code %d: %s", code, stderr)
+		t.Fatalf("an explicit --approve-consequential must run the recipe scrub, got code %d: %s", code, stderr)
 	}
 	if secretSurvives(t, dir) {
 		t.Error("the consented recipe scrub did not rewrite history")
@@ -157,10 +159,10 @@ func TestAuthorRewriteJSONDoesNotConfirm(t *testing.T) {
 		t.Errorf("--json must not answer the author-rewrite confirmation, got authors %v", names)
 	}
 
-	_, stderr, code = runSafegitNoConsent(t, dir, confirmEnv, "--json", "--yes", "author", "rewrite",
+	_, stderr, code = runSafegitNoConsent(t, dir, confirmEnv, "--json", "--approve-consequential", "author", "rewrite",
 		"--old-name", "Test", "--new-name", "Renamed")
 	if code != 0 {
-		t.Fatalf("an explicit --yes must run the author rewrite, got code %d: %s", code, stderr)
+		t.Fatalf("an explicit --approve-consequential must run the author rewrite, got code %d: %s", code, stderr)
 	}
 	if names := authorNames(t, dir); names["Test"] || !names["Renamed"] {
 		t.Errorf("the consented author rewrite did not run, got authors %v", names)
@@ -178,8 +180,8 @@ func TestDoctorUninstallJSONDoesNotConfirm(t *testing.T) {
 		t.Errorf("--json must not answer the uninstall confirmation; %s is gone: %v", safegitDir, err)
 	}
 
-	if _, stderr, code := runSafegitNoConsent(t, dir, confirmEnv, "--json", "--yes", "doctor", "--uninstall"); code != 0 {
-		t.Fatalf("an explicit --yes must run the uninstall, got code %d: %s", code, stderr)
+	if _, stderr, code := runSafegitNoConsent(t, dir, confirmEnv, "--json", "--approve-consequential", "doctor", "--uninstall"); code != 0 {
+		t.Fatalf("an explicit --approve-consequential must run the uninstall, got code %d: %s", code, stderr)
 	}
 	if _, err := os.Stat(safegitDir); !os.IsNotExist(err) {
 		t.Errorf("the consented uninstall left %s behind (err=%v)", safegitDir, err)
@@ -217,12 +219,54 @@ func TestScrubFileInSubmoduleJSONDoesNotConfirm(t *testing.T) {
 		t.Errorf("--json must not answer the submodule scrub confirmation; submodule HEAD moved to %s", got)
 	}
 
-	_, stderr, code = runSafegitNoConsent(t, parentDir, submoduleEnv, "--json", "--yes", "scrub", "file",
+	_, stderr, code = runSafegitNoConsent(t, parentDir, submoduleEnv, "--json", "--approve-consequential", "scrub", "file",
 		"mysub/secret.txt", "--from", firstSubCommit, "--reason", "explicit consent")
 	if code != 0 {
-		t.Fatalf("an explicit --yes must run the submodule scrub, got code %d: %s", code, stderr)
+		t.Fatalf("an explicit --approve-consequential must run the submodule scrub, got code %d: %s", code, stderr)
 	}
 	if got := revParseHEAD(t, subDir); got == subHeadBefore {
 		t.Error("the consented submodule scrub did not rewrite the submodule history")
 	}
+}
+
+// TestDeclinedDeliberateConfirmationExitsNonzero pins the exit code of a
+// refusal at safegit's OWN confirmDeliberate seam -- the sites the framework's
+// confirm protocol does not cover, because the command they guard is not
+// consequential at command granularity (`doctor --uninstall` guards one flag;
+// `backup backup` guards one remote classification).
+//
+// A declined confirmation is a refusal, not a success. While the framework
+// prompted for every `mutating` command its exit-1 refusal masked this: the
+// handler was never reached. Now the seam is the only gate at these two sites,
+// so a zero exit here would tell a script or agent that the uninstall (or the
+// backup) succeeded when nothing happened.
+func TestDeclinedDeliberateConfirmationExitsNonzero(t *testing.T) {
+	t.Run("doctor uninstall", func(t *testing.T) {
+		dir := newRepo(t)
+		commitFileEnv(t, dir, confirmEnv, "file.txt", "content\n", "add file")
+		safegitDir := filepath.Join(dir, ".git", "safegit")
+
+		// Not a TTY, so the prompt reads EOF and declines.
+		_, stderr, code := runSafegitNoConsent(t, dir, confirmEnv, "doctor", "--uninstall")
+		if code == 0 {
+			t.Errorf("a declined uninstall must exit nonzero, got 0; stderr: %s", stderr)
+		}
+		if _, err := os.Stat(safegitDir); err != nil {
+			t.Errorf("the declined uninstall removed %s anyway: %v", safegitDir, err)
+		}
+	})
+
+	t.Run("backup to unclassifiable remote", func(t *testing.T) {
+		dir := newRepo(t)
+		commitFileEnv(t, dir, confirmEnv, "file.txt", "content\n", "add file")
+		gitIn(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
+
+		_, stderr, code := runSafegitNoConsent(t, dir, confirmEnv, "backup", "backup", "cloudy")
+		if code == 0 {
+			t.Errorf("a declined backup must exit nonzero, got 0; stderr: %s", stderr)
+		}
+		if strings.Contains(stderr, "Could not resolve host") {
+			t.Errorf("the refusal must precede any network contact, got: %s", stderr)
+		}
+	})
 }

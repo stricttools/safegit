@@ -34,23 +34,72 @@ func wouldDoLog(stdout string) string {
 	return ""
 }
 
-// TestMutatingCommandRefusesWithoutConsent: strictcli's confirm protocol gates
-// every command classified `mutating`. A spawned safegit has no terminal to
-// confirm at, so an unconsented mutating run is refused and changes nothing.
-func TestMutatingCommandRefusesWithoutConsent(t *testing.T) {
+// TestPlainMutatingCommandNeedsNoConsent: strictcli's confirm protocol keys on
+// the `consequential` declaration, NOT on the `mutating` classification. A
+// plain mutating command -- `commit`, the single most-used command in the
+// ecosystem -- must dispatch straight through with nothing added to argv, in a
+// spawned process that has no terminal to confirm at.
+//
+// This is the regression that matters most: while the protocol inferred the
+// prompt from `mutating`, bare `safegit commit` refused, and every documented
+// convention that spells it bare was broken.
+func TestPlainMutatingCommandNeedsNoConsent(t *testing.T) {
 	dir := newRepo(t)
 	writeFile(t, dir, "a.txt", "one\n")
 	before := gitLog(t, dir, "HEAD")
 
-	_, stderr, code := runSafegitNoConsent(t, dir, nil, "commit", "-m", "unconsented", "--", "a.txt")
+	_, stderr, code := runSafegitNoConsent(t, dir, nil, "commit", "-m", "bare commit", "--", "a.txt")
+	if code != 0 {
+		t.Fatalf("bare `safegit commit` must succeed with no approval flag; code=%d stderr=%s", code, stderr)
+	}
+	if strings.Contains(stderr, "Proceed?") || strings.Contains(stderr, "approve-consequential") {
+		t.Errorf("a plain mutating command must not raise the confirm protocol, got: %s", stderr)
+	}
+	if after := gitLog(t, dir, "HEAD"); after != before+1 {
+		t.Errorf("the bare commit did not land: %d -> %d", before, after)
+	}
+}
+
+// TestConsequentialCommandRefusesWithoutConsent: the commands that DO declare
+// themselves consequential still stop. A spawned safegit has no terminal to
+// confirm at, so an unapproved consequential run is refused and changes
+// nothing.
+func TestConsequentialCommandRefusesWithoutConsent(t *testing.T) {
+	dir := newRepo(t)
+	writeFile(t, dir, "a.txt", "one\n")
+	if _, stderr, code := runSafegitNoConsent(t, dir, nil, "commit", "-m", "seed", "--", "a.txt"); code != 0 {
+		t.Fatalf("seeding commit failed: %s", stderr)
+	}
+	before := revParseHEAD(t, dir)
+
+	_, stderr, code := runSafegitNoConsent(t, dir, nil,
+		"author", "rewrite", "--old-name=Test", "--new-name=Renamed")
 	if code == 0 {
-		t.Fatalf("an unconsented mutating command must not succeed; stderr=%s", stderr)
+		t.Fatalf("an unapproved consequential command must not succeed; stderr=%s", stderr)
 	}
-	if !strings.Contains(stderr, "--yes") && !strings.Contains(stderr, "aborted") {
-		t.Errorf("the refusal must show that consent was missing, got: %s", stderr)
+	if !strings.Contains(stderr, "--approve-consequential") && !strings.Contains(stderr, "aborted") {
+		t.Errorf("the refusal must show that approval was missing, got: %s", stderr)
 	}
-	if after := gitLog(t, dir, "HEAD"); after != before {
-		t.Errorf("an unconsented commit landed anyway: %d -> %d", before, after)
+	if after := revParseHEAD(t, dir); after != before {
+		t.Errorf("an unapproved rewrite moved HEAD anyway: %s -> %s", before, after)
+	}
+}
+
+// TestConsequentialNonInteractiveMessageIsPinned: the exact stderr line a
+// non-TTY stdin gets, verbatim from the contract (§8.3). It names the one flag
+// that consents, so a script or agent that trips it can fix itself.
+func TestConsequentialNonInteractiveMessageIsPinned(t *testing.T) {
+	dir := newRepo(t)
+	writeFile(t, dir, "a.txt", "one\n")
+	if _, stderr, code := runSafegitNoConsent(t, dir, nil, "commit", "-m", "seed", "--", "a.txt"); code != 0 {
+		t.Fatalf("seeding commit failed: %s", stderr)
+	}
+
+	_, stderr, code := runSafegitNoConsent(t, dir, nil,
+		"author", "rewrite", "--old-name=Test", "--new-name=Renamed")
+	const want = "error: stdin is not interactive; pass --approve-consequential to confirm"
+	if code == 0 || !strings.Contains(stderr, want) {
+		t.Errorf("expected %q on stderr (code %d), got: %s", want, code, stderr)
 	}
 }
 

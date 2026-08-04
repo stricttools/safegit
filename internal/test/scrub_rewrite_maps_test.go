@@ -96,7 +96,7 @@ func TestScrubFileRewriteMapsPersisted(t *testing.T) {
 	oldHead := commitFileEnv(t, dir, scrubEnv, "secret.txt", "REDACTED\n", "commit replacement")
 	gitCmd(t, dir, "update-ref", "refs/remotes/origin/main", oldHead)
 
-	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "--json", "scrub", "file",
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--json", "scrub", "file",
 		"--from", initialSHA, "--reason", "test rewrite maps", "secret.txt")
 	if code != 0 {
 		t.Fatalf("scrub failed (code %d): %s", code, stderr)
@@ -218,7 +218,7 @@ func TestScrubMatchRewriteMapsIncludeAnnotationPassTagRewrites(t *testing.T) {
 	// A separate file carries the secret so blobs are rewritten too.
 	commitFileEnv(t, dir, scrubEnv, "config.env", "token=SECRETXYZ\n", "add config")
 
-	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "--json", "scrub", "match",
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--json", "scrub", "match",
 		"--pattern", "SECRETXYZ", "--replace", "GONE", "--reason", "test annotation persistence",
 		"--entire-history")
 	if code != 0 {
@@ -291,7 +291,7 @@ func TestScrubMatchTagAnnotationOnlyRewriteWritesRewriteMaps(t *testing.T) {
 
 	headBefore := gitCmd(t, dir, "rev-parse", "HEAD")
 
-	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "--json", "scrub", "match",
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--json", "scrub", "match",
 		"--pattern", "TAGONLYSECRET", "--replace", "GONE", "--reason", "tag-annotation-only rewrite",
 		"--entire-history")
 	if code != 0 {
@@ -374,7 +374,7 @@ func TestScrubFilePureNoOpWritesNoRewriteMaps(t *testing.T) {
 	commitFileEnv(t, dir, scrubEnv, "clean.txt", "already clean\n", "add clean file")
 	headSHA := gitCmd(t, dir, "rev-parse", "HEAD")
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "scrub", "file",
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "file",
 		"--from", headSHA, "--reason", "pure no-op", "clean.txt")
 	if code != 0 {
 		t.Fatalf("no-op scrub failed (code %d): %s", code, stderr)
@@ -403,7 +403,7 @@ func TestScrubRunRewriteMapsPersisted(t *testing.T) {
 		t.Fatalf("committing recipe failed: %s", stderr)
 	}
 
-	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "--json", "scrub", "run",
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--json", "scrub", "run",
 		"--reason", "test scrub run maps", "--entire-history", "recipe.toml")
 	if code != 0 {
 		t.Fatalf("scrub run failed (code %d): %s", code, stderr)

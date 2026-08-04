@@ -150,7 +150,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	// return their preview before reaching this point.
 	if !flags.dryRun && !confirmDeliberate(flags, "This will rewrite %d commits. This cannot be undone. Proceed?", commitCount) {
 		infof(flags, "Aborted.\n")
-		return 0
+		return 1
 	}
 
 	// Dry-run check: purely read-only, no lock needed.
@@ -424,7 +424,7 @@ func runScrubFileInSubmodule(
 	// Confirmation prompt (skipped with an explicit --yes); a dry run never asks.
 	if !flags.dryRun && !confirmDeliberate(flags, "This will rewrite submodule + parent history. This cannot be undone. Proceed?") {
 		infof(flags, "Aborted.\n")
-		return 0
+		return 1
 	}
 
 	if flags.dryRun {

@@ -260,10 +260,11 @@ func TestBackupRestoreWithoutSlotErrors(t *testing.T) {
 	}
 }
 
-// TestBackupUnconsentedContactsNoRemote: `backup backup` is a `mutating`
-// command, so strictcli's confirm protocol stops it before dispatch when
-// nobody consented. Nothing is pushed and -- because the refusal happens
-// before the handler runs -- no remote is contacted at all.
+// TestBackupUnconsentedContactsNoRemote: `backup backup` is NOT consequential
+// (it writes only the tool-owned refs/backups namespace under a
+// --force-with-lease), so the framework never prompts for it. safegit's own
+// exposure confirmation is the gate: a remote whose visibility cannot be
+// proven private is refused, nothing is pushed, and no remote is contacted.
 func TestBackupUnconsentedContactsNoRemote(t *testing.T) {
 	dir := newRepo(t)
 	gitIn(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
@@ -278,7 +279,7 @@ func TestBackupUnconsentedContactsNoRemote(t *testing.T) {
 }
 
 // TestBackupJSONIsNotConsent: --json produces machine-readable output and says
-// nothing about consent. It must never stand in for the --yes the confirm
+// nothing about consent. It must never stand in for the --approve-consequential the confirm
 // protocol asks for; the remote is unreachable, so a bypass would show up as a
 // network error.
 func TestBackupJSONIsNotConsent(t *testing.T) {
@@ -294,7 +295,7 @@ func TestBackupJSONIsNotConsent(t *testing.T) {
 	}
 }
 
-// TestBackupExplicitYesSatisfiesExposureConfirmation: --yes is the deliberate
+// TestBackupExplicitYesSatisfiesExposureConfirmation: --approve-consequential is the deliberate
 // non-interactive consent flag, so it still answers the confirmation. The
 // remote refuses connections instantly, so reaching a network error is the
 // proof that the confirmation was satisfied rather than declined.
@@ -302,15 +303,15 @@ func TestBackupExplicitYesSatisfiesExposureConfirmation(t *testing.T) {
 	dir := newRepo(t)
 	gitIn(t, dir, "remote", "add", "refused", "git://127.0.0.1:1/owner/repo.git")
 
-	stdout, stderr, code := runSafegit(t, dir, "--yes", "backup", "backup", "refused")
+	stdout, stderr, code := runSafegit(t, dir, "--approve-consequential", "backup", "backup", "refused")
 	if code == 0 {
-		t.Fatalf("--yes should proceed past the confirmation and fail on the unreachable remote; stdout=%s stderr=%s", stdout, stderr)
+		t.Fatalf("--approve-consequential should proceed past the confirmation and fail on the unreachable remote; stdout=%s stderr=%s", stdout, stderr)
 	}
 	if !strings.Contains(stderr, "listing ") {
 		t.Errorf("expected a remote-listing failure (proving the confirmation was passed), got: %s", stderr)
 	}
 	if strings.Contains(stdout, "Aborted") {
-		t.Errorf("--yes must not decline the confirmation, got: %s", stdout)
+		t.Errorf("--approve-consequential must not decline the confirmation, got: %s", stdout)
 	}
 }
 

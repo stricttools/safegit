@@ -49,10 +49,10 @@ func captureConfirm(t *testing.T, fn func() bool) (bool, string) {
 	return result, string(captured)
 }
 
-// testFlags builds globalFlags the way the CLI does, so the --json/--yes
-// coupling under test is the real one.
-func testFlags(yes, jsonOut bool) globalFlags {
-	return newGlobalFlags(reservedFlags{yes: yes}, "", jsonOut)
+// testFlags builds globalFlags the way the CLI does, so the
+// --json/--approve-consequential coupling under test is the real one.
+func testFlags(approved, jsonOut bool) globalFlags {
+	return newGlobalFlags(reservedFlags{approved: approved}, "", jsonOut)
 }
 
 func TestClassifyRemoteGithubVisibility(t *testing.T) {
@@ -117,7 +117,7 @@ func TestClassifyRemoteSkipsProbe(t *testing.T) {
 // TestConfirmExposurePublicRequiresDeliberateConsent covers the branch a public
 // forge repository takes: the warning fires, an unanswerable prompt declines,
 // --json refuses (it must never publish a branch on the operator's behalf), and
-// an explicit --yes is the one thing that consents.
+// an explicit --approve-consequential is the one thing that consents.
 func TestConfirmExposurePublicRequiresDeliberateConsent(t *testing.T) {
 	withGhVisibility(t, func(ctx context.Context, slug string) (string, error) {
 		return "PUBLIC\n", nil
@@ -142,15 +142,15 @@ func TestConfirmExposurePublicRequiresDeliberateConsent(t *testing.T) {
 	if ok {
 		t.Error("--json must not answer the exposure confirmation")
 	}
-	if !strings.Contains(out, "--yes") {
-		t.Errorf("expected the refusal to name --yes as the consent flag, got: %s", out)
+	if !strings.Contains(out, "--approve-consequential") {
+		t.Errorf("expected the refusal to name --approve-consequential as the consent flag, got: %s", out)
 	}
 
 	if ok, _ = confirm(testFlags(true, false)); !ok {
-		t.Error("an explicit --yes must satisfy the exposure confirmation")
+		t.Error("an explicit --approve-consequential must satisfy the exposure confirmation")
 	}
 	if ok, _ = confirm(testFlags(true, true)); !ok {
-		t.Error("an explicit --yes must satisfy the confirmation even with --json")
+		t.Error("an explicit --approve-consequential must satisfy the confirmation even with --json")
 	}
 }
 

@@ -45,11 +45,11 @@ type globalFlags struct {
 	quiet   bool
 	verbose bool
 	dryRun  bool
-	// yes records that --yes was actually passed. Every prompt safegit raises
-	// gates something irreversible, so this is the ONLY thing that
-	// pre-approves one: --json never implies it, and adding --json to a
-	// command line can never disarm a confirmation.
-	yes        bool
+	// approved records that --approve-consequential was actually passed.
+	// Every prompt safegit raises gates something irreversible, so this is the
+	// ONLY thing that pre-approves one: --json never implies it, and adding
+	// --json to a command line can never disarm a confirmation.
+	approved   bool
 	configPath string
 	json       bool
 	// sc is the framework context for this dispatch. It is the only route to
@@ -68,11 +68,11 @@ func main() {
 		strictcli.WithHandshakeEnv(sessionIDEnvVar, "Claude Code session identifier set by the invoking agent session; scopes 'safegit undo' to operations this session performed and is recorded as a commit trailer"),
 	)
 
-	// --quiet, --verbose, --dry-run and --yes are owned by the framework: they
-	// are pre-scanned out of argv anywhere it appears and delivered on the
-	// Context. Registering them here is a hard error, and their former short
-	// forms (-q, -n, -y) are gone with them -- the reserved quartet has no
-	// short forms by ratified design.
+	// --quiet, --verbose, --dry-run and --approve-consequential are owned by
+	// the framework: they are pre-scanned out of argv anywhere they appear and
+	// delivered on the Context. Registering them here is a hard error, and
+	// their former short forms (-q, -n, -y) are gone with them -- the reserved
+	// quartet has no short forms by ratified design.
 	app.GlobalFlag(strictcli.StringFlag("config-file", "path to a custom safegit config file instead of the default location", strictcli.Default("")))
 	app.GlobalFlag(strictcli.BoolFlag("json", "emit machine-readable JSON output to stdout instead of human text", strictcli.Default(false)))
 
@@ -318,8 +318,7 @@ func main() {
 		strictcli.WithArgs(strictcli.NewArg("path", "filesystem path to the hook script file to install into safegit")),
 	)
 	app.Command("doctor", "run diagnostic health checks on the repository and optionally repair issues", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
-		runDoctor(globalsToFlags(ctx, kwargs), kwargs)
-		return strictcli.Exit(0)
+		return strictcli.Exit(runDoctor(globalsToFlags(ctx, kwargs), kwargs))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
 		strictcli.WithMutex(strictcli.MutexGroup{
@@ -351,6 +350,11 @@ func main() {
 		return strictcli.Exit(runRewriteAuthor(globalsToFlags(ctx, kwargs), kwargs))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
+		// Every commit from the rewrite point forward gets a new SHA. Anyone
+		// who already pulled this history keeps the old commits and will have
+		// to recover by hand, and the rewrite is not undoable from safegit's
+		// oplog. That is worth interrupting someone for.
+		strictcli.WithConsequential(),
 		strictcli.WithTags("json"),
 		strictcli.WithFlags(
 			strictcli.StringFlag("old-name", "current author or committer display name to search for and replace", strictcli.Default(nil)),
@@ -369,6 +373,10 @@ func main() {
 		return strictcli.Exit(runScrubFile(globalsToFlags(ctx, kwargs), kwargs))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
+		// An irreversible history rewrite: every commit downstream of --from is
+		// replaced, refs move, and a clone that already pulled the old history
+		// cannot be reconciled automatically.
+		strictcli.WithConsequential(),
 		strictcli.WithTags("json"),
 		strictcli.WithFlags(
 			strictcli.StringFlag("from", "first commit hash to include when rewriting history (default: root commit)"),
@@ -383,6 +391,9 @@ func main() {
 		return strictcli.Exit(runScrubMatch(globalsToFlags(ctx, kwargs), kwargs))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
+		// Same irreversible rewrite as `scrub file`, driven by a regex whose
+		// blast radius is not visible in the command line.
+		strictcli.WithConsequential(),
 		strictcli.WithTags("json"),
 		strictcli.WithFlags(
 			strictcli.StringFlag("pattern", "regular expression pattern to search for across all blobs in history"),
@@ -407,6 +418,10 @@ func main() {
 		return strictcli.Exit(runScrubRun(globalsToFlags(ctx, kwargs), kwargs))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
+		// A recipe applies many irreversible rewrites in one coordinated pass;
+		// the operations live in a TOML file, so the command line shows even
+		// less about what is about to happen than `scrub file` does.
+		strictcli.WithConsequential(),
 		strictcli.WithTags("json"),
 		strictcli.WithFlags(
 			strictcli.StringFlag("reason", "mandatory audit trail message explaining why this scrub operation is needed"),
@@ -495,13 +510,13 @@ func kwargsStrSlice(v interface{}) []string {
 }
 
 // reservedFlags is the framework-owned quartet, read off the Context. It is a
-// separate struct so the --json/--yes coupling below stays testable without a
-// live dispatch context.
+// separate struct so the --json/--approve-consequential coupling below stays
+// testable without a live dispatch context.
 type reservedFlags struct {
-	quiet   bool
-	verbose bool
-	dryRun  bool
-	yes     bool
+	quiet    bool
+	verbose  bool
+	dryRun   bool
+	approved bool
 }
 
 // newGlobalFlags applies safegit's own coupling rules to the reserved quartet
@@ -511,7 +526,7 @@ func newGlobalFlags(r reservedFlags, configPath string, jsonOut bool) globalFlag
 		quiet:      r.quiet,
 		verbose:    r.verbose,
 		dryRun:     r.dryRun,
-		yes:        r.yes,
+		approved:   r.approved,
 		configPath: configPath,
 		json:       jsonOut,
 	}
@@ -529,10 +544,10 @@ func newGlobalFlags(r reservedFlags, configPath string, jsonOut bool) globalFlag
 func globalsToFlags(ctx *strictcli.Context, globals map[string]interface{}) globalFlags {
 	gf := newGlobalFlags(
 		reservedFlags{
-			quiet:   ctx.Quiet(),
-			verbose: ctx.Verbose(),
-			dryRun:  ctx.DryRun(),
-			yes:     ctx.Yes(),
+			quiet:    ctx.Quiet(),
+			verbose:  ctx.Verbose(),
+			dryRun:   ctx.DryRun(),
+			approved: ctx.ApproveConsequential(),
 		},
 		globals["config_file"].(string),
 		globals["json"].(bool),
@@ -582,18 +597,18 @@ func mustGitDir(flags globalFlags, cmd string) string {
 // confirmDeliberate asks for confirmation of a decision that a machine-readable
 // run must never answer on the operator's behalf -- destroying history,
 // uninstalling the tool, publishing a branch to a remote we cannot prove is
-// private. Only an explicit --yes pre-approves them, never the --yes that
-// --json implies. It is the only confirmation helper: every prompt safegit
-// raises gates something irreversible.
+// private. Only an explicit --approve-consequential pre-approves them; --json
+// never does. It is the only confirmation helper: every prompt safegit raises
+// gates something irreversible.
 func confirmDeliberate(flags globalFlags, format string, args ...interface{}) bool {
-	if flags.yes {
+	if flags.approved {
 		return true
 	}
 	if flags.json {
 		// A --json run has nobody to prompt, and a dangling prompt would land
 		// in the JSON stream. Refuse, and name the flag that consents.
 		fmt.Fprintf(os.Stderr, "refusing: "+format+"\n", args...)
-		fmt.Fprintf(os.Stderr, "          --json does not answer this confirmation; pass --yes to consent deliberately\n")
+		fmt.Fprintf(os.Stderr, "          --json does not answer this confirmation; pass --approve-consequential to consent deliberately\n")
 		return false
 	}
 	fmt.Printf("\n"+format+" [y/N] ", args...)

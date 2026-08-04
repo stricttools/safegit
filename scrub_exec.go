@@ -164,10 +164,10 @@ func executeScrubRecipe(
 		return 0, nil
 	}
 
-	// Confirmation prompt (skipped with an explicit --yes)
+	// Confirmation prompt (skipped with an explicit --approve-consequential)
 	if !confirmDeliberate(flags, "This will rewrite history using %d recipe operations. This cannot be undone. Proceed?", len(recipe.Operations)) {
 		infof(flags, "Aborted.\n")
-		return 0, nil
+		return 1, nil
 	}
 
 	// Capture old HEAD
