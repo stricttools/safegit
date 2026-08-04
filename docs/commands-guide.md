@@ -16,17 +16,17 @@ Every safegit command accepts these global flags, which control output verbosity
 | `--quiet` | `false` | Suppress informational output, only showing errors and results |
 | `--verbose` | `false` | Enable verbose output with detailed progress and diagnostic info |
 | `--dry-run` | `false` | Preview what would happen without writing any changes to disk |
-| `--yes` | `false` | Consent to a mutating command without being asked |
+| `--approve-consequential` | `false` | Approve a consequential command up front instead of being asked |
 | `--config-file` | `""` | Path to a custom safegit config file instead of the default location |
 | `--json` | `false` | Emit machine-readable JSON output to stdout (implies `--quiet`) |
 
-The first four are owned by the CLI framework, not by safegit. Three consequences follow, and all three are breaking changes from safegit 0.24:
+The first four are owned by the CLI framework, not by safegit. Three consequences follow:
 
-- **They have no short forms.** `-q`, `-n` and `-y` are gone; write `--quiet`, `--dry-run` and `--yes`.
+- **They have no short forms.** `-q`, `-n` and `-y` are gone; write `--quiet`, `--dry-run` and `--approve-consequential`. The approval flag is deliberately unwieldy so it cannot decay into muscle memory.
 - **They are recognized anywhere in the command line.** `safegit --dry-run push` and `safegit push --dry-run` are the same run. (`--config-file` and `--json` are safegit's own and stay before the subcommand.)
-- **Every mutating command asks before it runs.** Commands are classified `read_only` or `mutating`; a `mutating` one prompts `about to run mutating command '<name>'. Proceed? [y/N]` on a terminal, and refuses outright with `error: stdin is not interactive; pass --yes to confirm` when there is no terminal to ask at. **Scripts and agents must pass `--yes`**: `safegit --yes commit -m "msg" -- file`. `--dry-run` also satisfies the gate, because a preview changes nothing.
+- **Only *consequential* commands ask before they run.** Classification (`read_only` / `mutating`) decides what a dry run records; it does not decide what prompts. A command prompts only when it declares itself **consequential**, and in safegit exactly four do: `scrub file`, `scrub match`, `scrub run` and `author rewrite` -- the operations that rewrite history irreversibly. Each prompts `about to run consequential command '<name>'. Proceed? [y/N]` on a terminal, and refuses outright with `error: stdin is not interactive; pass --approve-consequential to confirm` when there is no terminal to ask at. **Everything else -- `commit`, `push`, `pull`, `undo`, `config set` and the guarded passthroughs -- runs bare, with nothing added to the command line.**
 
-`--json` implies `--quiet` -- human-readable chatter would corrupt the JSON stream -- but it never implies `--yes`. `--json` says how to format output; it says nothing about consent. Adding it to a command line can therefore never destroy or publish anything on its own.
+`--json` implies `--quiet` -- human-readable chatter would corrupt the JSON stream -- but it never implies approval. `--json` says how to format output; it says nothing about consent. Adding it to a command line can therefore never destroy or publish anything on its own.
 
 Under `--dry-run` the framework writes a **would-do log** to stdout after the command's own output, listing every mutation the run would have performed:
 
@@ -318,7 +318,7 @@ git merge --ff-only FETCH_HEAD
 
 - **Ancestry check before every backup**: the slot is fetched first, and a slot holding commits that are not reachable from the local HEAD is a hard error (exit code 22) naming both SHAs. Overwriting it requires `--overwrite-remote-backup`.
 - **Leased push**: the push is pinned with `--force-with-lease` to the SHA observed moments earlier -- or, for a first backup, to "this ref must not exist". A backup pushed from another machine in between is rejected, never clobbered.
-- **Public-remote confirmation**: a real backup to a public repository (or to a networked remote whose visibility cannot be determined) asks first, before any network contact. Only an explicit `--yes` answers that question; under `--json` the backup refuses instead.
+- **Public-remote confirmation**: a real backup to a public repository (or to a networked remote whose visibility cannot be determined) asks first, before any network contact. Only an explicit `--approve-consequential` answers that question; under `--json` the backup refuses instead. A declined confirmation exits nonzero -- a refusal never reports success.
 - **Dry runs never touch the network**: `--dry-run` builds its preview from local state alone -- no `ls-remote`, no `fetch`, no prompt -- so previewing against an unreachable remote succeeds. The slot's current SHA, the ancestry check against it, and the lease pinned to it are all resolved when the backup actually runs.
 - **Hooks bypassed on purpose**: backup pushes run with `--no-verify`. `refs/backups` is a tool-owned namespace, and pre-push policies exist to police branches and tags.
 - **Restore never discards work**: the restore is `merge --ff-only`, so a branch carrying commits the backup lacks is refused with the range to inspect.
@@ -420,7 +420,7 @@ safegit scrub file --from abc1234 --reason "leaked key" --remap-shas-in "*.jsonl
 
 - **Clean tree required**: Refuses to run if the working tree has uncommitted changes.
 - **Rewrite lock**: Acquires a repository-wide rewrite lock to prevent concurrent scrub operations.
-- **Deliberate confirmation**: Prompts for confirmation before rewriting. Only an explicit `--yes` skips the prompt -- `--json` does not answer it, and refuses instead.
+- **Deliberate confirmation**: Prompts for confirmation before rewriting, behind the framework's own consequential gate. Only an explicit `--approve-consequential` skips both -- `--json` does not answer either, and refuses instead. A declined confirmation exits nonzero.
 - **Structural verification**: After rewriting, verifies that commit messages, author/committer identity, parent topology, and non-target files are preserved. Only the target file should change.
 - **Old blob verification**: Verifies that old (pre-scrub) blob objects are no longer reachable after cleanup.
 - **Post-rewrite cleanup**: Expires tainted reflog entries, repacks objects, and prunes unreachable objects.
@@ -777,7 +777,7 @@ safegit --dry-run author rewrite --old-name "alice" --new-name "Alice Smith"
 
 - **Clean tree required**: Refuses to run with uncommitted changes.
 - **Rewrite lock**: Acquires a repository-wide rewrite lock.
-- **Deliberate confirmation**: Prompts before rewriting; only an explicit `--yes` skips it, and `--json` refuses rather than answering it.
+- **Deliberate confirmation**: Prompts before rewriting, behind the framework's own consequential gate; only an explicit `--approve-consequential` skips both, and `--json` refuses rather than answering either. A declined confirmation exits nonzero.
 - **Snapshot verification**: Takes a full snapshot of repository state (commit count, tag count, branch names, tag names, messages, dates, tree hashes, parent topology) before and after the rewrite, then compares them. All invariants except the target identity fields must match exactly.
 - **Trailer rewriting**: Also rewrites identity-bearing trailers (Signed-off-by, Co-authored-by, etc.) to match the new identity.
 - **Tag rewriting**: Annotated tag objects are rewritten when their tagger name/email matches the old identity.
