@@ -10,6 +10,42 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/smm-h/stricttest/go/hygiene"
+)
+
+// isolate binds stricttest's environment floor for the duration of t: a
+// throwaway HOME and XDG tree, an empty git global/system config with a
+// throwaway identity, transports locked to file://, and every ambient
+// credential variable stripped. Every repo constructor in this package calls
+// it, so no test in any consumer package can read the developer's git config,
+// credentials or SSH agent by accident.
+//
+// It goes through TB.Setenv, which panics under T.Parallel. That is the
+// module's documented contract and the reason the suites that use these
+// helpers do not run their tests in parallel with each other.
+func isolate(t *testing.T) {
+	t.Helper()
+	hygiene.Isolate(t)
+	// The floor pins a throwaway git identity through GIT_AUTHOR_* /
+	// GIT_COMMITTER_*, which outrank the repo-local user.name/user.email these
+	// helpers write. Re-pin them to this package's declared identity so the
+	// commits every consumer test inspects carry the name those tests expect,
+	// and so the identity is declared in exactly one place.
+	for k, v := range map[string]string{
+		"GIT_AUTHOR_NAME":     IdentityName,
+		"GIT_AUTHOR_EMAIL":    IdentityEmail,
+		"GIT_COMMITTER_NAME":  IdentityName,
+		"GIT_COMMITTER_EMAIL": IdentityEmail,
+	} {
+		t.Setenv(k, v)
+	}
+}
+
+// The deterministic identity every repo these helpers build commits under.
+const (
+	IdentityName  = "Test"
+	IdentityEmail = "test@test.com"
 )
 
 // InitRepo creates a temp git repo with a seed file ("seed.txt") and initial
@@ -21,6 +57,7 @@ import (
 //	dir, gitDir, sgDir := testutil.InitRepo(t, repo.Init)
 func InitRepo(t *testing.T, safegitInit func(gitDir string) error) (repoDir, gitDir, safegitDir string) {
 	t.Helper()
+	isolate(t)
 	dir := evalTempDir(t)
 
 	cmds := [][]string{
@@ -65,6 +102,7 @@ func InitRepo(t *testing.T, safegitInit func(gitDir string) error) (repoDir, git
 // packages like git and index that don't need safegit infrastructure.
 func InitBareRepo(t *testing.T) string {
 	t.Helper()
+	isolate(t)
 	dir := evalTempDir(t)
 
 	cmds := [][]string{
@@ -98,12 +136,9 @@ func evalTempDir(t *testing.T) string {
 }
 
 // Chdir changes into dir for the duration of the test, restoring the
-// original working directory on cleanup.
+// original working directory on cleanup. A failed restore fails the test:
+// leaving a suite in the wrong directory corrupts every test after it.
 func Chdir(t *testing.T, dir string) {
 	t.Helper()
-	old, _ := os.Getwd()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.Chdir(old) })
+	hygiene.Chdir(t, dir)
 }
