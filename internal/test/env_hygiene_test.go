@@ -101,3 +101,32 @@ func TestRunSafegitEnvUsesOnlyExplicitOverrides(t *testing.T) {
 		t.Errorf("runSafegitEnv dropped the explicit session ID; commit message:\n%s", msg)
 	}
 }
+
+// TestFloorIsBoundInThisProcess pins that stricttest's environment floor is
+// actually in effect for the TEST process, not only for the safegit processes
+// it spawns. Before the floor was adopted, the test process inherited the
+// developer's HOME, git config and credentials wholesale, so a direct `git`
+// invocation from a helper read their real configuration.
+func TestFloorIsBoundInThisProcess(t *testing.T) {
+	t.Setenv("GH_TOKEN", "ambient-token")
+	t.Setenv("SSH_AUTH_SOCK", "/ambient/agent.sock")
+	realHome := os.Getenv("HOME")
+
+	isolate(t)
+
+	if v, ok := os.LookupEnv("GH_TOKEN"); ok {
+		t.Errorf("the floor must strip GH_TOKEN, still set to %q", v)
+	}
+	if v, ok := os.LookupEnv("SSH_AUTH_SOCK"); ok {
+		t.Errorf("the floor must strip SSH_AUTH_SOCK, still set to %q", v)
+	}
+	if home := os.Getenv("HOME"); home == realHome {
+		t.Errorf("the floor must repoint HOME away from %q", realHome)
+	}
+	if cfg := os.Getenv("GIT_CONFIG_GLOBAL"); cfg == "" || !strings.HasPrefix(cfg, os.Getenv("HOME")) {
+		t.Errorf("the floor must point GIT_CONFIG_GLOBAL inside the throwaway home, got %q", cfg)
+	}
+	if proto := os.Getenv("GIT_ALLOW_PROTOCOL"); proto != "file" {
+		t.Errorf("the floor must lock transports down to file://, got %q", proto)
+	}
+}

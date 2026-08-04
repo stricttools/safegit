@@ -14,6 +14,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/smm-h/stricttest/go/hygiene"
 )
 
 // safegitBin is the path to the built safegit binary, set in TestMain.
@@ -54,6 +56,7 @@ func projectRoot() string {
 // path comparison mismatches in test assertions.
 func evalTempDir(t *testing.T) string {
 	t.Helper()
+	isolate(t)
 	dir := t.TempDir()
 	resolved, err := filepath.EvalSymlinks(dir)
 	if err != nil {
@@ -102,6 +105,38 @@ func newRepo(t *testing.T) string {
 	runSafegit(t, dir, "config", "set", "commit.casMaxAttempts", "200")
 
 	return dir
+}
+
+// isolate binds stricttest's environment floor for this test process: a
+// throwaway HOME and XDG tree, an empty git global/system config with a
+// throwaway identity, transports locked to file://, and every ambient
+// credential variable stripped. controlledEnv already builds a deliberate
+// environment for the safegit processes these tests SPAWN; this covers the
+// test process's own direct git invocations, which used to inherit the
+// developer's git config and credentials wholesale.
+//
+// It goes through TB.Setenv, which panics under T.Parallel -- which is why no
+// test in this package calls T.Parallel any more. Serializing the package costs
+// about five seconds and buys an environment no ambient state can reach into.
+//
+// It must be called from the test goroutine, never from a worker one: TB.Setenv
+// writes testing-internal state, so calling it from the goroutines `parallel`
+// spawns is a data race. Every entry point that binds it (evalTempDir and the
+// repo constructors below) runs on the test goroutine.
+func isolate(t *testing.T) {
+	t.Helper()
+	hygiene.Isolate(t)
+	// The floor's throwaway identity outranks the repo-local user.name /
+	// user.email these helpers write, so re-pin it to the identity this
+	// package's assertions expect.
+	for k, v := range map[string]string{
+		"GIT_AUTHOR_NAME":     "Test",
+		"GIT_AUTHOR_EMAIL":    "test@test.com",
+		"GIT_COMMITTER_NAME":  "Test",
+		"GIT_COMMITTER_EMAIL": "test@test.com",
+	} {
+		t.Setenv(k, v)
+	}
 }
 
 // parallel spawns n goroutines calling fn(i) and waits for all to finish.
@@ -691,7 +726,6 @@ func TestCheckoutRefusedDirty(t *testing.T) {
 // TestDoctorFixCleansMainRepoStaleLocks verifies that `doctor --fix` removes
 // stale lock files from the main repo's safegit directory (not just submodules).
 func TestDoctorFixCleansMainRepoStaleLocks(t *testing.T) {
-	t.Parallel()
 	dir := newRepo(t)
 
 	// newRepo runs `safegit config set` which auto-initializes .git/safegit/.
@@ -731,7 +765,6 @@ func TestDoctorFixCleansMainRepoStaleLocks(t *testing.T) {
 // TestDoctorDiagnosesMainRepoStaleLocks verifies that `doctor` (without --fix)
 // reports stale locks in the main repo's safegit directory.
 func TestDoctorDiagnosesMainRepoStaleLocks(t *testing.T) {
-	t.Parallel()
 	dir := newRepo(t)
 
 	// Plant a stale lock file.

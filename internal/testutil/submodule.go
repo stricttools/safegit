@@ -131,6 +131,7 @@ func addSubmodule(t *testing.T, parentDir, originDir, name string) SubmoduleRepo
 // InitRepoWithSubmodule creates a test repo containing one submodule.
 func InitRepoWithSubmodule(t *testing.T) SubmoduleRepo {
 	t.Helper()
+	isolate(t)
 
 	originDir := initOriginRepo(t, "sub-file.txt")
 	parentDir := initParentRepo(t)
@@ -140,6 +141,7 @@ func InitRepoWithSubmodule(t *testing.T) SubmoduleRepo {
 // InitRepoWithTwoSubmodules creates a test repo containing two submodules.
 func InitRepoWithTwoSubmodules(t *testing.T) (SubmoduleRepo, SubmoduleRepo) {
 	t.Helper()
+	isolate(t)
 
 	origin1 := initOriginRepo(t, "sub-file.txt")
 	origin2 := initOriginRepo(t, "sub2-file.txt")
