@@ -135,7 +135,7 @@ A history rewrite moves every commit it touches, which invalidates three things 
 ### The orchestrated path
 
 1. The user runs `rlsbl release scrub`
-2. rlsbl invokes `safegit scrub` as a subprocess, passing `--remap-shas-in` for the changelog globs and `--yes` for the destructive confirmation
+2. rlsbl invokes `safegit scrub` as a subprocess, passing `--remap-shas-in` for the changelog globs and `--approve-consequential` for the destructive confirmation
 3. safegit rewrites history and writes rewrite maps to `.git/safegit/rewrite-maps.jsonl`
 4. rlsbl reads the rewrite maps and performs post-scrub work:
    - Remaps commit hashes in JSONL changelog files (via `--remap-shas-in`)
@@ -208,7 +208,7 @@ When safegit detects it is running inside a git submodule, two additional behavi
 
 ## JSON output mode
 
-All commands support `--json` for machine-readable output. When `--json` is active, safegit automatically enables `--quiet` (suppresses informational stderr). It does **not** imply `--yes`: consent is a separate question and `--json` does not answer it, so a non-interactive `--json` run of a mutating command must pass `--yes` explicitly. If a command fails before producing JSON output, an error envelope is written to stdout:
+All commands support `--json` for machine-readable output. When `--json` is active, safegit automatically enables `--quiet` (suppresses informational stderr). It does **not** imply approval: consent is a separate question and `--json` does not answer it, so a non-interactive `--json` run of a *consequential* command (`scrub file`/`match`/`run`, `author rewrite`) must pass `--approve-consequential` explicitly. Ordinary mutating commands such as `commit` need nothing. If a command fails before producing JSON output, an error envelope is written to stdout:
 
 ```json
 {
