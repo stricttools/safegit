@@ -11,17 +11,6 @@ import (
 // confirmations rely on: --json silences human-readable output but never
 // stands in for consent. Only a real --yes sets it.
 func TestGlobalsToFlagsJSONDoesNotImplyYes(t *testing.T) {
-	globals := func(yes, jsonOut bool) map[string]interface{} {
-		return map[string]interface{}{
-			"quiet":       false,
-			"verbose":     false,
-			"dry_run":     false,
-			"yes":         yes,
-			"config_file": "",
-			"json":        jsonOut,
-		}
-	}
-
 	tests := []struct {
 		name         string
 		yes, jsonOut bool
@@ -35,7 +24,7 @@ func TestGlobalsToFlagsJSONDoesNotImplyYes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gf := globalsToFlags(globals(tt.yes, tt.jsonOut))
+			gf := newGlobalFlags(reservedFlags{yes: tt.yes}, "", tt.jsonOut)
 			if gf.yes != tt.wantYes {
 				t.Errorf("yes = %v, want %v", gf.yes, tt.wantYes)
 			}

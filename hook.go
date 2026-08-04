@@ -9,6 +9,7 @@ import (
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/hooks"
 	"github.com/smm-h/safegit/internal/repo"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
 // hookList discovers and lists all pre-pre-push hooks.
@@ -136,13 +137,29 @@ func hookRun(flags globalFlags, name string) int {
 func hookInstall(flags globalFlags, srcPath string) int {
 	gitDir := mustGitDir(flags, "hook")
 
-	if err := hooks.Install(gitDir, srcPath); err != nil {
+	// Reading the source is not an effect; the three mutations that follow are,
+	// so `hook install --dry-run` records them and installs nothing.
+	data, dest, err := hooks.PlanInstall(gitDir, srcPath)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	fx := flags.effects()
+	if _, err := fx.Mkdir(filepath.Dir(dest)); err != nil {
+		fmt.Fprintf(os.Stderr, "error: creating hooks dir: %v\n", err)
+		return 1
+	}
+	if _, err := fx.Write(dest, data, strictcli.Resource("safegit-hook:"+dest)); err != nil {
+		fmt.Fprintf(os.Stderr, "error: writing hook file: %v\n", err)
+		return 1
+	}
+	if _, err := fx.Chmod(dest, 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "error: making hook executable: %v\n", err)
 		return 1
 	}
 
 	name := filepath.Base(srcPath)
-	if !flags.quiet {
+	if !flags.quiet && !flags.dryRun {
 		fmt.Printf("installed hook: %s\n", name)
 	}
 	return 0

@@ -233,13 +233,29 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// SaveConfigTo writes config to an arbitrary path.
-func SaveConfigTo(path string, cfg *Config) error {
+// MarshalConfig renders the config exactly as SaveConfig would write it. It is
+// split out so callers can mint the write as an effect instead of performing it
+// here, which is what lets --dry-run record a config change without making one.
+func MarshalConfig(cfg *Config) ([]byte, error) {
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshaling config: %w", err)
+		return nil, fmt.Errorf("marshaling config: %w", err)
 	}
-	return os.WriteFile(path, append(data, '\n'), 0644)
+	return append(data, '\n'), nil
+}
+
+// ConfigPath is the path SaveConfig writes to for the given git dir.
+func ConfigPath(gitDir string) string {
+	return filepath.Join(SafegitDir(gitDir), "config.json")
+}
+
+// SaveConfigTo writes config to an arbitrary path.
+func SaveConfigTo(path string, cfg *Config) error {
+	data, err := MarshalConfig(cfg)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
 }
 
 // SaveConfig writes config back to config.json.
@@ -335,4 +351,3 @@ func parseInt(s string) (int, error) {
 	_, err := fmt.Sscanf(s, "%d", &v)
 	return v, err
 }
-

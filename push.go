@@ -12,6 +12,7 @@ import (
 	"github.com/smm-h/safegit/internal/oplog"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/submodule"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
 // Exit codes specific to push
@@ -45,13 +46,13 @@ type pushRefInfo struct {
 func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote string, mode pushMode) int {
 	gitDir := mustGitDir(flags, "push")
 	if err := repo.EnsureInitialized(gitDir); err != nil {
-		die(flags, "push",1, err.Error())
+		die(flags, "push", 1, err.Error())
 		return 1
 	}
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(flags, "push",1, fmt.Sprintf("loading config: %v", err))
+		die(flags, "push", 1, fmt.Sprintf("loading config: %v", err))
 		return 1
 	}
 
@@ -61,7 +62,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	ctx := context.Background()
 	remoteURL, err := resolveRemoteURL(ctx, remote)
 	if err != nil {
-		die(flags, "push",1, fmt.Sprintf("resolving remote URL: %v", err))
+		die(flags, "push", 1, fmt.Sprintf("resolving remote URL: %v", err))
 		return 1
 	}
 
@@ -73,7 +74,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	}
 
 	if len(refs) == 0 {
-		die(flags, "push",1, "nothing to push (no matching refs)")
+		die(flags, "push", 1, "nothing to push (no matching refs)")
 		return 1
 	}
 
@@ -91,9 +92,15 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	}
 	hookStdin := []byte(strings.Join(stdinLines, "\n") + "\n")
 
-	// Run pre-pre-push hooks (unless disabled)
+	// Run pre-pre-push hooks (unless disabled). A dry run never runs them:
+	// a hook is an arbitrary user script, so executing one is a mutation, and
+	// hooks.RunAll feeds it stdin -- something the effects handle's closed
+	// method set has no way to express (see docs/dry-run notes).
 	var hookResults []hooks.HookResult
-	if !noPrePrePush {
+	if !noPrePrePush && flags.dryRun && !flags.quiet {
+		fmt.Fprintln(os.Stderr, "  pre-pre-push hooks are not run under --dry-run")
+	}
+	if !noPrePrePush && !flags.dryRun {
 		timeoutSec := cfg.Hooks.PrePrePush.TimeoutSeconds
 		if timeoutSec <= 0 {
 			timeoutSec = 1800
@@ -158,7 +165,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	pushArgs := buildGitPushArgs(remote, refspecs, forceFlag)
 	var pushErr error
 	for attempt := 1; attempt <= retryAttempts; attempt++ {
-		pushErr = execGitPush(ctx, pushArgs)
+		pushErr = execGitPush(flags, pushArgs)
 		if pushErr == nil {
 			break
 		}
@@ -183,26 +190,31 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		return exitPushGitFailed
 	}
 
-	// Log to oplog
-	sgDir := repo.SafegitDir(gitDir)
-	refDetails := make([]map[string]string, len(refs))
-	for i, r := range refs {
-		refDetails[i] = map[string]string{
-			"localRef": r.LocalRef, "localSha": r.LocalSHA,
-			"remoteRef": r.RemoteRef, "remoteSha": r.RemoteSHA,
+	// Log to oplog. The oplog is an atomically-appended JSONL audit trail; the
+	// effects handle's `write` is whole-content and would destroy the O_APPEND
+	// concurrency guarantee, so this mutation stays outside the handle and is
+	// simply skipped in dry mode -- a preview leaves no audit trail behind.
+	if !flags.dryRun {
+		sgDir := repo.SafegitDir(gitDir)
+		refDetails := make([]map[string]string, len(refs))
+		for i, r := range refs {
+			refDetails[i] = map[string]string{
+				"localRef": r.LocalRef, "localSha": r.LocalSHA,
+				"remoteRef": r.RemoteRef, "remoteSha": r.RemoteSHA,
+			}
 		}
+		_ = oplog.Append(sgDir, oplog.Entry{
+			Op: "push",
+			Extra: map[string]interface{}{
+				"remote":   remote,
+				"refs":     refDetails,
+				"hooksRun": len(hookResults),
+			},
+		})
 	}
-	_ = oplog.Append(sgDir, oplog.Entry{
-		Op: "push",
-		Extra: map[string]interface{}{
-			"remote":   remote,
-			"refs":     refDetails,
-			"hooksRun": len(hookResults),
-		},
-	})
 
 	// Output result
-	if !flags.quiet {
+	if !flags.quiet && !flags.dryRun {
 		for _, r := range refs {
 			fmt.Printf("  %s -> %s\n", shortRef(r.LocalRef), shortRef(r.RemoteRef))
 		}
@@ -359,17 +371,39 @@ func buildGitPushArgs(remote string, refspecs []string, force bool) []string {
 	return args
 }
 
-// execGitPush runs git push, streaming stdout/stderr to the user.
-func execGitPush(ctx context.Context, args []string) error {
-	stdout, stderr, err := git.Run(ctx, args...)
-	if stdout != "" {
-		fmt.Print(stdout)
+// execGitPush runs git push through the effects handle, streaming
+// stdout/stderr to the user. Routing it here is what makes `--dry-run` honest:
+// the push is recorded in the would-do log and nothing reaches the remote.
+func execGitPush(flags globalFlags, args []string) error {
+	argv := make([]interface{}, 0, len(args)+1)
+	argv = append(argv, "git")
+	for _, a := range args {
+		argv = append(argv, a)
 	}
-	if stderr != "" {
-		// git push writes progress to stderr even on success
-		fmt.Fprint(os.Stderr, stderr)
+	grant := "push"
+	for _, a := range args {
+		if strings.HasPrefix(a, "--force-with-lease") || a == "--force" {
+			grant = "force-push"
+			break
+		}
 	}
+	_, err := flags.effects().Run(argv,
+		strictcli.Stream(true),
+		strictcli.UseGrant(grant),
+		strictcli.Resource("remote-refs:"+remoteOf(args)),
+	)
 	return err
+}
+
+// remoteOf extracts the remote name from a built `git push` argv.
+func remoteOf(args []string) string {
+	for _, a := range args {
+		if a == "push" || strings.HasPrefix(a, "-") {
+			continue
+		}
+		return a
+	}
+	return "origin"
 }
 
 // isTransportError heuristically determines if a push error is a network/transport issue

@@ -260,43 +260,37 @@ func TestBackupRestoreWithoutSlotErrors(t *testing.T) {
 	}
 }
 
-// TestBackupUnknownVisibilityRequiresConfirmation: a networked remote that
-// cannot be proven private is only backed up after a confirmation. The test
-// runs without a terminal, so the prompt is declined and nothing is pushed --
-// which also proves the check happens before any network contact.
-func TestBackupUnknownVisibilityRequiresConfirmation(t *testing.T) {
+// TestBackupUnconsentedContactsNoRemote: `backup backup` is a `mutating`
+// command, so strictcli's confirm protocol stops it before dispatch when
+// nobody consented. Nothing is pushed and -- because the refusal happens
+// before the handler runs -- no remote is contacted at all.
+func TestBackupUnconsentedContactsNoRemote(t *testing.T) {
 	dir := newRepo(t)
 	gitIn(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
 
-	stdout, stderr, code := runSafegit(t, dir, "backup", "backup", "cloudy")
-	if code != 0 {
-		t.Fatalf("declining the prompt should exit 0 (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	stdout, stderr, code := runSafegitNoConsent(t, dir, nil, "backup", "backup", "cloudy")
+	if code == 0 {
+		t.Fatalf("an unconsented backup must not succeed: stdout=%s stderr=%s", stdout, stderr)
 	}
-	if !strings.Contains(stderr, "cannot determine") {
-		t.Errorf("expected a visibility warning, got: %s", stderr)
-	}
-	if !strings.Contains(stdout, "Aborted") {
-		t.Errorf("expected the abort notice, got: %s", stdout)
+	if strings.Contains(stderr, "Could not resolve host") {
+		t.Errorf("the refusal must precede any network contact, got: %s", stderr)
 	}
 }
 
-// TestBackupJSONDoesNotBypassExposureConfirmation: --json makes safegit
-// non-interactive, but it must never stand in for the deliberate consent the
-// exposure confirmation asks for. The remote is unreachable, so a bypass shows
-// up as a network error instead of a clean decline.
-func TestBackupJSONDoesNotBypassExposureConfirmation(t *testing.T) {
+// TestBackupJSONIsNotConsent: --json produces machine-readable output and says
+// nothing about consent. It must never stand in for the --yes the confirm
+// protocol asks for; the remote is unreachable, so a bypass would show up as a
+// network error.
+func TestBackupJSONIsNotConsent(t *testing.T) {
 	dir := newRepo(t)
 	gitIn(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
 
-	stdout, stderr, code := runSafegit(t, dir, "--json", "backup", "backup", "cloudy")
-	if code != 0 {
-		t.Fatalf("--json must decline the exposure confirmation, not answer it (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	stdout, stderr, code := runSafegitNoConsent(t, dir, nil, "--json", "backup", "backup", "cloudy")
+	if code == 0 {
+		t.Fatalf("--json must not answer the confirmation (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
-	if !strings.Contains(stderr, "cannot determine") {
-		t.Errorf("expected the visibility warning, got: %s", stderr)
-	}
-	if strings.Contains(stderr, "listing ") || strings.Contains(stderr, "fetching ") {
-		t.Errorf("--json bypassed the confirmation and contacted the remote: %s", stderr)
+	if strings.Contains(stderr, "Could not resolve host") {
+		t.Errorf("--json was taken as consent and the remote was contacted: %s", stderr)
 	}
 }
 

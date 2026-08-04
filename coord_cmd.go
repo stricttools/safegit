@@ -11,7 +11,22 @@ import (
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/oplog"
 	"github.com/smm-h/safegit/internal/repo"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
+
+// runGitMutation runs a tree- or ref-mutating git command through the effects
+// handle, streaming git's own output straight to the terminal. Routing it here
+// is what makes --dry-run honest for these commands: the invocation is recorded
+// in the would-do log and git is never started.
+func runGitMutation(flags globalFlags, args ...string) error {
+	argv := make([]interface{}, 0, len(args)+1)
+	argv = append(argv, "git")
+	for _, a := range args {
+		argv = append(argv, a)
+	}
+	_, err := flags.effects().Run(argv, strictcli.Stream(true))
+	return err
+}
 
 // coordGuard runs coord.Check and prints a refusal if dirty.
 // Returns exit code 5 if dirty, 0 if clean, or 1 on error.
@@ -64,15 +79,11 @@ func runCheckout(flags globalFlags, args []string) int {
 	ctx := context.Background()
 	oldHead, _ := git.RevParse(ctx, "HEAD")
 
-	stdout, stderr, err := git.Run(ctx, append([]string{"checkout"}, args...)...)
-	if stdout != "" {
-		fmt.Print(stdout)
-	}
-	if stderr != "" {
-		fmt.Fprint(os.Stderr, stderr)
-	}
-	if err != nil {
+	if err := runGitMutation(flags, append([]string{"checkout"}, args...)...); err != nil {
 		return 1
+	}
+	if flags.dryRun {
+		return 0
 	}
 
 	syncMainIndex(flags, "checkout")
@@ -110,16 +121,12 @@ func runPull(flags globalFlags, mode pullMode, remote string, branch string) int
 		return code
 	}
 
-	ctx := context.Background()
-
 	// Step 1: fetch
 	fetchArgs := []string{"fetch", remote}
 	if branch != "" {
 		fetchArgs = append(fetchArgs, branch)
 	}
-	_, stderr, err := git.Run(ctx, fetchArgs...)
-	if err != nil {
-		fmt.Fprint(os.Stderr, stderr)
+	if err := runGitMutation(flags, fetchArgs...); err != nil {
 		return 1
 	}
 
@@ -135,15 +142,11 @@ func runPull(flags globalFlags, mode pullMode, remote string, branch string) int
 	}
 	mergeTarget := "FETCH_HEAD"
 	mergeArgs = append(mergeArgs, mergeTarget)
-	stdout, stderr, err := git.Run(ctx, mergeArgs...)
-	if stdout != "" {
-		fmt.Print(stdout)
-	}
-	if stderr != "" {
-		fmt.Fprint(os.Stderr, stderr)
-	}
-	if err != nil {
+	if err := runGitMutation(flags, mergeArgs...); err != nil {
 		return 1
+	}
+	if flags.dryRun {
+		return 0
 	}
 
 	syncMainIndex(flags, "pull")
@@ -180,15 +183,11 @@ func runMerge(flags globalFlags, args []string) int {
 	}
 
 	ctx := context.Background()
-	stdout, stderr, err := git.Run(ctx, append([]string{"merge"}, args...)...)
-	if stdout != "" {
-		fmt.Print(stdout)
-	}
-	if stderr != "" {
-		fmt.Fprint(os.Stderr, stderr)
-	}
-	if err != nil {
+	if err := runGitMutation(flags, append([]string{"merge"}, args...)...); err != nil {
 		return 1
+	}
+	if flags.dryRun {
+		return 0
 	}
 
 	syncMainIndex(flags, "merge")
@@ -225,16 +224,11 @@ func runRebase(flags globalFlags, args []string) int {
 		return 2
 	}
 
-	ctx := context.Background()
-	stdout, stderr, err := git.Run(ctx, append([]string{"rebase"}, args...)...)
-	if stdout != "" {
-		fmt.Print(stdout)
-	}
-	if stderr != "" {
-		fmt.Fprint(os.Stderr, stderr)
-	}
-	if err != nil {
+	if err := runGitMutation(flags, append([]string{"rebase"}, args...)...); err != nil {
 		return 1
+	}
+	if flags.dryRun {
+		return 0
 	}
 
 	syncMainIndex(flags, "rebase")
@@ -275,16 +269,11 @@ func runReset(flags globalFlags, args []string) int {
 		}
 	}
 
-	ctx := context.Background()
-	stdout, stderr, err := git.Run(ctx, append([]string{"reset"}, args...)...)
-	if stdout != "" {
-		fmt.Print(stdout)
-	}
-	if stderr != "" {
-		fmt.Fprint(os.Stderr, stderr)
-	}
-	if err != nil {
+	if err := runGitMutation(flags, append([]string{"reset"}, args...)...); err != nil {
 		return 1
+	}
+	if flags.dryRun {
+		return 0
 	}
 
 	if isHard {
@@ -327,16 +316,11 @@ func runBisect(flags globalFlags, args []string) int {
 		}
 	}
 
-	ctx := context.Background()
-	stdout, stderr, err := git.Run(ctx, append([]string{"bisect"}, args...)...)
-	if stdout != "" {
-		fmt.Print(stdout)
-	}
-	if stderr != "" {
-		fmt.Fprint(os.Stderr, stderr)
-	}
-	if err != nil {
+	if err := runGitMutation(flags, append([]string{"bisect"}, args...)...); err != nil {
 		return 1
+	}
+	if flags.dryRun {
+		return 0
 	}
 
 	syncMainIndex(flags, "bisect")
@@ -375,6 +359,13 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 
 	if code := coordGuard(flags, sgDir, gitCmd); code != 0 {
 		return code
+	}
+
+	if flags.dryRun {
+		if err := runGitMutation(flags, append([]string{gitCmd}, args...)...); err != nil {
+			return 1
+		}
+		return 0
 	}
 
 	code := runPassthrough(gitCmd, args)

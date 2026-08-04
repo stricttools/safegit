@@ -774,73 +774,41 @@ func TestRewriteAuthorDirtyTreeAlwaysRejected(t *testing.T) {
 	}
 }
 
-func TestRewriteAuthorConfirmAbort(t *testing.T) {
+// TestRewriteAuthorUnconsentedRewritesNothing: `author rewrite` is `mutating`,
+// so strictcli's confirm protocol stops it before dispatch when nobody
+// consented. Feeding "n" (or anything) down a pipe is not consent, and history
+// is left alone.
+func TestRewriteAuthorUnconsentedRewritesNothing(t *testing.T) {
 	dir := newRepo(t)
 	makeCommits(t, dir, "oldname", "old@test.com", 3, "abort")
 
-	cmd := exec.Command(safegitBin, "author", "rewrite", "--old-name=oldname", "--new-name=newname")
-	cmd.Dir = dir
-	cmd.Stdin = strings.NewReader("n\n")
-
-	var outBuf, errBuf strings.Builder
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-
-	err := cmd.Run()
-	exitCode := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			t.Fatalf("running safegit: %v", err)
-		}
+	_, stderr, exitCode := runSafegitNoConsent(t, dir, nil,
+		"author", "rewrite", "--old-name=oldname", "--new-name=newname")
+	if exitCode == 0 {
+		t.Errorf("an unconsented author rewrite must not succeed; stderr: %s", stderr)
 	}
 
-	if exitCode != 0 {
-		t.Errorf("expected exit code 0 on abort, got %d", exitCode)
-	}
-
-	combined := outBuf.String() + errBuf.String()
-	if !strings.Contains(combined, "Aborted") {
-		t.Errorf("output should contain 'Aborted', got: %s", combined)
-	}
-
-	// Nothing was rewritten
 	names := getAuthorNames(t, dir)
 	if !containsName(names, "oldname") {
-		t.Errorf("author name 'oldname' should still be present after abort: %v", names)
+		t.Errorf("author name 'oldname' should still be present after the refusal: %v", names)
 	}
 }
 
-func TestRewriteAuthorConfirmProceed(t *testing.T) {
+// TestRewriteAuthorConsentedProceeds: an explicit --yes is the deliberate
+// consent, and the rewrite runs.
+func TestRewriteAuthorConsentedProceeds(t *testing.T) {
 	dir := newRepo(t)
 	makeCommits(t, dir, "oldname", "old@test.com", 3, "proceed")
 
-	cmd := exec.Command(safegitBin, "author", "rewrite", "--old-name=oldname", "--new-name=newname")
-	cmd.Dir = dir
-	cmd.Stdin = strings.NewReader("y\n")
-
-	var outBuf, errBuf strings.Builder
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-
-	err := cmd.Run()
-	exitCode := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
-			t.Fatalf("running safegit: %v", err)
-		}
-	}
-
+	_, stderr, exitCode := runSafegitNoConsent(t, dir, nil,
+		"--yes", "author", "rewrite", "--old-name=oldname", "--new-name=newname")
 	if exitCode != 0 {
-		t.Fatalf("expected exit code 0, got %d: stdout=%s stderr=%s", exitCode, outBuf.String(), errBuf.String())
+		t.Fatalf("expected exit code 0, got %d: stderr=%s", exitCode, stderr)
 	}
 
 	names := getAuthorNames(t, dir)
 	if containsName(names, "oldname") {
-		t.Errorf("author name 'oldname' still present after confirm-proceed: %v", names)
+		t.Errorf("author name 'oldname' still present after consented rewrite: %v", names)
 	}
 }
 
@@ -913,7 +881,7 @@ func TestRewriteAuthorJSON(t *testing.T) {
 		OldName          string            `json:"old_name"`
 		NewName          string            `json:"new_name"`
 	}
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 
@@ -1002,7 +970,7 @@ func TestRewriteAuthorJSONDryRun(t *testing.T) {
 		OldName        string `json:"old_name"`
 		NewName        string `json:"new_name"`
 	}
-	if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 

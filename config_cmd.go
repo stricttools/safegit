@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/smm-h/safegit/internal/repo"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
 // formatConfigValue formats a config value for display.
@@ -87,17 +88,22 @@ func runConfigSet(flags globalFlags, key, value string) int {
 		return 1
 	}
 
-	var saveErr error
-	if flags.configPath != "" {
-		saveErr = repo.SaveConfigTo(flags.configPath, cfg)
-	} else {
-		saveErr = repo.SaveConfig(gitDir, cfg)
-	}
-	if saveErr != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", saveErr)
+	data, err := repo.MarshalConfig(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
 	}
-	if !flags.quiet {
+	configPath := flags.configPath
+	if configPath == "" {
+		configPath = repo.ConfigPath(gitDir)
+	}
+	// Minting the write on the handle is what makes `config set --dry-run`
+	// record the change instead of performing it.
+	if _, err := flags.effects().Write(configPath, data, strictcli.Resource("safegit-config:"+configPath)); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 1
+	}
+	if !flags.quiet && !flags.dryRun {
 		fmt.Printf("%s = %s\n", key, value)
 	}
 	return 0
