@@ -56,7 +56,7 @@ func TestScrubVerifyRoundTrip(t *testing.T) {
 
 	// Scrub the secret
 	_, stderr, code := runSafegitEnv(t, dir, scrubVerifyEnv,
-		"--yes", "scrub", "match",
+		"--approve-consequential", "scrub", "match",
 		"--pattern", "SECRET_XYZ_123",
 		"--replace", "REDACTED",
 		"--reason", "test round-trip verify",
@@ -108,7 +108,7 @@ func TestScrubVerifyHandWrittenPolicy(t *testing.T) {
 
 	// Scrub the secret
 	_, stderr, code := runSafegitEnv(t, dir, scrubVerifyEnv,
-		"--yes", "scrub", "match",
+		"--approve-consequential", "scrub", "match",
 		"--pattern", "sk_live_abc123",
 		"--replace", "REDACTED",
 		"--reason", "remove api key",
@@ -152,7 +152,7 @@ func TestScrubVerifyDetectsReintroduced(t *testing.T) {
 
 	// Scrub the secret
 	_, stderr, code := runSafegitEnv(t, dir, scrubVerifyEnv,
-		"--yes", "scrub", "match",
+		"--approve-consequential", "scrub", "match",
 		"--pattern", "SUPER_SECRET_42",
 		"--replace", "REDACTED",
 		"--reason", "remove token",
@@ -234,7 +234,7 @@ func TestScrubVerifyJSONOutput(t *testing.T) {
 	// Create and scrub a secret
 	commitFileEnv(t, dir, scrubVerifyEnv, "secret.txt", "password=MY_SECRET_99\n", "add secret")
 	_, stderr, code := runSafegitEnv(t, dir, scrubVerifyEnv,
-		"--yes", "scrub", "match",
+		"--approve-consequential", "scrub", "match",
 		"--pattern", "MY_SECRET_99",
 		"--replace", "GONE",
 		"--reason", "json output test",
@@ -299,7 +299,7 @@ func TestScrubVerifyMultiPolicySingleScan(t *testing.T) {
 
 	// Scrub first secret.
 	_, stderr, code := runSafegitEnv(t, dir, scrubVerifyEnv,
-		"--yes", "scrub", "match",
+		"--approve-consequential", "scrub", "match",
 		"--pattern", "alpha_secret_one",
 		"--replace", "REDACTED_1",
 		"--reason", "remove db password",
@@ -311,7 +311,7 @@ func TestScrubVerifyMultiPolicySingleScan(t *testing.T) {
 
 	// Scrub second secret.
 	_, stderr, code = runSafegitEnv(t, dir, scrubVerifyEnv,
-		"--yes", "scrub", "match",
+		"--approve-consequential", "scrub", "match",
 		"--pattern", "beta_secret_two",
 		"--replace", "REDACTED_2",
 		"--reason", "remove api key",
@@ -381,7 +381,7 @@ func TestScrubVerifyScopeAutoAppend(t *testing.T) {
 
 	// Scrub with scope
 	_, stderr, code := runSafegitEnv(t, dir, scrubVerifyEnv,
-		"--yes", "scrub", "match",
+		"--approve-consequential", "scrub", "match",
 		"--pattern", "secret123",
 		"--replace", "REDACTED",
 		"--reason", "scoped scrub test",

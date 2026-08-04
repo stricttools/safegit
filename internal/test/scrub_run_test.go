@@ -41,7 +41,7 @@ replace = "REDACTED"
 `)
 
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
-		"--yes", "scrub", "run",
+		"--approve-consequential", "scrub", "run",
 		"--reason", "test basic recipe",
 		"--entire-history",
 		recipe,
@@ -109,7 +109,7 @@ replace = "REDACTED"
 `)
 
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
-		"--yes", "scrub", "run",
+		"--approve-consequential", "scrub", "run",
 		"--reason", "test multi-op recipe",
 		"--entire-history",
 		recipe,
@@ -160,7 +160,7 @@ depends_on = [0]
 `)
 
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
-		"--yes", "scrub", "run",
+		"--approve-consequential", "scrub", "run",
 		"--reason", "test depends_on",
 		"--entire-history",
 		recipe,
@@ -209,7 +209,7 @@ replace = "REDACTED2"
 `)
 
 	_, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
-		"--yes", "scrub", "run",
+		"--approve-consequential", "scrub", "run",
 		"--reason", "test overlap error",
 		"--entire-history",
 		recipe,
@@ -239,7 +239,7 @@ replace = "REDACTED"
 `)
 
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
-		"--yes", "scrub", "run",
+		"--approve-consequential", "scrub", "run",
 		"--diff",
 		"--reason", "test diff preview",
 		"--entire-history",
@@ -288,7 +288,7 @@ replace = "REDACTED"
 `)
 
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
-		"--yes", "--json", "scrub", "run",
+		"--approve-consequential", "--json", "scrub", "run",
 		"--reason", "test json output",
 		"--entire-history",
 		recipe,
@@ -361,7 +361,7 @@ replace = "REDACTED"
 `)
 
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
-		"--yes", "scrub", "run",
+		"--approve-consequential", "scrub", "run",
 		"--diff",
 		"--reason", "test no object writes",
 		"--entire-history",
@@ -429,7 +429,7 @@ replace = "REDACTED"
 `)
 
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
-		"--dry-run", "--yes", "scrub", "run",
+		"--dry-run", "--approve-consequential", "scrub", "run",
 		"--reason", "test dry-run",
 		"--entire-history",
 		recipe,
@@ -494,7 +494,7 @@ replace = "REDACTED"
 `)
 
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
-		"--dry-run", "--json", "--yes", "scrub", "run",
+		"--dry-run", "--json", "--approve-consequential", "scrub", "run",
 		"--reason", "test dry-run json",
 		"--entire-history",
 		recipe,
@@ -585,7 +585,7 @@ replace = "REDACTED"
 `)
 
 	_, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
-		"--dry-run", "--yes", "scrub", "run",
+		"--dry-run", "--approve-consequential", "scrub", "run",
 		"--diff",
 		"--reason", "test mutex",
 		"--entire-history",
@@ -627,7 +627,7 @@ scope = "*.yaml"
 `)
 
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubRunEnv,
-		"--yes", "scrub", "run",
+		"--approve-consequential", "scrub", "run",
 		"--reason", "test per-op scope",
 		"--entire-history",
 		recipe,

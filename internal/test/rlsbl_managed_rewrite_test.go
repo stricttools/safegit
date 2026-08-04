@@ -37,7 +37,7 @@ func newRlsblRepo(t *testing.T) (dir, initialSHA string) {
 func TestScrubFileInRlsblManagedRepoProceeds(t *testing.T) {
 	dir, initialSHA := newRlsblRepo(t)
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "scrub", "file",
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "file",
 		"--from", initialSHA, "--reason", "raw scrub", "secret.txt")
 	if code != 0 {
 		t.Fatalf("scrub file must proceed in an rlsbl-managed repo, got code %d: %s", code, stderr)
@@ -57,7 +57,7 @@ func TestScrubFileInRlsblManagedRepoProceeds(t *testing.T) {
 func TestScrubMatchAndRunInRlsblManagedRepoProceed(t *testing.T) {
 	dir, _ := newRlsblRepo(t)
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "scrub", "match",
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "match",
 		"--pattern", "hunter2", "--replace", "GONE", "--reason", "raw scrub", "--entire-history")
 	if code != 0 {
 		t.Fatalf("scrub match must proceed in an rlsbl-managed repo, got code %d: %s", code, stderr)
@@ -72,7 +72,7 @@ func TestScrubMatchAndRunInRlsblManagedRepoProceed(t *testing.T) {
 		t.Fatalf("committing recipe failed: %s", stderr)
 	}
 
-	_, stderr, code = runSafegitEnv(t, dir, scrubEnv, "--yes", "scrub", "run",
+	_, stderr, code = runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "run",
 		"--reason", "raw scrub", "--entire-history", "recipe.toml")
 	if code != 0 {
 		t.Fatalf("scrub run must proceed in an rlsbl-managed repo, got code %d: %s", code, stderr)
@@ -85,7 +85,7 @@ func TestScrubInRlsblManagedRepoWritesJournal(t *testing.T) {
 	dir, initialSHA := newRlsblRepo(t)
 	before := revListReverse(t, dir)
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "scrub", "file",
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "file",
 		"--from", initialSHA, "--reason", "raw scrub", "secret.txt")
 	if code != 0 {
 		t.Fatalf("scrub file failed (code %d): %s", code, stderr)
@@ -121,7 +121,7 @@ func authorNames(t *testing.T, dir string) map[string]bool {
 func TestAuthorRewriteInRlsblManagedRepoProceeds(t *testing.T) {
 	dir, _ := newRlsblRepo(t)
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "author", "rewrite",
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "author", "rewrite",
 		"--old-name", "Test", "--new-name", "Renamed")
 	if code != 0 {
 		t.Fatalf("author rewrite must proceed in an rlsbl-managed repo, got code %d: %s", code, stderr)
@@ -138,13 +138,13 @@ func TestAuthorRewriteInRlsblManagedRepoProceeds(t *testing.T) {
 func TestRewritePreviewsInRlsblManagedRepo(t *testing.T) {
 	dir, initialSHA := newRlsblRepo(t)
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "--dry-run", "scrub", "file",
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--dry-run", "scrub", "file",
 		"--from", initialSHA, "--reason", "preview", "secret.txt")
 	if code != 0 {
 		t.Fatalf("dry-run scrub file should succeed, got code %d: %s", code, stderr)
 	}
 
-	_, stderr, code = runSafegitEnv(t, dir, scrubEnv, "--yes", "--dry-run", "author", "rewrite",
+	_, stderr, code = runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--dry-run", "author", "rewrite",
 		"--old-name", "Test", "--new-name", "Renamed")
 	if code != 0 {
 		t.Fatalf("dry-run author rewrite should succeed, got code %d: %s", code, stderr)

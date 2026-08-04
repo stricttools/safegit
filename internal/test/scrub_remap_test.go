@@ -86,7 +86,7 @@ func TestScrubFileRemapShas(t *testing.T) {
 	initialSHA := revListReverse(t, dir)[0]
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "REDACTED\n", "commit replacement")
 
-	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "--json", "scrub", "file",
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--json", "scrub", "file",
 		"--from", initialSHA, "--reason", "remap test",
 		"--remap-shas-in", "changes/changelog.jsonl", "secret.txt")
 	if code != 0 {
@@ -135,7 +135,7 @@ func TestScrubFileRemapPartialRange(t *testing.T) {
 
 	// Scrub only from c3: c1 (referenced by the changelog) is a pre-range
 	// ancestor and must be left untouched.
-	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "--json", "scrub", "file",
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--json", "scrub", "file",
 		"--from", c3, "--reason", "partial range remap",
 		"--remap-shas-in", "changelog.jsonl", "secret.txt")
 	if code != 0 {
@@ -180,7 +180,7 @@ func TestScrubFileRemapStaleHash(t *testing.T) {
 	initialSHA := revListReverse(t, dir)[0]
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "REDACTED\n", "commit replacement")
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "scrub", "file",
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "file",
 		"--from", initialSHA, "--reason", "stale hash remap",
 		"--remap-shas-in", "changelog.jsonl", "secret.txt")
 	if code != 0 {
@@ -212,7 +212,7 @@ func TestScrubFileRemapLeavesAbbreviatedAndLongerHex(t *testing.T) {
 	initialSHA := revListReverse(t, dir)[0]
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "REDACTED\n", "commit replacement")
 
-	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "--json", "scrub", "file",
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--json", "scrub", "file",
 		"--from", initialSHA, "--reason", "abbrev remap",
 		"--remap-shas-in", "notes.txt", "secret.txt")
 	if code != 0 {
@@ -247,7 +247,7 @@ func TestScrubMatchRemapShas(t *testing.T) {
 	c1 := commitFileEnv(t, dir, scrubEnv, "config.env", "token=MATCHSECRET\n", "add config")
 	appendChangelogLine(t, dir, "changelog.jsonl", c1)
 
-	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "--json", "scrub", "match",
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--json", "scrub", "match",
 		"--pattern", "MATCHSECRET", "--replace", "GONE", "--reason", "match remap",
 		"--entire-history", "--remap-shas-in", "changelog.jsonl")
 	if code != 0 {
@@ -291,7 +291,7 @@ func TestScrubRunRemapShas(t *testing.T) {
 		t.Fatalf("committing recipe failed: %s", stderr)
 	}
 
-	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "--json", "scrub", "run",
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--json", "scrub", "run",
 		"--reason", "recipe remap", "--entire-history",
 		"--remap-shas-in", "changelog.jsonl", "recipe.toml")
 	if code != 0 {
@@ -331,7 +331,7 @@ func TestScrubFileRemapSkipsBinary(t *testing.T) {
 	initialSHA := revListReverse(t, dir)[0]
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "REDACTED\n", "commit replacement")
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "scrub", "file",
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "file",
 		"--from", initialSHA, "--reason", "binary remap",
 		"--remap-shas-in", "*.bin", "secret.txt")
 	if code != 0 {
@@ -355,7 +355,7 @@ func TestScrubRemapInvalidGlob(t *testing.T) {
 	initialSHA := revListReverse(t, dir)[0]
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "REDACTED\n", "commit replacement")
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--yes", "scrub", "file",
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "file",
 		"--from", initialSHA, "--reason", "bad glob",
 		"--remap-shas-in", "[", "secret.txt")
 	if code != 2 {
@@ -365,7 +365,7 @@ func TestScrubRemapInvalidGlob(t *testing.T) {
 		t.Errorf("error should mention the flag: %s", stderr)
 	}
 
-	_, stderr, code = runSafegitEnv(t, dir, scrubEnv, "--yes", "scrub", "match",
+	_, stderr, code = runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "match",
 		"--pattern", "hunter2", "--replace", "GONE", "--reason", "bad glob",
 		"--entire-history", "--remap-shas-in", "[")
 	if code != 2 {
@@ -382,7 +382,7 @@ func TestScrubRemapInvalidGlob(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("committing recipe failed: %s", stderr)
 	}
-	_, stderr, code = runSafegitEnv(t, dir, scrubEnv, "--yes", "scrub", "run",
+	_, stderr, code = runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "run",
 		"--reason", "bad glob", "--entire-history",
 		"--remap-shas-in", "[", "recipe.toml")
 	if code != 2 {
@@ -430,7 +430,7 @@ func TestScrubFileInSubmoduleRemapShas(t *testing.T) {
 	gitCmd(t, parentDir, "commit", "-m", "update submodule ref")
 
 	stdout, stderr, code := runSafegitEnv(t, parentDir, submoduleEnv,
-		"--yes", "--json", "scrub", "file",
+		"--approve-consequential", "--json", "scrub", "file",
 		"mysub/secret.txt",
 		"--from", firstSubCommit,
 		"--reason", "submodule remap test",

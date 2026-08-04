@@ -66,10 +66,10 @@ func autoBumpParent(flags globalFlags, parentWorkTree, subRelPath, newSubSHA, op
 
 	// Run safegit commit in the parent through the effects handle, so the
 	// self-spawn is a recorded PROC_MUTATE rather than a bare subprocess.
-	// --yes is mandatory: the child is a mutating command dispatched with no
-	// terminal to confirm at, and the operator already consented to this run.
+	// `commit` is not consequential, so the child needs no approval flag: it
+	// dispatches straight through with no terminal to confirm at.
 	completed, err := flags.effects().Run(
-		[]interface{}{safegitBin, "--yes", "commit", "-m", msg, "--", subRelPath},
+		[]interface{}{safegitBin, "commit", "-m", msg, "--", subRelPath},
 		strictcli.Cwd(parentWorkTree),
 		strictcli.UseGrant("parent-bump"),
 		strictcli.Resource("parent-pointer:"+subRelPath),

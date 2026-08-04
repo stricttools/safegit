@@ -170,9 +170,9 @@ func classifyRemote(ctx context.Context, remoteURL string) remoteExposure {
 
 // confirmExposure asks for confirmation when a backup would leave this machine
 // for a remote that is public (or that we cannot prove is private). Returns
-// false when the user declines. The prompt is deliberate: --json (which implies
-// --yes elsewhere) must never publish a branch on the operator's behalf, so only
-// an explicit --yes answers it.
+// false when the user declines. The prompt is deliberate: --json must never
+// publish a branch on the operator's behalf, so only an explicit
+// --approve-consequential answers it.
 func confirmExposure(ctx context.Context, flags globalFlags, remote, remoteURL string) bool {
 	switch classifyRemote(ctx, remoteURL) {
 	case exposurePublic:
@@ -229,7 +229,7 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup boo
 	// the whole branch, so the decision belongs before any network contact.
 	if !confirmExposure(ctx, flags, remote, remoteURL) {
 		infof(flags, "Aborted.\n")
-		return 0
+		return 1
 	}
 
 	// Read the remote slot BEFORE deciding anything: the fetched SHA is both
