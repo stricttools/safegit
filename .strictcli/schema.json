@@ -811,5 +811,5 @@
   "name": "safegit",
   "project_id": "github.com/smm-h/safegit",
   "schema_version": 1,
-  "version": "0.25.0"
+  "version": "0.25.1"
 }
