@@ -1,0 +1,24 @@
+# Gitleaks allowlist for safegit's own test fixtures.
+#
+# safegit's scrub and scan machinery is tested by planting synthetic secrets in
+# throwaway repositories and proving they are found and removed. Those fixture
+# strings are invented, live only inside Go test files, and match nothing real
+# -- but they look exactly like what gitleaks is built to catch, which is the
+# point of the test.
+#
+# The allowlist is scoped as narrowly as the fixtures allow: each entry names
+# the literal string, so a genuine credential landing in the same file is still
+# reported.
+
+[extend]
+  useDefault = true
+
+[allowlist]
+  description = "synthetic secrets planted by safegit's own scrub/scan tests"
+  regexTarget = "match"
+  regexes = [
+    '''SECRET_SUBDIR_456''',
+    '''SECRET_ORPHAN_789''',
+    '''SECRET_XYZ_123''',
+    '''sk_live_abc123''',
+  ]
