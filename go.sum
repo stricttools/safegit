@@ -2,8 +2,6 @@ github.com/BurntSushi/toml v1.6.0 h1:dRaEfpa2VI55EwlIW72hMRHdWouJeRF7TPYhI+AUQjk
 github.com/BurntSushi/toml v1.6.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
 github.com/smm-h/go-toml-edit v0.2.2 h1:z+eR3WuVbZhJiJ1TprX4HwB+UI8/VT7wr5bItwGIwWo=
 github.com/smm-h/go-toml-edit v0.2.2/go.mod h1:ateUuu33c4CaaB3XUQgsyuPEsIkAWRV8nahfZqpNhm4=
-github.com/smm-h/strictcli/go v0.28.2 h1:y8TqxMQHjP4H/GaLl5cAmhTdhAqo27SnuGqTQ6SKCU8=
-github.com/smm-h/strictcli/go v0.28.2/go.mod h1:CFDJB7rDMon5TFSn5JqCy7I2PYv43j/KQDs1OlE2Ezg=
 github.com/smm-h/strictcli/go v0.29.0 h1:n0+NckMikyL/b3omhv2pSVKQOeGrMI505JkDLblcbVc=
 github.com/smm-h/strictcli/go v0.29.0/go.mod h1:CFDJB7rDMon5TFSn5JqCy7I2PYv43j/KQDs1OlE2Ezg=
 github.com/smm-h/stricttest/go v0.1.1 h1:z3N7RPoeLjrWTrcudxNJh2W5PVYZPJ/WsqX8ssXTkNE=

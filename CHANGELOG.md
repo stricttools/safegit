@@ -2,9 +2,48 @@
 
 # Changelog
 
-## Unreleased
+## 0.25.0
 
-- No user-facing changes.
+`safegit backup` keeps a per-branch history snapshot on a remote, `--dry-run` is honest in every command that accepts it, only the four history-rewriting commands confirm (via `--approve-consequential`), and the rlsbl rewrite handshake is gone
+
+<details>
+<summary>Context</summary>
+
+Three things happened here, and they are connected.
+
+The first is `safegit backup`. The tool has always been careful about the working tree and the commit path, but the one thing it could not do was give you somewhere to put a branch before you did something frightening to it. The new group keeps exactly one slot per branch under `refs/backups/<branch>` on a remote: `backup backup` refuses to overwrite a slot holding commits your history does not contain, pins the push with a lease to the SHA it just observed so a concurrent backup from another machine is rejected rather than clobbered, and asks first when the remote is public or cannot be proven private. Every slot is plain-git restorable, which is the point -- a backup you need safegit to read is not much of a backup.
+
+The second is that `--dry-run` now means something. It used to be a per-command courtesy: eleven commands accepted the flag and mutated anyway, so `safegit --dry-run push` really pushed, and a dry-run commit inside a submodule created a real commit in the parent repository. The mutating seams now route through the CLI framework's effects handle, so a dry run records what it would do and prints it instead of doing it. That is a guarantee rather than a habit, because there is now one place it could break instead of thirty.
+
+The third is the confirmation story, and it is where the breaking changes are. Confirmation used to be inferred from "this command mutates something", which caught roughly two thirds of the commands in the tool -- `commit`, `push`, `pull`, `undo` among them -- and a prompt that fires on two thirds of invocations trains people to dismiss it, which is the opposite of what a confirmation is for. Consequence is now declared per command, and exactly four declare it: `scrub file`, `scrub match`, `scrub run` and `author rewrite`, the ones that rewrite history irreversibly. Everything else runs bare again, with no flag and no prompt. The flag that consents is `--approve-consequential`, deliberately unwieldy so it cannot decay into muscle memory the way `-y` did, and self-documenting wherever it appears in a script. `--yes` is gone, and so are `-q`, `-n` and `-y`: the reserved quartet is framework-owned and has no short forms, in exchange for being accepted anywhere on the command line. `--json` no longer answers a confirmation on your behalf, and a declined confirmation exits 1 instead of 0, so a script cannot read a refusal as success.
+
+Also gone: the guard that killed `scrub` and `author rewrite` in any repository containing `.rlsbl/` unless `RLSBL_SCRUB_ORCHESTRATED=1` was exported. That was prevention by handshake -- two tools had to agree on an environment variable before either could do its job, and the failure mode was a hard stop on a legitimate rewrite. Every rewrite already writes a journal at `.git/safegit/rewrite-maps.jsonl`; the release tooling reads that journal to detect the metadata a rewrite invalidated and repair it. Detecting and healing after the fact turned out to be both simpler and stricter than refusing beforehand.
+
+</details>
+
+### Breaking
+
+- **Destructive history rewrites are no longer blocked in release-managed repositories.** `scrub file`, `scrub match`, `scrub run` and `author rewrite` used to die in repos containing `.rlsbl/` unless `RLSBL_SCRUB_ORCHESTRATED=1` was set; that handshake is gone and the rewrites run like anywhere else. Every rewrite still writes the journal at `.git/safegit/rewrite-maps.jsonl`, which the release tooling reads to detect and repair the metadata a rewrite invalidates.
+- **`--json` no longer confirms destructive operations for you.** A `--json` run used to imply consent, so `safegit --json scrub match ...`, `--json author rewrite` and `--json doctor --uninstall` went ahead without asking. They now refuse and name `--approve-consequential` as the flag that consents deliberately; `--json` still means machine-readable output. Previews are unaffected, and `scrub file --dry-run` no longer asks for permission to rewrite nothing.
+- **Breaking: `--quiet`, `--verbose`, `--dry-run` and `--approve-consequential` are framework-owned, and the short forms are gone.** Write them in full -- `-q`, `-n` and `-y` no longer exist. In exchange all four are recognized anywhere on the command line, so `safegit push --dry-run` works as well as `safegit --dry-run push`. Every command is now classified read-only or mutating, which is what decides whether `--dry-run` records the command's effects instead of performing them; read-only commands (`version`, `scan`, `config show`/`get`, `author list`/`check`, `backup list`, `hook list`, `scrub verify`) have nothing to record.
+- **Only history-rewriting commands ask for confirmation now.** `safegit commit`, `push`, `pull`, `undo`, `config set` and the guarded passthroughs run bare again -- no flag, no prompt. Confirmation is reserved for the four commands that rewrite history irreversibly (`scrub file`, `scrub match`, `scrub run`, `author rewrite`), and the flag that skips it is now `--approve-consequential`; `--yes` is gone.
+
+### Features
+
+- **`CLAUDE_CODE_SESSION_ID` is now documented in `safegit --help`.** The session handshake variable that scopes `safegit undo` and stamps commit trailers is declared to the CLI framework and listed under Infrastructure.
+- **New `safegit backup` command group.** `backup backup`, `backup list` and `backup restore` keep one backup slot per branch under `refs/backups/<branch>` on a remote: the backup refuses to overwrite a slot containing work missing from your history, leases the push to the SHA it just observed, warns before pushing to a public remote, and every slot stays restorable with plain git.
+- **Commands guide documents the backup group.** The guide covers `backup backup`/`list`/`restore`, the divergence refusal and lease, the public-remote confirmation, and the plain-git commands each subcommand is equivalent to.
+- **Three new documentation guides, and a README and CLAUDE.md generated from templates.** The docs site gains a commands guide covering every subcommand with its flags, exit codes and plain-git equivalent; a concurrency guide explaining the locking model and how concurrent sessions interact; and an integration guide for wiring safegit into other tools. `README.md` and `CLAUDE.md` are now generated by selfdoc from `docs/_README.md` and `docs/_CLAUDE.md`, so they stay in step with the rest of the documentation.
+
+### Fixes
+
+- **`author rewrite --dry-run` no longer contends for the rewrite lock.** The read-only preview previously loaded config and acquired the repo-wide rewrite lock, so it could block and fail while an unrelated scrub was running.
+- **`--dry-run` in a submodule no longer commits in the parent repository.** Submodule auto-bump ran on the dry-run path too, so previewing a commit, amend or reword inside a submodule could create a real parent commit; the preview now leaves the parent untouched.
+- **`--json` no longer bypasses the backup public-remote confirmation.** `safegit --json backup backup <remote>` used to push a full branch snapshot to a public or unclassifiable remote without asking, because `--json` implied consent. It now refuses and names `--approve-consequential` as the flag that consents deliberately.
+- **`backup backup --dry-run` no longer contacts the remote.** The preview is built from local state, so it works against an unreachable remote and never asks the public-remote question. The slot's SHA, the ancestry check and the lease are resolved when the backup actually runs.
+- **`--dry-run` is honest everywhere now.** `push`, `pull`, `checkout`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick`, `revert`, `config set` and `hook install` all ignored `--dry-run` and mutated anyway -- `safegit --dry-run push` really pushed. Every one of them now records what it would do in a would-do log on stdout and changes nothing.
+- **`commit --dry-run` no longer reports a commit it did not make.** The preview printed `<n> file(s) committed`; it now says `would be committed` and lists the ref update it would perform.
+- **A declined confirmation now exits nonzero.** Answering `n` (or feeding EOF) to `doctor --uninstall`, a public-remote `backup backup`, or any scrub/rewrite prompt printed `Aborted.` and exited 0, so a script or agent could read a refusal as success. Every declined confirmation now exits 1.
 
 ## 0.24.0
 
