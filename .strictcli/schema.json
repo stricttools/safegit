@@ -1,16 +1,19 @@
 {
   "commands": {
     "bisect": {
+      "effect": "mutating",
       "help": "binary search through commits to find a bug, with safety guards",
       "name": "bisect",
       "passthrough": true
     },
     "checkout": {
+      "effect": "mutating",
       "help": "checkout a branch or ref with working-tree safety guards",
       "name": "checkout",
       "passthrough": true
     },
     "cherry-pick": {
+      "effect": "mutating",
       "help": "cherry-pick one or more commits onto HEAD with safety guards",
       "name": "cherry-pick",
       "passthrough": true
@@ -24,6 +27,7 @@
           "variadic": true
         }
       ],
+      "effect": "mutating",
       "flags": [
         {
           "default": [],
@@ -66,6 +70,13 @@
           "type": "str"
         }
       ],
+      "grants": [
+        {
+          "kind": "proc_mutate",
+          "name": "parent-bump",
+          "reason": "committing in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on"
+        }
+      ],
       "help": "stage and commit specified files in a single atomic operation",
       "name": "commit"
     },
@@ -80,6 +91,7 @@
           "type": "mutex"
         }
       ],
+      "effect": "mutating",
       "flags": [
         {
           "default": false,
@@ -107,6 +119,7 @@
       "name": "doctor"
     },
     "merge": {
+      "effect": "mutating",
       "help": "merge a branch into HEAD with working-tree safety guards",
       "name": "merge",
       "passthrough": true
@@ -124,6 +137,7 @@
           "required": false
         }
       ],
+      "effect": "mutating",
       "flags": [
         {
           "choices": [
@@ -158,6 +172,7 @@
           "type": "mutex"
         }
       ],
+      "effect": "mutating",
       "flags": [
         {
           "default": true,
@@ -202,25 +217,41 @@
           "type": "bool"
         }
       ],
+      "grants": [
+        {
+          "kind": "proc_mutate",
+          "name": "push",
+          "reason": "publishing local refs to a remote is what this command is for"
+        },
+        {
+          "kind": "proc_mutate",
+          "name": "force-push",
+          "reason": "--force-with-lease overwrites the remote ref, discarding whatever the lease expectation did not cover"
+        }
+      ],
       "help": "push refs to remote with pre-pre-push hooks and automatic retry",
       "name": "push"
     },
     "rebase": {
+      "effect": "mutating",
       "help": "rebase current branch onto upstream with safety guards",
       "name": "rebase",
       "passthrough": true
     },
     "reset": {
+      "effect": "mutating",
       "help": "reset HEAD with guards that prevent accidental --hard data loss",
       "name": "reset",
       "passthrough": true
     },
     "revert": {
+      "effect": "mutating",
       "help": "revert one or more commits creating inverse patches, with safety guards",
       "name": "revert",
       "passthrough": true
     },
     "scan": {
+      "effect": "read_only",
       "flags": [
         {
           "help": "regular expression pattern to search for across all objects in history",
@@ -257,6 +288,7 @@
       ]
     },
     "undo": {
+      "effect": "mutating",
       "flags": [
         {
           "default": false,
@@ -272,6 +304,13 @@
           "type": "int"
         }
       ],
+      "grants": [
+        {
+          "kind": "proc_mutate",
+          "name": "parent-bump",
+          "reason": "undoing a submodule commit moves the parent's gitlink back, so safegit commits the parent too when commit.autoBumpParent is on"
+        }
+      ],
       "help": "reverse the last commit, amend, or reword operation using the oplog",
       "name": "undo"
     },
@@ -282,10 +321,12 @@
           "name": "ref"
         }
       ],
+      "effect": "mutating",
       "help": "release a stale .lock file left behind by a crashed git process",
       "name": "unlock"
     },
     "version": {
+      "effect": "read_only",
       "help": "print safegit version, Go runtime version, and git version",
       "name": "version"
     }
@@ -341,37 +382,6 @@
   },
   "global_flags": [
     {
-      "default": false,
-      "help": "suppress all informational output, only showing errors and results",
-      "name": "quiet",
-      "negatable": true,
-      "short": "q",
-      "type": "bool"
-    },
-    {
-      "default": false,
-      "help": "enable verbose output with detailed progress and diagnostic info",
-      "name": "verbose",
-      "negatable": true,
-      "type": "bool"
-    },
-    {
-      "default": false,
-      "help": "preview what would happen without writing any changes to disk",
-      "name": "dry-run",
-      "negatable": true,
-      "short": "n",
-      "type": "bool"
-    },
-    {
-      "default": false,
-      "help": "automatically confirm all interactive prompts without asking",
-      "name": "yes",
-      "negatable": true,
-      "short": "y",
-      "type": "bool"
-    },
-    {
       "default": "",
       "help": "path to a custom safegit config file instead of the default location",
       "name": "config-file",
@@ -389,6 +399,7 @@
     "author": {
       "commands": {
         "check": {
+          "effect": "read_only",
           "flags": [
             {
               "help": "expected author and committer display name that all commits should use",
@@ -408,13 +419,15 @@
           ]
         },
         "list": {
-          "help": "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite",
+          "effect": "read_only",
+          "help": "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity \u2014 useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite",
           "name": "list",
           "tags": [
             "json"
           ]
         },
         "rewrite": {
+          "consequential": true,
           "constraints": [
             {
               "flags": [
@@ -431,6 +444,7 @@
               "type": "co_required"
             }
           ],
+          "effect": "mutating",
           "flags": [
             {
               "help": "current author or committer display name to search for and replace",
@@ -460,7 +474,7 @@
           ]
         }
       },
-      "help": "audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history",
+      "help": "audit and rewrite commit author/committer identity \u2014 list all identities, check against expected values, and rewrite name or email across history",
       "name": "author"
     },
     "backup": {
@@ -473,6 +487,7 @@
               "required": false
             }
           ],
+          "effect": "mutating",
           "flags": [
             {
               "default": false,
@@ -482,7 +497,19 @@
               "type": "bool"
             }
           ],
-          "help": "push the current branch to its backup slot refs/backups/\u003cbranch\u003e on the remote, after fetching that slot and refusing when it holds commits your history does not contain; the push is pinned with --force-with-lease to the exact SHA that was just observed (or to \"this ref must not exist\" for a first backup), so a concurrent backup from another machine is rejected rather than clobbered; plain git equivalent: git push --force-with-lease=refs/backups/\u003cbranch\u003e:\u003cobserved-sha\u003e \u003cremote\u003e HEAD:refs/backups/\u003cbranch\u003e",
+          "grants": [
+            {
+              "kind": "proc_mutate",
+              "name": "push",
+              "reason": "a backup slot is only useful once it is on the remote"
+            },
+            {
+              "kind": "proc_mutate",
+              "name": "force-push",
+              "reason": "a backup slot is a single overwritten slot, pinned by a lease to the SHA observed a moment earlier"
+            }
+          ],
+          "help": "push the current branch to its backup slot refs/backups/<branch> on the remote, after fetching that slot and refusing when it holds commits your history does not contain; the push is pinned with --force-with-lease to the exact SHA that was just observed (or to \"this ref must not exist\" for a first backup), so a concurrent backup from another machine is rejected rather than clobbered; plain git equivalent: git push --force-with-lease=refs/backups/<branch>:<observed-sha> <remote> HEAD:refs/backups/<branch>",
           "name": "backup"
         },
         "list": {
@@ -493,7 +520,8 @@
               "required": false
             }
           ],
-          "help": "list every backup slot present on the remote with the branch name and the commit each slot points at, so you can see which branches are backed up from which machine before restoring one; plain git equivalent: git ls-remote \u003cremote\u003e 'refs/backups/*'",
+          "effect": "read_only",
+          "help": "list every backup slot present on the remote with the branch name and the commit each slot points at, so you can see which branches are backed up from which machine before restoring one; plain git equivalent: git ls-remote <remote> 'refs/backups/*'",
           "name": "list"
         },
         "restore": {
@@ -504,7 +532,8 @@
               "required": false
             }
           ],
-          "help": "fetch the current branch's backup slot from the remote and fast-forward the branch onto it, refusing when the local branch carries commits the backup does not contain so no local work is ever discarded; plain git equivalent: git fetch \u003cremote\u003e refs/backups/\u003cbranch\u003e \u0026\u0026 git merge --ff-only FETCH_HEAD",
+          "effect": "mutating",
+          "help": "fetch the current branch's backup slot from the remote and fast-forward the branch onto it, refusing when the local branch carries commits the backup does not contain so no local work is ever discarded; plain git equivalent: git fetch <remote> refs/backups/<branch> && git merge --ff-only FETCH_HEAD",
           "name": "restore"
         }
       },
@@ -520,6 +549,7 @@
               "name": "key"
             }
           ],
+          "effect": "read_only",
           "help": "get the current value of a single configuration key from the .git/safegit/config.json file, printing the raw value to stdout so it can be captured by scripts or used in automation pipelines",
           "name": "get"
         },
@@ -534,10 +564,12 @@
               "name": "value"
             }
           ],
+          "effect": "mutating",
           "help": "set a configuration key to a new value in the .git/safegit/config.json file, creating the file if it does not exist yet, and persisting the change for all future safegit invocations in this repository",
           "name": "set"
         },
         "show": {
+          "effect": "read_only",
           "help": "show all configuration values currently in effect for this repository, including built-in defaults and any user overrides from the .git/safegit/config.json file, printed as key-value pairs to stdout for inspection and debugging purposes",
           "name": "show"
         }
@@ -554,10 +586,12 @@
               "name": "path"
             }
           ],
+          "effect": "mutating",
           "help": "install a pre-pre-push hook by copying a script file into the .git/safegit/hooks directory, making it executable, and registering it so that safegit push will run it before any network I/O occurs",
           "name": "install"
         },
         "list": {
+          "effect": "read_only",
           "help": "list all pre-pre-push hooks currently installed in the .git/safegit/hooks directory, showing each hook name, file path, and whether it is executable, so you can audit which checks run before every push",
           "name": "list"
         },
@@ -569,6 +603,7 @@
               "required": false
             }
           ],
+          "effect": "mutating",
           "help": "run all installed pre-pre-push hooks (or a single named hook) immediately without performing an actual push, so you can verify that all configured hooks pass before committing to a real push operation",
           "name": "run"
         }
@@ -585,6 +620,8 @@
               "name": "file"
             }
           ],
+          "consequential": true,
+          "effect": "mutating",
           "flags": [
             {
               "help": "first commit hash to include when rewriting history (default: root commit)",
@@ -612,6 +649,7 @@
           ]
         },
         "match": {
+          "consequential": true,
           "constraints": [
             {
               "flags": [
@@ -628,6 +666,7 @@
               "type": "mutex"
             }
           ],
+          "effect": "mutating",
           "flags": [
             {
               "help": "regular expression pattern to search for across all blobs in history",
@@ -690,6 +729,7 @@
               "name": "recipe"
             }
           ],
+          "consequential": true,
           "constraints": [
             {
               "flags": [
@@ -699,6 +739,7 @@
               "type": "mutex"
             }
           ],
+          "effect": "mutating",
           "flags": [
             {
               "help": "mandatory audit trail message explaining why this scrub operation is needed",
@@ -739,13 +780,14 @@
               "type": "bool"
             }
           ],
-          "help": "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite",
+          "help": "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store \u2014 use --diff to preview all changes as unified diffs before committing to the rewrite",
           "name": "run",
           "tags": [
             "json"
           ]
         },
         "verify": {
+          "effect": "read_only",
           "help": "check all scrub policies defined in the repository configuration to confirm that previously scrubbed secrets and sensitive patterns remain completely absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-policy pass or fail results with match locations for any violations found",
           "name": "verify",
           "tags": [
@@ -769,5 +811,5 @@
   "name": "safegit",
   "project_id": "github.com/smm-h/safegit",
   "schema_version": 1,
-  "version": "0.24.1-0.20260802150042-60880d5139b9"
+  "version": "0.25.0"
 }
