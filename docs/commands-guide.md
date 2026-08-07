@@ -271,6 +271,7 @@ Use it when work exists only on one machine and losing that machine would lose t
 | Flag | Command | Default | Description |
 |------|---------|---------|-------------|
 | `--overwrite-remote-backup` | `backup backup` | `false` | Replace a slot whose commits are missing from the local history |
+| `--allow-public-remote` | `backup backup` | `false` | Consent to backing up to a remote that is public, or whose visibility safegit cannot determine |
 
 ### Examples
 
@@ -292,6 +293,9 @@ safegit backup restore
 
 # Replace a slot that was written from another machine (deliberate data loss)
 safegit backup backup --overwrite-remote-backup
+
+# Back up to a public repository, having said so deliberately
+safegit backup backup --allow-public-remote
 ```
 
 ### Plain git equivalents
@@ -318,7 +322,7 @@ git merge --ff-only FETCH_HEAD
 
 - **Ancestry check before every backup**: the slot is fetched first, and a slot holding commits that are not reachable from the local HEAD is a hard error (exit code 22) naming both SHAs. Overwriting it requires `--overwrite-remote-backup`.
 - **Leased push**: the push is pinned with `--force-with-lease` to the SHA observed moments earlier -- or, for a first backup, to "this ref must not exist". A backup pushed from another machine in between is rejected, never clobbered.
-- **Public-remote confirmation**: a real backup to a public repository (or to a networked remote whose visibility cannot be determined) asks first, before any network contact. Only an explicit `--approve-consequential` answers that question; under `--json` the backup refuses instead. A declined confirmation exits nonzero -- a refusal never reports success.
+- **Public-remote confirmation**: a real backup to a public repository (or to a networked remote whose visibility cannot be determined) asks first, before any network contact. That question is about the target, not the command, and safegit only learns the answer by probing the remote at run time -- so only `--allow-public-remote` answers it. The blanket `--approve-consequential` does not, and under `--json` the backup refuses instead. A declined confirmation exits nonzero -- a refusal never reports success.
 - **Dry runs never touch the network**: `--dry-run` builds its preview from local state alone -- no `ls-remote`, no `fetch`, no prompt -- so previewing against an unreachable remote succeeds. The slot's current SHA, the ancestry check against it, and the lease pinned to it are all resolved when the backup actually runs.
 - **Hooks bypassed on purpose**: backup pushes run with `--no-verify`. `refs/backups` is a tool-owned namespace, and pre-push policies exist to police branches and tags.
 - **Restore never discards work**: the restore is `merge --ff-only`, so a branch carrying commits the backup lacks is refused with the range to inspect.
@@ -420,7 +424,7 @@ safegit scrub file --from abc1234 --reason "leaked key" --remap-shas-in "*.jsonl
 
 - **Clean tree required**: Refuses to run if the working tree has uncommitted changes.
 - **Rewrite lock**: Acquires a repository-wide rewrite lock to prevent concurrent scrub operations.
-- **Deliberate confirmation**: Prompts for confirmation before rewriting, behind the framework's own consequential gate. Only an explicit `--approve-consequential` skips both -- `--json` does not answer either, and refuses instead. A declined confirmation exits nonzero.
+- **Deliberate confirmation**: The framework's consequential gate takes consent before dispatch: on a terminal it prompts, and without one it refuses and names `--approve-consequential`. `--json` never answers it. safegit adds no second prompt behind the gate -- it prints the commit count and scope as a notice, so what the rewrite covers is stated rather than asked twice.
 - **Structural verification**: After rewriting, verifies that commit messages, author/committer identity, parent topology, and non-target files are preserved. Only the target file should change.
 - **Old blob verification**: Verifies that old (pre-scrub) blob objects are no longer reachable after cleanup.
 - **Post-rewrite cleanup**: Expires tainted reflog entries, repacks objects, and prunes unreachable objects.
@@ -777,7 +781,7 @@ safegit --dry-run author rewrite --old-name "alice" --new-name "Alice Smith"
 
 - **Clean tree required**: Refuses to run with uncommitted changes.
 - **Rewrite lock**: Acquires a repository-wide rewrite lock.
-- **Deliberate confirmation**: Prompts before rewriting, behind the framework's own consequential gate; only an explicit `--approve-consequential` skips both, and `--json` refuses rather than answering either. A declined confirmation exits nonzero.
+- **Deliberate confirmation**: The framework's consequential gate takes consent before dispatch and `--json` never answers it; pass `--approve-consequential` from a script. safegit adds no second prompt behind the gate -- the number of commits about to be rewritten is printed as a notice.
 - **Snapshot verification**: Takes a full snapshot of repository state (commit count, tag count, branch names, tag names, messages, dates, tree hashes, parent topology) before and after the rewrite, then compares them. All invariants except the target identity fields must match exactly.
 - **Trailer rewriting**: Also rewrites identity-bearing trailers (Signed-off-by, Co-authored-by, etc.) to match the new identity.
 - **Tag rewriting**: Annotated tag objects are rewritten when their tagger name/email matches the old identity.
@@ -1042,6 +1046,14 @@ safegit hook run
 # Run a specific hook
 safegit hook run my-check.sh
 ```
+
+### `--dry-run` is refused
+
+`hook run` declares `dry_run_supported=false`. A hook is a script the operator
+supplied; safegit cannot know what it does, and the effects handle has no way to
+mint a subprocess that is fed stdin, so any would-do log rendered here would be
+invented. Passing `--dry-run` therefore fails with the reason instead of
+pretending. Use `safegit hook list` to see which scripts a push would run.
 
 ## hook install
 

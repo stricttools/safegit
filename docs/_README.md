@@ -86,8 +86,10 @@ Configuration is stored in `.git/safegit/config.json`. Remove the entire
   reclaim is refused when the hostname doesn't match.
 - **PID reuse.** On Linux, safegit compares process start time against lock
   creation time via `/proc` to detect PID reuse. On other platforms, a reused
-  PID could keep an orphan lock alive until the lock timeout expires. Use
-  `safegit unlock --force` to clear a stuck lock.
+  PID keeps an orphan lock looking alive, and `safegit unlock <ref>` refuses to
+  clear a lock whose holder is alive, so such a lock has to be removed by hand
+  from `.git/safegit/locks/`. Where the holder really is gone, `safegit unlock
+  refs/heads/main` clears the lock.
 - **Linux and macOS only.** Windows is not supported (Unix-only syscalls for
   locking, signals, process management). WSL (Windows Subsystem for Linux) works
   since it runs the Linux binary natively.
