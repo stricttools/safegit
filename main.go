@@ -64,7 +64,15 @@ type globalFlags struct {
 func (g globalFlags) effects() *strictcli.Effects { return g.sc.Effects() }
 
 func main() {
-	app := strictcli.NewApp("safegit", version, "concurrency-safe git wrapper providing 20 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
+	newApp().Run()
+}
+
+// newApp builds the fully registered application without running it. main()
+// only runs what this returns, so a test can hold the same app and inspect
+// what was registered -- which is what pins every command's effect
+// classification (see classification_test.go).
+func newApp() *strictcli.App {
+	app := strictcli.NewApp("safegit", version, "concurrency-safe git wrapper providing 31 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
 		strictcli.WithHandshakeEnv(sessionIDEnvVar, "Claude Code session identifier set by the invoking agent session; scopes 'safegit undo' to operations this session performed and is recorded as a commit trailer"),
 	)
 
@@ -497,7 +505,7 @@ func main() {
 		return strictcli.Exit(0)
 	}, strictcli.WithEffect(strictcli.EffectReadOnly))
 
-	app.Run()
+	return app
 }
 
 // kwargsStrSlice converts a []interface{} value (from repeatable flags or
