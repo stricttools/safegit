@@ -2,11 +2,33 @@
 format_version = 1
 # Version bump type: patch, minor, major, infra, or prerelease
 #   prerelease: advance an existing pre-release (0.6.0-beta.0 -> -beta.1)
-bump = ""
+bump = "minor"
 # Short description of this release (required)
-description = ""
+description = "Each confirmation now owns its consent flag, `hook run` stops pretending to have a dry run, and the command surface is pinned by tests."
 # Optional context explaining why these changes were made
-context = ""
+context = """
+This release closes the residue the strictcli effects-regime migration left
+behind. Two confirmation layers had ended up in series: the framework asks
+before a consequential command runs, and safegit asked again behind it. A human
+answered twice; a script that passed --approve-consequential had every
+safegit-side question answered for it, including the one that flag says nothing
+about -- whether the remote a backup is about to land on is public. Each
+question now carries its own flag. --allow-public-remote is the only answer to
+the exposure question, which restores the property that a non-interactive run
+cannot publish a branch to a public repository without having said so, and the
+four history rewrites lost their duplicate prompt in favour of a notice.
+
+`hook run` was found to ignore --dry-run entirely and execute every installed
+script for real. It now declares that it has no dry-run mode, with the reason,
+rather than inventing a preview of a program safegit did not write.
+
+Under the hood, main() was split so that a test can hold the registered app:
+every command's classification, its consequential and dry-run declarations and
+the group tree are now pinned by a table, and the app description's command
+count is checked against the number of commands actually registered -- it had
+been advertising twenty against thirty-one. The generated selfdoc manifest and
+content hashes are tracked in the repo, matching the rest of the fleet.
+"""
 # Pre-release channel: alpha, beta, rc, or stable (ordered;
 # demotion is an error). With patch/minor/major it ENTERS the
 # channel (0.5.2 + minor + alpha -> 0.6.0-alpha.0); with
