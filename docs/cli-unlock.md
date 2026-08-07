@@ -11,6 +11,8 @@ nav_order: 19
 
 release a stale .lock file left behind by a crashed git process
 
+**Effect:** mutating
+
 ## Arguments
 
 | Name | Required | Description |

@@ -16,6 +16,8 @@ audit and rewrite commit author/committer identity — list all identities, chec
 
 check that all commits use the expected author and committer identity by scanning every commit in the repository history, reporting any deviations with the exact commit hashes and mismatched fields, and suggesting the corresponding safegit author rewrite command to fix each deviation found
 
+**Effect:** read_only
+
 ### Flags
 
 | Name | Short | Type | Default | Env | Description |
@@ -27,9 +29,13 @@ check that all commits use the expected author and committer identity by scannin
 
 list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite
 
+**Effect:** read_only
+
 ## author rewrite
 
 rewrite author and committer name or email across all commit history using git filter-branch style rewriting, replacing every occurrence of the old identity with the new one in both author and committer fields while preserving timestamps, commit messages, tree contents, and parent relationships so the rewritten history is otherwise identical to the original
+
+**Effect:** mutating · **consequential** (prompts before running; `--approve-consequential` skips)
 
 ### Flags
 

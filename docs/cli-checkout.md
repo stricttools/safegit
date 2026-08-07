@@ -10,3 +10,5 @@ nav_order: 4
 # safegit checkout
 
 checkout a branch or ref with working-tree safety guards
+
+**Effect:** mutating

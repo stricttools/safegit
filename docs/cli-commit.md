@@ -11,6 +11,8 @@ nav_order: 6
 
 stage and commit specified files in a single atomic operation
 
+**Effect:** mutating
+
 ## Flags
 
 | Name | Short | Type | Default | Env | Description |
@@ -27,3 +29,9 @@ stage and commit specified files in a single atomic operation
 | Name | Required | Description |
 | --- | --- | --- |
 | `files` | no | files to commit (supports hunk specs: file.go:1,3) |
+
+## Grants
+
+| Kind | Name | Reason |
+| --- | --- | --- |
+| proc_mutate | `parent-bump` | committing in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on |

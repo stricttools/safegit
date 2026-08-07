@@ -10,3 +10,5 @@ nav_order: 10
 # safegit merge
 
 merge a branch into HEAD with working-tree safety guards
+
+**Effect:** mutating

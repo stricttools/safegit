@@ -10,3 +10,5 @@ nav_order: 3
 # safegit bisect
 
 binary search through commits to find a bug, with safety guards
+
+**Effect:** mutating

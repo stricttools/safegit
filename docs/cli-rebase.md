@@ -10,3 +10,5 @@ nav_order: 13
 # safegit rebase
 
 rebase current branch onto upstream with safety guards
+
+**Effect:** mutating

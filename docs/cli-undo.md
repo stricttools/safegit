@@ -11,9 +11,17 @@ nav_order: 18
 
 reverse the last commit, amend, or reword operation using the oplog
 
+**Effect:** mutating
+
 ## Flags
 
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
 | `--bypass-session` |  | bool |  |  | undo across all sessions by ignoring the session ID ownership check |
 | `--count` |  | int | 1 |  | number of oplog operations to undo in a single invocation |
+
+## Grants
+
+| Kind | Name | Reason |
+| --- | --- | --- |
+| proc_mutate | `parent-bump` | undoing a submodule commit moves the parent's gitlink back, so safegit commits the parent too when commit.autoBumpParent is on |

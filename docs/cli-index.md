@@ -10,7 +10,7 @@ order: 91
 
 # safegit CLI Reference
 
-concurrency-safe git wrapper providing 20 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting
+concurrency-safe git wrapper providing 31 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting
 
 Version: :-: var key="project.version"
 
@@ -39,3 +39,33 @@ Version: :-: var key="project.version"
 - [config](cli-config.html) -- show, get, or set safegit configuration key-value pairs
 - [hook](cli-hook.html) -- manage pre-pre-push hook scripts that run before every push
 - [scrub](cli-scrub.html) -- surgically rewrite git history to remove or replace sensitive content using 4 subcommands (file, match, run, verify) that operate on all commits, trees, and blobs in the repository
+
+## Global flags
+
+| Name | Short | Type | Default | Env | Description |
+| --- | --- | --- | --- | --- | --- |
+| `--config-file` |  | str |  |  | path to a custom safegit config file instead of the default location |
+| `--json` |  | bool |  |  | emit machine-readable JSON output to stdout instead of human text |
+
+## Framework flags
+
+These flags are owned by the strictcli framework, not by the app. No command may declare a flag with one of these names, and each is recognized anywhere on the command line.
+
+| Flag | Effect |
+| --- | --- |
+| `--dry-run` | Preview mode: no mutation runs. The framework prints a log of every effect the command would have performed. |
+| `--approve-consequential` | Skips the confirmation prompt a consequential command shows before it runs. |
+| `--quiet` | Hides informational output. Warnings, errors, structured data and the dry-run log are never suppressed. |
+| `--verbose` | Shows debug output. `--quiet` wins when both are passed. |
+
+## Infrastructure
+
+### Handshake variables
+
+| Env var | Description |
+| --- | --- |
+| `CLAUDE_CODE_SESSION_ID` | Claude Code session identifier set by the invoking agent session; scopes 'safegit undo' to operations this session performed and is recorded as a commit trailer |
+
+## Deprecated
+
+- `rewrite-author` -- use 'safegit author rewrite' instead

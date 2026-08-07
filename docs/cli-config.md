@@ -15,6 +15,8 @@ show, get, or set safegit configuration key-value pairs
 
 get the current value of a single configuration key from the .git/safegit/config.json file, printing the raw value to stdout so it can be captured by scripts or used in automation pipelines
 
+**Effect:** read_only
+
 ### Arguments
 
 | Name | Required | Description |
@@ -24,6 +26,8 @@ get the current value of a single configuration key from the .git/safegit/config
 ## config set
 
 set a configuration key to a new value in the .git/safegit/config.json file, creating the file if it does not exist yet, and persisting the change for all future safegit invocations in this repository
+
+**Effect:** mutating
 
 ### Arguments
 
@@ -35,3 +39,5 @@ set a configuration key to a new value in the .git/safegit/config.json file, cre
 ## config show
 
 show all configuration values currently in effect for this repository, including built-in defaults and any user overrides from the .git/safegit/config.json file, printed as key-value pairs to stdout for inspection and debugging purposes
+
+**Effect:** read_only

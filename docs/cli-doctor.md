@@ -11,6 +11,8 @@ nav_order: 8
 
 run diagnostic health checks on the repository and optionally repair issues
 
+**Effect:** mutating
+
 ## Flags
 
 | Name | Short | Type | Default | Env | Description |

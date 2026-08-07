@@ -11,6 +11,8 @@ nav_order: 12
 
 push refs to remote with pre-pre-push hooks and automatic retry
 
+**Effect:** mutating
+
 ## Flags
 
 | Name | Short | Type | Default | Env | Description |
@@ -27,3 +29,10 @@ push refs to remote with pre-pre-push hooks and automatic retry
 | Name | Required | Description |
 | --- | --- | --- |
 | `remote` | no | name of the remote repository to push to (defaults to origin) |
+
+## Grants
+
+| Kind | Name | Reason |
+| --- | --- | --- |
+| proc_mutate | `push` | publishing local refs to a remote is what this command is for |
+| proc_mutate | `force-push` | --force-with-lease overwrites the remote ref, discarding whatever the lease expectation did not cover |
