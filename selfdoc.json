@@ -26,10 +26,6 @@
     "docs/_README.md",
     "docs/_CLAUDE.md"
   ],
-  "deploy": {
-    "provider": "cloudflare-pages",
-    "project": "safegit"
-  },
   "topology": {
     "slug": "safegit",
     "docs_base": "https://docs.smmh.dev",
