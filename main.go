@@ -238,7 +238,8 @@ func newApp() *strictcli.App {
 			remote = v.(string)
 		}
 		overwrite := kwargs["overwrite_remote_backup"].(bool)
-		return strictcli.Exit(runBackupCreate(globalsToFlags(ctx, kwargs), remote, overwrite))
+		allowPublicRemote := kwargs["allow_public_remote"].(bool)
+		return strictcli.Exit(runBackupCreate(globalsToFlags(ctx, kwargs), remote, overwrite, allowPublicRemote))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
 		strictcli.WithGrants(
@@ -255,6 +256,7 @@ func newApp() *strictcli.App {
 		),
 		strictcli.WithFlags(
 			strictcli.BoolFlag("overwrite-remote-backup", "replace a backup slot whose commits are missing from your current history, leasing on the SHA observed during this run; without this flag such a slot is a hard error because overwriting it would drop work backed up from elsewhere", strictcli.Default(false)),
+			strictcli.BoolFlag("allow-public-remote", "consent to backing up to a remote that is public, or whose visibility safegit cannot determine; without this flag such a target is a question, asked at the terminal and refused outright when there is none, because a backup pushes the whole branch and --approve-consequential says nothing about where", strictcli.Default(false)),
 		),
 		strictcli.WithArgs(
 			strictcli.NewArg("remote", "name of the remote repository holding the backup slots (defaults to origin)", strictcli.ArgRequired(false)),
@@ -607,21 +609,40 @@ func mustGitDir(flags globalFlags, cmd string) string {
 	return abs
 }
 
+// consent names what pre-answers ONE deliberate confirmation when there is no
+// terminal to ask at. Every confirmation site owns its own token, because the
+// statements are not interchangeable: the framework's --approve-consequential
+// says "yes, run this consequential command", which is not the same as "yes, to
+// THAT remote". A site whose question is about a condition discovered at run
+// time -- something the caller could not have known when it composed the
+// command line -- declares a per-condition flag instead of borrowing the
+// blanket one.
+type consent struct {
+	// granted reports that this site's own consent token was passed.
+	granted bool
+	// flag is the flag a refusal names, e.g. "--allow-public-remote".
+	flag string
+}
+
 // confirmDeliberate asks for confirmation of a decision that a machine-readable
-// run must never answer on the operator's behalf -- destroying history,
-// uninstalling the tool, publishing a branch to a remote we cannot prove is
-// private. Only an explicit --approve-consequential pre-approves them; --json
-// never does. It is the only confirmation helper: every prompt safegit raises
-// gates something irreversible.
-func confirmDeliberate(flags globalFlags, format string, args ...interface{}) bool {
-	if flags.approved {
+// run must never answer on the operator's behalf -- uninstalling the tool,
+// publishing a branch to a remote we cannot prove is private. --json never
+// consents, and neither does any flag other than the one the site declares.
+//
+// It does NOT gate the history rewrites (scrub file/match/run, author rewrite).
+// Those declare themselves `consequential`, so the framework's confirm protocol
+// obtains consent for exactly that act before dispatch; a second prompt behind
+// it asked the same question twice and told an automated caller nothing the
+// first had not already settled.
+func confirmDeliberate(flags globalFlags, c consent, format string, args ...interface{}) bool {
+	if c.granted {
 		return true
 	}
 	if flags.json {
 		// A --json run has nobody to prompt, and a dangling prompt would land
 		// in the JSON stream. Refuse, and name the flag that consents.
 		fmt.Fprintf(os.Stderr, "refusing: "+format+"\n", args...)
-		fmt.Fprintf(os.Stderr, "          --json does not answer this confirmation; pass --approve-consequential to consent deliberately\n")
+		fmt.Fprintf(os.Stderr, "          --json does not answer this confirmation; pass %s to consent deliberately\n", c.flag)
 		return false
 	}
 	fmt.Printf("\n"+format+" [y/N] ", args...)

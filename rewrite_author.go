@@ -135,7 +135,10 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 	defer lk.Release()
 
-	// Confirmation prompt (skipped with an explicit --approve-consequential)
+	// The framework's confirm protocol already obtained deliberate consent for
+	// this act: `author rewrite` declares itself consequential, so nothing
+	// reaches here unconsented. The scale is still worth stating, so it is a
+	// notice rather than a second prompt asking what was just answered.
 	{
 		countArgs := append([]string{"rev-list", "--topo-order", "--reverse"}, refGlobs...)
 		out, _, err := git.Run(ctx, countArgs...)
@@ -143,11 +146,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 			die(flags, cmd, 1, fmt.Sprintf("listing commits: %v", err))
 		}
 		total := len(git.SplitNonEmpty(out))
-
-		if !confirmDeliberate(flags, "About to rewrite %d commits. This cannot be undone. Proceed?", total) {
-			infof(flags, "Aborted.\n")
-			return 1
-		}
+		infof(flags, "Rewriting %d commits. This cannot be undone.\n", total)
 	}
 
 	// Capture old HEAD before rewrite

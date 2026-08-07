@@ -33,7 +33,12 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 
 	// --uninstall: remove safegit from this repo and exit.
 	if uninstall {
-		if !confirmDeliberate(flags, "Remove safegit from this repository?") {
+		// doctor is not consequential at command granularity -- --diagnose only
+		// reads -- so the framework never prompts here and this seam is the only
+		// gate. The condition is the --uninstall flag the caller typed, so the
+		// blanket --approve-consequential is exactly the right consent for it.
+		uninstallConsent := consent{granted: flags.approved, flag: "--approve-consequential"}
+		if !confirmDeliberate(flags, uninstallConsent, "Remove safegit from this repository?") {
 			infof(flags, "Aborted.\n")
 			return 1
 		}

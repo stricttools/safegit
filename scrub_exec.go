@@ -164,11 +164,10 @@ func executeScrubRecipe(
 		return 0, nil
 	}
 
-	// Confirmation prompt (skipped with an explicit --approve-consequential)
-	if !confirmDeliberate(flags, "This will rewrite history using %d recipe operations. This cannot be undone. Proceed?", len(recipe.Operations)) {
-		infof(flags, "Aborted.\n")
-		return 1, nil
-	}
+	// `scrub run` declares itself consequential, so the framework's confirm
+	// protocol already took deliberate consent for this rewrite before dispatch.
+	// The scale is stated, not asked a second time.
+	infof(flags, "Rewriting history using %d recipe operations. This cannot be undone.\n", len(recipe.Operations))
 
 	// Capture old HEAD
 	oldHeadSHA, err := git.RevParse(ctx, "HEAD")

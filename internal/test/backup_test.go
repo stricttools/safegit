@@ -295,23 +295,24 @@ func TestBackupJSONIsNotConsent(t *testing.T) {
 	}
 }
 
-// TestBackupExplicitYesSatisfiesExposureConfirmation: --approve-consequential is the deliberate
-// non-interactive consent flag, so it still answers the confirmation. The
-// remote refuses connections instantly, so reaching a network error is the
-// proof that the confirmation was satisfied rather than declined.
-func TestBackupExplicitYesSatisfiesExposureConfirmation(t *testing.T) {
+// TestBackupAllowPublicRemoteSatisfiesExposureConfirmation: the exposure
+// question is about the target, so its consent flag is --allow-public-remote,
+// not the blanket --approve-consequential. The remote refuses connections
+// instantly, so reaching a network error is the proof that the confirmation was
+// satisfied rather than declined.
+func TestBackupAllowPublicRemoteSatisfiesExposureConfirmation(t *testing.T) {
 	dir := newRepo(t)
 	gitIn(t, dir, "remote", "add", "refused", "git://127.0.0.1:1/owner/repo.git")
 
-	stdout, stderr, code := runSafegit(t, dir, "--approve-consequential", "backup", "backup", "refused")
+	stdout, stderr, code := runSafegit(t, dir, "backup", "backup", "--allow-public-remote", "refused")
 	if code == 0 {
-		t.Fatalf("--approve-consequential should proceed past the confirmation and fail on the unreachable remote; stdout=%s stderr=%s", stdout, stderr)
+		t.Fatalf("--allow-public-remote should proceed past the confirmation and fail on the unreachable remote; stdout=%s stderr=%s", stdout, stderr)
 	}
 	if !strings.Contains(stderr, "listing ") {
 		t.Errorf("expected a remote-listing failure (proving the confirmation was passed), got: %s", stderr)
 	}
 	if strings.Contains(stdout, "Aborted") {
-		t.Errorf("--approve-consequential must not decline the confirmation, got: %s", stdout)
+		t.Errorf("--allow-public-remote must not decline the confirmation, got: %s", stdout)
 	}
 }
 
@@ -465,4 +466,56 @@ func TestBackupDetachedHeadErrors(t *testing.T) {
 	if !strings.Contains(stderr, "detached") {
 		t.Errorf("expected a detached-HEAD message, got: %s", stderr)
 	}
+}
+
+// TestApproveConsequentialDoesNotConsentToAnUnprovenRemote pins the ratified
+// property that a non-interactive run cannot publish a branch to a remote it
+// cannot prove is private without saying so deliberately.
+//
+// The framework's --approve-consequential answers "yes, run this command". The
+// exposure question is about the TARGET, not the command -- it is discovered by
+// probing the remote at run time, so a caller may not know the answer when it
+// composes the command line. Letting the blanket flag answer it meant every
+// script and agent that passed --approve-consequential silently consented to a
+// public push. The per-condition --allow-public-remote is the only thing that
+// answers it now.
+func TestApproveConsequentialDoesNotConsentToAnUnprovenRemote(t *testing.T) {
+	newUnprovenRemoteRepo := func(t *testing.T) string {
+		t.Helper()
+		dir := newRepo(t)
+		commitFileEnv(t, dir, confirmEnv, "file.txt", "content\n", "add file")
+		// Not a forge safegit can classify, and unreachable -- so if the run
+		// gets past the exposure gate it fails at the network, which is exactly
+		// the difference the assertions below key on.
+		gitIn(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
+		return dir
+	}
+
+	t.Run("blanket consent refuses", func(t *testing.T) {
+		dir := newUnprovenRemoteRepo(t)
+		_, stderr, code := runSafegitNoConsent(t, dir, confirmEnv,
+			"--json", "--approve-consequential", "backup", "backup", "cloudy")
+		if code == 0 {
+			t.Errorf("--approve-consequential must not consent to an unproven remote; stderr: %s", stderr)
+		}
+		if !strings.Contains(stderr, "--allow-public-remote") {
+			t.Errorf("the refusal must name --allow-public-remote as the consent flag, got: %s", stderr)
+		}
+		if strings.Contains(stderr, "Could not resolve host") {
+			t.Errorf("the refusal must precede any network contact, got: %s", stderr)
+		}
+	})
+
+	t.Run("the per-condition flag consents", func(t *testing.T) {
+		dir := newUnprovenRemoteRepo(t)
+		_, stderr, _ := runSafegitNoConsent(t, dir, confirmEnv,
+			"--json", "backup", "backup", "--allow-public-remote", "cloudy")
+		if strings.Contains(stderr, "--allow-public-remote") {
+			t.Errorf("--allow-public-remote must answer the exposure question, got: %s", stderr)
+		}
+		// The remote does not exist, so the run must have reached the network.
+		if !strings.Contains(stderr, "example.invalid") {
+			t.Errorf("the consented backup must reach the remote, got: %s", stderr)
+		}
+	})
 }
