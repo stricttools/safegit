@@ -145,12 +145,12 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	infof(flags, "  Commits: %d\n", commitCount)
 	infof(flags, "  Reason:  %s\n", reason)
 
-	// Confirmation prompt (skipped with an explicit --yes). A dry run destroys
-	// nothing, so it never asks -- same shape as the scrub siblings, which
-	// return their preview before reaching this point.
-	if !flags.dryRun && !confirmDeliberate(flags, "This will rewrite %d commits. This cannot be undone. Proceed?", commitCount) {
-		infof(flags, "Aborted.\n")
-		return 1
+	// `scrub file` declares itself consequential, so the framework's confirm
+	// protocol already took deliberate consent for this rewrite before dispatch.
+	// The summary above says what and how much; a second prompt only asked the
+	// question the framework had just had answered.
+	if !flags.dryRun {
+		infof(flags, "Rewriting %d commits. This cannot be undone.\n", commitCount)
 	}
 
 	// Dry-run check: purely read-only, no lock needed.
@@ -421,10 +421,12 @@ func runScrubFileInSubmodule(
 	infof(flags, "  Sub commits: %d\n", subCommitCount)
 	infof(flags, "  Reason:     %s\n", reason)
 
-	// Confirmation prompt (skipped with an explicit --yes); a dry run never asks.
-	if !flags.dryRun && !confirmDeliberate(flags, "This will rewrite submodule + parent history. This cannot be undone. Proceed?") {
-		infof(flags, "Aborted.\n")
-		return 1
+	// Same as the non-submodule path: consent for the rewrite was taken by the
+	// framework before dispatch. The wider blast radius -- the parent moves too,
+	// because its gitlink has to follow the submodule -- is a consequence of the
+	// path the caller named, so it is stated rather than asked.
+	if !flags.dryRun {
+		infof(flags, "Rewriting %d submodule commits, and the parent history that points at them. This cannot be undone.\n", subCommitCount)
 	}
 
 	if flags.dryRun {

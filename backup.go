@@ -170,19 +170,25 @@ func classifyRemote(ctx context.Context, remoteURL string) remoteExposure {
 
 // confirmExposure asks for confirmation when a backup would leave this machine
 // for a remote that is public (or that we cannot prove is private). Returns
-// false when the user declines. The prompt is deliberate: --json must never
-// publish a branch on the operator's behalf, so only an explicit
-// --approve-consequential answers it.
-func confirmExposure(ctx context.Context, flags globalFlags, remote, remoteURL string) bool {
+// false when the user declines.
+//
+// The question is about the TARGET, and its answer is discovered by probing the
+// remote at run time -- a caller composing the command line may not know it. So
+// the blanket --approve-consequential does not answer it; only the
+// per-condition --allow-public-remote does, which is what keeps a
+// non-interactive run from publishing a branch to a public repository without
+// having said so.
+func confirmExposure(ctx context.Context, flags globalFlags, remote, remoteURL string, allowPublicRemote bool) bool {
+	c := consent{granted: allowPublicRemote, flag: "--allow-public-remote"}
 	switch classifyRemote(ctx, remoteURL) {
 	case exposurePublic:
 		fmt.Fprintf(os.Stderr, "warning: %s (%s) is a PUBLIC repository\n", remote, remoteURL)
 		fmt.Fprintf(os.Stderr, "         a backup pushes your entire current branch there, including work you have not published\n")
-		return confirmDeliberate(flags, "Push a backup of this branch to a PUBLIC repository?")
+		return confirmDeliberate(flags, c, "Push a backup of this branch to a PUBLIC repository?")
 	case exposureUnknown:
 		fmt.Fprintf(os.Stderr, "warning: cannot determine whether %s (%s) is public\n", remote, remoteURL)
 		fmt.Fprintf(os.Stderr, "         a backup pushes your entire current branch there\n")
-		return confirmDeliberate(flags, "Push a backup of this branch to a remote of unknown visibility?")
+		return confirmDeliberate(flags, c, "Push a backup of this branch to a remote of unknown visibility?")
 	default:
 		return true
 	}
@@ -190,7 +196,7 @@ func confirmExposure(ctx context.Context, flags globalFlags, remote, remoteURL s
 
 // --- commands ---
 
-func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup bool) int {
+func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, allowPublicRemote bool) int {
 	const cmd = "backup backup"
 
 	gitDir := mustGitDir(flags, cmd)
@@ -227,7 +233,7 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup boo
 
 	// Ask before touching a remote we cannot prove is private: a backup pushes
 	// the whole branch, so the decision belongs before any network contact.
-	if !confirmExposure(ctx, flags, remote, remoteURL) {
+	if !confirmExposure(ctx, flags, remote, remoteURL, allowPublicRemote) {
 		infof(flags, "Aborted.\n")
 		return 1
 	}

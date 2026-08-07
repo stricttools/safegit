@@ -116,21 +116,22 @@ func TestClassifyRemoteSkipsProbe(t *testing.T) {
 
 // TestConfirmExposurePublicRequiresDeliberateConsent covers the branch a public
 // forge repository takes: the warning fires, an unanswerable prompt declines,
-// --json refuses (it must never publish a branch on the operator's behalf), and
-// an explicit --approve-consequential is the one thing that consents.
+// --json refuses (it must never publish a branch on the operator's behalf), the
+// blanket --approve-consequential does NOT answer this question, and the
+// per-condition --allow-public-remote is the one thing that does.
 func TestConfirmExposurePublicRequiresDeliberateConsent(t *testing.T) {
 	withGhVisibility(t, func(ctx context.Context, slug string) (string, error) {
 		return "PUBLIC\n", nil
 	})
 	const url = "https://github.com/owner/repo.git"
 
-	confirm := func(flags globalFlags) (bool, string) {
+	confirm := func(flags globalFlags, allowPublicRemote bool) (bool, string) {
 		return captureConfirm(t, func() bool {
-			return confirmExposure(context.Background(), flags, "origin", url)
+			return confirmExposure(context.Background(), flags, "origin", url, allowPublicRemote)
 		})
 	}
 
-	ok, out := confirm(testFlags(false, false))
+	ok, out := confirm(testFlags(false, false), false)
 	if ok {
 		t.Error("an unanswered prompt must decline the backup")
 	}
@@ -138,19 +139,28 @@ func TestConfirmExposurePublicRequiresDeliberateConsent(t *testing.T) {
 		t.Errorf("expected the public-repository warning, got: %s", out)
 	}
 
-	ok, out = confirm(testFlags(false, true))
+	ok, out = confirm(testFlags(false, true), false)
 	if ok {
 		t.Error("--json must not answer the exposure confirmation")
 	}
-	if !strings.Contains(out, "--approve-consequential") {
-		t.Errorf("expected the refusal to name --approve-consequential as the consent flag, got: %s", out)
+	if !strings.Contains(out, "--allow-public-remote") {
+		t.Errorf("expected the refusal to name --allow-public-remote as the consent flag, got: %s", out)
 	}
 
-	if ok, _ = confirm(testFlags(true, false)); !ok {
-		t.Error("an explicit --approve-consequential must satisfy the exposure confirmation")
+	// The decoupling: --approve-consequential says "yes, run this command",
+	// which is not a statement about where the branch lands.
+	if ok, out = confirm(testFlags(true, true), false); ok {
+		t.Error("--approve-consequential must not answer the exposure confirmation")
 	}
-	if ok, _ = confirm(testFlags(true, true)); !ok {
-		t.Error("an explicit --approve-consequential must satisfy the confirmation even with --json")
+	if !strings.Contains(out, "--allow-public-remote") {
+		t.Errorf("the refusal must still name --allow-public-remote, got: %s", out)
+	}
+
+	if ok, _ = confirm(testFlags(false, false), true); !ok {
+		t.Error("--allow-public-remote must satisfy the exposure confirmation")
+	}
+	if ok, _ = confirm(testFlags(false, true), true); !ok {
+		t.Error("--allow-public-remote must satisfy the confirmation even with --json")
 	}
 }
 
@@ -162,7 +172,7 @@ func TestConfirmExposurePrivateAsksNothing(t *testing.T) {
 	})
 
 	ok, out := captureConfirm(t, func() bool {
-		return confirmExposure(context.Background(), testFlags(false, false), "origin", "https://github.com/owner/repo.git")
+		return confirmExposure(context.Background(), testFlags(false, false), "origin", "https://github.com/owner/repo.git", false)
 	})
 	if !ok {
 		t.Error("a private remote must be backed up without confirmation")

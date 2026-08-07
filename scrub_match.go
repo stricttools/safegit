@@ -576,11 +576,10 @@ func scrubMatchExecute(
 		infof(flags, "  Submodules with matches: %d\n", len(subScans))
 	}
 
-	// Confirmation prompt (skipped with an explicit --yes)
-	if !confirmDeliberate(flags, "This will rewrite history to replace pattern matches. This cannot be undone. Proceed?") {
-		infof(flags, "Aborted.\n")
-		return 1
-	}
+	// `scrub match` declares itself consequential, so the framework's confirm
+	// protocol already took deliberate consent for this rewrite before dispatch.
+	// The scale is stated above, not asked a second time.
+	infof(flags, "Rewriting history to replace pattern matches. This cannot be undone.\n")
 
 	// Phase 1: Process submodules (blob map, walkAndRewrite, Finalize per submodule).
 	replaceBytes := []byte(replace)
