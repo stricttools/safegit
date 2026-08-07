@@ -23,7 +23,10 @@ dist/
 # Selfdoc / Cloudflare
 docs/_build/
 .wrangler/
-.selfdoc/
+# .selfdoc/manifest.json and .selfdoc/hashes/ are committed (fleet pattern):
+# they are generated project state, not build output. Only the caches are local.
+.selfdoc/cache/
+.selfdoc/data/
 
 .rlsbl/lock
 .claude/

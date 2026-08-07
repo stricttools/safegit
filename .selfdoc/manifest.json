@@ -1,0 +1,238 @@
+{
+  "schema_version": 1,
+  "name": "safegit",
+  "slug": "safegit",
+  "version": "0.25.0",
+  "description": "",
+  "language": "go",
+  "base_url": "https://safegit.smmh.dev",
+  "pages": [
+    {
+      "path": "architecture.md",
+      "title": "Architecture",
+      "type": "doc"
+    },
+    {
+      "path": "cli-author.md",
+      "title": "safegit author",
+      "type": "doc"
+    },
+    {
+      "path": "cli-backup.md",
+      "title": "safegit backup",
+      "type": "doc"
+    },
+    {
+      "path": "cli-bisect.md",
+      "title": "safegit bisect",
+      "type": "doc"
+    },
+    {
+      "path": "cli-checkout.md",
+      "title": "safegit checkout",
+      "type": "doc"
+    },
+    {
+      "path": "cli-cherry-pick.md",
+      "title": "safegit cherry-pick",
+      "type": "doc"
+    },
+    {
+      "path": "cli-commit.md",
+      "title": "safegit commit",
+      "type": "doc"
+    },
+    {
+      "path": "cli-config.md",
+      "title": "safegit config",
+      "type": "doc"
+    },
+    {
+      "path": "cli-doctor.md",
+      "title": "safegit doctor",
+      "type": "doc"
+    },
+    {
+      "path": "cli-hook.md",
+      "title": "safegit hook",
+      "type": "doc"
+    },
+    {
+      "path": "cli-index.md",
+      "title": "safegit CLI Reference",
+      "type": "doc"
+    },
+    {
+      "path": "cli-merge.md",
+      "title": "safegit merge",
+      "type": "doc"
+    },
+    {
+      "path": "cli-pull.md",
+      "title": "safegit pull",
+      "type": "doc"
+    },
+    {
+      "path": "cli-push.md",
+      "title": "safegit push",
+      "type": "doc"
+    },
+    {
+      "path": "cli-rebase.md",
+      "title": "safegit rebase",
+      "type": "doc"
+    },
+    {
+      "path": "cli-reset.md",
+      "title": "safegit reset",
+      "type": "doc"
+    },
+    {
+      "path": "cli-revert.md",
+      "title": "safegit revert",
+      "type": "doc"
+    },
+    {
+      "path": "cli-scan.md",
+      "title": "safegit scan",
+      "type": "doc"
+    },
+    {
+      "path": "cli-scrub.md",
+      "title": "safegit scrub",
+      "type": "doc"
+    },
+    {
+      "path": "cli-undo.md",
+      "title": "safegit undo",
+      "type": "doc"
+    },
+    {
+      "path": "cli-unlock.md",
+      "title": "safegit unlock",
+      "type": "doc"
+    },
+    {
+      "path": "cli-version.md",
+      "title": "safegit version",
+      "type": "doc"
+    },
+    {
+      "path": "commands-guide.md",
+      "title": "Commands Guide",
+      "type": "doc"
+    },
+    {
+      "path": "concurrency-guide.md",
+      "title": "Concurrency Guide",
+      "type": "doc"
+    },
+    {
+      "path": "gen-index.md",
+      "title": "API Reference",
+      "type": "doc"
+    },
+    {
+      "path": "index.md",
+      "title": "safegit",
+      "type": "doc"
+    },
+    {
+      "path": "integration-guide.md",
+      "title": "Integration Guide",
+      "type": "doc"
+    },
+    {
+      "path": "internal-commit.md",
+      "title": "internal/commit",
+      "type": "doc"
+    },
+    {
+      "path": "internal-coord.md",
+      "title": "internal/coord",
+      "type": "doc"
+    },
+    {
+      "path": "internal-filelock.md",
+      "title": "internal/filelock",
+      "type": "doc"
+    },
+    {
+      "path": "internal-git.md",
+      "title": "internal/git",
+      "type": "doc"
+    },
+    {
+      "path": "internal-hooks.md",
+      "title": "internal/hooks",
+      "type": "doc"
+    },
+    {
+      "path": "internal-index.md",
+      "title": "internal/index",
+      "type": "doc"
+    },
+    {
+      "path": "internal-lock.md",
+      "title": "internal/lock",
+      "type": "doc"
+    },
+    {
+      "path": "internal-oplog.md",
+      "title": "internal/oplog",
+      "type": "doc"
+    },
+    {
+      "path": "internal-procutil.md",
+      "title": "internal/procutil",
+      "type": "doc"
+    },
+    {
+      "path": "internal-repo.md",
+      "title": "internal/repo",
+      "type": "doc"
+    },
+    {
+      "path": "internal-scan.md",
+      "title": "internal/scan",
+      "type": "doc"
+    },
+    {
+      "path": "internal-stage.md",
+      "title": "internal/stage",
+      "type": "doc"
+    },
+    {
+      "path": "internal-submodule.md",
+      "title": "internal/submodule",
+      "type": "doc"
+    },
+    {
+      "path": "internal-testutil.md",
+      "title": "internal/testutil",
+      "type": "doc"
+    },
+    {
+      "path": "internal-trailer.md",
+      "title": "internal/trailer",
+      "type": "doc"
+    },
+    {
+      "path": "req.md",
+      "title": "safegit Requirements",
+      "type": "doc"
+    },
+    {
+      "path": "research.md",
+      "title": "Git Alternatives for AI-Safe Concurrency",
+      "type": "doc"
+    },
+    {
+      "path": "safegit.md",
+      "title": "safegit",
+      "type": "doc"
+    }
+  ],
+  "posts": [],
+  "last_gen": "2026-08-05T13:53:14.227298+00:00"
+}
