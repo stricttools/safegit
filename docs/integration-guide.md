@@ -208,7 +208,7 @@ When safegit detects it is running inside a git submodule, two additional behavi
 
 ## JSON output mode
 
-All commands support `--json` for machine-readable output. When `--json` is active, safegit automatically enables `--quiet` (suppresses informational stderr). It does **not** imply approval: consent is a separate question and `--json` does not answer it, so a non-interactive `--json` run of a *consequential* command (`scrub file`/`match`/`run`, `author rewrite`) must pass `--approve-consequential` explicitly. Ordinary mutating commands such as `commit` need nothing. If a command fails before producing JSON output, an error envelope is written to stdout:
+All commands support `--json` for machine-readable output. When `--json` is active, safegit automatically enables `--quiet` (suppresses informational stderr). It does **not** imply approval: consent is a separate question and `--json` does not answer it, so a non-interactive `--json` run of a *consequential* command (`scrub file`/`match`/`run`, `author rewrite`) must pass `--approve-consequential` explicitly. Ordinary mutating commands such as `commit` need nothing. A `--json backup backup` to a remote safegit cannot prove is private is the one place where `--approve-consequential` is not the answer either: that question belongs to the target, so it takes `--allow-public-remote`. If a command fails before producing JSON output, an error envelope is written to stdout:
 
 ```json
 {
