@@ -308,6 +308,11 @@ func main() {
 		return strictcli.Exit(hookRun(globalsToFlags(ctx, kwargs), name))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
+		// Running a hook means running an operator-supplied script whose effects
+		// safegit cannot know, and the effects handle's `run` carries no stdin
+		// parameter, so the invocation cannot be minted either. Any preview here
+		// would be invented, so the flag is refused instead.
+		strictcli.WithDryRunUnsupported("running a hook executes an operator-supplied script whose effects safegit cannot know in advance, so there is nothing honest to preview; run 'safegit hook list' to see which scripts would run"),
 		strictcli.WithArgs(strictcli.NewArg("name", "name of a specific hook to run; omit to run all installed hooks", strictcli.ArgRequired(false))),
 	)
 	hg.Command("install", "install a pre-pre-push hook by copying a script file into the .git/safegit/hooks directory, making it executable, and registering it so that safegit push will run it before any network I/O occurs", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {

@@ -225,3 +225,48 @@ func TestCommitDryRunRecordsAndCommitsNothing(t *testing.T) {
 		t.Errorf("a dry-run commit landed: %d -> %d", before, after)
 	}
 }
+
+// TestHookRunRefusesDryRun: `hook run` executes operator-supplied scripts.
+// safegit cannot know what a hook does, and the effects handle's `run` carries
+// no stdin parameter, so the invocation cannot be minted either -- there is no
+// honest preview to render. Before the declaration landed, `--dry-run hook run`
+// silently ran every hook for real, which is the exact reading the effects
+// contract's §3.5 exists to prevent. It must now refuse.
+func TestHookRunRefusesDryRun(t *testing.T) {
+	dir := newRepo(t)
+	marker := filepath.Join(t.TempDir(), "hook-ran")
+
+	// The discovered name is `pre-pre-push` (or an entry under
+	// `pre-pre-push.d/`); `hook install` copies the source under its own
+	// basename, so the source has to carry that name to be found.
+	src := filepath.Join(t.TempDir(), "pre-pre-push")
+	script := "#!/bin/sh\ntouch " + marker + "\nexit 0\n"
+	if err := os.WriteFile(src, []byte(script), 0o755); err != nil {
+		t.Fatalf("writing hook source: %v", err)
+	}
+	if _, stderr, code := runSafegit(t, dir, "hook", "install", src); code != 0 {
+		t.Fatalf("installing the hook failed (%d): %s", code, stderr)
+	}
+
+	_, stderr, code := runSafegit(t, dir, "--dry-run", "hook", "run")
+	if code == 0 {
+		t.Errorf("`--dry-run hook run` must refuse, got exit 0: %s", stderr)
+	}
+	if !strings.Contains(stderr, "--dry-run is not supported") {
+		t.Errorf("the refusal must name the unsupported flag, got: %s", stderr)
+	}
+	if !strings.Contains(stderr, "hook") {
+		t.Errorf("the refusal must name the command, got: %s", stderr)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("`--dry-run hook run` executed the hook for real")
+	}
+
+	// A real run still executes it -- the refusal is scoped to the preview.
+	if _, stderr, code := runSafegit(t, dir, "hook", "run"); code != 0 {
+		t.Fatalf("`hook run` without --dry-run failed (%d): %s", code, stderr)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Errorf("`hook run` did not execute the hook: %v", err)
+	}
+}
