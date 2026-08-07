@@ -10,3 +10,5 @@ nav_order: 20
 # safegit version
 
 print safegit version, Go runtime version, and git version
+
+**Effect:** read_only

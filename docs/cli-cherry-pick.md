@@ -10,3 +10,5 @@ nav_order: 5
 # safegit cherry-pick
 
 cherry-pick one or more commits onto HEAD with safety guards
+
+**Effect:** mutating

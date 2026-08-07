@@ -11,6 +11,8 @@ nav_order: 11
 
 fetch from remote and merge, defaulting to fast-forward-only mode
 
+**Effect:** mutating
+
 ## Flags
 
 | Name | Short | Type | Default | Env | Description |

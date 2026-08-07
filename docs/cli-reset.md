@@ -10,3 +10,5 @@ nav_order: 14
 # safegit reset
 
 reset HEAD with guards that prevent accidental --hard data loss
+
+**Effect:** mutating

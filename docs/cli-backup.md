@@ -16,11 +16,14 @@ push, list, and restore per-branch history backups held in the tool-owned refs/b
 
 push the current branch to its backup slot refs/backups/<branch> on the remote, after fetching that slot and refusing when it holds commits your history does not contain; the push is pinned with --force-with-lease to the exact SHA that was just observed (or to "this ref must not exist" for a first backup), so a concurrent backup from another machine is rejected rather than clobbered; plain git equivalent: git push --force-with-lease=refs/backups/<branch>:<observed-sha> <remote> HEAD:refs/backups/<branch>
 
+**Effect:** mutating
+
 ### Flags
 
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
 | `--overwrite-remote-backup` |  | bool |  |  | replace a backup slot whose commits are missing from your current history, leasing on the SHA observed during this run; without this flag such a slot is a hard error because overwriting it would drop work backed up from elsewhere |
+| `--allow-public-remote` |  | bool |  |  | consent to backing up to a remote that is public, or whose visibility safegit cannot determine; without this flag such a target is a question, asked at the terminal and refused outright when there is none, because a backup pushes the whole branch and --approve-consequential says nothing about where |
 
 ### Arguments
 
@@ -28,9 +31,18 @@ push the current branch to its backup slot refs/backups/<branch> on the remote, 
 | --- | --- | --- |
 | `remote` | no | name of the remote repository holding the backup slots (defaults to origin) |
 
+### Grants
+
+| Kind | Name | Reason |
+| --- | --- | --- |
+| proc_mutate | `push` | a backup slot is only useful once it is on the remote |
+| proc_mutate | `force-push` | a backup slot is a single overwritten slot, pinned by a lease to the SHA observed a moment earlier |
+
 ## backup list
 
 list every backup slot present on the remote with the branch name and the commit each slot points at, so you can see which branches are backed up from which machine before restoring one; plain git equivalent: git ls-remote <remote> 'refs/backups/*'
+
+**Effect:** read_only
 
 ### Arguments
 
@@ -41,6 +53,8 @@ list every backup slot present on the remote with the branch name and the commit
 ## backup restore
 
 fetch the current branch's backup slot from the remote and fast-forward the branch onto it, refusing when the local branch carries commits the backup does not contain so no local work is ever discarded; plain git equivalent: git fetch <remote> refs/backups/<branch> && git merge --ff-only FETCH_HEAD
+
+**Effect:** mutating
 
 ### Arguments
 

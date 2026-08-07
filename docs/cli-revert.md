@@ -10,3 +10,5 @@ nav_order: 15
 # safegit revert
 
 revert one or more commits creating inverse patches, with safety guards
+
+**Effect:** mutating

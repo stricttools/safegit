@@ -15,6 +15,8 @@ surgically rewrite git history to remove or replace sensitive content using 4 su
 
 replace or remove a specific file across all commits in the repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized version or delete the file entirely from every historical snapshot
 
+**Effect:** mutating · **consequential** (prompts before running; `--approve-consequential` skips)
+
 ### Flags
 
 | Name | Short | Type | Default | Env | Description |
@@ -33,6 +35,8 @@ replace or remove a specific file across all commits in the repository history, 
 
 replace all occurrences of a regex pattern across every blob in the repository history, rewriting commit trees to substitute matched text with a replacement string so that sensitive values like secrets and credentials are permanently removed from all historical snapshots
 
+**Effect:** mutating · **consequential** (prompts before running; `--approve-consequential` skips)
+
 ### Flags
 
 | Name | Short | Type | Default | Env | Description |
@@ -49,6 +53,8 @@ replace all occurrences of a regex pattern across every blob in the repository h
 ## scrub run
 
 execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite
+
+**Effect:** mutating · **consequential** (prompts before running; `--approve-consequential` skips)
 
 ### Flags
 
@@ -70,3 +76,5 @@ execute a multi-operation scrub recipe from a TOML file, applying all pattern re
 ## scrub verify
 
 check all scrub policies defined in the repository configuration to confirm that previously scrubbed secrets and sensitive patterns remain completely absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-policy pass or fail results with match locations for any violations found
+
+**Effect:** read_only
