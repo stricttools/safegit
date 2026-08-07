@@ -420,7 +420,7 @@
         },
         "list": {
           "effect": "read_only",
-          "help": "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity \u2014 useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite",
+          "help": "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite",
           "name": "list",
           "tags": [
             "json"
@@ -474,7 +474,7 @@
           ]
         }
       },
-      "help": "audit and rewrite commit author/committer identity \u2014 list all identities, check against expected values, and rewrite name or email across history",
+      "help": "audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history",
       "name": "author"
     },
     "backup": {
@@ -495,6 +495,13 @@
               "name": "overwrite-remote-backup",
               "negatable": true,
               "type": "bool"
+            },
+            {
+              "default": false,
+              "help": "consent to backing up to a remote that is public, or whose visibility safegit cannot determine; without this flag such a target is a question, asked at the terminal and refused outright when there is none, because a backup pushes the whole branch and --approve-consequential says nothing about where",
+              "name": "allow-public-remote",
+              "negatable": true,
+              "type": "bool"
             }
           ],
           "grants": [
@@ -509,7 +516,7 @@
               "reason": "a backup slot is a single overwritten slot, pinned by a lease to the SHA observed a moment earlier"
             }
           ],
-          "help": "push the current branch to its backup slot refs/backups/<branch> on the remote, after fetching that slot and refusing when it holds commits your history does not contain; the push is pinned with --force-with-lease to the exact SHA that was just observed (or to \"this ref must not exist\" for a first backup), so a concurrent backup from another machine is rejected rather than clobbered; plain git equivalent: git push --force-with-lease=refs/backups/<branch>:<observed-sha> <remote> HEAD:refs/backups/<branch>",
+          "help": "push the current branch to its backup slot refs/backups/\u003cbranch\u003e on the remote, after fetching that slot and refusing when it holds commits your history does not contain; the push is pinned with --force-with-lease to the exact SHA that was just observed (or to \"this ref must not exist\" for a first backup), so a concurrent backup from another machine is rejected rather than clobbered; plain git equivalent: git push --force-with-lease=refs/backups/\u003cbranch\u003e:\u003cobserved-sha\u003e \u003cremote\u003e HEAD:refs/backups/\u003cbranch\u003e",
           "name": "backup"
         },
         "list": {
@@ -521,7 +528,7 @@
             }
           ],
           "effect": "read_only",
-          "help": "list every backup slot present on the remote with the branch name and the commit each slot points at, so you can see which branches are backed up from which machine before restoring one; plain git equivalent: git ls-remote <remote> 'refs/backups/*'",
+          "help": "list every backup slot present on the remote with the branch name and the commit each slot points at, so you can see which branches are backed up from which machine before restoring one; plain git equivalent: git ls-remote \u003cremote\u003e 'refs/backups/*'",
           "name": "list"
         },
         "restore": {
@@ -533,7 +540,7 @@
             }
           ],
           "effect": "mutating",
-          "help": "fetch the current branch's backup slot from the remote and fast-forward the branch onto it, refusing when the local branch carries commits the backup does not contain so no local work is ever discarded; plain git equivalent: git fetch <remote> refs/backups/<branch> && git merge --ff-only FETCH_HEAD",
+          "help": "fetch the current branch's backup slot from the remote and fast-forward the branch onto it, refusing when the local branch carries commits the backup does not contain so no local work is ever discarded; plain git equivalent: git fetch \u003cremote\u003e refs/backups/\u003cbranch\u003e \u0026\u0026 git merge --ff-only FETCH_HEAD",
           "name": "restore"
         }
       },
@@ -603,6 +610,8 @@
               "required": false
             }
           ],
+          "dry_run_supported": false,
+          "dry_run_unsupported_reason": "running a hook executes an operator-supplied script whose effects safegit cannot know in advance, so there is nothing honest to preview; run 'safegit hook list' to see which scripts would run",
           "effect": "mutating",
           "help": "run all installed pre-pre-push hooks (or a single named hook) immediately without performing an actual push, so you can verify that all configured hooks pass before committing to a real push operation",
           "name": "run"
@@ -780,7 +789,7 @@
               "type": "bool"
             }
           ],
-          "help": "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store \u2014 use --diff to preview all changes as unified diffs before committing to the rewrite",
+          "help": "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite",
           "name": "run",
           "tags": [
             "json"
@@ -799,7 +808,7 @@
       "name": "scrub"
     }
   },
-  "help": "concurrency-safe git wrapper providing 20 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
+  "help": "concurrency-safe git wrapper providing 31 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "infra": {
     "handshakes": [
       {
@@ -811,5 +820,5 @@
   "name": "safegit",
   "project_id": "github.com/smm-h/safegit",
   "schema_version": 1,
-  "version": "0.25.1"
+  "version": "0.25.2-0.20260807132629-4ad734c0d0d0+dirty"
 }
