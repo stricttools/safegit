@@ -210,6 +210,24 @@ func assertNoSafegitDir(t *testing.T, dir, what string) {
 	}
 }
 
+// assertNoAutoInit fails if the auto-init artifacts (config.json and the
+// operation log) exist. It is the weaker sibling of assertNoSafegitDir, for
+// commands whose dry-run path still touches .git/safegit/ for its own reasons:
+// the commit pipeline creates an empty tmp/ directory for its per-invocation
+// index even under --dry-run, which is a separate defect from the auto-init one
+// and belongs to the commit pipeline rather than to this seam.
+func assertNoAutoInit(t *testing.T, dir, what string) {
+	t.Helper()
+	for _, name := range []string{"config.json", "log"} {
+		p := filepath.Join(dir, ".git", "safegit", name)
+		if _, err := os.Stat(p); err == nil {
+			t.Errorf("%s auto-initialized: %s was created", what, p)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("stat %s: %v", p, err)
+		}
+	}
+}
+
 // scrubMode names one of the three scrub entry points and builds its argv for a
 // given repo.
 type scrubMode struct {
@@ -297,6 +315,40 @@ func TestScrubDryRunPreviewsDirtyTree(t *testing.T) {
 				if string(got) != want {
 					t.Errorf("%s changed during a dry run: %q, want %q", path, got, want)
 				}
+			}
+		})
+	}
+}
+
+// TestDryRunInUninitializedRepoStillPreviews guards the other side of the
+// auto-init seam: skipping auto-init under --dry-run must not turn a preview
+// into an error in a repo where safegit has never run. The config a first
+// execute run would read is the default one auto-init writes, so a preview
+// works from those same defaults without creating anything.
+func TestDryRunInUninitializedRepoStillPreviews(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"commit", []string{"--dry-run", "commit", "-m", "preview", "--", "new.txt"}},
+		{"config set", []string{"--dry-run", "config", "set", "push.retryAttempts", "7"}},
+		{"config show", []string{"--dry-run", "config", "show"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, _ := newRawSecretRepo(t)
+			writeRepoFile(t, dir, "new.txt", "new content\n")
+			headBefore := revParseHEAD(t, dir)
+
+			stdout, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv, tc.args...)
+			if code != 0 {
+				t.Fatalf("%s --dry-run in an uninitialized repo failed (code %d): stdout=%s stderr=%s",
+					tc.name, code, stdout, stderr)
+			}
+			assertNoAutoInit(t, dir, tc.name+" --dry-run")
+			if got := revParseHEAD(t, dir); got != headBefore {
+				t.Errorf("HEAD moved during a dry run: %s -> %s", headBefore[:12], got[:12])
 			}
 		})
 	}
