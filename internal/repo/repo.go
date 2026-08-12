@@ -94,9 +94,15 @@ func SharedSafegitDir(ctx context.Context, gitDir string) string {
 	return filepath.Join(abs, "safegit")
 }
 
-// IsInitialized checks whether the .git/safegit/ directory exists.
+// IsInitialized reports whether this repository has a usable safegit data
+// directory, which is decided by config.json rather than by the directory
+// alone. A directory that exists without config.json is half-initialized -- an
+// interrupted Init, or any stray subdirectory created under it -- and reporting
+// that as initialized would make EnsureInitialized a no-op and leave every
+// command failing on the missing config.json. Reporting it as uninitialized
+// lets Init complete it (Init is idempotent over the directories it creates).
 func IsInitialized(gitDir string) bool {
-	_, err := os.Stat(SafegitDir(gitDir))
+	_, err := os.Stat(filepath.Join(SafegitDir(gitDir), "config.json"))
 	return err == nil
 }
 

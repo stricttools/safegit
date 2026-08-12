@@ -210,24 +210,6 @@ func assertNoSafegitDir(t *testing.T, dir, what string) {
 	}
 }
 
-// assertNoAutoInit fails if the auto-init artifacts (config.json and the
-// operation log) exist. It is the weaker sibling of assertNoSafegitDir, for
-// commands whose dry-run path still touches .git/safegit/ for its own reasons:
-// the commit pipeline creates an empty tmp/ directory for its per-invocation
-// index even under --dry-run, which is a separate defect from the auto-init one
-// and belongs to the commit pipeline rather than to this seam.
-func assertNoAutoInit(t *testing.T, dir, what string) {
-	t.Helper()
-	for _, name := range []string{"config.json", "log"} {
-		p := filepath.Join(dir, ".git", "safegit", name)
-		if _, err := os.Stat(p); err == nil {
-			t.Errorf("%s auto-initialized: %s was created", what, p)
-		} else if !os.IsNotExist(err) {
-			t.Fatalf("stat %s: %v", p, err)
-		}
-	}
-}
-
 // scrubMode names one of the three scrub entry points and builds its argv for a
 // given repo.
 type scrubMode struct {
@@ -346,11 +328,62 @@ func TestDryRunInUninitializedRepoStillPreviews(t *testing.T) {
 				t.Fatalf("%s --dry-run in an uninitialized repo failed (code %d): stdout=%s stderr=%s",
 					tc.name, code, stdout, stderr)
 			}
-			assertNoAutoInit(t, dir, tc.name+" --dry-run")
+			assertNoSafegitDir(t, dir, tc.name+" --dry-run")
 			if got := revParseHEAD(t, dir); got != headBefore {
 				t.Errorf("HEAD moved during a dry run: %s -> %s", headBefore[:12], got[:12])
 			}
 		})
+	}
+}
+
+// TestCommitDryRunLeavesNoSafegitDir: a dry-run commit must write nothing to
+// disk, the same promise the scrub previews keep. The commit pipeline created
+// its per-invocation temp index under .git/safegit/tmp/ even under --dry-run,
+// and Cleanup() left .git/safegit/tmp/ behind. The leftover directory made the
+// repo read as initialized while config.json was absent, so every later safegit
+// invocation there -- preview or execute -- died with "reading config.json: no
+// such file or directory". The second pass below is the one that used to fail.
+func TestCommitDryRunLeavesNoSafegitDir(t *testing.T) {
+	dir, _ := newRawSecretRepo(t)
+	writeRepoFile(t, dir, "new.txt", "new content\n")
+	headBefore := revParseHEAD(t, dir)
+
+	for _, pass := range []string{"first", "second"} {
+		stdout, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv,
+			"--dry-run", "commit", "-m", "preview", "--", "new.txt")
+		if code != 0 {
+			t.Fatalf("%s --dry-run commit failed (code %d): stdout=%s stderr=%s",
+				pass, code, stdout, stderr)
+		}
+		assertNoSafegitDir(t, dir, pass+" --dry-run commit")
+	}
+
+	if got := revParseHEAD(t, dir); got != headBefore {
+		t.Errorf("HEAD moved during a dry-run commit: %s -> %s", headBefore[:12], got[:12])
+	}
+}
+
+// TestHalfInitializedSafegitDirIsRepaired: a .git/safegit/ that exists without
+// config.json is a half-initialized repository -- any stray subdirectory puts it
+// there. Initialization must complete such a directory instead of reading the
+// bare directory as proof that everything is present, which left every command
+// failing on the missing config.json until someone deleted .git/safegit by hand.
+func TestHalfInitializedSafegitDirIsRepaired(t *testing.T) {
+	dir, _ := newRawSecretRepo(t)
+	if err := os.MkdirAll(filepath.Join(dir, ".git", "safegit", "tmp"), 0755); err != nil {
+		t.Fatalf("manufacturing the half-initialized state: %v", err)
+	}
+	writeRepoFile(t, dir, "new.txt", "new content\n")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv,
+		"commit", "-m", "real commit", "--", "new.txt")
+	if code != 0 {
+		t.Fatalf("an execute-path command must repair a half-initialized safegit dir (code %d): stdout=%s stderr=%s",
+			code, stdout, stderr)
+	}
+	cfgPath := filepath.Join(dir, ".git", "safegit", "config.json")
+	if _, err := os.Stat(cfgPath); err != nil {
+		t.Errorf("the repair did not create config.json: %v", err)
 	}
 }
 

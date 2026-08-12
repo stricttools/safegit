@@ -23,10 +23,12 @@ type TmpIndex struct {
 	IndexPath string // Dir + "/index"
 }
 
-// New creates a temporary index directory and seeds the index from the given treeish.
-// The directory name is <pid>-<random> where random is 4 bytes hex.
-func New(ctx context.Context, safegitDir string, treeish string) (*TmpIndex, error) {
-	tmpBase := filepath.Join(safegitDir, "tmp")
+// New creates a temporary index directory under baseDir/tmp/ and seeds the
+// index from the given treeish. The directory name is <pid>-<random> where
+// random is 4 bytes hex. baseDir is .git/safegit for an executing run; a
+// preview passes an OS temp directory so that nothing is written inside .git/.
+func New(ctx context.Context, baseDir string, treeish string) (*TmpIndex, error) {
+	tmpBase := filepath.Join(baseDir, "tmp")
 
 	// Generate 4 random bytes -> 8 hex chars
 	var rndBytes [4]byte
@@ -55,9 +57,10 @@ func New(ctx context.Context, safegitDir string, treeish string) (*TmpIndex, err
 }
 
 // NewEmpty creates a temporary index directory with an empty index (no tree).
-// Used for root commits in repos with no prior commits.
-func NewEmpty(safegitDir string) (*TmpIndex, error) {
-	tmpBase := filepath.Join(safegitDir, "tmp")
+// Used for root commits in repos with no prior commits. baseDir has the same
+// meaning as in New.
+func NewEmpty(baseDir string) (*TmpIndex, error) {
+	tmpBase := filepath.Join(baseDir, "tmp")
 
 	var rndBytes [4]byte
 	if _, err := rand.Read(rndBytes[:]); err != nil {
