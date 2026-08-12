@@ -36,7 +36,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	}
 
 	gitDir := mustGitDir(flags, cmd)
-	if err := repo.EnsureInitialized(gitDir); err != nil {
+	if err := ensureInitialized(flags, gitDir); err != nil {
 		die(flags, cmd, 4, err.Error())
 	}
 

@@ -13,7 +13,7 @@ import (
 
 func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, trailers []string, files []string) {
 	gitDir := mustGitDir(flags, "commit")
-	if err := repo.EnsureInitialized(gitDir); err != nil {
+	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(4)
 	}

@@ -591,7 +591,29 @@ func loadConfig(flags globalFlags, gitDir string) (*repo.Config, error) {
 	if flags.configPath != "" {
 		return repo.LoadConfigFrom(flags.configPath)
 	}
+	if flags.dryRun && !repo.IsInitialized(gitDir) {
+		// A dry run never auto-initializes (see ensureInitialized), so on a
+		// first-ever invocation in this repo there is no config.json to read.
+		// The values an execute run would read are exactly the defaults
+		// auto-init writes, so the preview computes from those rather than
+		// failing on a file the preview itself declined to create.
+		cfg := repo.DefaultConfig()
+		return &cfg, nil
+	}
 	return repo.LoadConfig(gitDir)
+}
+
+// ensureInitialized is the single seam every command goes through to get
+// .git/safegit/ auto-created. It exists because auto-init is a WRITE: creating
+// the directory tree, config.json and the log file. A --dry-run promises to
+// change nothing, so under it the auto-init is skipped entirely and deferred to
+// the next executing invocation; a preview that has to write first is not a
+// preview. No command in this package may call repo.EnsureInitialized directly.
+func ensureInitialized(flags globalFlags, gitDir string) error {
+	if flags.dryRun {
+		return nil
+	}
+	return repo.EnsureInitialized(gitDir)
 }
 
 // mustGitDir resolves the .git directory or exits with an error.

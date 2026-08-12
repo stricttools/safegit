@@ -118,13 +118,15 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 
 	// Validation
 	gitDir := mustGitDir(flags, cmd)
-	if err := repo.EnsureInitialized(gitDir); err != nil {
+	if err := ensureInitialized(flags, gitDir); err != nil {
 		die(flags, cmd, 4, err.Error())
 	}
 
 	ctx := context.Background()
 
-	requireCleanTree(ctx, flags, cmd)
+	// The clean-tree requirement belongs to the execute path only; it is checked
+	// after the dry-run branch below. A preview is exactly what a dirty working
+	// tree is for.
 
 	// Parse recipe
 	recipe, err := parseRecipe(recipePath)
@@ -160,6 +162,11 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	if flags.dryRun {
 		return scrubRunDryRun(ctx, flags, cmd, recipe, fromSHA, entireHistory)
 	}
+
+	// Execute path only: a rewrite of a dirty tree would lose the uncommitted
+	// work. `--diff` keeps the requirement it has always had, because it is a
+	// step on the execute path rather than a separate preview mode.
+	requireCleanTree(ctx, flags, cmd)
 
 	// --diff preview mode: purely read-only, no lock needed.
 	if diffMode {

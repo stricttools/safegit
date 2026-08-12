@@ -8,7 +8,6 @@ import (
 
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/hooks"
-	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 
@@ -37,7 +36,7 @@ func hookList(flags globalFlags) int {
 // hookRun runs a specific hook by name (or all if no name given).
 func hookRun(flags globalFlags, name string) int {
 	gitDir := mustGitDir(flags, "hook")
-	if err := repo.EnsureInitialized(gitDir); err != nil {
+	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
 	}

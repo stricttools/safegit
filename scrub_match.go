@@ -89,13 +89,15 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 
 	// Validation
 	gitDir := mustGitDir(flags, cmd)
-	if err := repo.EnsureInitialized(gitDir); err != nil {
+	if err := ensureInitialized(flags, gitDir); err != nil {
 		die(flags, cmd, 4, err.Error())
 	}
 
 	ctx := context.Background()
 
-	requireCleanTree(ctx, flags, cmd)
+	// The clean-tree requirement belongs to the execute path only; it is checked
+	// after the dry-run branch below. A preview is exactly what a dirty working
+	// tree is for.
 
 	// Resolve --from if provided
 	var fromSHA string
@@ -129,6 +131,9 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 	if flags.dryRun {
 		return scrubMatchDryRun(ctx, flags, cmd, compiledPattern, scope, gitDir, pattern, fromSHA, entireHistory)
 	}
+
+	// Execute path only: a rewrite of a dirty tree would lose the uncommitted work.
+	requireCleanTree(ctx, flags, cmd)
 
 	sgDir := repo.SafegitDir(gitDir)
 
@@ -435,7 +440,7 @@ func scrubMatchExecute(
 	// Ensure safegit dir exists for each initialized submodule.
 	for _, sub := range subs {
 		if sub.Initialized {
-			if err := repo.EnsureInitialized(sub.GitDir); err != nil {
+			if err := ensureInitialized(flags, sub.GitDir); err != nil {
 				fmt.Fprintf(os.Stderr, "warning: initializing safegit for submodule %s: %v\n", sub.RelativePath, err)
 			}
 		}
