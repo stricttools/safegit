@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/scan"
 	"github.com/smm-h/safegit/internal/trailer"
 )
@@ -174,7 +173,7 @@ func runScan(flags globalFlags, kwargs map[string]interface{}) int {
 
 	// Require a git repo.
 	gitDir := mustGitDir(flags, cmd)
-	if err := repo.EnsureInitialized(gitDir); err != nil {
+	if err := ensureInitialized(flags, gitDir); err != nil {
 		die(flags, cmd, 4, err.Error())
 	}
 

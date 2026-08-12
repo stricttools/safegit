@@ -200,7 +200,7 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 	const cmd = "backup backup"
 
 	gitDir := mustGitDir(flags, cmd)
-	if err := repo.EnsureInitialized(gitDir); err != nil {
+	if err := ensureInitialized(flags, gitDir); err != nil {
 		die(flags, cmd, 4, err.Error())
 	}
 	sgDir := repo.SafegitDir(gitDir)
@@ -294,7 +294,7 @@ func runBackupList(flags globalFlags, remote string) int {
 	const cmd = "backup list"
 
 	gitDir := mustGitDir(flags, cmd)
-	if err := repo.EnsureInitialized(gitDir); err != nil {
+	if err := ensureInitialized(flags, gitDir); err != nil {
 		die(flags, cmd, 4, err.Error())
 	}
 	ctx := context.Background()
@@ -339,7 +339,7 @@ func runBackupRestore(flags globalFlags, remote string) int {
 	const cmd = "backup restore"
 
 	gitDir := mustGitDir(flags, cmd)
-	if err := repo.EnsureInitialized(gitDir); err != nil {
+	if err := ensureInitialized(flags, gitDir); err != nil {
 		die(flags, cmd, 4, err.Error())
 	}
 	sgDir := repo.SafegitDir(gitDir)

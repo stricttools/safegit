@@ -45,7 +45,7 @@ type pushRefInfo struct {
 
 func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote string, mode pushMode) int {
 	gitDir := mustGitDir(flags, "push")
-	if err := repo.EnsureInitialized(gitDir); err != nil {
+	if err := ensureInitialized(flags, gitDir); err != nil {
 		die(flags, "push", 1, err.Error())
 		return 1
 	}

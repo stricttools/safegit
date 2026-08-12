@@ -130,7 +130,7 @@ func maybeAutoBumpParent(ctx context.Context, flags globalFlags, gitDir, newHead
 	}
 
 	// Ensure parent's safegit dir exists
-	if err := repo.EnsureInitialized(parentGitDir); err != nil {
+	if err := ensureInitialized(flags, parentGitDir); err != nil {
 		return fmt.Errorf("initializing parent safegit: %v", err)
 	}
 

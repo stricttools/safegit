@@ -54,13 +54,16 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 
 	// Validation
 	gitDir := mustGitDir(flags, cmd)
-	if err := repo.EnsureInitialized(gitDir); err != nil {
+	if err := ensureInitialized(flags, gitDir); err != nil {
 		die(flags, cmd, 4, err.Error())
 	}
 
 	ctx := context.Background()
 
-	requireCleanTree(ctx, flags, cmd)
+	// The clean-tree requirement belongs to the execute path only, so it is
+	// checked after the dry-run branch below (and after the submodule
+	// delegation, which has its own execute path). A preview is exactly what a
+	// dirty working tree is for.
 
 	sgDir := repo.SafegitDir(gitDir)
 
@@ -171,6 +174,9 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		infof(flags, "Dry run: no changes made.\n")
 		return 0
 	}
+
+	// Execute path only: a rewrite of a dirty tree would lose the uncommitted work.
+	requireCleanTree(ctx, flags, cmd)
 
 	// Acquire rewrite lock to prevent concurrent scrub operations (execute path only).
 	cfg, err := loadConfig(flags, gitDir)
@@ -357,7 +363,7 @@ func runScrubFileInSubmodule(
 		fullPath, sub.RelativePath, subFilePath)
 
 	// Ensure safegit is initialized for the submodule.
-	if err := repo.EnsureInitialized(sub.GitDir); err != nil {
+	if err := ensureInitialized(flags, sub.GitDir); err != nil {
 		die(flags, cmd, 1, fmt.Sprintf("initializing safegit for submodule %s: %v", sub.RelativePath, err))
 	}
 
@@ -446,6 +452,10 @@ func runScrubFileInSubmodule(
 		infof(flags, "Dry run: no changes made.\n")
 		return 0
 	}
+
+	// Execute path only, and the caller's check was moved past its own dry-run
+	// branch: the parent's tree must still be clean before anything is rewritten.
+	requireCleanTree(ctx, flags, cmd)
 
 	// Write the replacement blob to the submodule's object store (execute path only).
 	if mode == "replace" {

@@ -30,7 +30,7 @@ func formatConfigValue(val interface{}) string {
 
 func runConfigShow(flags globalFlags) int {
 	gitDir := mustGitDir(flags, "config")
-	if err := repo.EnsureInitialized(gitDir); err != nil {
+	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 4
 	}
@@ -50,7 +50,7 @@ func runConfigShow(flags globalFlags) int {
 
 func runConfigGet(flags globalFlags, key string) int {
 	gitDir := mustGitDir(flags, "config")
-	if err := repo.EnsureInitialized(gitDir); err != nil {
+	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 4
 	}
@@ -72,7 +72,7 @@ func runConfigGet(flags globalFlags, key string) int {
 
 func runConfigSet(flags globalFlags, key, value string) int {
 	gitDir := mustGitDir(flags, "config")
-	if err := repo.EnsureInitialized(gitDir); err != nil {
+	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 4
 	}
