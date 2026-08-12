@@ -363,6 +363,111 @@ func TestCommitDryRunLeavesNoSafegitDir(t *testing.T) {
 	}
 }
 
+// TestAmendDryRunLeavesNoSafegitDir is TestCommitDryRunLeavesNoSafegitDir for
+// the amend pipeline, which reaches the same temp-index seam (indexBaseDir)
+// through tryAmend. Without this the seam could regress back to the repo
+// directory on the amend side alone and the suite would stay green. Both
+// --amend forms are covered: an amend that stages files (which builds a temp
+// index) and a reword (which does not), since neither may create .git/safegit
+// or move HEAD.
+func TestAmendDryRunLeavesNoSafegitDir(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"amend with files", []string{"--dry-run", "commit", "--amend", "-m", "preview amend", "--", "new.txt"}},
+		{"reword", []string{"--dry-run", "commit", "--amend", "-m", "preview reword"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, _ := newRawSecretRepo(t)
+			writeRepoFile(t, dir, "new.txt", "new content\n")
+			headBefore := revParseHEAD(t, dir)
+
+			// Two passes: a leftover .git/safegit without config.json is what
+			// makes the *next* invocation in the same repo die on the missing
+			// config, so the second pass is the one that shows the damage.
+			for _, pass := range []string{"first", "second"} {
+				stdout, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv, tc.args...)
+				if code != 0 {
+					t.Fatalf("%s --dry-run (%s pass) failed (code %d): stdout=%s stderr=%s",
+						tc.name, pass, code, stdout, stderr)
+				}
+				assertNoSafegitDir(t, dir, pass+" --dry-run "+tc.name)
+			}
+
+			if got := revParseHEAD(t, dir); got != headBefore {
+				t.Errorf("HEAD moved during a dry-run %s: %s -> %s", tc.name, headBefore[:12], got[:12])
+			}
+		})
+	}
+}
+
+// previewDirLeftovers returns the names of the safegit-preview-* entries left
+// in root.
+func previewDirLeftovers(t *testing.T, root string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatalf("reading temp root %s: %v", root, err)
+	}
+	var leftovers []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), "safegit-preview-") {
+			leftovers = append(leftovers, e.Name())
+		}
+	}
+	return leftovers
+}
+
+// TestCommitDryRunCleansUpPreviewTempDir: routing the preview index out of the
+// repository moves the cleanup obligation to the OS temp root, where nothing
+// garbage-collects it (the doctor only sweeps .git/safegit/tmp). The
+// per-invocation safegit-preview-* directory must therefore be removed on the
+// way out of every path, not just the one where a commit object gets built.
+// TMPDIR is pointed at a directory this test owns, so the assertion sees only
+// what this test's own invocations created.
+func TestCommitDryRunCleansUpPreviewTempDir(t *testing.T) {
+	dir, _ := newRawSecretRepo(t)
+	writeRepoFile(t, dir, "new.txt", "new content\n")
+
+	tmpRoot := filepath.Join(t.TempDir(), "preview-tmp")
+	if err := os.MkdirAll(tmpRoot, 0755); err != nil {
+		t.Fatalf("creating the test-owned temp root: %v", err)
+	}
+	env := append([]string{"TMPDIR=" + tmpRoot}, dryRunScrubEnv...)
+
+	// Success path: a preview that stages, writes the tree and builds the
+	// commit object.
+	stdout, stderr, code := runSafegitEnv(t, dir, env,
+		"--dry-run", "commit", "-m", "preview", "--", "new.txt")
+	if code != 0 {
+		t.Fatalf("dry-run commit failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if leftovers := previewDirLeftovers(t, tmpRoot); len(leftovers) > 0 {
+		t.Errorf("a successful dry-run commit left preview dirs behind in %s: %v", tmpRoot, leftovers)
+	}
+
+	// Failure path: the temp index is created and the run then aborts on the
+	// unchanged tree, so the cleanup has to run on the error return too.
+	_, stderr, code = runSafegitEnv(t, dir, env,
+		"--dry-run", "commit", "-m", "preview", "--", "secret.txt")
+	if code == 0 {
+		t.Fatalf("a dry-run commit of an unchanged file must fail, got code 0")
+	}
+	if !strings.Contains(stderr, "nothing to commit") {
+		t.Fatalf("expected a nothing-to-commit failure, got: %s", stderr)
+	}
+	if leftovers := previewDirLeftovers(t, tmpRoot); len(leftovers) > 0 {
+		t.Errorf("a failed dry-run commit left preview dirs behind in %s: %v", tmpRoot, leftovers)
+	}
+
+	// The counterpart assertion: nothing went into the repository either, so
+	// the preview index really did live under the temp root.
+	assertNoSafegitDir(t, dir, "dry-run commit with TMPDIR set")
+}
+
 // TestHalfInitializedSafegitDirIsRepaired: a .git/safegit/ that exists without
 // config.json is a half-initialized repository -- any stray subdirectory puts it
 // there. Initialization must complete such a directory instead of reading the
