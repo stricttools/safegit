@@ -141,7 +141,13 @@ func (p *Pipeline) tryAmend(
 	// Use headSHA (resolved above) instead of ref to avoid a TOCTOU race:
 	// if the ref moves between RevParse and index creation, the tree would be
 	// based on a different commit than headSHA, silently dropping files.
-	tmpIdx, err := index.New(ctx, p.SafegitDir, headSHA)
+	idxBase, idxBaseCleanup, err := p.indexBaseDir(req.DryRun)
+	if err != nil {
+		return nil, false, err
+	}
+	defer idxBaseCleanup()
+
+	tmpIdx, err := index.New(ctx, idxBase, headSHA)
 	if err != nil {
 		return nil, false, fmt.Errorf("creating tmp index: %w", err)
 	}
