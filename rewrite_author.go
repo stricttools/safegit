@@ -47,7 +47,9 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	sgDir := repo.SafegitDir(gitDir)
 	ctx := context.Background()
 
-	requireCleanTree(ctx, flags, cmd)
+	// The clean-tree requirement belongs to the execute path only, so it is
+	// checked after the dry-run branch below. A preview is exactly what a dirty
+	// working tree is for.
 
 	// Dry-run mode: purely read-only, so it returns before the config load and
 	// before contending for the rewrite lock (same shape as the scrub siblings).
@@ -121,6 +123,9 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		}
 		return 0
 	}
+
+	// Execute path only: a rewrite of a dirty tree would lose the uncommitted work.
+	requireCleanTree(ctx, flags, cmd)
 
 	// Acquire rewrite lock to prevent concurrent history rewriting (execute path only)
 	cfg, err := loadConfig(flags, gitDir)

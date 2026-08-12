@@ -387,6 +387,70 @@ func TestHalfInitializedSafegitDirIsRepaired(t *testing.T) {
 	}
 }
 
+// TestAuthorRewriteDryRunPreviewsDirtyTree: `author rewrite` is the fourth
+// rewrite entry point and kept the defect its scrub siblings had -- it ran the
+// clean-tree check before its dry-run branch, so a preview refused exactly when
+// it is most wanted (mid-edit, deciding whether to rewrite at all).
+func TestAuthorRewriteDryRunPreviewsDirtyTree(t *testing.T) {
+	dir := newRepo(t)
+	headBefore := revParseHEAD(t, dir)
+
+	// Dirty the tree: one modified tracked file, one untracked file.
+	writeRepoFile(t, dir, "seed.txt", "seed modified\n")
+	writeRepoFile(t, dir, "untracked.txt", "not committed\n")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv,
+		"--dry-run", "author", "rewrite", "--old-name", "Test", "--new-name", "Renamed")
+	if code != 0 {
+		t.Fatalf("author rewrite --dry-run must preview on a dirty tree (code %d): stdout=%s stderr=%s",
+			code, stdout, stderr)
+	}
+	if strings.Contains(stderr, "working tree is dirty") {
+		t.Errorf("author rewrite --dry-run refused a dirty tree: %s", stderr)
+	}
+	if !strings.Contains(stdout, "Would rewrite") {
+		t.Errorf("expected a preview on stdout, got: %s", stdout)
+	}
+
+	// The dirty files and the history are untouched.
+	for path, want := range map[string]string{
+		"seed.txt":      "seed modified\n",
+		"untracked.txt": "not committed\n",
+	} {
+		got, err := os.ReadFile(filepath.Join(dir, path))
+		if err != nil {
+			t.Fatalf("reading %s: %v", path, err)
+		}
+		if string(got) != want {
+			t.Errorf("%s changed during a dry run: %q, want %q", path, got, want)
+		}
+	}
+	if got := revParseHEAD(t, dir); got != headBefore {
+		t.Errorf("history was rewritten by a dry run: %s -> %s", headBefore[:12], got[:12])
+	}
+}
+
+// TestAuthorRewriteExecuteStillRequiresCleanTree is the non-weakening half of
+// the same move: the execute path keeps refusing a dirty working tree, whose
+// uncommitted work a rewrite would lose.
+func TestAuthorRewriteExecuteStillRequiresCleanTree(t *testing.T) {
+	dir := newRepo(t)
+	headBefore := revParseHEAD(t, dir)
+	writeRepoFile(t, dir, "seed.txt", "seed modified\n")
+
+	_, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv,
+		"--approve-consequential", "author", "rewrite", "--old-name", "Test", "--new-name", "Renamed")
+	if code == 0 {
+		t.Fatalf("author rewrite must refuse a dirty working tree, got code 0: %s", stderr)
+	}
+	if !strings.Contains(stderr, "working tree is dirty") {
+		t.Errorf("author rewrite must say the tree is dirty, got: %s", stderr)
+	}
+	if got := revParseHEAD(t, dir); got != headBefore {
+		t.Errorf("history was rewritten despite the dirty tree: %s -> %s", headBefore[:12], got[:12])
+	}
+}
+
 // TestScrubExecuteStillRequiresCleanTree pins the other half of the same seam:
 // moving the clean-tree check past the dry-run branch must not weaken the
 // execute path, which still refuses a dirty working tree.
