@@ -2,7 +2,7 @@
   "schema_version": 1,
   "name": "safegit",
   "slug": "safegit",
-  "version": "0.25.1",
+  "version": "0.26.0",
   "description": "",
   "language": "go",
   "base_url": "https://safegit.smmh.dev",
@@ -10,229 +10,4139 @@
     {
       "path": "architecture.md",
       "title": "Architecture",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "Architecture",
+          "anchor": "architecture"
+        },
+        {
+          "level": 2,
+          "text": "Decision Record",
+          "anchor": "decision-record"
+        },
+        {
+          "level": 2,
+          "text": "Data Model",
+          "anchor": "data-model"
+        },
+        {
+          "level": 3,
+          "text": "Directory layout",
+          "anchor": "directory-layout"
+        },
+        {
+          "level": 3,
+          "text": "Per-invocation tmp index",
+          "anchor": "per-invocation-tmp-index"
+        },
+        {
+          "level": 3,
+          "text": "Operation log schema",
+          "anchor": "operation-log-schema"
+        },
+        {
+          "level": 3,
+          "text": "Lock file format",
+          "anchor": "lock-file-format"
+        },
+        {
+          "level": 2,
+          "text": "Commit Pipeline",
+          "anchor": "commit-pipeline"
+        },
+        {
+          "level": 3,
+          "text": "Phase A -- parallel-safe (no locks)",
+          "anchor": "phase-a-parallel-safe-no-locks"
+        },
+        {
+          "level": 3,
+          "text": "Phase B -- serialized (per-ref lock + CAS)",
+          "anchor": "phase-b-serialized-per-ref-lock-cas"
+        },
+        {
+          "level": 3,
+          "text": "Sequence summary",
+          "anchor": "sequence-summary"
+        },
+        {
+          "level": 3,
+          "text": "Wakeup mechanism",
+          "anchor": "wakeup-mechanism"
+        },
+        {
+          "level": 3,
+          "text": "Retry policy",
+          "anchor": "retry-policy"
+        },
+        {
+          "level": 2,
+          "text": "Hunk Staging",
+          "anchor": "hunk-staging"
+        },
+        {
+          "level": 3,
+          "text": "Hunk extraction",
+          "anchor": "hunk-extraction"
+        },
+        {
+          "level": 3,
+          "text": "Staging API surface",
+          "anchor": "staging-api-surface"
+        },
+        {
+          "level": 3,
+          "text": "Synthetic patch mechanism",
+          "anchor": "synthetic-patch-mechanism"
+        },
+        {
+          "level": 3,
+          "text": "Edge cases",
+          "anchor": "edge-cases"
+        },
+        {
+          "level": 3,
+          "text": "Inverse: unstage",
+          "anchor": "inverse-unstage"
+        },
+        {
+          "level": 2,
+          "text": "Pre-pre-push Hook Contract",
+          "anchor": "pre-pre-push-hook-contract"
+        },
+        {
+          "level": 3,
+          "text": "No enforcement hooks",
+          "anchor": "no-enforcement-hooks"
+        },
+        {
+          "level": 3,
+          "text": "Hook discovery",
+          "anchor": "hook-discovery"
+        },
+        {
+          "level": 3,
+          "text": "Stdin contract",
+          "anchor": "stdin-contract"
+        },
+        {
+          "level": 3,
+          "text": "Environment",
+          "anchor": "environment"
+        },
+        {
+          "level": 3,
+          "text": "Execution flow",
+          "anchor": "execution-flow"
+        },
+        {
+          "level": 3,
+          "text": "Compose with git's built-in pre-push",
+          "anchor": "compose-with-gits-built-in-pre-push"
+        },
+        {
+          "level": 3,
+          "text": "Timeout policy",
+          "anchor": "timeout-policy"
+        },
+        {
+          "level": 3,
+          "text": "Bypass",
+          "anchor": "bypass"
+        },
+        {
+          "level": 2,
+          "text": "Failure Modes",
+          "anchor": "failure-modes"
+        },
+        {
+          "level": 3,
+          "text": "Process crashes mid-stage",
+          "anchor": "process-crashes-mid-stage"
+        },
+        {
+          "level": 3,
+          "text": "Process crashes mid-commit (lock held)",
+          "anchor": "process-crashes-mid-commit-lock-held"
+        },
+        {
+          "level": 3,
+          "text": "Two invocations commit to same branch simultaneously",
+          "anchor": "two-invocations-commit-to-same-branch-simultaneously"
+        },
+        {
+          "level": 3,
+          "text": "Network failure mid-push",
+          "anchor": "network-failure-mid-push"
+        },
+        {
+          "level": 3,
+          "text": "Disk full during object write",
+          "anchor": "disk-full-during-object-write"
+        },
+        {
+          "level": 3,
+          "text": "Cross-machine / NFS use is unsupported",
+          "anchor": "cross-machine-nfs-use-is-unsupported"
+        },
+        {
+          "level": 3,
+          "text": "Pre-pre-push hook hangs",
+          "anchor": "pre-pre-push-hook-hangs"
+        },
+        {
+          "level": 3,
+          "text": "Raw-git bypass",
+          "anchor": "raw-git-bypass"
+        }
+      ]
     },
     {
       "path": "cli-author.md",
       "title": "safegit author",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit author",
+          "anchor": "safegit-author"
+        },
+        {
+          "level": 2,
+          "text": "author check",
+          "anchor": "author-check"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags"
+        },
+        {
+          "level": 2,
+          "text": "author list",
+          "anchor": "author-list"
+        },
+        {
+          "level": 2,
+          "text": "author rewrite",
+          "anchor": "author-rewrite"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-1"
+        }
+      ]
     },
     {
       "path": "cli-backup.md",
       "title": "safegit backup",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit backup",
+          "anchor": "safegit-backup"
+        },
+        {
+          "level": 2,
+          "text": "backup backup",
+          "anchor": "backup-backup"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments"
+        },
+        {
+          "level": 3,
+          "text": "Grants",
+          "anchor": "grants"
+        },
+        {
+          "level": 2,
+          "text": "backup list",
+          "anchor": "backup-list"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-1"
+        },
+        {
+          "level": 2,
+          "text": "backup restore",
+          "anchor": "backup-restore"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-2"
+        }
+      ]
     },
     {
       "path": "cli-bisect.md",
       "title": "safegit bisect",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit bisect",
+          "anchor": "safegit-bisect"
+        }
+      ]
     },
     {
       "path": "cli-checkout.md",
       "title": "safegit checkout",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit checkout",
+          "anchor": "safegit-checkout"
+        }
+      ]
     },
     {
       "path": "cli-cherry-pick.md",
       "title": "safegit cherry-pick",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit cherry-pick",
+          "anchor": "safegit-cherry-pick"
+        }
+      ]
     },
     {
       "path": "cli-commit.md",
       "title": "safegit commit",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit commit",
+          "anchor": "safegit-commit"
+        },
+        {
+          "level": 2,
+          "text": "Flags",
+          "anchor": "flags"
+        },
+        {
+          "level": 2,
+          "text": "Arguments",
+          "anchor": "arguments"
+        },
+        {
+          "level": 2,
+          "text": "Grants",
+          "anchor": "grants"
+        }
+      ]
     },
     {
       "path": "cli-config.md",
       "title": "safegit config",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit config",
+          "anchor": "safegit-config"
+        },
+        {
+          "level": 2,
+          "text": "config get",
+          "anchor": "config-get"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments"
+        },
+        {
+          "level": 2,
+          "text": "config set",
+          "anchor": "config-set"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-1"
+        },
+        {
+          "level": 2,
+          "text": "config show",
+          "anchor": "config-show"
+        }
+      ]
     },
     {
       "path": "cli-doctor.md",
       "title": "safegit doctor",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit doctor",
+          "anchor": "safegit-doctor"
+        },
+        {
+          "level": 2,
+          "text": "Flags",
+          "anchor": "flags"
+        }
+      ]
     },
     {
       "path": "cli-hook.md",
       "title": "safegit hook",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit hook",
+          "anchor": "safegit-hook"
+        },
+        {
+          "level": 2,
+          "text": "hook install",
+          "anchor": "hook-install"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments"
+        },
+        {
+          "level": 2,
+          "text": "hook list",
+          "anchor": "hook-list"
+        },
+        {
+          "level": 2,
+          "text": "hook run",
+          "anchor": "hook-run"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-1"
+        }
+      ]
     },
     {
       "path": "cli-index.md",
       "title": "safegit CLI Reference",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit CLI Reference",
+          "anchor": "safegit-cli-reference"
+        },
+        {
+          "level": 2,
+          "text": "Commands",
+          "anchor": "commands"
+        },
+        {
+          "level": 2,
+          "text": "Command Groups",
+          "anchor": "command-groups"
+        },
+        {
+          "level": 2,
+          "text": "Global flags",
+          "anchor": "global-flags"
+        },
+        {
+          "level": 2,
+          "text": "Framework flags",
+          "anchor": "framework-flags"
+        },
+        {
+          "level": 2,
+          "text": "Infrastructure",
+          "anchor": "infrastructure"
+        },
+        {
+          "level": 3,
+          "text": "Handshake variables",
+          "anchor": "handshake-variables"
+        },
+        {
+          "level": 2,
+          "text": "Deprecated",
+          "anchor": "deprecated"
+        }
+      ]
     },
     {
       "path": "cli-merge.md",
       "title": "safegit merge",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit merge",
+          "anchor": "safegit-merge"
+        }
+      ]
     },
     {
       "path": "cli-pull.md",
       "title": "safegit pull",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit pull",
+          "anchor": "safegit-pull"
+        },
+        {
+          "level": 2,
+          "text": "Flags",
+          "anchor": "flags"
+        },
+        {
+          "level": 2,
+          "text": "Arguments",
+          "anchor": "arguments"
+        }
+      ]
     },
     {
       "path": "cli-push.md",
       "title": "safegit push",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit push",
+          "anchor": "safegit-push"
+        },
+        {
+          "level": 2,
+          "text": "Flags",
+          "anchor": "flags"
+        },
+        {
+          "level": 2,
+          "text": "Arguments",
+          "anchor": "arguments"
+        },
+        {
+          "level": 2,
+          "text": "Grants",
+          "anchor": "grants"
+        }
+      ]
     },
     {
       "path": "cli-rebase.md",
       "title": "safegit rebase",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit rebase",
+          "anchor": "safegit-rebase"
+        }
+      ]
     },
     {
       "path": "cli-reset.md",
       "title": "safegit reset",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit reset",
+          "anchor": "safegit-reset"
+        }
+      ]
     },
     {
       "path": "cli-revert.md",
       "title": "safegit revert",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit revert",
+          "anchor": "safegit-revert"
+        }
+      ]
     },
     {
       "path": "cli-scan.md",
       "title": "safegit scan",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit scan",
+          "anchor": "safegit-scan"
+        },
+        {
+          "level": 2,
+          "text": "Flags",
+          "anchor": "flags"
+        }
+      ]
     },
     {
       "path": "cli-scrub.md",
       "title": "safegit scrub",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit scrub",
+          "anchor": "safegit-scrub"
+        },
+        {
+          "level": 2,
+          "text": "scrub file",
+          "anchor": "scrub-file"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments"
+        },
+        {
+          "level": 2,
+          "text": "scrub match",
+          "anchor": "scrub-match"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-1"
+        },
+        {
+          "level": 2,
+          "text": "scrub run",
+          "anchor": "scrub-run"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-2"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-1"
+        },
+        {
+          "level": 2,
+          "text": "scrub verify",
+          "anchor": "scrub-verify"
+        }
+      ]
     },
     {
       "path": "cli-undo.md",
       "title": "safegit undo",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit undo",
+          "anchor": "safegit-undo"
+        },
+        {
+          "level": 2,
+          "text": "Flags",
+          "anchor": "flags"
+        },
+        {
+          "level": 2,
+          "text": "Grants",
+          "anchor": "grants"
+        }
+      ]
     },
     {
       "path": "cli-unlock.md",
       "title": "safegit unlock",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit unlock",
+          "anchor": "safegit-unlock"
+        },
+        {
+          "level": 2,
+          "text": "Arguments",
+          "anchor": "arguments"
+        }
+      ]
     },
     {
       "path": "cli-version.md",
       "title": "safegit version",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit version",
+          "anchor": "safegit-version"
+        }
+      ]
     },
     {
       "path": "commands-guide.md",
       "title": "Commands Guide",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "Commands Guide",
+          "anchor": "commands-guide"
+        },
+        {
+          "level": 2,
+          "text": "Global Flags",
+          "anchor": "global-flags"
+        },
+        {
+          "level": 2,
+          "text": "commit",
+          "anchor": "commit"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees"
+        },
+        {
+          "level": 2,
+          "text": "undo",
+          "anchor": "undo"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-1"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-1"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-1"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-1"
+        },
+        {
+          "level": 2,
+          "text": "push",
+          "anchor": "push"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-2"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-2"
+        },
+        {
+          "level": 3,
+          "text": "Mutex Group (pick at most one)",
+          "anchor": "mutex-group-pick-at-most-one"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-1"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-2"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-2"
+        },
+        {
+          "level": 3,
+          "text": "Exit Codes",
+          "anchor": "exit-codes"
+        },
+        {
+          "level": 2,
+          "text": "pull",
+          "anchor": "pull"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-3"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-3"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-2"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-3"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-3"
+        },
+        {
+          "level": 2,
+          "text": "backup",
+          "anchor": "backup"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-4"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-3"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-4"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-4"
+        },
+        {
+          "level": 3,
+          "text": "Plain git equivalents",
+          "anchor": "plain-git-equivalents"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-4"
+        },
+        {
+          "level": 3,
+          "text": "Exit Codes",
+          "anchor": "exit-codes-1"
+        },
+        {
+          "level": 2,
+          "text": "scan",
+          "anchor": "scan"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-5"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-5"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-5"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-5"
+        },
+        {
+          "level": 2,
+          "text": "scrub file",
+          "anchor": "scrub-file"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-6"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-6"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-4"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-6"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-6"
+        },
+        {
+          "level": 2,
+          "text": "scrub match",
+          "anchor": "scrub-match"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-7"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-7"
+        },
+        {
+          "level": 3,
+          "text": "Mutex Group: Replacement Mode (pick one)",
+          "anchor": "mutex-group-replacement-mode-pick-one"
+        },
+        {
+          "level": 3,
+          "text": "Mutex Group: Range (pick one)",
+          "anchor": "mutex-group-range-pick-one"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-7"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-7"
+        },
+        {
+          "level": 2,
+          "text": "scrub run",
+          "anchor": "scrub-run"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-8"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-8"
+        },
+        {
+          "level": 3,
+          "text": "Mutex Group: Range (pick one)",
+          "anchor": "mutex-group-range-pick-one-1"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-5"
+        },
+        {
+          "level": 3,
+          "text": "Recipe File Format",
+          "anchor": "recipe-file-format"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-8"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-8"
+        },
+        {
+          "level": 2,
+          "text": "scrub verify",
+          "anchor": "scrub-verify"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-9"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-9"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-9"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-9"
+        },
+        {
+          "level": 2,
+          "text": "doctor",
+          "anchor": "doctor"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-10"
+        },
+        {
+          "level": 3,
+          "text": "Flags (Mutex Group -- pick at most one)",
+          "anchor": "flags-mutex-group-pick-at-most-one"
+        },
+        {
+          "level": 3,
+          "text": "Health Checks",
+          "anchor": "health-checks"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-10"
+        },
+        {
+          "level": 3,
+          "text": "What `--fix` Repairs",
+          "anchor": "what-fix-repairs"
+        },
+        {
+          "level": 2,
+          "text": "unlock",
+          "anchor": "unlock"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-11"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-6"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-11"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-10"
+        },
+        {
+          "level": 2,
+          "text": "author list",
+          "anchor": "author-list"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-12"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-12"
+        },
+        {
+          "level": 3,
+          "text": "Output Format",
+          "anchor": "output-format"
+        },
+        {
+          "level": 2,
+          "text": "author check",
+          "anchor": "author-check"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-13"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-10"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-13"
+        },
+        {
+          "level": 2,
+          "text": "author rewrite",
+          "anchor": "author-rewrite"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-14"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-11"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-14"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-11"
+        },
+        {
+          "level": 2,
+          "text": "checkout",
+          "anchor": "checkout"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-15"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-7"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-15"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-12"
+        },
+        {
+          "level": 2,
+          "text": "merge",
+          "anchor": "merge"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-16"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-8"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-16"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-13"
+        },
+        {
+          "level": 2,
+          "text": "rebase",
+          "anchor": "rebase"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-17"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-9"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-17"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-14"
+        },
+        {
+          "level": 2,
+          "text": "reset",
+          "anchor": "reset"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-18"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-10"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-18"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-15"
+        },
+        {
+          "level": 2,
+          "text": "bisect",
+          "anchor": "bisect"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-19"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-11"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-19"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-16"
+        },
+        {
+          "level": 2,
+          "text": "cherry-pick",
+          "anchor": "cherry-pick"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-20"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-12"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-20"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-17"
+        },
+        {
+          "level": 2,
+          "text": "revert",
+          "anchor": "revert"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-21"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-13"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-21"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-18"
+        },
+        {
+          "level": 2,
+          "text": "config show",
+          "anchor": "config-show"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-22"
+        },
+        {
+          "level": 2,
+          "text": "config get",
+          "anchor": "config-get"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-14"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-23"
+        },
+        {
+          "level": 2,
+          "text": "config set",
+          "anchor": "config-set"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-15"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-24"
+        },
+        {
+          "level": 2,
+          "text": "hook list",
+          "anchor": "hook-list"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-25"
+        },
+        {
+          "level": 2,
+          "text": "hook run",
+          "anchor": "hook-run"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-16"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-26"
+        },
+        {
+          "level": 3,
+          "text": "`--dry-run` is refused",
+          "anchor": "dry-run-is-refused"
+        },
+        {
+          "level": 2,
+          "text": "hook install",
+          "anchor": "hook-install"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-17"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-27"
+        },
+        {
+          "level": 2,
+          "text": "version",
+          "anchor": "version"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-28"
+        },
+        {
+          "level": 2,
+          "text": "Configuration Reference",
+          "anchor": "configuration-reference"
+        },
+        {
+          "level": 2,
+          "text": "Exit Code Reference",
+          "anchor": "exit-code-reference"
+        }
+      ]
     },
     {
       "path": "concurrency-guide.md",
       "title": "Concurrency Guide",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "Concurrency Guide",
+          "anchor": "concurrency-guide"
+        },
+        {
+          "level": 2,
+          "text": "The problem: multiple agents, one worktree",
+          "anchor": "the-problem-multiple-agents-one-worktree"
+        },
+        {
+          "level": 2,
+          "text": "Two-phase commit pipeline",
+          "anchor": "two-phase-commit-pipeline"
+        },
+        {
+          "level": 2,
+          "text": "internal/commit",
+          "anchor": "internalcommit"
+        },
+        {
+          "level": 3,
+          "text": "ExitCASExhausted",
+          "anchor": "exitcasexhausted"
+        },
+        {
+          "level": 3,
+          "text": "ExitWriteTree",
+          "anchor": "exitwritetree"
+        },
+        {
+          "level": 3,
+          "text": "ExitCommitTree",
+          "anchor": "exitcommittree"
+        },
+        {
+          "level": 3,
+          "text": "AmendRequest",
+          "anchor": "amendrequest"
+        },
+        {
+          "level": 3,
+          "text": "AmendResult",
+          "anchor": "amendresult"
+        },
+        {
+          "level": 3,
+          "text": "RewordRequest",
+          "anchor": "rewordrequest"
+        },
+        {
+          "level": 3,
+          "text": "RewordResult",
+          "anchor": "rewordresult"
+        },
+        {
+          "level": 3,
+          "text": "CommitError",
+          "anchor": "commiterror"
+        },
+        {
+          "level": 3,
+          "text": "Pipeline",
+          "anchor": "pipeline"
+        },
+        {
+          "level": 3,
+          "text": "FileSpec",
+          "anchor": "filespec"
+        },
+        {
+          "level": 3,
+          "text": "CommitRequest",
+          "anchor": "commitrequest"
+        },
+        {
+          "level": 3,
+          "text": "CommitResult",
+          "anchor": "commitresult"
+        },
+        {
+          "level": 3,
+          "text": "Pipeline.Amend",
+          "anchor": "pipelineamend"
+        },
+        {
+          "level": 3,
+          "text": "Pipeline.Reword",
+          "anchor": "pipelinereword"
+        },
+        {
+          "level": 3,
+          "text": "CommitError.Error",
+          "anchor": "commiterrorerror"
+        },
+        {
+          "level": 3,
+          "text": "Pipeline.Execute",
+          "anchor": "pipelineexecute"
+        },
+        {
+          "level": 3,
+          "text": "Phase A: parallel-safe object construction",
+          "anchor": "phase-a-parallel-safe-object-construction"
+        },
+        {
+          "level": 2,
+          "text": "internal/index",
+          "anchor": "internalindex"
+        },
+        {
+          "level": 3,
+          "text": "TmpIndex",
+          "anchor": "tmpindex"
+        },
+        {
+          "level": 3,
+          "text": "New",
+          "anchor": "new"
+        },
+        {
+          "level": 3,
+          "text": "NewEmpty",
+          "anchor": "newempty"
+        },
+        {
+          "level": 3,
+          "text": "GarbageCollect",
+          "anchor": "garbagecollect"
+        },
+        {
+          "level": 3,
+          "text": "GarbageCollectDryRun",
+          "anchor": "garbagecollectdryrun"
+        },
+        {
+          "level": 3,
+          "text": "TmpIndex.Cleanup",
+          "anchor": "tmpindexcleanup"
+        },
+        {
+          "level": 3,
+          "text": "Phase B: serialized ref update",
+          "anchor": "phase-b-serialized-ref-update"
+        },
+        {
+          "level": 2,
+          "text": "internal/lock",
+          "anchor": "internallock"
+        },
+        {
+          "level": 3,
+          "text": "RefLock",
+          "anchor": "reflock"
+        },
+        {
+          "level": 3,
+          "text": "Acquire",
+          "anchor": "acquire"
+        },
+        {
+          "level": 3,
+          "text": "IsStale",
+          "anchor": "isstale"
+        },
+        {
+          "level": 3,
+          "text": "ForceRelease",
+          "anchor": "forcerelease"
+        },
+        {
+          "level": 3,
+          "text": "ParsePID",
+          "anchor": "parsepid"
+        },
+        {
+          "level": 3,
+          "text": "RefLock.Release",
+          "anchor": "reflockrelease"
+        },
+        {
+          "level": 3,
+          "text": "CAS retry on miss",
+          "anchor": "cas-retry-on-miss"
+        },
+        {
+          "level": 2,
+          "text": "Locking strategy",
+          "anchor": "locking-strategy"
+        },
+        {
+          "level": 3,
+          "text": "Lock file format",
+          "anchor": "lock-file-format"
+        },
+        {
+          "level": 3,
+          "text": "Stale lock recovery",
+          "anchor": "stale-lock-recovery"
+        },
+        {
+          "level": 3,
+          "text": "Polling and backoff",
+          "anchor": "polling-and-backoff"
+        },
+        {
+          "level": 3,
+          "text": "Signal handling",
+          "anchor": "signal-handling"
+        },
+        {
+          "level": 2,
+          "text": "What makes it safe vs regular git",
+          "anchor": "what-makes-it-safe-vs-regular-git"
+        },
+        {
+          "level": 3,
+          "text": "The `--no-optional-locks` flag",
+          "anchor": "the-no-optional-locks-flag"
+        },
+        {
+          "level": 2,
+          "text": "internal/git",
+          "anchor": "internalgit"
+        },
+        {
+          "level": 3,
+          "text": "ErrDetachedHead",
+          "anchor": "errdetachedhead"
+        },
+        {
+          "level": 3,
+          "text": "AuthorInfo",
+          "anchor": "authorinfo"
+        },
+        {
+          "level": 3,
+          "text": "CommitInfo",
+          "anchor": "commitinfo"
+        },
+        {
+          "level": 3,
+          "text": "TreeEntry",
+          "anchor": "treeentry"
+        },
+        {
+          "level": 3,
+          "text": "ObjectEntry",
+          "anchor": "objectentry"
+        },
+        {
+          "level": 3,
+          "text": "ObjectIterator",
+          "anchor": "objectiterator"
+        },
+        {
+          "level": 3,
+          "text": "WithDir",
+          "anchor": "withdir"
+        },
+        {
+          "level": 3,
+          "text": "Run",
+          "anchor": "run"
+        },
+        {
+          "level": 3,
+          "text": "RunWithEnv",
+          "anchor": "runwithenv"
+        },
+        {
+          "level": 3,
+          "text": "RunWithEnvStdin",
+          "anchor": "runwithenvstdin"
+        },
+        {
+          "level": 3,
+          "text": "RepoRoot",
+          "anchor": "reporoot"
+        },
+        {
+          "level": 3,
+          "text": "GitDir",
+          "anchor": "gitdir"
+        },
+        {
+          "level": 3,
+          "text": "HeadRef",
+          "anchor": "headref"
+        },
+        {
+          "level": 3,
+          "text": "RevParse",
+          "anchor": "revparse"
+        },
+        {
+          "level": 3,
+          "text": "ReadTree",
+          "anchor": "readtree"
+        },
+        {
+          "level": 3,
+          "text": "WriteTree",
+          "anchor": "writetree"
+        },
+        {
+          "level": 3,
+          "text": "CommitTree",
+          "anchor": "committree"
+        },
+        {
+          "level": 3,
+          "text": "UpdateRef",
+          "anchor": "updateref"
+        },
+        {
+          "level": 3,
+          "text": "DeleteRef",
+          "anchor": "deleteref"
+        },
+        {
+          "level": 3,
+          "text": "AddFile",
+          "anchor": "addfile"
+        },
+        {
+          "level": 3,
+          "text": "RmCached",
+          "anchor": "rmcached"
+        },
+        {
+          "level": 3,
+          "text": "IsTracked",
+          "anchor": "istracked"
+        },
+        {
+          "level": 3,
+          "text": "ListSkipWorktreeFiles",
+          "anchor": "listskipworktreefiles"
+        },
+        {
+          "level": 3,
+          "text": "ListTrackedIgnoredFiles",
+          "anchor": "listtrackedignoredfiles"
+        },
+        {
+          "level": 3,
+          "text": "SyncMainIndex",
+          "anchor": "syncmainindex"
+        },
+        {
+          "level": 3,
+          "text": "SyncMainIndexWithWorktree",
+          "anchor": "syncmainindexwithworktree"
+        },
+        {
+          "level": 3,
+          "text": "RunPassthrough",
+          "anchor": "runpassthrough"
+        },
+        {
+          "level": 3,
+          "text": "CommonGitDir",
+          "anchor": "commongitdir"
+        },
+        {
+          "level": 3,
+          "text": "CommonGitDirOf",
+          "anchor": "commongitdirof"
+        },
+        {
+          "level": 3,
+          "text": "IsIgnored",
+          "anchor": "isignored"
+        },
+        {
+          "level": 3,
+          "text": "IsAncestorOf",
+          "anchor": "isancestorof"
+        },
+        {
+          "level": 3,
+          "text": "CommitMessage",
+          "anchor": "commitmessage"
+        },
+        {
+          "level": 3,
+          "text": "ParseCommit",
+          "anchor": "parsecommit"
+        },
+        {
+          "level": 3,
+          "text": "CommitTreeWithAuthor",
+          "anchor": "committreewithauthor"
+        },
+        {
+          "level": 3,
+          "text": "LsTreeAll",
+          "anchor": "lstreeall"
+        },
+        {
+          "level": 3,
+          "text": "LsTree",
+          "anchor": "lstree"
+        },
+        {
+          "level": 3,
+          "text": "HashObject",
+          "anchor": "hashobject"
+        },
+        {
+          "level": 3,
+          "text": "HashObjectWrite",
+          "anchor": "hashobjectwrite"
+        },
+        {
+          "level": 3,
+          "text": "HashObjectWriteBytes",
+          "anchor": "hashobjectwritebytes"
+        },
+        {
+          "level": 3,
+          "text": "CatFileBlob",
+          "anchor": "catfileblob"
+        },
+        {
+          "level": 3,
+          "text": "MkTree",
+          "anchor": "mktree"
+        },
+        {
+          "level": 3,
+          "text": "CatFileBatchAll",
+          "anchor": "catfilebatchall"
+        },
+        {
+          "level": 3,
+          "text": "CatFileBatchSHAs",
+          "anchor": "catfilebatchshas"
+        },
+        {
+          "level": 3,
+          "text": "RunWithGitDir",
+          "anchor": "runwithgitdir"
+        },
+        {
+          "level": 3,
+          "text": "CatFileBatchAllWithDir",
+          "anchor": "catfilebatchallwithdir"
+        },
+        {
+          "level": 3,
+          "text": "CatFileBatchSHAsWithDir",
+          "anchor": "catfilebatchshaswithdir"
+        },
+        {
+          "level": 3,
+          "text": "SplitNonEmpty",
+          "anchor": "splitnonempty"
+        },
+        {
+          "level": 3,
+          "text": "ForEachRef",
+          "anchor": "foreachref"
+        },
+        {
+          "level": 3,
+          "text": "LsRemoteBulk",
+          "anchor": "lsremotebulk"
+        },
+        {
+          "level": 3,
+          "text": "ObjectIterator.Next",
+          "anchor": "objectiteratornext"
+        },
+        {
+          "level": 3,
+          "text": "ObjectIterator.Close",
+          "anchor": "objectiteratorclose"
+        },
+        {
+          "level": 2,
+          "text": "Operation log and undo",
+          "anchor": "operation-log-and-undo"
+        },
+        {
+          "level": 2,
+          "text": "internal/oplog",
+          "anchor": "internaloplog"
+        },
+        {
+          "level": 3,
+          "text": "Entry",
+          "anchor": "entry"
+        },
+        {
+          "level": 3,
+          "text": "Append",
+          "anchor": "append"
+        },
+        {
+          "level": 3,
+          "text": "Read",
+          "anchor": "read"
+        },
+        {
+          "level": 3,
+          "text": "LogSize",
+          "anchor": "logsize"
+        },
+        {
+          "level": 3,
+          "text": "Rotate",
+          "anchor": "rotate"
+        },
+        {
+          "level": 3,
+          "text": "LastRefUpdate",
+          "anchor": "lastrefupdate"
+        },
+        {
+          "level": 3,
+          "text": "LastRefUpdateForSession",
+          "anchor": "lastrefupdateforsession"
+        },
+        {
+          "level": 3,
+          "text": "TipSHA",
+          "anchor": "tipsha"
+        },
+        {
+          "level": 2,
+          "text": "Coordination guards for tree-mutating operations",
+          "anchor": "coordination-guards-for-tree-mutating-operations"
+        },
+        {
+          "level": 2,
+          "text": "internal/coord",
+          "anchor": "internalcoord"
+        },
+        {
+          "level": 3,
+          "text": "DirtyState",
+          "anchor": "dirtystate"
+        },
+        {
+          "level": 3,
+          "text": "Check",
+          "anchor": "check"
+        },
+        {
+          "level": 3,
+          "text": "DirtyState.Refuse",
+          "anchor": "dirtystaterefuse"
+        },
+        {
+          "level": 2,
+          "text": "Session attribution via trailers",
+          "anchor": "session-attribution-via-trailers"
+        },
+        {
+          "level": 2,
+          "text": "internal/trailer",
+          "anchor": "internaltrailer"
+        },
+        {
+          "level": 3,
+          "text": "SessionKey",
+          "anchor": "sessionkey"
+        },
+        {
+          "level": 3,
+          "text": "Inject",
+          "anchor": "inject"
+        },
+        {
+          "level": 3,
+          "text": "AppendCustom",
+          "anchor": "appendcustom"
+        },
+        {
+          "level": 3,
+          "text": "SplitBodyTrailers",
+          "anchor": "splitbodytrailers"
+        },
+        {
+          "level": 3,
+          "text": "ReplaceIdentity",
+          "anchor": "replaceidentity"
+        },
+        {
+          "level": 2,
+          "text": "Worktree support",
+          "anchor": "worktree-support"
+        },
+        {
+          "level": 2,
+          "text": "internal/repo",
+          "anchor": "internalrepo"
+        },
+        {
+          "level": 3,
+          "text": "Config",
+          "anchor": "config"
+        },
+        {
+          "level": 3,
+          "text": "CommitConfig",
+          "anchor": "commitconfig"
+        },
+        {
+          "level": 3,
+          "text": "LockConfig",
+          "anchor": "lockconfig"
+        },
+        {
+          "level": 3,
+          "text": "HooksConfig",
+          "anchor": "hooksconfig"
+        },
+        {
+          "level": 3,
+          "text": "PrePrePushConfig",
+          "anchor": "preprepushconfig"
+        },
+        {
+          "level": 3,
+          "text": "PushConfig",
+          "anchor": "pushconfig"
+        },
+        {
+          "level": 3,
+          "text": "LogConfig",
+          "anchor": "logconfig"
+        },
+        {
+          "level": 3,
+          "text": "DefaultConfig",
+          "anchor": "defaultconfig"
+        },
+        {
+          "level": 3,
+          "text": "SafegitDir",
+          "anchor": "safegitdir"
+        },
+        {
+          "level": 3,
+          "text": "SharedSafegitDir",
+          "anchor": "sharedsafegitdir"
+        },
+        {
+          "level": 3,
+          "text": "IsInitialized",
+          "anchor": "isinitialized"
+        },
+        {
+          "level": 3,
+          "text": "Init",
+          "anchor": "init"
+        },
+        {
+          "level": 3,
+          "text": "EnsureInitialized",
+          "anchor": "ensureinitialized"
+        },
+        {
+          "level": 3,
+          "text": "Uninstall",
+          "anchor": "uninstall"
+        },
+        {
+          "level": 3,
+          "text": "LoadConfig",
+          "anchor": "loadconfig"
+        },
+        {
+          "level": 3,
+          "text": "LoadConfigFrom",
+          "anchor": "loadconfigfrom"
+        },
+        {
+          "level": 3,
+          "text": "MarshalConfig",
+          "anchor": "marshalconfig"
+        },
+        {
+          "level": 3,
+          "text": "ConfigPath",
+          "anchor": "configpath"
+        },
+        {
+          "level": 3,
+          "text": "SaveConfigTo",
+          "anchor": "saveconfigto"
+        },
+        {
+          "level": 3,
+          "text": "SaveConfig",
+          "anchor": "saveconfig"
+        },
+        {
+          "level": 3,
+          "text": "GetConfigValue",
+          "anchor": "getconfigvalue"
+        },
+        {
+          "level": 3,
+          "text": "SetConfigValue",
+          "anchor": "setconfigvalue"
+        },
+        {
+          "level": 3,
+          "text": "ValidConfigKeys",
+          "anchor": "validconfigkeys"
+        },
+        {
+          "level": 3,
+          "text": "Config.Validate",
+          "anchor": "configvalidate"
+        },
+        {
+          "level": 2,
+          "text": "The scrub system",
+          "anchor": "the-scrub-system"
+        },
+        {
+          "level": 3,
+          "text": "Rewrite lock",
+          "anchor": "rewrite-lock"
+        },
+        {
+          "level": 3,
+          "text": "Crash-safe rewrite maps",
+          "anchor": "crash-safe-rewrite-maps"
+        },
+        {
+          "level": 3,
+          "text": "Rewrites in release-managed repositories",
+          "anchor": "rewrites-in-release-managed-repositories"
+        },
+        {
+          "level": 3,
+          "text": "The rewrite walk",
+          "anchor": "the-rewrite-walk"
+        },
+        {
+          "level": 2,
+          "text": "Common concurrent workflows",
+          "anchor": "common-concurrent-workflows"
+        },
+        {
+          "level": 3,
+          "text": "Multiple sessions editing different files on the same branch",
+          "anchor": "multiple-sessions-editing-different-files-on-the-same-branch"
+        },
+        {
+          "level": 3,
+          "text": "Multiple sessions working on different branches",
+          "anchor": "multiple-sessions-working-on-different-branches"
+        },
+        {
+          "level": 3,
+          "text": "Cross-branch commits",
+          "anchor": "cross-branch-commits"
+        },
+        {
+          "level": 3,
+          "text": "Amend while another session is committing",
+          "anchor": "amend-while-another-session-is-committing"
+        },
+        {
+          "level": 3,
+          "text": "Cleanup after crashes",
+          "anchor": "cleanup-after-crashes"
+        },
+        {
+          "level": 2,
+          "text": "Temporary index garbage collection",
+          "anchor": "temporary-index-garbage-collection"
+        },
+        {
+          "level": 2,
+          "text": "internal/index",
+          "anchor": "internalindex-1"
+        },
+        {
+          "level": 3,
+          "text": "TmpIndex",
+          "anchor": "tmpindex-1"
+        },
+        {
+          "level": 3,
+          "text": "New",
+          "anchor": "new-1"
+        },
+        {
+          "level": 3,
+          "text": "NewEmpty",
+          "anchor": "newempty-1"
+        },
+        {
+          "level": 3,
+          "text": "GarbageCollect",
+          "anchor": "garbagecollect-1"
+        },
+        {
+          "level": 3,
+          "text": "GarbageCollectDryRun",
+          "anchor": "garbagecollectdryrun-1"
+        },
+        {
+          "level": 3,
+          "text": "TmpIndex.Cleanup",
+          "anchor": "tmpindexcleanup-1"
+        }
+      ]
     },
     {
       "path": "gen-index.md",
       "title": "API Reference",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "API Reference",
+          "anchor": "api-reference"
+        }
+      ]
     },
     {
       "path": "index.md",
       "title": "safegit",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit",
+          "anchor": "safegit"
+        },
+        {
+          "level": 2,
+          "text": "API Reference",
+          "anchor": "api-reference"
+        },
+        {
+          "level": 2,
+          "text": ".",
+          "anchor": ""
+        },
+        {
+          "level": 3,
+          "text": "ScrubVerifyPolicyResult",
+          "anchor": "scrubverifypolicyresult"
+        },
+        {
+          "level": 3,
+          "text": "ScrubVerifyResult",
+          "anchor": "scrubverifyresult"
+        },
+        {
+          "level": 3,
+          "text": "Recipe",
+          "anchor": "recipe"
+        },
+        {
+          "level": 3,
+          "text": "RecipeOperation",
+          "anchor": "recipeoperation"
+        },
+        {
+          "level": 3,
+          "text": "ParsedRecipe",
+          "anchor": "parsedrecipe"
+        },
+        {
+          "level": 3,
+          "text": "RewriteAuthorResult",
+          "anchor": "rewriteauthorresult"
+        },
+        {
+          "level": 3,
+          "text": "RewriteAuthorDryRunResult",
+          "anchor": "rewriteauthordryrunresult"
+        },
+        {
+          "level": 3,
+          "text": "RewriteMapStart",
+          "anchor": "rewritemapstart"
+        },
+        {
+          "level": 3,
+          "text": "RewriteMapRefs",
+          "anchor": "rewritemaprefs"
+        },
+        {
+          "level": 3,
+          "text": "RewriteMapComplete",
+          "anchor": "rewritemapcomplete"
+        },
+        {
+          "level": 3,
+          "text": "AnnotationRewriteFunc",
+          "anchor": "annotationrewritefunc"
+        },
+        {
+          "level": 3,
+          "text": "VerifyFunc",
+          "anchor": "verifyfunc"
+        },
+        {
+          "level": 3,
+          "text": "RewriteResult",
+          "anchor": "rewriteresult"
+        },
+        {
+          "level": 3,
+          "text": "ScanResult",
+          "anchor": "scanresult"
+        },
+        {
+          "level": 3,
+          "text": "ScanMatchJSON",
+          "anchor": "scanmatchjson"
+        },
+        {
+          "level": 3,
+          "text": "ScrubFileResult",
+          "anchor": "scrubfileresult"
+        },
+        {
+          "level": 3,
+          "text": "ScrubFileDryRunResult",
+          "anchor": "scrubfiledryrunresult"
+        },
+        {
+          "level": 3,
+          "text": "TagBodyTransformFunc",
+          "anchor": "tagbodytransformfunc"
+        },
+        {
+          "level": 3,
+          "text": "ScrubMatchResult",
+          "anchor": "scrubmatchresult"
+        },
+        {
+          "level": 3,
+          "text": "ScrubMatchDryRunResult",
+          "anchor": "scrubmatchdryrunresult"
+        },
+        {
+          "level": 3,
+          "text": "ScrubPolicy",
+          "anchor": "scrubpolicy"
+        },
+        {
+          "level": 3,
+          "text": "ScrubRunResult",
+          "anchor": "scrubrunresult"
+        },
+        {
+          "level": 3,
+          "text": "ScrubRunDiffEntry",
+          "anchor": "scrubrundiffentry"
+        },
+        {
+          "level": 3,
+          "text": "ScrubRunDiffResult",
+          "anchor": "scrubrundiffresult"
+        },
+        {
+          "level": 3,
+          "text": "MessageDiffEntry",
+          "anchor": "messagediffentry"
+        },
+        {
+          "level": 3,
+          "text": "ScrubRunDryRunOpResult",
+          "anchor": "scrubrundryrunopresult"
+        },
+        {
+          "level": 3,
+          "text": "ScrubRunDryRunResult",
+          "anchor": "scrubrundryrunresult"
+        },
+        {
+          "level": 3,
+          "text": "TagRewrite",
+          "anchor": "tagrewrite"
+        },
+        {
+          "level": 3,
+          "text": "CommitTransform",
+          "anchor": "committransform"
+        },
+        {
+          "level": 3,
+          "text": "TransformFunc",
+          "anchor": "transformfunc"
+        },
+        {
+          "level": 3,
+          "text": "BuildRecipeBlobContent",
+          "anchor": "buildrecipeblobcontent"
+        },
+        {
+          "level": 3,
+          "text": "RewriteResult.Finalize",
+          "anchor": "rewriteresultfinalize"
+        }
+      ]
     },
     {
       "path": "integration-guide.md",
       "title": "Integration Guide",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "Integration Guide",
+          "anchor": "integration-guide"
+        },
+        {
+          "level": 2,
+          "text": "Claude Code sessions",
+          "anchor": "claude-code-sessions"
+        },
+        {
+          "level": 3,
+          "text": "Commit workflow",
+          "anchor": "commit-workflow"
+        },
+        {
+          "level": 3,
+          "text": "Session scoping",
+          "anchor": "session-scoping"
+        },
+        {
+          "level": 3,
+          "text": "Restricted operations",
+          "anchor": "restricted-operations"
+        },
+        {
+          "level": 2,
+          "text": "rlsbl release workflow",
+          "anchor": "rlsbl-release-workflow"
+        },
+        {
+          "level": 3,
+          "text": "Push handling",
+          "anchor": "push-handling"
+        },
+        {
+          "level": 3,
+          "text": "rlsbl detection",
+          "anchor": "rlsbl-detection"
+        },
+        {
+          "level": 2,
+          "text": "Pre-push hooks (pre-pre-push)",
+          "anchor": "pre-push-hooks-pre-pre-push"
+        },
+        {
+          "level": 3,
+          "text": "Hook lifecycle",
+          "anchor": "hook-lifecycle"
+        },
+        {
+          "level": 3,
+          "text": "Installing hooks",
+          "anchor": "installing-hooks"
+        },
+        {
+          "level": 3,
+          "text": "Hook environment",
+          "anchor": "hook-environment"
+        },
+        {
+          "level": 3,
+          "text": "Hook management",
+          "anchor": "hook-management"
+        },
+        {
+          "level": 3,
+          "text": "Timeout configuration",
+          "anchor": "timeout-configuration"
+        },
+        {
+          "level": 3,
+          "text": "Submodule hook cascading",
+          "anchor": "submodule-hook-cascading"
+        },
+        {
+          "level": 3,
+          "text": "Interaction with git pre-push hooks",
+          "anchor": "interaction-with-git-pre-push-hooks"
+        },
+        {
+          "level": 2,
+          "text": "Scrub orchestration protocol",
+          "anchor": "scrub-orchestration-protocol"
+        },
+        {
+          "level": 3,
+          "text": "The orchestrated path",
+          "anchor": "the-orchestrated-path"
+        },
+        {
+          "level": 3,
+          "text": "The unorchestrated path",
+          "anchor": "the-unorchestrated-path"
+        },
+        {
+          "level": 3,
+          "text": "Rewrite maps",
+          "anchor": "rewrite-maps"
+        },
+        {
+          "level": 3,
+          "text": "SHA remapping in files",
+          "anchor": "sha-remapping-in-files"
+        },
+        {
+          "level": 2,
+          "text": "Environment variables",
+          "anchor": "environment-variables"
+        },
+        {
+          "level": 3,
+          "text": "Variables safegit reads",
+          "anchor": "variables-safegit-reads"
+        },
+        {
+          "level": 3,
+          "text": "Variables safegit sets (for hooks)",
+          "anchor": "variables-safegit-sets-for-hooks"
+        },
+        {
+          "level": 2,
+          "text": "Configuration reference",
+          "anchor": "configuration-reference"
+        },
+        {
+          "level": 2,
+          "text": "Submodule integration",
+          "anchor": "submodule-integration"
+        },
+        {
+          "level": 2,
+          "text": "JSON output mode",
+          "anchor": "json-output-mode"
+        }
+      ]
     },
     {
       "path": "internal-commit.md",
       "title": "internal/commit",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/commit",
+          "anchor": "internalcommit"
+        },
+        {
+          "level": 2,
+          "text": "internal/commit",
+          "anchor": "internalcommit"
+        },
+        {
+          "level": 3,
+          "text": "ExitCASExhausted",
+          "anchor": "exitcasexhausted"
+        },
+        {
+          "level": 3,
+          "text": "ExitWriteTree",
+          "anchor": "exitwritetree"
+        },
+        {
+          "level": 3,
+          "text": "ExitCommitTree",
+          "anchor": "exitcommittree"
+        },
+        {
+          "level": 3,
+          "text": "AmendRequest",
+          "anchor": "amendrequest"
+        },
+        {
+          "level": 3,
+          "text": "AmendResult",
+          "anchor": "amendresult"
+        },
+        {
+          "level": 3,
+          "text": "RewordRequest",
+          "anchor": "rewordrequest"
+        },
+        {
+          "level": 3,
+          "text": "RewordResult",
+          "anchor": "rewordresult"
+        },
+        {
+          "level": 3,
+          "text": "CommitError",
+          "anchor": "commiterror"
+        },
+        {
+          "level": 3,
+          "text": "Pipeline",
+          "anchor": "pipeline"
+        },
+        {
+          "level": 3,
+          "text": "FileSpec",
+          "anchor": "filespec"
+        },
+        {
+          "level": 3,
+          "text": "CommitRequest",
+          "anchor": "commitrequest"
+        },
+        {
+          "level": 3,
+          "text": "CommitResult",
+          "anchor": "commitresult"
+        },
+        {
+          "level": 3,
+          "text": "Pipeline.Amend",
+          "anchor": "pipelineamend"
+        },
+        {
+          "level": 3,
+          "text": "Pipeline.Reword",
+          "anchor": "pipelinereword"
+        },
+        {
+          "level": 3,
+          "text": "CommitError.Error",
+          "anchor": "commiterrorerror"
+        },
+        {
+          "level": 3,
+          "text": "Pipeline.Execute",
+          "anchor": "pipelineexecute"
+        }
+      ]
     },
     {
       "path": "internal-coord.md",
       "title": "internal/coord",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/coord",
+          "anchor": "internalcoord"
+        },
+        {
+          "level": 2,
+          "text": "internal/coord",
+          "anchor": "internalcoord"
+        },
+        {
+          "level": 3,
+          "text": "DirtyState",
+          "anchor": "dirtystate"
+        },
+        {
+          "level": 3,
+          "text": "Check",
+          "anchor": "check"
+        },
+        {
+          "level": 3,
+          "text": "DirtyState.Refuse",
+          "anchor": "dirtystaterefuse"
+        }
+      ]
     },
     {
       "path": "internal-filelock.md",
       "title": "internal/filelock",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/filelock",
+          "anchor": "internalfilelock"
+        },
+        {
+          "level": 2,
+          "text": "internal/filelock",
+          "anchor": "internalfilelock"
+        },
+        {
+          "level": 3,
+          "text": "LockedAppend",
+          "anchor": "lockedappend"
+        }
+      ]
     },
     {
       "path": "internal-git.md",
       "title": "internal/git",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/git",
+          "anchor": "internalgit"
+        },
+        {
+          "level": 2,
+          "text": "internal/git",
+          "anchor": "internalgit"
+        },
+        {
+          "level": 3,
+          "text": "ErrDetachedHead",
+          "anchor": "errdetachedhead"
+        },
+        {
+          "level": 3,
+          "text": "AuthorInfo",
+          "anchor": "authorinfo"
+        },
+        {
+          "level": 3,
+          "text": "CommitInfo",
+          "anchor": "commitinfo"
+        },
+        {
+          "level": 3,
+          "text": "TreeEntry",
+          "anchor": "treeentry"
+        },
+        {
+          "level": 3,
+          "text": "ObjectEntry",
+          "anchor": "objectentry"
+        },
+        {
+          "level": 3,
+          "text": "ObjectIterator",
+          "anchor": "objectiterator"
+        },
+        {
+          "level": 3,
+          "text": "WithDir",
+          "anchor": "withdir"
+        },
+        {
+          "level": 3,
+          "text": "Run",
+          "anchor": "run"
+        },
+        {
+          "level": 3,
+          "text": "RunWithEnv",
+          "anchor": "runwithenv"
+        },
+        {
+          "level": 3,
+          "text": "RunWithEnvStdin",
+          "anchor": "runwithenvstdin"
+        },
+        {
+          "level": 3,
+          "text": "RepoRoot",
+          "anchor": "reporoot"
+        },
+        {
+          "level": 3,
+          "text": "GitDir",
+          "anchor": "gitdir"
+        },
+        {
+          "level": 3,
+          "text": "HeadRef",
+          "anchor": "headref"
+        },
+        {
+          "level": 3,
+          "text": "RevParse",
+          "anchor": "revparse"
+        },
+        {
+          "level": 3,
+          "text": "ReadTree",
+          "anchor": "readtree"
+        },
+        {
+          "level": 3,
+          "text": "WriteTree",
+          "anchor": "writetree"
+        },
+        {
+          "level": 3,
+          "text": "CommitTree",
+          "anchor": "committree"
+        },
+        {
+          "level": 3,
+          "text": "UpdateRef",
+          "anchor": "updateref"
+        },
+        {
+          "level": 3,
+          "text": "DeleteRef",
+          "anchor": "deleteref"
+        },
+        {
+          "level": 3,
+          "text": "AddFile",
+          "anchor": "addfile"
+        },
+        {
+          "level": 3,
+          "text": "RmCached",
+          "anchor": "rmcached"
+        },
+        {
+          "level": 3,
+          "text": "IsTracked",
+          "anchor": "istracked"
+        },
+        {
+          "level": 3,
+          "text": "ListSkipWorktreeFiles",
+          "anchor": "listskipworktreefiles"
+        },
+        {
+          "level": 3,
+          "text": "ListTrackedIgnoredFiles",
+          "anchor": "listtrackedignoredfiles"
+        },
+        {
+          "level": 3,
+          "text": "SyncMainIndex",
+          "anchor": "syncmainindex"
+        },
+        {
+          "level": 3,
+          "text": "SyncMainIndexWithWorktree",
+          "anchor": "syncmainindexwithworktree"
+        },
+        {
+          "level": 3,
+          "text": "RunPassthrough",
+          "anchor": "runpassthrough"
+        },
+        {
+          "level": 3,
+          "text": "CommonGitDir",
+          "anchor": "commongitdir"
+        },
+        {
+          "level": 3,
+          "text": "CommonGitDirOf",
+          "anchor": "commongitdirof"
+        },
+        {
+          "level": 3,
+          "text": "IsIgnored",
+          "anchor": "isignored"
+        },
+        {
+          "level": 3,
+          "text": "IsAncestorOf",
+          "anchor": "isancestorof"
+        },
+        {
+          "level": 3,
+          "text": "CommitMessage",
+          "anchor": "commitmessage"
+        },
+        {
+          "level": 3,
+          "text": "ParseCommit",
+          "anchor": "parsecommit"
+        },
+        {
+          "level": 3,
+          "text": "CommitTreeWithAuthor",
+          "anchor": "committreewithauthor"
+        },
+        {
+          "level": 3,
+          "text": "LsTreeAll",
+          "anchor": "lstreeall"
+        },
+        {
+          "level": 3,
+          "text": "LsTree",
+          "anchor": "lstree"
+        },
+        {
+          "level": 3,
+          "text": "HashObject",
+          "anchor": "hashobject"
+        },
+        {
+          "level": 3,
+          "text": "HashObjectWrite",
+          "anchor": "hashobjectwrite"
+        },
+        {
+          "level": 3,
+          "text": "HashObjectWriteBytes",
+          "anchor": "hashobjectwritebytes"
+        },
+        {
+          "level": 3,
+          "text": "CatFileBlob",
+          "anchor": "catfileblob"
+        },
+        {
+          "level": 3,
+          "text": "MkTree",
+          "anchor": "mktree"
+        },
+        {
+          "level": 3,
+          "text": "CatFileBatchAll",
+          "anchor": "catfilebatchall"
+        },
+        {
+          "level": 3,
+          "text": "CatFileBatchSHAs",
+          "anchor": "catfilebatchshas"
+        },
+        {
+          "level": 3,
+          "text": "RunWithGitDir",
+          "anchor": "runwithgitdir"
+        },
+        {
+          "level": 3,
+          "text": "CatFileBatchAllWithDir",
+          "anchor": "catfilebatchallwithdir"
+        },
+        {
+          "level": 3,
+          "text": "CatFileBatchSHAsWithDir",
+          "anchor": "catfilebatchshaswithdir"
+        },
+        {
+          "level": 3,
+          "text": "SplitNonEmpty",
+          "anchor": "splitnonempty"
+        },
+        {
+          "level": 3,
+          "text": "ForEachRef",
+          "anchor": "foreachref"
+        },
+        {
+          "level": 3,
+          "text": "LsRemoteBulk",
+          "anchor": "lsremotebulk"
+        },
+        {
+          "level": 3,
+          "text": "ObjectIterator.Next",
+          "anchor": "objectiteratornext"
+        },
+        {
+          "level": 3,
+          "text": "ObjectIterator.Close",
+          "anchor": "objectiteratorclose"
+        }
+      ]
     },
     {
       "path": "internal-hooks.md",
       "title": "internal/hooks",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/hooks",
+          "anchor": "internalhooks"
+        },
+        {
+          "level": 2,
+          "text": "internal/hooks",
+          "anchor": "internalhooks"
+        },
+        {
+          "level": 3,
+          "text": "HookResult",
+          "anchor": "hookresult"
+        },
+        {
+          "level": 3,
+          "text": "SetOutput",
+          "anchor": "setoutput"
+        },
+        {
+          "level": 3,
+          "text": "Discover",
+          "anchor": "discover"
+        },
+        {
+          "level": 3,
+          "text": "DiscoverMulti",
+          "anchor": "discovermulti"
+        },
+        {
+          "level": 3,
+          "text": "Run",
+          "anchor": "run"
+        },
+        {
+          "level": 3,
+          "text": "RunAll",
+          "anchor": "runall"
+        },
+        {
+          "level": 3,
+          "text": "RunSingle",
+          "anchor": "runsingle"
+        },
+        {
+          "level": 3,
+          "text": "PlanInstall",
+          "anchor": "planinstall"
+        },
+        {
+          "level": 3,
+          "text": "Install",
+          "anchor": "install"
+        },
+        {
+          "level": 3,
+          "text": "InstallPlaceholder",
+          "anchor": "installplaceholder"
+        }
+      ]
     },
     {
       "path": "internal-index.md",
       "title": "internal/index",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/index",
+          "anchor": "internalindex"
+        },
+        {
+          "level": 2,
+          "text": "internal/index",
+          "anchor": "internalindex"
+        },
+        {
+          "level": 3,
+          "text": "TmpIndex",
+          "anchor": "tmpindex"
+        },
+        {
+          "level": 3,
+          "text": "New",
+          "anchor": "new"
+        },
+        {
+          "level": 3,
+          "text": "NewEmpty",
+          "anchor": "newempty"
+        },
+        {
+          "level": 3,
+          "text": "GarbageCollect",
+          "anchor": "garbagecollect"
+        },
+        {
+          "level": 3,
+          "text": "GarbageCollectDryRun",
+          "anchor": "garbagecollectdryrun"
+        },
+        {
+          "level": 3,
+          "text": "TmpIndex.Cleanup",
+          "anchor": "tmpindexcleanup"
+        }
+      ]
     },
     {
       "path": "internal-lock.md",
       "title": "internal/lock",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/lock",
+          "anchor": "internallock"
+        },
+        {
+          "level": 2,
+          "text": "internal/lock",
+          "anchor": "internallock"
+        },
+        {
+          "level": 3,
+          "text": "RefLock",
+          "anchor": "reflock"
+        },
+        {
+          "level": 3,
+          "text": "Acquire",
+          "anchor": "acquire"
+        },
+        {
+          "level": 3,
+          "text": "IsStale",
+          "anchor": "isstale"
+        },
+        {
+          "level": 3,
+          "text": "ForceRelease",
+          "anchor": "forcerelease"
+        },
+        {
+          "level": 3,
+          "text": "ParsePID",
+          "anchor": "parsepid"
+        },
+        {
+          "level": 3,
+          "text": "RefLock.Release",
+          "anchor": "reflockrelease"
+        }
+      ]
     },
     {
       "path": "internal-oplog.md",
       "title": "internal/oplog",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/oplog",
+          "anchor": "internaloplog"
+        },
+        {
+          "level": 2,
+          "text": "internal/oplog",
+          "anchor": "internaloplog"
+        },
+        {
+          "level": 3,
+          "text": "Entry",
+          "anchor": "entry"
+        },
+        {
+          "level": 3,
+          "text": "Append",
+          "anchor": "append"
+        },
+        {
+          "level": 3,
+          "text": "Read",
+          "anchor": "read"
+        },
+        {
+          "level": 3,
+          "text": "LogSize",
+          "anchor": "logsize"
+        },
+        {
+          "level": 3,
+          "text": "Rotate",
+          "anchor": "rotate"
+        },
+        {
+          "level": 3,
+          "text": "LastRefUpdate",
+          "anchor": "lastrefupdate"
+        },
+        {
+          "level": 3,
+          "text": "LastRefUpdateForSession",
+          "anchor": "lastrefupdateforsession"
+        },
+        {
+          "level": 3,
+          "text": "TipSHA",
+          "anchor": "tipsha"
+        }
+      ]
     },
     {
       "path": "internal-procutil.md",
       "title": "internal/procutil",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/procutil",
+          "anchor": "internalprocutil"
+        },
+        {
+          "level": 2,
+          "text": "internal/procutil",
+          "anchor": "internalprocutil"
+        },
+        {
+          "level": 3,
+          "text": "ProcessAlive",
+          "anchor": "processalive"
+        },
+        {
+          "level": 3,
+          "text": "ProcessAlive",
+          "anchor": "processalive-1"
+        }
+      ]
     },
     {
       "path": "internal-repo.md",
       "title": "internal/repo",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/repo",
+          "anchor": "internalrepo"
+        },
+        {
+          "level": 2,
+          "text": "internal/repo",
+          "anchor": "internalrepo"
+        },
+        {
+          "level": 3,
+          "text": "Config",
+          "anchor": "config"
+        },
+        {
+          "level": 3,
+          "text": "CommitConfig",
+          "anchor": "commitconfig"
+        },
+        {
+          "level": 3,
+          "text": "LockConfig",
+          "anchor": "lockconfig"
+        },
+        {
+          "level": 3,
+          "text": "HooksConfig",
+          "anchor": "hooksconfig"
+        },
+        {
+          "level": 3,
+          "text": "PrePrePushConfig",
+          "anchor": "preprepushconfig"
+        },
+        {
+          "level": 3,
+          "text": "PushConfig",
+          "anchor": "pushconfig"
+        },
+        {
+          "level": 3,
+          "text": "LogConfig",
+          "anchor": "logconfig"
+        },
+        {
+          "level": 3,
+          "text": "DefaultConfig",
+          "anchor": "defaultconfig"
+        },
+        {
+          "level": 3,
+          "text": "SafegitDir",
+          "anchor": "safegitdir"
+        },
+        {
+          "level": 3,
+          "text": "SharedSafegitDir",
+          "anchor": "sharedsafegitdir"
+        },
+        {
+          "level": 3,
+          "text": "IsInitialized",
+          "anchor": "isinitialized"
+        },
+        {
+          "level": 3,
+          "text": "Init",
+          "anchor": "init"
+        },
+        {
+          "level": 3,
+          "text": "EnsureInitialized",
+          "anchor": "ensureinitialized"
+        },
+        {
+          "level": 3,
+          "text": "Uninstall",
+          "anchor": "uninstall"
+        },
+        {
+          "level": 3,
+          "text": "LoadConfig",
+          "anchor": "loadconfig"
+        },
+        {
+          "level": 3,
+          "text": "LoadConfigFrom",
+          "anchor": "loadconfigfrom"
+        },
+        {
+          "level": 3,
+          "text": "MarshalConfig",
+          "anchor": "marshalconfig"
+        },
+        {
+          "level": 3,
+          "text": "ConfigPath",
+          "anchor": "configpath"
+        },
+        {
+          "level": 3,
+          "text": "SaveConfigTo",
+          "anchor": "saveconfigto"
+        },
+        {
+          "level": 3,
+          "text": "SaveConfig",
+          "anchor": "saveconfig"
+        },
+        {
+          "level": 3,
+          "text": "GetConfigValue",
+          "anchor": "getconfigvalue"
+        },
+        {
+          "level": 3,
+          "text": "SetConfigValue",
+          "anchor": "setconfigvalue"
+        },
+        {
+          "level": 3,
+          "text": "ValidConfigKeys",
+          "anchor": "validconfigkeys"
+        },
+        {
+          "level": 3,
+          "text": "Config.Validate",
+          "anchor": "configvalidate"
+        }
+      ]
     },
     {
       "path": "internal-scan.md",
       "title": "internal/scan",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/scan",
+          "anchor": "internalscan"
+        },
+        {
+          "level": 2,
+          "text": "internal/scan",
+          "anchor": "internalscan"
+        },
+        {
+          "level": 3,
+          "text": "Match",
+          "anchor": "match"
+        },
+        {
+          "level": 3,
+          "text": "ScanResults",
+          "anchor": "scanresults"
+        },
+        {
+          "level": 3,
+          "text": "ScanOpts",
+          "anchor": "scanopts"
+        },
+        {
+          "level": 3,
+          "text": "AddAttribution",
+          "anchor": "addattribution"
+        },
+        {
+          "level": 3,
+          "text": "ScanNonObjects",
+          "anchor": "scannonobjects"
+        },
+        {
+          "level": 3,
+          "text": "ScanObjectsMulti",
+          "anchor": "scanobjectsmulti"
+        },
+        {
+          "level": 3,
+          "text": "ScanObjects",
+          "anchor": "scanobjects"
+        }
+      ]
     },
     {
       "path": "internal-stage.md",
       "title": "internal/stage",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/stage",
+          "anchor": "internalstage"
+        },
+        {
+          "level": 2,
+          "text": "internal/stage",
+          "anchor": "internalstage"
+        },
+        {
+          "level": 3,
+          "text": "Hunk",
+          "anchor": "hunk"
+        },
+        {
+          "level": 3,
+          "text": "ExtractHunks",
+          "anchor": "extracthunks"
+        },
+        {
+          "level": 3,
+          "text": "ParseDiff",
+          "anchor": "parsediff"
+        },
+        {
+          "level": 3,
+          "text": "BuildPatch",
+          "anchor": "buildpatch"
+        },
+        {
+          "level": 3,
+          "text": "ApplyPatch",
+          "anchor": "applypatch"
+        },
+        {
+          "level": 3,
+          "text": "StageHunks",
+          "anchor": "stagehunks"
+        },
+        {
+          "level": 3,
+          "text": "ParseHunkSpec",
+          "anchor": "parsehunkspec"
+        }
+      ]
     },
     {
       "path": "internal-submodule.md",
       "title": "internal/submodule",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/submodule",
+          "anchor": "internalsubmodule"
+        },
+        {
+          "level": 2,
+          "text": "internal/submodule",
+          "anchor": "internalsubmodule"
+        },
+        {
+          "level": 3,
+          "text": "ErrNestedSubmodules",
+          "anchor": "errnestedsubmodules"
+        },
+        {
+          "level": 3,
+          "text": "SubmoduleInfo",
+          "anchor": "submoduleinfo"
+        },
+        {
+          "level": 3,
+          "text": "Enumerate",
+          "anchor": "enumerate"
+        },
+        {
+          "level": 3,
+          "text": "CheckNested",
+          "anchor": "checknested"
+        },
+        {
+          "level": 3,
+          "text": "DetectParent",
+          "anchor": "detectparent"
+        }
+      ]
     },
     {
       "path": "internal-testutil.md",
       "title": "internal/testutil",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/testutil",
+          "anchor": "internaltestutil"
+        },
+        {
+          "level": 2,
+          "text": "internal/testutil",
+          "anchor": "internaltestutil"
+        },
+        {
+          "level": 3,
+          "text": "IdentityName",
+          "anchor": "identityname"
+        },
+        {
+          "level": 3,
+          "text": "IdentityEmail",
+          "anchor": "identityemail"
+        },
+        {
+          "level": 3,
+          "text": "SubmoduleRepo",
+          "anchor": "submodulerepo"
+        },
+        {
+          "level": 3,
+          "text": "InitRepoWithSubmodule",
+          "anchor": "initrepowithsubmodule"
+        },
+        {
+          "level": 3,
+          "text": "InitRepoWithTwoSubmodules",
+          "anchor": "initrepowithtwosubmodules"
+        },
+        {
+          "level": 3,
+          "text": "InitRepo",
+          "anchor": "initrepo"
+        },
+        {
+          "level": 3,
+          "text": "InitBareRepo",
+          "anchor": "initbarerepo"
+        },
+        {
+          "level": 3,
+          "text": "Chdir",
+          "anchor": "chdir"
+        }
+      ]
     },
     {
       "path": "internal-trailer.md",
       "title": "internal/trailer",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/trailer",
+          "anchor": "internaltrailer"
+        },
+        {
+          "level": 2,
+          "text": "internal/trailer",
+          "anchor": "internaltrailer"
+        },
+        {
+          "level": 3,
+          "text": "SessionKey",
+          "anchor": "sessionkey"
+        },
+        {
+          "level": 3,
+          "text": "Inject",
+          "anchor": "inject"
+        },
+        {
+          "level": 3,
+          "text": "AppendCustom",
+          "anchor": "appendcustom"
+        },
+        {
+          "level": 3,
+          "text": "SplitBodyTrailers",
+          "anchor": "splitbodytrailers"
+        },
+        {
+          "level": 3,
+          "text": "ReplaceIdentity",
+          "anchor": "replaceidentity"
+        }
+      ]
     },
     {
       "path": "req.md",
       "title": "safegit Requirements",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit Requirements",
+          "anchor": "safegit-requirements"
+        },
+        {
+          "level": 2,
+          "text": "Core: Multi-Agent Safety",
+          "anchor": "core-multi-agent-safety"
+        },
+        {
+          "level": 2,
+          "text": "Concurrency Mechanism",
+          "anchor": "concurrency-mechanism"
+        },
+        {
+          "level": 2,
+          "text": "Git Compatibility",
+          "anchor": "git-compatibility"
+        },
+        {
+          "level": 2,
+          "text": "CLI",
+          "anchor": "cli"
+        },
+        {
+          "level": 2,
+          "text": "Hooks",
+          "anchor": "hooks"
+        },
+        {
+          "level": 2,
+          "text": "Reliability",
+          "anchor": "reliability"
+        }
+      ]
     },
     {
       "path": "research.md",
       "title": "Git Alternatives for AI-Safe Concurrency",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "Git Alternatives for AI-Safe Concurrency",
+          "anchor": "git-alternatives-for-ai-safe-concurrency"
+        },
+        {
+          "level": 2,
+          "text": "Summary Table",
+          "anchor": "summary-table"
+        },
+        {
+          "level": 2,
+          "text": "Jujutsu (jj)",
+          "anchor": "jujutsu-jj"
+        },
+        {
+          "level": 3,
+          "text": "Origin and Motivation",
+          "anchor": "origin-and-motivation"
+        },
+        {
+          "level": 3,
+          "text": "Maintainers and Governance",
+          "anchor": "maintainers-and-governance"
+        },
+        {
+          "level": 3,
+          "text": "Activity",
+          "anchor": "activity"
+        },
+        {
+          "level": 3,
+          "text": "Design Philosophy",
+          "anchor": "design-philosophy"
+        },
+        {
+          "level": 3,
+          "text": "Divergence from Git",
+          "anchor": "divergence-from-git"
+        },
+        {
+          "level": 3,
+          "text": "AI Agent Concurrency Model",
+          "anchor": "ai-agent-concurrency-model"
+        },
+        {
+          "level": 3,
+          "text": "Git Interoperability",
+          "anchor": "git-interoperability"
+        },
+        {
+          "level": 3,
+          "text": "Adopters",
+          "anchor": "adopters"
+        },
+        {
+          "level": 3,
+          "text": "Key Resources",
+          "anchor": "key-resources"
+        },
+        {
+          "level": 2,
+          "text": "GitButler (`but`)",
+          "anchor": "gitbutler-but"
+        },
+        {
+          "level": 3,
+          "text": "Origin and Motivation",
+          "anchor": "origin-and-motivation-1"
+        },
+        {
+          "level": 3,
+          "text": "Maintainers and Funding",
+          "anchor": "maintainers-and-funding"
+        },
+        {
+          "level": 3,
+          "text": "Activity",
+          "anchor": "activity-1"
+        },
+        {
+          "level": 3,
+          "text": "Design Philosophy",
+          "anchor": "design-philosophy-1"
+        },
+        {
+          "level": 3,
+          "text": "CLI Commands",
+          "anchor": "cli-commands"
+        },
+        {
+          "level": 3,
+          "text": "AI Agent Concurrency Model",
+          "anchor": "ai-agent-concurrency-model-1"
+        },
+        {
+          "level": 3,
+          "text": "Git Interoperability",
+          "anchor": "git-interoperability-1"
+        },
+        {
+          "level": 3,
+          "text": "Architecture",
+          "anchor": "architecture"
+        },
+        {
+          "level": 3,
+          "text": "Key Resources",
+          "anchor": "key-resources-1"
+        },
+        {
+          "level": 2,
+          "text": "Sapling (`sl`)",
+          "anchor": "sapling-sl"
+        },
+        {
+          "level": 3,
+          "text": "Origin and Motivation",
+          "anchor": "origin-and-motivation-2"
+        },
+        {
+          "level": 3,
+          "text": "Maintainers and Funding",
+          "anchor": "maintainers-and-funding-1"
+        },
+        {
+          "level": 3,
+          "text": "Activity",
+          "anchor": "activity-2"
+        },
+        {
+          "level": 3,
+          "text": "Open Source Status",
+          "anchor": "open-source-status"
+        },
+        {
+          "level": 3,
+          "text": "Design Philosophy",
+          "anchor": "design-philosophy-2"
+        },
+        {
+          "level": 3,
+          "text": "Divergence from Git",
+          "anchor": "divergence-from-git-1"
+        },
+        {
+          "level": 3,
+          "text": "Git Interoperability",
+          "anchor": "git-interoperability-2"
+        },
+        {
+          "level": 3,
+          "text": "AI Agent Concurrency",
+          "anchor": "ai-agent-concurrency"
+        },
+        {
+          "level": 3,
+          "text": "Key Resources",
+          "anchor": "key-resources-2"
+        },
+        {
+          "level": 2,
+          "text": "go-git",
+          "anchor": "go-git"
+        },
+        {
+          "level": 3,
+          "text": "Origin and Motivation",
+          "anchor": "origin-and-motivation-3"
+        },
+        {
+          "level": 3,
+          "text": "Maintainers and Funding",
+          "anchor": "maintainers-and-funding-2"
+        },
+        {
+          "level": 3,
+          "text": "Activity",
+          "anchor": "activity-3"
+        },
+        {
+          "level": 3,
+          "text": "Design Philosophy",
+          "anchor": "design-philosophy-3"
+        },
+        {
+          "level": 3,
+          "text": "Divergence from Git",
+          "anchor": "divergence-from-git-2"
+        },
+        {
+          "level": 3,
+          "text": "Git Interoperability",
+          "anchor": "git-interoperability-3"
+        },
+        {
+          "level": 3,
+          "text": "AI Agent Concurrency",
+          "anchor": "ai-agent-concurrency-1"
+        },
+        {
+          "level": 3,
+          "text": "Adopters",
+          "anchor": "adopters-1"
+        },
+        {
+          "level": 3,
+          "text": "Key Resources",
+          "anchor": "key-resources-3"
+        },
+        {
+          "level": 2,
+          "text": "Rejected Candidates",
+          "anchor": "rejected-candidates"
+        },
+        {
+          "level": 3,
+          "text": "Forking C Git",
+          "anchor": "forking-c-git"
+        },
+        {
+          "level": 3,
+          "text": "libgit2 (C)",
+          "anchor": "libgit2-c"
+        },
+        {
+          "level": 3,
+          "text": "JGit (Java)",
+          "anchor": "jgit-java"
+        },
+        {
+          "level": 3,
+          "text": "gitoxide / gix (Rust)",
+          "anchor": "gitoxide-gix-rust"
+        },
+        {
+          "level": 3,
+          "text": "Game of Trees (C)",
+          "anchor": "game-of-trees-c"
+        },
+        {
+          "level": 3,
+          "text": "Pijul (Rust)",
+          "anchor": "pijul-rust"
+        },
+        {
+          "level": 3,
+          "text": "Radicle (Rust)",
+          "anchor": "radicle-rust"
+        },
+        {
+          "level": 3,
+          "text": "git-branchless (Rust)",
+          "anchor": "git-branchless-rust"
+        },
+        {
+          "level": 2,
+          "text": "Conclusion",
+          "anchor": "conclusion"
+        }
+      ]
     },
     {
       "path": "safegit.md",
       "title": "safegit",
-      "type": "doc"
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit",
+          "anchor": "safegit"
+        },
+        {
+          "level": 2,
+          "text": ".",
+          "anchor": ""
+        },
+        {
+          "level": 3,
+          "text": "ScrubVerifyPolicyResult",
+          "anchor": "scrubverifypolicyresult"
+        },
+        {
+          "level": 3,
+          "text": "ScrubVerifyResult",
+          "anchor": "scrubverifyresult"
+        },
+        {
+          "level": 3,
+          "text": "Recipe",
+          "anchor": "recipe"
+        },
+        {
+          "level": 3,
+          "text": "RecipeOperation",
+          "anchor": "recipeoperation"
+        },
+        {
+          "level": 3,
+          "text": "ParsedRecipe",
+          "anchor": "parsedrecipe"
+        },
+        {
+          "level": 3,
+          "text": "RewriteAuthorResult",
+          "anchor": "rewriteauthorresult"
+        },
+        {
+          "level": 3,
+          "text": "RewriteAuthorDryRunResult",
+          "anchor": "rewriteauthordryrunresult"
+        },
+        {
+          "level": 3,
+          "text": "RewriteMapStart",
+          "anchor": "rewritemapstart"
+        },
+        {
+          "level": 3,
+          "text": "RewriteMapRefs",
+          "anchor": "rewritemaprefs"
+        },
+        {
+          "level": 3,
+          "text": "RewriteMapComplete",
+          "anchor": "rewritemapcomplete"
+        },
+        {
+          "level": 3,
+          "text": "AnnotationRewriteFunc",
+          "anchor": "annotationrewritefunc"
+        },
+        {
+          "level": 3,
+          "text": "VerifyFunc",
+          "anchor": "verifyfunc"
+        },
+        {
+          "level": 3,
+          "text": "RewriteResult",
+          "anchor": "rewriteresult"
+        },
+        {
+          "level": 3,
+          "text": "ScanResult",
+          "anchor": "scanresult"
+        },
+        {
+          "level": 3,
+          "text": "ScanMatchJSON",
+          "anchor": "scanmatchjson"
+        },
+        {
+          "level": 3,
+          "text": "ScrubFileResult",
+          "anchor": "scrubfileresult"
+        },
+        {
+          "level": 3,
+          "text": "ScrubFileDryRunResult",
+          "anchor": "scrubfiledryrunresult"
+        },
+        {
+          "level": 3,
+          "text": "TagBodyTransformFunc",
+          "anchor": "tagbodytransformfunc"
+        },
+        {
+          "level": 3,
+          "text": "ScrubMatchResult",
+          "anchor": "scrubmatchresult"
+        },
+        {
+          "level": 3,
+          "text": "ScrubMatchDryRunResult",
+          "anchor": "scrubmatchdryrunresult"
+        },
+        {
+          "level": 3,
+          "text": "ScrubPolicy",
+          "anchor": "scrubpolicy"
+        },
+        {
+          "level": 3,
+          "text": "ScrubRunResult",
+          "anchor": "scrubrunresult"
+        },
+        {
+          "level": 3,
+          "text": "ScrubRunDiffEntry",
+          "anchor": "scrubrundiffentry"
+        },
+        {
+          "level": 3,
+          "text": "ScrubRunDiffResult",
+          "anchor": "scrubrundiffresult"
+        },
+        {
+          "level": 3,
+          "text": "MessageDiffEntry",
+          "anchor": "messagediffentry"
+        },
+        {
+          "level": 3,
+          "text": "ScrubRunDryRunOpResult",
+          "anchor": "scrubrundryrunopresult"
+        },
+        {
+          "level": 3,
+          "text": "ScrubRunDryRunResult",
+          "anchor": "scrubrundryrunresult"
+        },
+        {
+          "level": 3,
+          "text": "TagRewrite",
+          "anchor": "tagrewrite"
+        },
+        {
+          "level": 3,
+          "text": "CommitTransform",
+          "anchor": "committransform"
+        },
+        {
+          "level": 3,
+          "text": "TransformFunc",
+          "anchor": "transformfunc"
+        },
+        {
+          "level": 3,
+          "text": "BuildRecipeBlobContent",
+          "anchor": "buildrecipeblobcontent"
+        },
+        {
+          "level": 3,
+          "text": "RewriteResult.Finalize",
+          "anchor": "rewriteresultfinalize"
+        }
+      ]
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-07T13:28:51.468650+00:00"
+  "last_gen": "2026-08-12T03:47:54.936379+00:00"
 }
