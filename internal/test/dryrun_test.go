@@ -153,3 +153,192 @@ func TestAuthorRewriteDryRunSkipsConfigLoad(t *testing.T) {
 		t.Errorf("expected a preview on stdout, got: %s", stdout)
 	}
 }
+
+// newRawSecretRepo builds a repo with a secret in history using raw git only,
+// so .git/safegit/ is never created: exactly the state a first-ever safegit
+// invocation sees. Returns the repo dir and the SHA of the first commit.
+func newRawSecretRepo(t *testing.T) (dir, initialSHA string) {
+	t.Helper()
+	dir = evalTempDir(t)
+
+	gitCmd(t, dir, "init", "--initial-branch=main")
+	gitCmd(t, dir, "config", "user.email", "test@test.com")
+	gitCmd(t, dir, "config", "user.name", "Test")
+
+	writeRepoFile(t, dir, "secret.txt", "hunter2\n")
+	gitCmd(t, dir, "add", "secret.txt")
+	gitCmd(t, dir, "commit", "-m", "add secret")
+	initialSHA = gitCmd(t, dir, "rev-parse", "HEAD")
+
+	// Replacement content committed on top, so the tree is clean and
+	// `scrub file` has something to substitute.
+	writeRepoFile(t, dir, "secret.txt", "REDACTED\n")
+	gitCmd(t, dir, "add", "secret.txt")
+	gitCmd(t, dir, "commit", "-m", "commit replacement")
+
+	if _, err := os.Stat(filepath.Join(dir, ".git", "safegit")); !os.IsNotExist(err) {
+		t.Fatalf("fixture is wrong: .git/safegit already exists (stat err: %v)", err)
+	}
+	return dir, initialSHA
+}
+
+// writeRepoFile writes content to a path inside the repo.
+func writeRepoFile(t *testing.T, dir, path, content string) {
+	t.Helper()
+	full := filepath.Join(dir, path)
+	if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// assertNoSafegitDir fails if the safegit data directory exists.
+func assertNoSafegitDir(t *testing.T, dir, what string) {
+	t.Helper()
+	sgDir := filepath.Join(dir, ".git", "safegit")
+	if _, err := os.Stat(sgDir); err == nil {
+		entries, _ := os.ReadDir(sgDir)
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("%s wrote to disk: %s exists containing %v", what, sgDir, names)
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat %s: %v", sgDir, err)
+	}
+}
+
+// scrubMode names one of the three scrub entry points and builds its argv for a
+// given repo.
+type scrubMode struct {
+	name string
+	args func(initialSHA, recipePath string) []string
+}
+
+// scrubDryRunModes returns the three scrub entry points in their --dry-run form.
+func scrubDryRunModes() []scrubMode {
+	return []scrubMode{
+		{"scrub file", func(initialSHA, _ string) []string {
+			return []string{"--dry-run", "scrub", "file",
+				"--from", initialSHA, "--reason", "preview", "secret.txt"}
+		}},
+		{"scrub match", func(_, _ string) []string {
+			return []string{"--dry-run", "scrub", "match",
+				"--pattern", "hunter2", "--replace", "GONE", "--reason", "preview", "--entire-history"}
+		}},
+		{"scrub run", func(_, recipePath string) []string {
+			return []string{"--dry-run", "scrub", "run",
+				"--reason", "preview", "--entire-history", recipePath}
+		}},
+	}
+}
+
+var dryRunScrubEnv = []string{"CLAUDE_CODE_SESSION_ID=dryrun-scrub-test"}
+
+const dryRunRecipe = `
+[[operations]]
+pattern = "hunter2"
+replace = "GONE"
+`
+
+// TestScrubDryRunDoesNotAutoInit: a preview must not write to disk. All three
+// scrub modes used to call repo.EnsureInitialized before their dry-run branch,
+// which created .git/safegit/ (directories, config.json, log) during a run that
+// promised to change nothing.
+func TestScrubDryRunDoesNotAutoInit(t *testing.T) {
+	recipePath := writeRecipe(t, "dryrun-recipe.toml", dryRunRecipe)
+
+	for _, mode := range scrubDryRunModes() {
+		t.Run(mode.name, func(t *testing.T) {
+			dir, initialSHA := newRawSecretRepo(t)
+			stdout, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv, mode.args(initialSHA, recipePath)...)
+			if code != 0 {
+				t.Fatalf("%s --dry-run failed (code %d): stdout=%s stderr=%s", mode.name, code, stdout, stderr)
+			}
+			assertNoSafegitDir(t, dir, mode.name+" --dry-run")
+		})
+	}
+}
+
+// TestScrubDryRunPreviewsDirtyTree: a preview changes nothing, so it must work
+// on a dirty working tree -- which is exactly when a preview is wanted (you are
+// mid-edit and want to know what a scrub would do). All three scrub modes used
+// to run requireCleanTree before their dry-run branch and refuse.
+func TestScrubDryRunPreviewsDirtyTree(t *testing.T) {
+	recipePath := writeRecipe(t, "dirty-recipe.toml", dryRunRecipe)
+
+	for _, mode := range scrubDryRunModes() {
+		t.Run(mode.name, func(t *testing.T) {
+			dir, initialSHA := newSecretRepo(t)
+
+			// Dirty the tree: one modified tracked file, one untracked file.
+			writeRepoFile(t, dir, "seed.txt", "seed modified\n")
+			writeRepoFile(t, dir, "untracked.txt", "not committed\n")
+
+			stdout, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv, mode.args(initialSHA, recipePath)...)
+			if code != 0 {
+				t.Fatalf("%s --dry-run must preview on a dirty tree (code %d): stdout=%s stderr=%s",
+					mode.name, code, stdout, stderr)
+			}
+			if strings.Contains(stderr, "working tree is dirty") {
+				t.Errorf("%s --dry-run refused a dirty tree: %s", mode.name, stderr)
+			}
+			// The dirty files are untouched.
+			for path, want := range map[string]string{
+				"seed.txt":      "seed modified\n",
+				"untracked.txt": "not committed\n",
+			} {
+				got, err := os.ReadFile(filepath.Join(dir, path))
+				if err != nil {
+					t.Fatalf("reading %s: %v", path, err)
+				}
+				if string(got) != want {
+					t.Errorf("%s changed during a dry run: %q, want %q", path, got, want)
+				}
+			}
+		})
+	}
+}
+
+// TestScrubExecuteStillRequiresCleanTree pins the other half of the same seam:
+// moving the clean-tree check past the dry-run branch must not weaken the
+// execute path, which still refuses a dirty working tree.
+func TestScrubExecuteStillRequiresCleanTree(t *testing.T) {
+	recipePath := writeRecipe(t, "execute-recipe.toml", dryRunRecipe)
+
+	modes := []scrubMode{
+		{"scrub file", func(initialSHA, _ string) []string {
+			return []string{"--approve-consequential", "scrub", "file",
+				"--from", initialSHA, "--reason", "execute", "secret.txt"}
+		}},
+		{"scrub match", func(_, _ string) []string {
+			return []string{"--approve-consequential", "scrub", "match",
+				"--pattern", "hunter2", "--replace", "GONE", "--reason", "execute", "--entire-history"}
+		}},
+		{"scrub run", func(_, recipePath string) []string {
+			return []string{"--approve-consequential", "scrub", "run",
+				"--reason", "execute", "--entire-history", recipePath}
+		}},
+	}
+
+	for _, mode := range modes {
+		t.Run(mode.name, func(t *testing.T) {
+			dir, initialSHA := newSecretRepo(t)
+			headBefore := revParseHEAD(t, dir)
+			writeRepoFile(t, dir, "seed.txt", "seed modified\n")
+
+			_, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv, mode.args(initialSHA, recipePath)...)
+			if code == 0 {
+				t.Fatalf("%s must refuse a dirty working tree, got code 0: %s", mode.name, stderr)
+			}
+			if !strings.Contains(stderr, "working tree is dirty") {
+				t.Errorf("%s must say the tree is dirty, got: %s", mode.name, stderr)
+			}
+			if got := revParseHEAD(t, dir); got != headBefore {
+				t.Errorf("history was rewritten despite the dirty tree: %s -> %s", headBefore[:12], got[:12])
+			}
+		})
+	}
+}
