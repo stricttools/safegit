@@ -62,6 +62,110 @@ func TestInitAndIsInitialized(t *testing.T) {
 	}
 }
 
+// halfInitializedGitDir builds the state that made every safegit command in the
+// repository fail: .git/safegit/ exists (here with the tmp/ subdirectory a
+// preview index used to leave behind) but config.json does not.
+func halfInitializedGitDir(t *testing.T) string {
+	t.Helper()
+	gitDir := filepath.Join(t.TempDir(), ".git")
+	if err := os.MkdirAll(filepath.Join(SafegitDir(gitDir), "tmp"), 0755); err != nil {
+		t.Fatalf("manufacturing the half-initialized state: %v", err)
+	}
+	return gitDir
+}
+
+// TestIsInitializedRequiresConfig pins the predicate itself: the safegit
+// directory existing is not the question, config.json being present is. Reading
+// the bare directory as proof of initialization is what made EnsureInitialized a
+// no-op over a half-initialized tree.
+func TestIsInitializedRequiresConfig(t *testing.T) {
+	gitDir := halfInitializedGitDir(t)
+
+	if IsInitialized(gitDir) {
+		t.Error("a safegit dir without config.json must not read as initialized")
+	}
+
+	cfg := DefaultConfig()
+	if err := SaveConfigTo(ConfigPath(gitDir), &cfg); err != nil {
+		t.Fatalf("writing config.json: %v", err)
+	}
+	if !IsInitialized(gitDir) {
+		t.Error("a safegit dir with config.json must read as initialized")
+	}
+}
+
+// TestInitCompletesHalfInitializedDir: Init must complete a half-initialized
+// directory rather than skipping on the strength of the directory existing --
+// and must stay idempotent once it has, leaving an existing config alone.
+func TestInitCompletesHalfInitializedDir(t *testing.T) {
+	gitDir := halfInitializedGitDir(t)
+
+	if err := Init(gitDir); err != nil {
+		t.Fatalf("Init over a half-initialized dir: %v", err)
+	}
+	if !IsInitialized(gitDir) {
+		t.Fatal("Init did not complete the half-initialized dir")
+	}
+
+	sgDir := SafegitDir(gitDir)
+	for _, d := range []string{
+		filepath.Join(sgDir, "locks", "refs", "heads"),
+		filepath.Join(sgDir, "tmp"),
+	} {
+		if stat, err := os.Stat(d); err != nil || !stat.IsDir() {
+			t.Errorf("expected directory %s to exist after the repair", d)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(sgDir, "log")); err != nil {
+		t.Errorf("the repair did not create the log file: %v", err)
+	}
+
+	// Idempotent: a second Init must not rewrite an existing config.
+	cfg, err := LoadConfig(gitDir)
+	if err != nil {
+		t.Fatalf("loading the repaired config: %v", err)
+	}
+	cfg.Push.RetryAttempts = 42
+	if err := SaveConfig(gitDir, cfg); err != nil {
+		t.Fatalf("saving the edited config: %v", err)
+	}
+	if err := Init(gitDir); err != nil {
+		t.Fatalf("second Init: %v", err)
+	}
+	reloaded, err := LoadConfig(gitDir)
+	if err != nil {
+		t.Fatalf("reloading config after the second Init: %v", err)
+	}
+	if reloaded.Push.RetryAttempts != 42 {
+		t.Errorf("a second Init overwrote the existing config: RetryAttempts = %d, want 42",
+			reloaded.Push.RetryAttempts)
+	}
+}
+
+// TestEnsureInitializedCompletesHalfInitializedDir is the same repair through
+// the seam every command actually calls.
+func TestEnsureInitializedCompletesHalfInitializedDir(t *testing.T) {
+	gitDir := halfInitializedGitDir(t)
+
+	if err := EnsureInitialized(gitDir); err != nil {
+		t.Fatalf("EnsureInitialized over a half-initialized dir: %v", err)
+	}
+	if _, err := os.Stat(ConfigPath(gitDir)); err != nil {
+		t.Fatalf("the repair did not create config.json: %v", err)
+	}
+	if _, err := LoadConfig(gitDir); err != nil {
+		t.Fatalf("the repaired config is not loadable: %v", err)
+	}
+
+	// Idempotent: calling it again on the repaired repo changes nothing.
+	if err := EnsureInitialized(gitDir); err != nil {
+		t.Fatalf("second EnsureInitialized: %v", err)
+	}
+	if !IsInitialized(gitDir) {
+		t.Error("should still be initialized after a second EnsureInitialized")
+	}
+}
+
 func TestInitIdempotent(t *testing.T) {
 	gitDir := filepath.Join(t.TempDir(), ".git")
 	os.MkdirAll(gitDir, 0755)
