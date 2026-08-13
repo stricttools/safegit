@@ -17,16 +17,16 @@ Every safegit command accepts these global flags, which control output verbosity
 | `--verbose` | `false` | Enable verbose output with detailed progress and diagnostic info |
 | `--dry-run` | `false` | Preview what would happen without writing any changes to disk |
 | `--approve-consequential` | `false` | Approve a consequential command up front instead of being asked |
+| `--json` | `false` | Select machine mode: stdout carries the framework's envelope and nothing else |
 | `--config-file` | `""` | Path to a custom safegit config file instead of the default location |
-| `--json` | `false` | Emit machine-readable JSON output to stdout (implies `--quiet`) |
 
-The first four are owned by the CLI framework, not by safegit. Three consequences follow:
+The first five are owned by the CLI framework, not by safegit. Three consequences follow:
 
 - **They have no short forms.** `-q`, `-n` and `-y` are gone; write `--quiet`, `--dry-run` and `--approve-consequential`. The approval flag is deliberately unwieldy so it cannot decay into muscle memory.
-- **They are recognized anywhere in the command line.** `safegit --dry-run push` and `safegit push --dry-run` are the same run. (`--config-file` and `--json` are safegit's own and stay before the subcommand.)
+- **They are recognized anywhere in the command line.** `safegit --dry-run push` and `safegit push --dry-run` are the same run. (`--config-file` is safegit's own and stays before the subcommand.)
 - **Only *consequential* commands ask before they run.** Classification (`read_only` / `mutating`) decides what a dry run records; it does not decide what prompts. A command prompts only when it declares itself **consequential**, and in safegit exactly four do: `scrub file`, `scrub match`, `scrub run` and `author rewrite` -- the operations that rewrite history irreversibly. Each prompts `about to run consequential command '<name>'. Proceed? [y/N]` on a terminal, and refuses outright with `error: stdin is not interactive; pass --approve-consequential to confirm` when there is no terminal to ask at. **Everything else -- `commit`, `push`, `pull`, `undo`, `config set` and the guarded passthroughs -- runs bare, with nothing added to the command line.**
 
-`--json` implies `--quiet` -- human-readable chatter would corrupt the JSON stream -- but it never implies approval. `--json` says how to format output; it says nothing about consent. Adding it to a command line can therefore never destroy or publish anything on its own.
+`--json` does **not** imply `--quiet`, and it never implies approval. The two are independent: `--quiet` governs the human stream, and the envelope is not written through the writers `--quiet` can reach, so `--json --quiet` still emits the complete document. `--json` says how to answer; it says nothing about consent. Adding it to a command line can therefore never destroy or publish anything on its own.
 
 Under `--dry-run` the framework writes a **would-do log** to stdout after the command's own output, listing every mutation the run would have performed:
 
@@ -35,7 +35,7 @@ DRY RUN — no changes were made. Would do:
   1. run: git push origin refs/heads/main:refs/heads/main (granted: push — publishing local refs to a remote is what this command is for)
 ```
 
-The log is never suppressed -- not by `--quiet`, not by `--json` -- so a machine-readable dry run's stdout is safegit's JSON payload followed by the log. Cut at the `DRY RUN` line before decoding.
+The log is never suppressed by `--quiet`. In machine mode it is not printed as text at all: the same records ride the envelope's `preview` member, so a machine-readable dry run's stdout is still exactly one JSON document. Parse it whole.
 
 ## commit
 

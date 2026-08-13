@@ -206,14 +206,36 @@ When safegit detects it is running inside a git submodule, two additional behavi
 
 - **Hook cascading:** `safegit push` discovers and runs pre-pre-push hooks from both the parent repo and the submodule, with parent hooks executing first.
 
-## JSON output mode
+## Machine mode (`--json`)
 
-All commands support `--json` for machine-readable output. When `--json` is active, safegit automatically enables `--quiet` (suppresses informational stderr). It does **not** imply approval: consent is a separate question and `--json` does not answer it, so a non-interactive `--json` run of a *consequential* command (`scrub file`/`match`/`run`, `author rewrite`) must pass `--approve-consequential` explicitly. Ordinary mutating commands such as `commit` need nothing. A `--json backup backup` to a remote safegit cannot prove is private is the one place where `--approve-consequential` is not the answer either: that question belongs to the target, so it takes `--allow-public-remote`. If a command fails before producing JSON output, an error envelope is written to stdout:
+`--json` selects the CLI framework's machine mode, on every command. **stdout then carries exactly one document: the envelope.** safegit's own data is its `payload` member, the recorded effects of a `--dry-run` are its `preview` member, and everything safegit would have said in human text is either absent or a diagnostic:
 
 ```json
 {
-  "error": "description of what went wrong"
+  "interface_version": 1,
+  "app": "safegit",
+  "app_version": "0.27.0",
+  "command": "scrub.file",
+  "exit_code": 0,
+  "payload": {"version": 1, "dry_run": true, "file": "secret.txt", "commit_count": 3},
+  "dry_run": true,
+  "preview": [
+    {"seq": 1, "verb": "run", "kind": "proc_mutate", "recorded": true,
+     "detail": "git update-ref refs/heads/main <rewritten> 9e46d1bb"}
+  ],
+  "preview_error": null,
+  "diagnostics": []
 }
 ```
+
+Parse the whole stream: there is no trailing would-do log to cut off, and no second document to skip.
+
+Each command that produces a payload **declares its JSON Schema**, and the framework validates the value against that declaration before writing it -- a wrong shape fails the run instead of shipping. `safegit --dump-schema` publishes every declaration verbatim.
+
+Three properties worth knowing:
+
+- **The envelope is exempt from `--quiet`.** `--json --quiet` emits the complete document; quiet governs the human stream only.
+- **`--json` does not imply approval.** A non-interactive `--json` run of a *consequential* command (`scrub file`/`match`/`run`, `author rewrite`) must pass `--approve-consequential` explicitly. Ordinary mutating commands such as `commit` need nothing. A `--json backup backup` to a remote safegit cannot prove is private is the one place `--approve-consequential` is not the answer either: that question belongs to the target, so it takes `--allow-public-remote`.
+- **An error path answers with its exit code and stderr.** A command that fails writes its message to stderr and exits nonzero; it does not write a JSON error object, because the envelope is the only document machine mode has and a failing command exits below the point where the framework emits it.
 
 This makes safegit suitable for embedding in tool pipelines that parse structured output.
