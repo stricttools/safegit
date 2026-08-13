@@ -1291,7 +1291,7 @@ func TestScrubFileJSON(t *testing.T) {
 		OldHead          string            `json:"old_head"`
 		NewHead          string            `json:"new_head"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 
@@ -1388,7 +1388,7 @@ func TestScrubFileDryRunShowsSHA(t *testing.T) {
 	var result struct {
 		NewBlobSHA string `json:"new_blob_sha"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON: %v\nstdout: %s", err, stdout)
 	}
 	if result.NewBlobSHA == "" {
@@ -1435,7 +1435,7 @@ func TestScrubFileJSONDryRun(t *testing.T) {
 		OldHead     string `json:"old_head"`
 		NewBlobSHA  string `json:"new_blob_sha"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 

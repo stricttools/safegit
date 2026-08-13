@@ -2,6 +2,10 @@
 /safegit
 *.exe
 
+# Go workspace: local development against an unreleased strictcli checkout
+go.work
+go.work.sum
+
 # Added by rlsbl
 node_modules/
 __pycache__/

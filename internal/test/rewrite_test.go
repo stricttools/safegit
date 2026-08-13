@@ -881,7 +881,7 @@ func TestRewriteAuthorJSON(t *testing.T) {
 		OldName          string            `json:"old_name"`
 		NewName          string            `json:"new_name"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 
@@ -970,7 +970,7 @@ func TestRewriteAuthorJSONDryRun(t *testing.T) {
 		OldName        string `json:"old_name"`
 		NewName        string `json:"new_name"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 

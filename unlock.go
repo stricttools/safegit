@@ -43,7 +43,7 @@ func runUnlock(flags globalFlags, ref string) int {
 	}
 
 	if flags.dryRun {
-		if !flags.quiet {
+		if !flags.silent() {
 			fmt.Printf("would release lock on %s\n", refShortName(ref))
 		}
 		return 0
@@ -55,7 +55,7 @@ func runUnlock(flags globalFlags, ref string) int {
 		return 1
 	}
 
-	if !flags.quiet {
+	if !flags.silent() {
 		fmt.Printf("lock on %s released\n", refShortName(ref))
 	}
 	return 0

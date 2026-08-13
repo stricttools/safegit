@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
 // authorCheckDeviation records a commit whose author or committer
@@ -29,6 +30,36 @@ type authorCheckExpected struct {
 	Name  string `json:"name,omitempty"`
 	Email string `json:"email,omitempty"`
 }
+
+// authorCheckPayloadSchema declares what `author check` puts in the envelope's
+// payload. The framework validates the value against it at emission, so the
+// declaration and the struct above cannot drift: name and email are omitempty
+// (an unset expectation is absent, not empty), which is why they are declared
+// but not required.
+var authorCheckPayloadSchema = strictcli.SchemaObject(
+	map[string]interface{}{
+		"expected": strictcli.SchemaObject(
+			map[string]interface{}{
+				"name":  strictcli.SchemaType("string"),
+				"email": strictcli.SchemaType("string"),
+			},
+			nil, false,
+		),
+		"deviations": strictcli.SchemaArray(strictcli.SchemaObject(
+			map[string]interface{}{
+				"sha":             strictcli.SchemaType("string"),
+				"author_name":     strictcli.SchemaType("string"),
+				"author_email":    strictcli.SchemaType("string"),
+				"committer_name":  strictcli.SchemaType("string"),
+				"committer_email": strictcli.SchemaType("string"),
+			},
+			[]string{"sha", "author_name", "author_email", "committer_name", "committer_email"},
+			false,
+		)),
+	},
+	[]string{"expected", "deviations"},
+	false,
+)
 
 func runAuthorCheck(flags globalFlags, kwargs map[string]interface{}) int {
 	const cmd = "author check"
@@ -91,18 +122,24 @@ func runAuthorCheck(flags globalFlags, kwargs map[string]interface{}) int {
 		}
 	}
 
+	// One computation, two renderings: the payload is built unconditionally and
+	// the human text below reports the same deviations list.
+	result := authorCheckResult{
+		Expected: authorCheckExpected{
+			Name:  expectName,
+			Email: expectEmail,
+		},
+		Deviations: deviations,
+	}
+	if result.Deviations == nil {
+		result.Deviations = []authorCheckDeviation{}
+	}
+	flags.payload(result)
+
+	// In machine mode the envelope is stdout's only document, so the human
+	// rendering below is skipped -- it prints straight to stdout and would land
+	// beside the envelope.
 	if flags.json {
-		result := authorCheckResult{
-			Expected: authorCheckExpected{
-				Name:  expectName,
-				Email: expectEmail,
-			},
-			Deviations: deviations,
-		}
-		if result.Deviations == nil {
-			result.Deviations = []authorCheckDeviation{}
-		}
-		emitJSON(result)
 		if len(deviations) > 0 {
 			return 1
 		}

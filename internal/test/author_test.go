@@ -47,7 +47,7 @@ func TestAuthorListJSON(t *testing.T) {
 		Role  string `json:"role"`
 		Count int    `json:"count"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &entries); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &entries); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 
@@ -96,7 +96,7 @@ func TestAuthorListMultipleIdentities(t *testing.T) {
 		Role  string `json:"role"`
 		Count int    `json:"count"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &entries); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &entries); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 
@@ -189,7 +189,7 @@ func TestAuthorCheckJSON(t *testing.T) {
 			CommitterEmail string `json:"committer_email"`
 		} `json:"deviations"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 
@@ -281,7 +281,7 @@ func TestAuthorCheckPassJSON(t *testing.T) {
 	var result struct {
 		Deviations []interface{} `json:"deviations"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON: %v\nstdout: %s", err, stdout)
 	}
 	if len(result.Deviations) != 0 {

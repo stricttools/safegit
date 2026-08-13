@@ -10,6 +10,7 @@ import (
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/scan"
 	"github.com/smm-h/safegit/internal/trailer"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
 // ScanResult is the JSON output for `safegit scan`.
@@ -38,6 +39,48 @@ type ScanMatchJSON struct {
 	Reachable  bool   `json:"reachable"`
 	Context    string `json:"context"`
 }
+
+// scanMatchSchema is the declared shape of one match inside the scan payload.
+// sha, path and commit_sha are omitempty on ScanMatchJSON -- a non-object match
+// has no SHA, an unattributed blob has no path -- so they are declared without
+// being required.
+var scanMatchSchema = strictcli.SchemaObject(
+	map[string]interface{}{
+		"sha":         strictcli.SchemaType("string"),
+		"object_type": strictcli.SchemaType("string"),
+		"path":        strictcli.SchemaType("string"),
+		"commit_sha":  strictcli.SchemaType("string"),
+		"line":        strictcli.SchemaType("integer"),
+		"reachable":   strictcli.SchemaType("boolean"),
+		"context":     strictcli.SchemaType("string"),
+	},
+	[]string{"object_type", "line", "reachable", "context"},
+	false,
+)
+
+// scanPayloadSchema declares what `scan` puts in the envelope's payload.
+var scanPayloadSchema = strictcli.SchemaObject(
+	map[string]interface{}{
+		"version":         strictcli.SchemaType("integer"),
+		"pattern":         strictcli.SchemaType("string"),
+		"scope":           strictcli.SchemaType("string"),
+		"target":          strictcli.SchemaType("string"),
+		"objects_scanned": strictcli.SchemaType("integer"),
+		"binary_skipped":  strictcli.SchemaType("integer"),
+		"total_matches":   strictcli.SchemaType("integer"),
+		"blob_matches":    strictcli.SchemaArray(scanMatchSchema),
+		"commit_matches":  strictcli.SchemaArray(scanMatchSchema),
+		"tag_matches":     strictcli.SchemaArray(scanMatchSchema),
+		"trailer_matches": strictcli.SchemaArray(scanMatchSchema),
+		"file_matches":    strictcli.SchemaArray(scanMatchSchema),
+	},
+	[]string{
+		"version", "pattern", "objects_scanned", "binary_skipped",
+		"total_matches", "blob_matches", "commit_matches", "tag_matches",
+		"trailer_matches", "file_matches",
+	},
+	false,
+)
 
 // validTargets lists the allowed values for --target.
 var validTargets = map[string]bool{
@@ -294,27 +337,30 @@ func runScan(flags globalFlags, kwargs map[string]interface{}) int {
 		targetStr = strings.Join(parts, ",")
 	}
 
-	// JSON output.
+	// One computation, two renderings: the payload carries the same per-kind
+	// match lists and the same total the human output below prints.
+	result := ScanResult{
+		Version:        1,
+		Pattern:        pattern,
+		ObjectsScanned: results.Scanned,
+		BinarySkipped:  results.Skipped,
+		TotalMatches:   totalMatches,
+		BlobMatches:    matchesToJSON(blobMatches),
+		CommitMatches:  matchesToJSON(commitMatches),
+		TagMatches:     matchesToJSON(tagMatches),
+		TrailerMatches: matchesToJSON(trailerMatches),
+		FileMatches:    matchesToJSON(nonObjectMatches),
+	}
+	if scope != nil {
+		result.Scope = *scope
+	}
+	if targetStr != "" {
+		result.Target = targetStr
+	}
+	flags.payload(result)
+
+	// In machine mode the envelope owns stdout.
 	if flags.json {
-		result := ScanResult{
-			Version:        1,
-			Pattern:        pattern,
-			ObjectsScanned: results.Scanned,
-			BinarySkipped:  results.Skipped,
-			TotalMatches:   totalMatches,
-			BlobMatches:    matchesToJSON(blobMatches),
-			CommitMatches:  matchesToJSON(commitMatches),
-			TagMatches:     matchesToJSON(tagMatches),
-			TrailerMatches: matchesToJSON(trailerMatches),
-			FileMatches:    matchesToJSON(nonObjectMatches),
-		}
-		if scope != nil {
-			result.Scope = *scope
-		}
-		if targetStr != "" {
-			result.Target = targetStr
-		}
-		emitJSON(result)
 		return 0
 	}
 

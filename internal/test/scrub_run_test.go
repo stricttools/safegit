@@ -310,7 +310,7 @@ replace = "REDACTED"
 		OldHead          string            `json:"old_head"`
 		NewHead          string            `json:"new_head"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 
@@ -522,7 +522,7 @@ replace = "REDACTED"
 		EstimatedCommits   int `json:"estimated_commits"`
 		ObjectsScanned     int `json:"objects_scanned"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 

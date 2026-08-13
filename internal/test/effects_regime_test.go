@@ -1,6 +1,7 @@
 package test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,19 +11,47 @@ import (
 // These tests pin the two framework-level behaviours the strictcli effects
 // regime introduced, and the safegit-level honesty they buy.
 
-// dryRunLogHeader is the first line strictcli writes to stdout at the end of
-// every dry-run dispatch. It is never suppressed -- not by --quiet and not by
-// safegit's --json -- so a machine-readable dry run's stdout is safegit's JSON
-// payload followed by this log.
+// dryRunLogHeader is the first line strictcli writes to stdout at the end of a
+// dry-run dispatch in HUMAN mode. In machine mode there is no would-do text on
+// stdout at all: the envelope is the sole document and the same records ride
+// its preview member.
 const dryRunLogHeader = "DRY RUN — no changes were made. Would do:"
 
-// jsonPayload returns stdout with any trailing would-do log removed, so a dry
-// run's JSON body can be decoded. Non-dry-run output passes through unchanged.
-func jsonPayload(stdout string) string {
-	if i := strings.Index(stdout, dryRunLogHeader); i >= 0 {
-		return stdout[:i]
+// machineEnvelope is the framework's machine-mode document (effects contract
+// §19.2), as much of it as safegit's tests read.
+type machineEnvelope struct {
+	InterfaceVersion int                      `json:"interface_version"`
+	App              string                   `json:"app"`
+	AppVersion       string                   `json:"app_version"`
+	Command          *string                  `json:"command"`
+	ExitCode         int                      `json:"exit_code"`
+	Payload          json.RawMessage          `json:"payload"`
+	DryRun           bool                     `json:"dry_run"`
+	Preview          []map[string]interface{} `json:"preview"`
+	PreviewError     map[string]interface{}   `json:"preview_error"`
+	Diagnostics      []map[string]string      `json:"diagnostics"`
+}
+
+// decodeEnvelope parses a machine-mode run's stdout. In machine mode stdout
+// carries exactly one document, so anything that does not parse whole is a
+// failure rather than something to tolerate.
+func decodeEnvelope(t *testing.T, stdout string) machineEnvelope {
+	t.Helper()
+	var env machineEnvelope
+	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
+		t.Fatalf("stdout is not a strictcli envelope: %v\nstdout: %s", err, stdout)
 	}
-	return stdout
+	if env.InterfaceVersion != 1 {
+		t.Fatalf("unexpected envelope interface_version %d", env.InterfaceVersion)
+	}
+	return env
+}
+
+// jsonPayload returns the envelope's payload member, which is where a
+// machine-mode run's own document now lives.
+func jsonPayload(t *testing.T, stdout string) string {
+	t.Helper()
+	return string(decodeEnvelope(t, stdout).Payload)
 }
 
 // wouldDoLog returns the would-do log portion of stdout, or "" when the run was

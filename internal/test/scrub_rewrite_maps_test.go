@@ -103,7 +103,7 @@ func TestScrubFileRewriteMapsPersisted(t *testing.T) {
 	}
 
 	var result scrubFileJSON
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("parsing scrub JSON: %v\n%s", err, stdout)
 	}
 
@@ -229,7 +229,7 @@ func TestScrubMatchRewriteMapsIncludeAnnotationPassTagRewrites(t *testing.T) {
 		Tags          []tagRewriteJSON `json:"tags"`
 		TagsRewritten int              `json:"tags_rewritten"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("parsing scrub match JSON: %v\n%s", err, stdout)
 	}
 	if result.TagsRewritten < 1 {
@@ -302,7 +302,7 @@ func TestScrubMatchTagAnnotationOnlyRewriteWritesRewriteMaps(t *testing.T) {
 		Rewrites      map[string]string `json:"rewrites"`
 		TagsRewritten int               `json:"tags_rewritten"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("parsing scrub match JSON: %v\n%s", err, stdout)
 	}
 	if len(result.Rewrites) != 0 {
@@ -414,7 +414,7 @@ func TestScrubRunRewriteMapsPersisted(t *testing.T) {
 		NewHead   string            `json:"new_head"`
 		CleanupOK *bool             `json:"cleanup_ok"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("parsing scrub run JSON: %v\n%s", err, stdout)
 	}
 	if result.CleanupOK == nil || !*result.CleanupOK {

@@ -1027,7 +1027,7 @@ func TestScrubMatchJSON(t *testing.T) {
 		OldHead          string            `json:"old_head"`
 		NewHead          string            `json:"new_head"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 
@@ -1093,7 +1093,7 @@ func TestScrubMatchJSONDryRun(t *testing.T) {
 		FileMatches      int    `json:"file_matches"`
 		EstimatedCommits int    `json:"estimated_commits"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 
@@ -1151,7 +1151,7 @@ func TestScrubMatchDryRunRangeFilter(t *testing.T) {
 		TotalMatches int    `json:"total_matches"`
 		Scope        string `json:"scope"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 

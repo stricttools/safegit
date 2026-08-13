@@ -284,7 +284,7 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 		},
 	})
 
-	if !flags.quiet {
+	if !flags.silent() {
 		fmt.Printf("  %s (%s) -> %s %s\n", branch, headSHA[:12], remote, slot)
 	}
 	return 0
@@ -330,7 +330,7 @@ func runBackupList(flags globalFlags, remote string) int {
 		if len(sha) > 12 {
 			sha = sha[:12]
 		}
-		fmt.Printf("  %-*s  %s  %s\n", width, branch, sha, ref)
+		outf(flags, "  %-*s  %s  %s\n", width, branch, sha, ref)
 	}
 	return 0
 }
@@ -380,7 +380,7 @@ func runBackupRestore(flags globalFlags, remote string) int {
 
 	stdout, stderr, err := git.Run(ctx, "merge", "--ff-only", "FETCH_HEAD")
 	if stdout != "" {
-		fmt.Print(stdout)
+		outf(flags, "%s", stdout)
 	}
 	if err != nil {
 		fmt.Fprint(os.Stderr, stderr)
@@ -405,7 +405,7 @@ func runBackupRestore(flags globalFlags, remote string) int {
 		},
 	})
 
-	if !flags.quiet {
+	if !flags.silent() {
 		fmt.Printf("  %s restored from %s %s (%s -> %s)\n", branch, remote, slot, oldHead[:12], fetched[:12])
 	}
 	return 0

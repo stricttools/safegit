@@ -50,7 +50,7 @@ func TestScanBasic(t *testing.T) {
 			Line int    `json:"line"`
 		} `json:"blob_matches"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(jstdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, jstdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, jstdout)
 	}
 
@@ -93,7 +93,7 @@ func TestScanScope(t *testing.T) {
 			Path string `json:"path"`
 		} `json:"blob_matches"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, stdout)
 	}
 
@@ -148,7 +148,7 @@ func TestScanEntireHistory(t *testing.T) {
 			Path string `json:"path"`
 		} `json:"blob_matches"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, stdout)
 	}
 
@@ -185,7 +185,7 @@ func TestScanNoMatches(t *testing.T) {
 	var result struct {
 		TotalMatches int `json:"total_matches"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, stdout)
 	}
 	if result.TotalMatches != 0 {
@@ -212,7 +212,7 @@ func TestScanCommitMessage(t *testing.T) {
 			Context    string `json:"context"`
 		} `json:"commit_matches"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, stdout)
 	}
 
@@ -246,7 +246,7 @@ func TestScanFrom(t *testing.T) {
 	var result struct {
 		TotalMatches int `json:"total_matches"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON: %v\nraw: %s", err, stdout)
 	}
 	if result.TotalMatches == 0 {
@@ -267,7 +267,7 @@ func TestScanFrom(t *testing.T) {
 		// But file_matches may still appear from working tree scan.
 		BlobMatches []struct{} `json:"blob_matches"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout2)), &result2); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout2)), &result2); err != nil {
 		t.Fatalf("failed to parse JSON: %v\nraw: %s", err, stdout2)
 	}
 	if len(result2.BlobMatches) > 0 {
@@ -301,7 +301,7 @@ func TestScanNonObjectFiles(t *testing.T) {
 			Path string `json:"path"`
 		} `json:"file_matches"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, stdout)
 	}
 
@@ -355,7 +355,7 @@ func TestScanTargetBlobs(t *testing.T) {
 		TagMatches    []ScanMatchJSON `json:"tag_matches"`
 		FileMatches   []ScanMatchJSON `json:"file_matches"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, stdout)
 	}
 
@@ -402,7 +402,7 @@ func TestScanTargetTrailers(t *testing.T) {
 		BlobMatches    []ScanMatchJSON `json:"blob_matches"`
 		FileMatches    []ScanMatchJSON `json:"file_matches"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, stdout)
 	}
 
@@ -432,7 +432,7 @@ func TestScanTargetTrailers(t *testing.T) {
 		CommitMatches  []ScanMatchJSON `json:"commit_matches"`
 		TrailerMatches []ScanMatchJSON `json:"trailer_matches"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout2)), &result2); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout2)), &result2); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, stdout2)
 	}
 
@@ -469,7 +469,7 @@ func TestScanTargetMultiple(t *testing.T) {
 		TagMatches    []ScanMatchJSON `json:"tag_matches"`
 		FileMatches   []ScanMatchJSON `json:"file_matches"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, stdout)
 	}
 
@@ -507,7 +507,7 @@ func TestScanJSON(t *testing.T) {
 
 	// Parse into a generic map to verify all expected fields exist.
 	var raw map[string]interface{}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &raw); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &raw); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nraw: %s", err, stdout)
 	}
 
@@ -547,7 +547,7 @@ func TestScanJSON(t *testing.T) {
 		TrailerMatches []ScanMatchJSON `json:"trailer_matches"`
 		FileMatches    []ScanMatchJSON `json:"file_matches"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse typed JSON output: %v\nraw: %s", err, stdout)
 	}
 

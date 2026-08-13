@@ -22,14 +22,14 @@ func hookList(flags globalFlags) int {
 	}
 
 	if len(discovered) == 0 {
-		fmt.Println("no pre-pre-push hooks found")
+		outf(flags, "no pre-pre-push hooks found\n")
 		return 0
 	}
 
 	for _, h := range discovered {
-		fmt.Printf("  %s  (%s)\n", filepath.Base(h), h)
+		outf(flags, "  %s  (%s)\n", filepath.Base(h), h)
 	}
-	fmt.Printf("%d hook(s)\n", len(discovered))
+	outf(flags, "%d hook(s)\n", len(discovered))
 	return 0
 }
 
@@ -87,7 +87,7 @@ func hookRun(flags globalFlags, name string) int {
 			return 1
 		}
 
-		fmt.Printf("running hook: %s\n", name)
+		outf(flags, "running hook: %s\n", name)
 		r := hooks.RunSingle(ctx, hookPath, hookStdin, timeoutSec, hookEnv)
 		if r.TimedOut {
 			fmt.Fprintf(os.Stderr, "hook %s timed out\n", name)
@@ -97,7 +97,7 @@ func hookRun(flags globalFlags, name string) int {
 			fmt.Fprintf(os.Stderr, "hook %s failed (exit %d)\n", name, r.ExitCode)
 			return 20
 		}
-		fmt.Printf("hook %s passed (%v)\n", name, r.Duration)
+		outf(flags, "hook %s passed (%v)\n", name, r.Duration)
 		return 0
 	}
 
@@ -109,7 +109,7 @@ func hookRun(flags globalFlags, name string) int {
 	}
 
 	if len(results) == 0 {
-		fmt.Println("no hooks to run")
+		outf(flags, "no hooks to run\n")
 		return 0
 	}
 
@@ -123,7 +123,7 @@ func hookRun(flags globalFlags, name string) int {
 			status = fmt.Sprintf("failed (exit %d)", r.ExitCode)
 			failed = true
 		}
-		fmt.Printf("  %s: %s (%v)\n", r.Name, status, r.Duration)
+		outf(flags, "  %s: %s (%v)\n", r.Name, status, r.Duration)
 	}
 
 	if failed {
@@ -158,7 +158,7 @@ func hookInstall(flags globalFlags, srcPath string) int {
 	}
 
 	name := filepath.Base(srcPath)
-	if !flags.quiet && !flags.dryRun {
+	if !flags.silent() && !flags.dryRun {
 		fmt.Printf("installed hook: %s\n", name)
 	}
 	return 0

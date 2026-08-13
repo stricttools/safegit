@@ -48,7 +48,7 @@ func coordGuard(flags globalFlags, sgDir, operation string) int {
 func syncMainIndex(flags globalFlags, op string) {
 	ctx := context.Background()
 	if err := git.SyncMainIndex(ctx, "HEAD"); err != nil {
-		if !flags.quiet {
+		if !flags.silent() {
 			fmt.Fprintf(os.Stderr, "warning: failed to sync main index after %s: %v\n", op, err)
 		}
 	}

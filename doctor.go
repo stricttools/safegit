@@ -46,7 +46,7 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		if !flags.quiet {
+		if !flags.silent() {
 			fmt.Println("safegit uninstalled")
 		}
 		return 0
@@ -212,13 +212,13 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 			allOK = false
 		}
 		if c.Detail != "" {
-			fmt.Printf("[%s] %s: %s\n", icon, c.Name, c.Detail)
+			outf(flags, "[%s] %s: %s\n", icon, c.Name, c.Detail)
 		} else {
-			fmt.Printf("[%s] %s\n", icon, c.Name)
+			outf(flags, "[%s] %s\n", icon, c.Name)
 		}
 	}
-	if allOK && !flags.quiet {
-		fmt.Println("all checks passed")
+	if allOK && !flags.silent() {
+		outf(flags, "all checks passed\n")
 	}
 
 	// --fix: run garbage collection and cleanup (formerly `safegit gc`).
@@ -263,7 +263,7 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 		}
 		wouldRotate := logSize >= int64(maxMB)*1024*1024
 
-		if !flags.quiet {
+		if !flags.silent() {
 			fmt.Printf("would remove %d orphan tmp dir(s)\n", len(orphanDirs))
 			if hasLegacyQueue {
 				fmt.Println("would remove legacy queue directory")
@@ -299,7 +299,7 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 			maxMB = cfg.Log.MaxSizeMB
 		}
 		rotated, rotErr := oplog.Rotate(sgDir, maxMB)
-		if rotErr != nil && !flags.quiet {
+		if rotErr != nil && !flags.silent() {
 			fmt.Fprintf(os.Stderr, "warning: log rotation failed: %v\n", rotErr)
 		}
 
@@ -307,7 +307,7 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 		sharedDir := repo.SharedSafegitDir(ctx, gitDir)
 		staleCleaned := removeStaleLocks(sharedDir)
 
-		if !flags.quiet {
+		if !flags.silent() {
 			fmt.Printf("removed %d orphan tmp dir(s)\n", removed)
 			if queueRemoved {
 				fmt.Println("removed legacy queue directory")
@@ -324,7 +324,7 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 	// Submodule safegit directory cleanup (runs in both dry-run and normal mode;
 	// doctorFixSubmodule handles dry-run internally).
 	submodules, enumErr := submodule.Enumerate(ctx, gitDir)
-	if enumErr != nil && !flags.quiet {
+	if enumErr != nil && !flags.silent() {
 		fmt.Fprintf(os.Stderr, "warning: enumerating submodules: %v\n", enumErr)
 	}
 	for _, sub := range submodules {
@@ -340,11 +340,11 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 func doctorFixSubmodule(flags globalFlags, name, sgDir string) {
 	if flags.dryRun {
 		orphans, err := index.GarbageCollectDryRun(sgDir)
-		if err != nil && !flags.quiet {
+		if err != nil && !flags.silent() {
 			fmt.Fprintf(os.Stderr, "warning: [%s] scanning orphan tmp dirs: %v\n", name, err)
 		}
 		staleLocks := countStaleLocks(sgDir)
-		if !flags.quiet {
+		if !flags.silent() {
 			if len(orphans) > 0 {
 				fmt.Printf("[%s] would remove %d orphan tmp dir(s)\n", name, len(orphans))
 			}
@@ -356,12 +356,12 @@ func doctorFixSubmodule(flags globalFlags, name, sgDir string) {
 	}
 
 	removed, err := index.GarbageCollect(sgDir)
-	if err != nil && !flags.quiet {
+	if err != nil && !flags.silent() {
 		fmt.Fprintf(os.Stderr, "warning: [%s] cleaning orphan tmp dirs: %v\n", name, err)
 	}
 	staleCleaned := removeStaleLocks(sgDir)
 
-	if !flags.quiet {
+	if !flags.silent() {
 		if removed > 0 {
 			fmt.Printf("[%s] removed %d orphan tmp dir(s)\n", name, removed)
 		}

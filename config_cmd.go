@@ -43,7 +43,7 @@ func runConfigShow(flags globalFlags) int {
 
 	for _, key := range repo.ValidConfigKeys() {
 		val, _ := repo.GetConfigValue(cfg, key)
-		fmt.Printf("%s = %s\n", key, formatConfigValue(val))
+		outf(flags, "%s = %s\n", key, formatConfigValue(val))
 	}
 	return 0
 }
@@ -66,7 +66,7 @@ func runConfigGet(flags globalFlags, key string) int {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
 	}
-	fmt.Printf("%s\n", formatConfigValue(val))
+	outf(flags, "%s\n", formatConfigValue(val))
 	return 0
 }
 
@@ -103,7 +103,7 @@ func runConfigSet(flags globalFlags, key, value string) int {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
 	}
-	if !flags.quiet && !flags.dryRun {
+	if !flags.silent() && !flags.dryRun {
 		fmt.Printf("%s = %s\n", key, value)
 	}
 	return 0

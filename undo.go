@@ -169,11 +169,11 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	}
 
 	if flags.dryRun {
-		fmt.Printf("would undo %d operation(s) on %s\n", count, refShortName(ref))
+		outf(flags, "would undo %d operation(s) on %s\n", count, refShortName(ref))
 		if isRootUndo {
-			fmt.Printf("  %s -> (empty, delete ref)\n", currentSHA[:8])
+			outf(flags, "  %s -> (empty, delete ref)\n", currentSHA[:8])
 		} else {
-			fmt.Printf("  %s -> %s\n", currentSHA[:8], targetSHA[:8])
+			outf(flags, "  %s -> %s\n", currentSHA[:8], targetSHA[:8])
 		}
 		return
 	}
@@ -230,7 +230,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		},
 	})
 
-	if !flags.quiet {
+	if !flags.silent() {
 		if count == 1 {
 			fmt.Printf("undid %s on %s\n", targetEntry.Op, refShortName(ref))
 		} else {

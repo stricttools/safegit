@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
 // identityKey uniquely identifies an author/committer by name and email.
@@ -22,6 +23,21 @@ type identityEntry struct {
 	Role  string `json:"role"`
 	Count int    `json:"count"`
 }
+
+// authorListPayloadSchema declares what `author list` puts in the envelope's
+// payload: the identity table, one object per distinct identity. `role` is an
+// enum because the three values below are the whole set the aggregation can
+// produce.
+var authorListPayloadSchema = strictcli.SchemaArray(strictcli.SchemaObject(
+	map[string]interface{}{
+		"name":  strictcli.SchemaType("string"),
+		"email": strictcli.SchemaType("string"),
+		"role":  strictcli.SchemaEnum("author", "committer", "both"),
+		"count": strictcli.SchemaType("integer"),
+	},
+	[]string{"name", "email", "role", "count"},
+	false,
+))
 
 func runAuthorList(flags globalFlags) int {
 	const cmd = "author list"
@@ -96,8 +112,11 @@ func runAuthorList(flags globalFlags) int {
 		return entries[i].Email < entries[j].Email
 	})
 
+	flags.payload(entries)
+
+	// In machine mode the envelope owns stdout; the table below would land
+	// beside it.
 	if flags.json {
-		emitJSON(entries)
 		return 0
 	}
 
