@@ -59,9 +59,9 @@ var scrubVerifyPayloadSchema = strictcli.SchemaObject(
 func runScrubVerify(flags globalFlags) int {
 	const cmd = "scrub verify"
 
-	gitDir := mustGitDir(flags, cmd)
+	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(flags, cmd, 4, err.Error())
+		die(4, err.Error())
 	}
 
 	ctx := context.Background()
@@ -70,7 +70,7 @@ func runScrubVerify(flags globalFlags) int {
 
 	policies, err := readScrubPolicies(sgDir)
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("reading scrub policies: %v", err))
+		die(1, fmt.Sprintf("reading scrub policies: %v", err))
 	}
 
 	if len(policies) == 0 {
@@ -129,7 +129,7 @@ func runScrubVerify(flags globalFlags) int {
 
 		allScanResults, err := scan.ScanObjectsMulti(ctx, patterns, scan.ScanOpts{EntireHistory: true})
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("scanning objects: %v", err))
+			die(1, fmt.Sprintf("scanning objects: %v", err))
 		}
 
 		// Phase 3: For scoped policies, we need attribution. Run AddAttribution
@@ -162,7 +162,7 @@ func runScrubVerify(flags globalFlags) int {
 			}
 
 			if err := scan.AddAttribution(ctx, &combined, scan.ScanOpts{}); err != nil {
-				die(flags, cmd, 1, fmt.Sprintf("adding attribution: %v", err))
+				die(1, fmt.Sprintf("adding attribution: %v", err))
 			}
 
 			// Distribute attributed matches back to per-pattern results.
@@ -222,7 +222,7 @@ func runScrubVerify(flags globalFlags) int {
 				if !ok {
 					scopedBlobs, err = buildScopedBlobSet(ctx, vp.policy.Scope)
 					if err != nil {
-						die(flags, cmd, 1, fmt.Sprintf("building scoped blob set for %q: %v", vp.policy.Scope, err))
+						die(1, fmt.Sprintf("building scoped blob set for %q: %v", vp.policy.Scope, err))
 					}
 					scopedBlobSets[vp.policy.Scope] = scopedBlobs
 				}

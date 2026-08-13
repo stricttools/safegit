@@ -29,7 +29,7 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 	fix := kwargs["fix"].(bool)
 	uninstall := kwargs["uninstall"].(bool)
 
-	gitDir := mustGitDir(flags, "doctor")
+	gitDir := mustGitDir()
 
 	// --uninstall: remove safegit from this repo and exit.
 	if uninstall {

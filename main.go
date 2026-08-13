@@ -677,11 +677,11 @@ func ensureInitialized(flags globalFlags, gitDir string) error {
 }
 
 // mustGitDir resolves the .git directory or exits with an error.
-func mustGitDir(flags globalFlags, cmd string) string {
+func mustGitDir() string {
 	ctx := context.Background()
 	gitDir, err := git.GitDir(ctx)
 	if err != nil {
-		die(flags, cmd, 3, "not a git repository (or git is not installed)")
+		die(3, "not a git repository (or git is not installed)")
 	}
 	// Resolve to absolute path
 	abs, err := filepath.Abs(gitDir)
@@ -751,13 +751,13 @@ func outf(flags globalFlags, format string, args ...interface{}) {
 }
 
 // requireCleanTree dies if the working tree has uncommitted changes.
-func requireCleanTree(ctx context.Context, flags globalFlags, cmd string) {
+func requireCleanTree(ctx context.Context) {
 	statusOut, _, err := git.Run(ctx, "status", "--porcelain")
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("checking working tree: %v", err))
+		die(1, fmt.Sprintf("checking working tree: %v", err))
 	}
 	if strings.TrimSpace(statusOut) != "" {
-		die(flags, cmd, 1, "working tree is dirty; commit changes before proceeding")
+		die(1, "working tree is dirty; commit changes before proceeding")
 	}
 }
 
@@ -767,14 +767,16 @@ func commandHelp(cmd, usage string) {
 	os.Exit(0)
 }
 
-// die prints an error for the given subcommand and exits with code.
+// die prints an error and exits with code.
 //
 // It writes no JSON of its own any more. Machine mode's stdout carries the
 // framework's envelope and nothing else, and safegit cannot mint one: die exits
 // the process directly, below the seam that emits it. So an error path answers
 // with the exit code and the stderr line in both modes -- never with a second
-// document that would have to imitate the envelope.
-func die(flags globalFlags, cmd string, code int, msg string) {
+// document that would have to imitate the envelope. It took a globalFlags and a
+// command name while the JSON branch existed; both went unread once that branch
+// died, so neither is a parameter any more.
+func die(code int, msg string) {
 	fmt.Fprintf(os.Stderr, "error: %s\n", msg)
 	os.Exit(code)
 }
@@ -794,7 +796,7 @@ func firstLine(s string) string {
 
 // parseFileSpecs converts raw file arguments (possibly with hunk suffixes like
 // "file.txt:1,3") into commit.FileSpec structs. Dies on malformed hunk specs.
-func parseFileSpecs(files []string, flags globalFlags, cmd string) []commit.FileSpec {
+func parseFileSpecs(files []string) []commit.FileSpec {
 	specs := make([]commit.FileSpec, 0, len(files))
 	for _, f := range files {
 		spec := commit.FileSpec{}
@@ -806,7 +808,7 @@ func parseFileSpecs(files []string, flags globalFlags, cmd string) []commit.File
 		if colonIdx > 0 && isHunkSpec(f[colonIdx+1:]) && !fileExists(f) {
 			hunks, err := stage.ParseHunkSpec(f[colonIdx+1:])
 			if err != nil {
-				die(flags, cmd, 2, fmt.Sprintf("invalid hunk spec in %q: %v", f, err))
+				die(2, fmt.Sprintf("invalid hunk spec in %q: %v", f, err))
 			}
 			spec.Path = f[:colonIdx]
 			spec.Hunks = hunks

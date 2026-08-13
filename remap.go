@@ -94,10 +94,10 @@ func matchAnyScope(globs []string, filePath string) bool {
 
 // validateRemapGlobs dies with a usage error when any glob is malformed.
 // Mirrors the --scope parse-time validation.
-func validateRemapGlobs(flags globalFlags, cmd string, globs []string) {
+func validateRemapGlobs(globs []string) {
 	for _, g := range globs {
 		if _, err := path.Match(g, ""); err != nil {
-			die(flags, cmd, 2, fmt.Sprintf("invalid --remap-shas-in glob %q: %v", g, err))
+			die(2, fmt.Sprintf("invalid --remap-shas-in glob %q: %v", g, err))
 		}
 	}
 }

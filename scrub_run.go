@@ -158,7 +158,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	// --dry-run and --diff are mutually exclusive: --diff shows content diffs,
 	// --dry-run shows match count summaries. Combining them is ambiguous.
 	if flags.dryRun && diffMode {
-		die(flags, cmd, 2, "--dry-run and --diff are mutually exclusive")
+		die(2, "--dry-run and --diff are mutually exclusive")
 	}
 
 	var from *string
@@ -176,12 +176,12 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 
 	remapGlobs := kwargsStrSlice(kwargs["remap_shas_in"])
-	validateRemapGlobs(flags, cmd, remapGlobs)
+	validateRemapGlobs(remapGlobs)
 
 	// Validation
-	gitDir := mustGitDir(flags, cmd)
+	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(flags, cmd, 4, err.Error())
+		die(4, err.Error())
 	}
 
 	ctx := context.Background()
@@ -193,7 +193,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	// Parse recipe
 	recipe, err := parseRecipe(recipePath)
 	if err != nil {
-		die(flags, cmd, 2, fmt.Sprintf("parsing recipe: %v", err))
+		die(2, fmt.Sprintf("parsing recipe: %v", err))
 	}
 
 	infof(flags, "Recipe loaded: %d operations\n", len(recipe.Operations))
@@ -203,20 +203,20 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	if from != nil {
 		fromSHA, err = git.RevParse(ctx, *from)
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("resolving --from %q: %v", *from, err))
+			die(1, fmt.Sprintf("resolving --from %q: %v", *from, err))
 		}
 		isAnc, err := git.IsAncestorOf(ctx, fromSHA, "HEAD")
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("checking ancestry of --from: %v", err))
+			die(1, fmt.Sprintf("checking ancestry of --from: %v", err))
 		}
 		if !isAnc {
-			die(flags, cmd, 1, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
+			die(1, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
 		}
 	}
 
 	// Neither --from nor --entire-history provided
 	if from == nil && !entireHistory {
-		die(flags, cmd, 2, "one of --from or --entire-history is required")
+		die(2, "one of --from or --entire-history is required")
 	}
 
 	// --dry-run preview mode: scan per-operation and show match counts.
@@ -228,7 +228,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	// Execute path only: a rewrite of a dirty tree would lose the uncommitted
 	// work. `--diff` keeps the requirement it has always had, because it is a
 	// step on the execute path rather than a separate preview mode.
-	requireCleanTree(ctx, flags, cmd)
+	requireCleanTree(ctx)
 
 	// --diff preview mode: purely read-only, no lock needed.
 	if diffMode {
@@ -238,7 +238,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 		}
 		combinedPattern, err := regexp.Compile(strings.Join(combinedPatternParts, "|"))
 		if err != nil {
-			die(flags, cmd, 2, fmt.Sprintf("compiling combined pattern: %v", err))
+			die(2, fmt.Sprintf("compiling combined pattern: %v", err))
 		}
 
 		infof(flags, "Scanning objects...\n")
@@ -247,7 +247,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 			EntireHistory: entireHistory,
 		})
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("scanning objects: %v", err))
+			die(1, fmt.Sprintf("scanning objects: %v", err))
 		}
 
 		if len(results.Matches) == 0 {
@@ -268,7 +268,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 
 		contentMap, err := BuildRecipeBlobContent(ctx, recipe, blobSHAList, nil)
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("building blob content map: %v", err))
+			die(1, fmt.Sprintf("building blob content map: %v", err))
 		}
 
 		return scrubRunDiff(ctx, flags, cmd, recipe, contentMap, fromSHA, entireHistory, limit)
@@ -279,13 +279,13 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	// Acquire rewrite lock (only for the execute path -- diff is read-only).
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("loading config: %v", err))
+		die(1, fmt.Sprintf("loading config: %v", err))
 	}
 	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
 	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
 	lk, err := lock.Acquire(sharedDir, sgDir, "safegit/rewrite", "scrub-run", timeout)
 	if err != nil {
-		die(flags, cmd, 1, "another rewrite operation is in progress")
+		die(1, "another rewrite operation is in progress")
 	}
 	defer lk.Release()
 
@@ -387,7 +387,7 @@ func rewriteTagAnnotationsRecipe(ctx context.Context, flags globalFlags, cmd str
 		return newBody, nil
 	})
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("rewriting tag annotations: %v", err))
+		die(1, fmt.Sprintf("rewriting tag annotations: %v", err))
 	}
 	if tagsRewritten > 0 && flags.verbose {
 		for _, tr := range tagRewrites {
@@ -404,7 +404,7 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 	// Build path attribution: SHA -> []paths
 	blobPaths, err := buildBlobPathMap(ctx)
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("building blob path map: %v", err))
+		die(1, fmt.Sprintf("building blob path map: %v", err))
 	}
 
 	// Produce blob diffs
@@ -456,13 +456,13 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 	if entireHistory {
 		out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", "HEAD")
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("listing commits for diff: %v", err))
+			die(1, fmt.Sprintf("listing commits for diff: %v", err))
 		}
 		shas = git.SplitNonEmpty(out)
 	} else if fromSHA != "" {
 		out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", fromSHA+"..HEAD")
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("listing commits for diff: %v", err))
+			die(1, fmt.Sprintf("listing commits for diff: %v", err))
 		}
 		shas = append([]string{fromSHA}, git.SplitNonEmpty(out)...)
 	}
@@ -554,14 +554,14 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 		var err error
 		allResults, err = scan.ScanObjectsMulti(ctx, patterns, scanOpts)
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("scanning objects: %v", err))
+			die(1, fmt.Sprintf("scanning objects: %v", err))
 		}
 	} else {
 		allResults = make([]*scan.ScanResults, len(patterns))
 		for i, pat := range patterns {
 			results, err := scan.ScanObjects(ctx, pat, scanOpts)
 			if err != nil {
-				die(flags, cmd, 1, fmt.Sprintf("scanning objects for operation %d: %v", i, err))
+				die(1, fmt.Sprintf("scanning objects for operation %d: %v", i, err))
 			}
 			allResults[i] = results
 		}
@@ -570,7 +570,7 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 	// Add attribution to each result set for file path info.
 	for i, results := range allResults {
 		if err := scan.AddAttribution(ctx, results, scanOpts); err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("adding attribution for operation %d: %v", i, err))
+			die(1, fmt.Sprintf("adding attribution for operation %d: %v", i, err))
 		}
 	}
 
@@ -580,7 +580,7 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 		if op.Scope != nil {
 			scopedBlobs, scopeErr := buildScopedBlobSet(ctx, *op.Scope)
 			if scopeErr != nil {
-				die(flags, cmd, 1, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
+				die(1, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
 			}
 			opScopedBlobs[i] = scopedBlobs
 		}

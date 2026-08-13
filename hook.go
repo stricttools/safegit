@@ -13,7 +13,7 @@ import (
 
 // hookList discovers and lists all pre-pre-push hooks.
 func hookList(flags globalFlags) int {
-	gitDir := mustGitDir(flags, "hook")
+	gitDir := mustGitDir()
 
 	discovered, err := hooks.Discover(gitDir)
 	if err != nil {
@@ -35,7 +35,7 @@ func hookList(flags globalFlags) int {
 
 // hookRun runs a specific hook by name (or all if no name given).
 func hookRun(flags globalFlags, name string) int {
-	gitDir := mustGitDir(flags, "hook")
+	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return 1
@@ -134,7 +134,7 @@ func hookRun(flags globalFlags, name string) int {
 
 // hookInstall copies a hook file to .git/hooks/ and makes it executable.
 func hookInstall(flags globalFlags, srcPath string) int {
-	gitDir := mustGitDir(flags, "hook")
+	gitDir := mustGitDir()
 
 	// Reading the source is not an effect; the three mutations that follow are,
 	// so `hook install --dry-run` records them and installs nothing.

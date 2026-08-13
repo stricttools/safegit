@@ -12,7 +12,7 @@ import (
 )
 
 func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, trailers []string, files []string) {
-	gitDir := mustGitDir(flags, "commit")
+	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(4)
@@ -20,16 +20,16 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 
 	// Validate: -m and -F are mutually exclusive
 	if len(messages) > 0 && messageFile != "" {
-		die(flags, "commit", 2, "-m and -F are mutually exclusive")
+		die(2, "-m and -F are mutually exclusive")
 	}
 
 	if amend {
 		// --amend mode: amend (with files) or reword (without files)
 		if allowEmpty {
-			die(flags, "commit", 2, "--allow-empty cannot be used with --amend")
+			die(2, "--allow-empty cannot be used with --amend")
 		}
 		if messageFile != "" {
-			die(flags, "commit", 2, "-F cannot be used with --amend")
+			die(2, "-F cannot be used with --amend")
 		}
 
 		runCommitAmend(flags, gitDir, messages, branch, trailers, files)
@@ -40,26 +40,26 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	if messageFile != "" {
 		data, err := os.ReadFile(messageFile)
 		if err != nil {
-			die(flags, "commit", 1, fmt.Sprintf("reading message file: %v", err))
+			die(1, fmt.Sprintf("reading message file: %v", err))
 		}
 		messages = append(messages, strings.TrimRight(string(data), "\n"))
 	}
 
 	if len(messages) == 0 {
-		die(flags, "commit", 2, "commit message required (-m or -F)")
+		die(2, "commit message required (-m or -F)")
 	}
 	if len(files) == 0 && !allowEmpty {
-		die(flags, "commit", 2, "no files specified (use -- file1 file2 ...)")
+		die(2, "no files specified (use -- file1 file2 ...)")
 	}
 
 	msg := strings.Join(messages, "\n")
 
-	fileSpecs := parseFileSpecs(files, flags, "commit")
+	fileSpecs := parseFileSpecs(files)
 
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(flags, "commit", 1, fmt.Sprintf("loading config: %v", err))
+		die(1, fmt.Sprintf("loading config: %v", err))
 	}
 
 	if flags.verbose {
@@ -151,7 +151,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(flags, "commit", 1, fmt.Sprintf("loading config: %v", err))
+		die(1, fmt.Sprintf("loading config: %v", err))
 	}
 	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg}
 
@@ -162,7 +162,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			msg = strings.Join(messages, "\n")
 		}
 
-		fileSpecs := parseFileSpecs(files, flags, "commit")
+		fileSpecs := parseFileSpecs(files)
 
 		if flags.verbose {
 			paths := make([]string, len(fileSpecs))
@@ -228,7 +228,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 	} else {
 		// Reword: change the tip commit message without touching files
 		if len(messages) == 0 {
-			die(flags, "commit", 2, "commit message required (-m) when using --amend without files")
+			die(2, "commit message required (-m) when using --amend without files")
 		}
 
 		msg := strings.Join(messages, "\n")

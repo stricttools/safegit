@@ -74,12 +74,12 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	reason := kwargs["reason"].(string)
 	filePath := kwargs["file"].(string)
 	remapGlobs := kwargsStrSlice(kwargs["remap_shas_in"])
-	validateRemapGlobs(flags, cmd, remapGlobs)
+	validateRemapGlobs(remapGlobs)
 
 	// Validation
-	gitDir := mustGitDir(flags, cmd)
+	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(flags, cmd, 4, err.Error())
+		die(4, err.Error())
 	}
 
 	ctx := context.Background()
@@ -120,22 +120,22 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	// Resolve --from to a full SHA
 	fromSHA, err := git.RevParse(ctx, from)
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving --from %q: %v", from, err))
+		die(1, fmt.Sprintf("resolving --from %q: %v", from, err))
 	}
 
 	// Ancestry guard: --from must be an ancestor of (or equal to) HEAD
 	isAnc, err := git.IsAncestorOf(ctx, fromSHA, "HEAD")
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("checking ancestry of --from: %v", err))
+		die(1, fmt.Sprintf("checking ancestry of --from: %v", err))
 	}
 	if !isAnc {
-		die(flags, cmd, 1, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", from))
+		die(1, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", from))
 	}
 
 	// Capture old HEAD before any changes
 	oldHeadSHA, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving HEAD: %v", err))
+		die(1, fmt.Sprintf("resolving HEAD: %v", err))
 	}
 
 	// Determine replacement blob: if file exists on disk, compute its SHA
@@ -146,7 +146,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	if _, err := os.Stat(filePath); err == nil {
 		newBlobSHA, err = git.HashObject(ctx, filePath)
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("hashing file %q: %v", filePath, err))
+			die(1, fmt.Sprintf("hashing file %q: %v", filePath, err))
 		}
 		mode = "replace"
 	} else {
@@ -156,11 +156,11 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	// Count commits to be rewritten (inclusive of --from)
 	countOut, _, err := git.Run(ctx, "rev-list", "--count", fromSHA+"..HEAD")
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("counting commits: %v", err))
+		die(1, fmt.Sprintf("counting commits: %v", err))
 	}
 	exclusiveCount, err := strconv.Atoi(strings.TrimSpace(countOut))
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("parsing commit count: %v", err))
+		die(1, fmt.Sprintf("parsing commit count: %v", err))
 	}
 	commitCount := exclusiveCount + 1 // inclusive of fromSHA
 
@@ -204,18 +204,18 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 
 	// Execute path only: a rewrite of a dirty tree would lose the uncommitted work.
-	requireCleanTree(ctx, flags, cmd)
+	requireCleanTree(ctx)
 
 	// Acquire rewrite lock to prevent concurrent scrub operations (execute path only).
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("loading config: %v", err))
+		die(1, fmt.Sprintf("loading config: %v", err))
 	}
 	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
 	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
 	lk, err := lock.Acquire(sharedDir, sgDir, "safegit/rewrite", "scrub-file", timeout)
 	if err != nil {
-		die(flags, cmd, 1, "another rewrite operation is in progress")
+		die(1, "another rewrite operation is in progress")
 	}
 	defer lk.Release()
 
@@ -223,14 +223,14 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	if mode == "replace" {
 		newBlobSHA, err = git.HashObjectWrite(ctx, filePath)
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("writing blob for %q: %v", filePath, err))
+			die(1, fmt.Sprintf("writing blob for %q: %v", filePath, err))
 		}
 	}
 
 	// Commit walker: topo-order, parents before children (inclusive of fromSHA)
 	out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", fromSHA+"..HEAD")
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("listing commits: %v", err))
+		die(1, fmt.Sprintf("listing commits: %v", err))
 	}
 	shas := append([]string{fromSHA}, git.SplitNonEmpty(out)...)
 
@@ -273,7 +273,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		return xform, nil
 	}, flags.verbose)
 	if err != nil {
-		die(flags, cmd, 1, err.Error())
+		die(1, err.Error())
 	}
 	remap.reportStale(flags)
 
@@ -328,7 +328,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 
 	if err := rewriteResult.Finalize(ctx, flags, cmd, nil, verifyFunc); err != nil {
-		die(flags, cmd, 1, err.Error())
+		die(1, err.Error())
 	}
 
 	// The executed rewrite's own figures, added to the same struct the preview
@@ -383,7 +383,7 @@ func runScrubFileInSubmodule(
 
 	// Ensure safegit is initialized for the submodule.
 	if err := ensureInitialized(flags, sub.GitDir); err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("initializing safegit for submodule %s: %v", sub.RelativePath, err))
+		die(1, fmt.Sprintf("initializing safegit for submodule %s: %v", sub.RelativePath, err))
 	}
 
 	// Context-scoped git directory targeting: all git commands using subCtx
@@ -414,7 +414,7 @@ func runScrubFileInSubmodule(
 	if _, err := os.Stat(absSubFilePath); err == nil {
 		newBlobSHA, err = git.HashObject(subCtx, subFilePath)
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("hashing file %q in submodule: %v", subFilePath, err))
+			die(1, fmt.Sprintf("hashing file %q in submodule: %v", subFilePath, err))
 		}
 		mode = "replace"
 	} else {
@@ -426,13 +426,13 @@ func runScrubFileInSubmodule(
 	if useEntireSubHistory {
 		out, _, err := git.Run(subCtx, "rev-list", "--topo-order", "--reverse", "HEAD")
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("submodule: listing commits: %v", err))
+			die(1, fmt.Sprintf("submodule: listing commits: %v", err))
 		}
 		subSHAs = git.SplitNonEmpty(out)
 	} else {
 		out, _, err := git.Run(subCtx, "rev-list", "--topo-order", "--reverse", subFromSHA+"..HEAD")
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("submodule: listing commits: %v", err))
+			die(1, fmt.Sprintf("submodule: listing commits: %v", err))
 		}
 		subSHAs = append([]string{subFromSHA}, git.SplitNonEmpty(out)...)
 	}
@@ -478,21 +478,21 @@ func runScrubFileInSubmodule(
 
 	// Execute path only, and the caller's check was moved past its own dry-run
 	// branch: the parent's tree must still be clean before anything is rewritten.
-	requireCleanTree(ctx, flags, cmd)
+	requireCleanTree(ctx)
 
 	// Write the replacement blob to the submodule's object store (execute path only).
 	if mode == "replace" {
 		var writeErr error
 		newBlobSHA, writeErr = git.HashObjectWrite(subCtx, subFilePath)
 		if writeErr != nil {
-			die(flags, cmd, 1, fmt.Sprintf("writing blob for %q in submodule: %v", subFilePath, writeErr))
+			die(1, fmt.Sprintf("writing blob for %q in submodule: %v", subFilePath, writeErr))
 		}
 	}
 
 	// Capture old submodule HEAD before rewriting.
 	oldSubHeadSHA, err := git.RevParse(subCtx, "HEAD")
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving submodule HEAD: %v", err))
+		die(1, fmt.Sprintf("resolving submodule HEAD: %v", err))
 	}
 
 	// Walk and rewrite submodule commits. Note: --remap-shas-in is not
@@ -515,7 +515,7 @@ func runScrubFileInSubmodule(
 		return xform, nil
 	}, flags.verbose)
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("submodule walk and rewrite: %v", err))
+		die(1, fmt.Sprintf("submodule walk and rewrite: %v", err))
 	}
 
 	// Finalize submodule rewrite via shared pipeline.
@@ -534,7 +534,7 @@ func runScrubFileInSubmodule(
 		},
 	}
 	if err := subResult.Finalize(subCtx, flags, cmd, nil, nil); err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("submodule finalize: %v", err))
+		die(1, fmt.Sprintf("submodule finalize: %v", err))
 	}
 	subTagRewrites := subResult.TagRewrites
 
@@ -556,14 +556,14 @@ func runScrubFileInSubmodule(
 	// Capture old parent HEAD.
 	oldHeadSHA, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving parent HEAD: %v", err))
+		die(1, fmt.Sprintf("resolving parent HEAD: %v", err))
 	}
 
 	// Parent commit range: use entire history since --from is a submodule SHA
 	// that doesn't exist in the parent repo.
 	out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", "HEAD")
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("listing parent commits: %v", err))
+		die(1, fmt.Sprintf("listing parent commits: %v", err))
 	}
 	parentSHAs := git.SplitNonEmpty(out)
 
@@ -596,7 +596,7 @@ func runScrubFileInSubmodule(
 		return xform, nil
 	}, flags.verbose)
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("parent walk and rewrite: %v", err))
+		die(1, fmt.Sprintf("parent walk and rewrite: %v", err))
 	}
 	parentRemap.reportStale(flags)
 
@@ -646,7 +646,7 @@ func runScrubFileInSubmodule(
 	}
 
 	if err := parentResult.Finalize(ctx, flags, cmd, nil, parentVerifyFunc); err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("parent finalize: %v", err))
+		die(1, fmt.Sprintf("parent finalize: %v", err))
 	}
 
 	// The executed rewrite's own figures, added to the same struct the preview

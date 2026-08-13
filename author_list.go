@@ -40,14 +40,13 @@ var authorListPayloadSchema = strictcli.SchemaArray(strictcli.SchemaObject(
 ))
 
 func runAuthorList(flags globalFlags) int {
-	const cmd = "author list"
 	ctx := context.Background()
 
 	// Get all author and committer identities in one pass.
 	// Format: author_name\x01author_email\x01committer_name\x01committer_email
 	out, _, err := git.Run(ctx, "log", "--all", "--format=%an\x01%ae\x01%cn\x01%ce")
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("reading git log: %v", err))
+		die(1, fmt.Sprintf("reading git log: %v", err))
 	}
 
 	lines := git.SplitNonEmpty(out)

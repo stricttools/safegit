@@ -35,7 +35,7 @@ func backupRef(branch string) string { return backupRefPrefix + branch }
 func currentBranch(ctx context.Context, flags globalFlags, cmd string) string {
 	headRef, err := git.HeadRef(ctx)
 	if err != nil || headRef == "" {
-		die(flags, cmd, 1, "HEAD is detached; backup slots are per branch, so check out a branch first")
+		die(1, "HEAD is detached; backup slots are per branch, so check out a branch first")
 	}
 	return strings.TrimPrefix(headRef, "refs/heads/")
 }
@@ -46,7 +46,7 @@ func currentBranch(ctx context.Context, flags globalFlags, cmd string) string {
 func remoteSlotSHA(ctx context.Context, flags globalFlags, cmd, remote, ref string) (string, bool) {
 	stdout, _, err := git.Run(ctx, "ls-remote", remote, ref)
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("listing %s on %s: %v", ref, remote, err))
+		die(1, fmt.Sprintf("listing %s on %s: %v", ref, remote, err))
 	}
 	fields := strings.Fields(stdout)
 	if len(fields) == 0 {
@@ -59,11 +59,11 @@ func remoteSlotSHA(ctx context.Context, flags globalFlags, cmd, remote, ref stri
 // locally (ancestry checks, restore merges). Returns the fetched SHA.
 func fetchSlotObjects(ctx context.Context, flags globalFlags, cmd, remote, ref string) string {
 	if _, stderr, err := git.Run(ctx, "fetch", remote, ref); err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("fetching %s from %s: %v\n%s", ref, remote, err, strings.TrimSpace(stderr)))
+		die(1, fmt.Sprintf("fetching %s from %s: %v\n%s", ref, remote, err, strings.TrimSpace(stderr)))
 	}
 	sha, err := git.RevParse(ctx, "FETCH_HEAD")
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving fetched backup: %v", err))
+		die(1, fmt.Sprintf("resolving fetched backup: %v", err))
 	}
 	return sha
 }
@@ -199,9 +199,9 @@ func confirmExposure(ctx context.Context, flags globalFlags, remote, remoteURL s
 func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, allowPublicRemote bool) int {
 	const cmd = "backup backup"
 
-	gitDir := mustGitDir(flags, cmd)
+	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(flags, cmd, 4, err.Error())
+		die(4, err.Error())
 	}
 	sgDir := repo.SafegitDir(gitDir)
 	ctx := context.Background()
@@ -211,12 +211,12 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 
 	headSHA, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving HEAD: %v", err))
+		die(1, fmt.Sprintf("resolving HEAD: %v", err))
 	}
 
 	remoteURL, err := resolveRemoteURL(ctx, remote)
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving remote URL: %v", err))
+		die(1, fmt.Sprintf("resolving remote URL: %v", err))
 	}
 
 	// A dry run previews from local state alone. Classifying the remote, reading
@@ -247,11 +247,11 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 		slotSHA = fetchSlotObjects(ctx, flags, cmd, remote, slot)
 		isAncestor, err := git.IsAncestorOf(ctx, slotSHA, headSHA)
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("comparing backup slot with HEAD: %v", err))
+			die(1, fmt.Sprintf("comparing backup slot with HEAD: %v", err))
 		}
 		diverged = !isAncestor
 		if diverged && !overwriteRemoteBackup {
-			die(flags, cmd, exitBackupDiverged, fmt.Sprintf(
+			die(exitBackupDiverged, fmt.Sprintf(
 				"remote backup contains work not in your current history\n"+
 					"  slot: %s on %s = %s\n"+
 					"  HEAD: %s\n"+
@@ -293,19 +293,19 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 func runBackupList(flags globalFlags, remote string) int {
 	const cmd = "backup list"
 
-	gitDir := mustGitDir(flags, cmd)
+	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(flags, cmd, 4, err.Error())
+		die(4, err.Error())
 	}
 	ctx := context.Background()
 
 	if _, err := resolveRemoteURL(ctx, remote); err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving remote URL: %v", err))
+		die(1, fmt.Sprintf("resolving remote URL: %v", err))
 	}
 
 	refs, err := git.LsRemoteBulk(ctx, remote, backupRefPrefix+"*")
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("listing backups on %s: %v", remote, err))
+		die(1, fmt.Sprintf("listing backups on %s: %v", remote, err))
 	}
 	if len(refs) == 0 {
 		infof(flags, "no backups on %s\n", remote)
@@ -338,9 +338,9 @@ func runBackupList(flags globalFlags, remote string) int {
 func runBackupRestore(flags globalFlags, remote string) int {
 	const cmd = "backup restore"
 
-	gitDir := mustGitDir(flags, cmd)
+	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(flags, cmd, 4, err.Error())
+		die(4, err.Error())
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
@@ -354,16 +354,16 @@ func runBackupRestore(flags globalFlags, remote string) int {
 
 	oldHead, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving HEAD: %v", err))
+		die(1, fmt.Sprintf("resolving HEAD: %v", err))
 	}
 
 	if _, err := resolveRemoteURL(ctx, remote); err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving remote URL: %v", err))
+		die(1, fmt.Sprintf("resolving remote URL: %v", err))
 	}
 
 	slotSHA, slotExists := remoteSlotSHA(ctx, flags, cmd, remote, slot)
 	if !slotExists {
-		die(flags, cmd, exitBackupNoSlot, fmt.Sprintf(
+		die(exitBackupNoSlot, fmt.Sprintf(
 			"no backup slot %s on %s\n"+
 				"list what is there with: safegit backup list %s", slot, remote, remote))
 	}
@@ -384,7 +384,7 @@ func runBackupRestore(flags globalFlags, remote string) int {
 	}
 	if err != nil {
 		fmt.Fprint(os.Stderr, stderr)
-		die(flags, cmd, 1, fmt.Sprintf(
+		die(1, fmt.Sprintf(
 			"backup %s cannot be fast-forwarded onto %s: the branch has commits the backup does not contain\n"+
 				"  slot: %s = %s\n"+
 				"  HEAD: %s\n"+

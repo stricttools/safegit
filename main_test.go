@@ -80,9 +80,6 @@ func TestIsHunkSpec(t *testing.T) {
 func TestParseFileSpecs(t *testing.T) {
 	// parseFileSpecs calls fileExists internally; for paths that don't exist
 	// on disk it will parse hunk suffixes normally.
-	flags := globalFlags{}
-	cmd := "commit"
-
 	tests := []struct {
 		name  string
 		files []string
@@ -125,7 +122,7 @@ func TestParseFileSpecs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseFileSpecs(tt.files, flags, cmd)
+			got := parseFileSpecs(tt.files)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("parseFileSpecs(%v) = %+v, want %+v", tt.files, got, tt.want)
 			}
