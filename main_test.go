@@ -8,28 +8,41 @@ import (
 )
 
 // TestGlobalsToFlagsJSONDoesNotImplyApproval pins what the deliberate
-// confirmations rely on: --json silences human-readable output but never
-// stands in for consent. Only a real --approve-consequential sets it.
+// confirmations rely on: machine mode never stands in for consent. Only a real
+// --approve-consequential sets it.
+//
+// It also pins that machine mode no longer forges --quiet. It used to, so that
+// safegit's own stdout writes could not corrupt the JSON document it printed
+// itself; the framework's envelope is structurally exempt from quiet and is
+// written by the framework, so the only thing left to suppress is safegit's
+// direct printing -- which silent() does WITHOUT claiming the operator passed
+// --quiet.
 func TestGlobalsToFlagsJSONDoesNotImplyApproval(t *testing.T) {
 	tests := []struct {
-		name              string
-		approved, jsonOut bool
-		wantApproved      bool
-		wantQuiet         bool
+		name                     string
+		quiet, approved, jsonOut bool
+		wantApproved             bool
+		wantQuiet                bool
+		wantSilent               bool
 	}{
-		{"neither", false, false, false, false},
-		{"json only", false, true, false, true},
-		{"approved only", true, false, true, false},
-		{"both", true, true, true, true},
+		{"neither", false, false, false, false, false, false},
+		{"json only", false, false, true, false, false, true},
+		{"approved only", false, true, false, true, false, false},
+		{"both", false, true, true, true, false, true},
+		{"quiet only", true, false, false, false, true, true},
+		{"quiet and json", true, false, true, false, true, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gf := newGlobalFlags(reservedFlags{approved: tt.approved}, "", tt.jsonOut)
+			gf := newGlobalFlags(reservedFlags{quiet: tt.quiet, approved: tt.approved}, "", tt.jsonOut)
 			if gf.approved != tt.wantApproved {
 				t.Errorf("approved = %v, want %v", gf.approved, tt.wantApproved)
 			}
 			if gf.quiet != tt.wantQuiet {
 				t.Errorf("quiet = %v, want %v", gf.quiet, tt.wantQuiet)
+			}
+			if gf.silent() != tt.wantSilent {
+				t.Errorf("silent() = %v, want %v", gf.silent(), tt.wantSilent)
 			}
 		})
 	}

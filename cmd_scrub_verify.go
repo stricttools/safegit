@@ -9,6 +9,7 @@ import (
 
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/scan"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
 // ScrubVerifyPolicyResult is the per-policy result for JSON output.
@@ -29,6 +30,32 @@ type ScrubVerifyResult struct {
 	Results  []ScrubVerifyPolicyResult `json:"results"`
 }
 
+// scrubVerifyPayloadSchema declares what `scrub verify` puts in the envelope's
+// payload. scope and details are omitempty on the per-policy record (an
+// unscoped policy has no scope; a passing one has no details), so they are
+// declared without being required.
+var scrubVerifyPayloadSchema = strictcli.SchemaObject(
+	map[string]interface{}{
+		"version":  strictcli.SchemaType("integer"),
+		"policies": strictcli.SchemaType("integer"),
+		"passed":   strictcli.SchemaType("integer"),
+		"failed":   strictcli.SchemaType("integer"),
+		"results": strictcli.SchemaArray(strictcli.SchemaObject(
+			map[string]interface{}{
+				"pattern": strictcli.SchemaType("string"),
+				"scope":   strictcli.SchemaType("string"),
+				"reason":  strictcli.SchemaType("string"),
+				"pass":    strictcli.SchemaType("boolean"),
+				"details": strictcli.SchemaArray(strictcli.SchemaType("string")),
+			},
+			[]string{"pattern", "reason", "pass"},
+			false,
+		)),
+	},
+	[]string{"version", "policies", "passed", "failed", "results"},
+	false,
+)
+
 func runScrubVerify(flags globalFlags) int {
 	const cmd = "scrub verify"
 
@@ -47,17 +74,14 @@ func runScrubVerify(flags globalFlags) int {
 	}
 
 	if len(policies) == 0 {
-		if flags.json {
-			emitJSON(ScrubVerifyResult{
-				Version:  1,
-				Policies: 0,
-				Passed:   0,
-				Failed:   0,
-				Results:  []ScrubVerifyPolicyResult{},
-			})
-		} else {
-			infof(flags, "No scrub policies found. Policies are stored at .git/safegit/scrub-policies.jsonl and are local to the machine where the scrub was performed. To verify patterns on this machine, run a scrub first.\n")
-		}
+		flags.payload(ScrubVerifyResult{
+			Version:  1,
+			Policies: 0,
+			Passed:   0,
+			Failed:   0,
+			Results:  []ScrubVerifyPolicyResult{},
+		})
+		infof(flags, "No scrub policies found. Policies are stored at .git/safegit/scrub-policies.jsonl and are local to the machine where the scrub was performed. To verify patterns on this machine, run a scrub first.\n")
 		return 0
 	}
 
@@ -68,7 +92,7 @@ func runScrubVerify(flags globalFlags) int {
 	// Phase 1: Compile all policy patterns upfront and identify valid "match"
 	// policies. Invalid patterns are recorded as failures immediately.
 	type validPolicy struct {
-		index    int              // index into original policies slice (for display as 1-based)
+		index    int // index into original policies slice (for display as 1-based)
 		policy   ScrubPolicy
 		compiled *regexp.Regexp
 	}
@@ -88,7 +112,7 @@ func runScrubVerify(flags globalFlags) int {
 				Details: []string{detail},
 			})
 			failed++
-			if !flags.quiet {
+			if !flags.silent() {
 				fmt.Fprintf(os.Stderr, "  FAIL [%d] %s: %s\n", i+1, policy.Pattern, detail)
 			}
 			continue
@@ -175,7 +199,7 @@ func runScrubVerify(flags globalFlags) int {
 						Details: []string{detail},
 					})
 					failed++
-					if !flags.quiet {
+					if !flags.silent() {
 						fmt.Fprintf(os.Stderr, "  FAIL [%d] pattern=%q: %s\n", displayIdx, vp.policy.Pattern, detail)
 					}
 				}
@@ -235,7 +259,7 @@ func runScrubVerify(flags globalFlags) int {
 						Details: []string{detail},
 					})
 					failed++
-					if !flags.quiet {
+					if !flags.silent() {
 						fmt.Fprintf(os.Stderr, "  FAIL [%d] pattern=%q scope=%q: %s\n",
 							displayIdx, vp.policy.Pattern, vp.policy.Scope, detail)
 					}
@@ -244,17 +268,19 @@ func runScrubVerify(flags globalFlags) int {
 		}
 	}
 
-	if flags.json {
-		emitJSON(ScrubVerifyResult{
-			Version:  1,
-			Policies: len(policies),
-			Passed:   passed,
-			Failed:   failed,
-			Results:  results,
-		})
-	} else {
-		infof(flags, "\n%d policies checked: %d passed, %d failed\n", len(policies), passed, failed)
+	if results == nil {
+		results = []ScrubVerifyPolicyResult{}
 	}
+	// One computation, two renderings: the counts below are the same three
+	// numbers the summary line prints.
+	flags.payload(ScrubVerifyResult{
+		Version:  1,
+		Policies: len(policies),
+		Passed:   passed,
+		Failed:   failed,
+		Results:  results,
+	})
+	infof(flags, "\n%d policies checked: %d passed, %d failed\n", len(policies), passed, failed)
 
 	if failed > 0 {
 		return 1
@@ -277,4 +303,3 @@ func formatMatchFailure(matches []scan.Match) string {
 	}
 	return sb.String()
 }
-

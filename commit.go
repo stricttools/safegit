@@ -105,7 +105,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 
 	recordCommitRefUpdate(flags, result.Ref, result.SHA, result.Parent)
 
-	if !flags.quiet {
+	if !flags.silent() {
 		fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msg))
 		if flags.dryRun {
 			fmt.Printf(" %d file(s) would be committed", len(files)+len(result.AutoStagedDeletions))
@@ -206,7 +206,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 
 		recordCommitRefUpdate(flags, result.Ref, result.SHA, result.OldSHA)
 
-		if !flags.quiet {
+		if !flags.silent() {
 			msgDisplay := msg
 			if msgDisplay == "" {
 				msgDisplay = "(message preserved)"
@@ -268,7 +268,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 
 		recordCommitRefUpdate(flags, result.Ref, result.SHA, result.OldSHA)
 
-		if !flags.quiet {
+		if !flags.silent() {
 			fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msg))
 			if flags.dryRun {
 				fmt.Printf(" would reword (was %s)\n", result.OldSHA[:8])

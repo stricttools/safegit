@@ -260,7 +260,7 @@ func TestScrubVerifyJSONOutput(t *testing.T) {
 			Pass    bool   `json:"pass"`
 		} `json:"results"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON output: %v\nstdout: %s", err, stdout)
 	}
 	if result.Version != 1 {
@@ -351,7 +351,7 @@ func TestScrubVerifyMultiPolicySingleScan(t *testing.T) {
 			Pass    bool   `json:"pass"`
 		} `json:"results"`
 	}
-	if err := json.Unmarshal([]byte(jsonPayload(stdout)), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
 		t.Fatalf("failed to parse JSON: %v\nstdout: %s", err, stdout)
 	}
 	if result.Policies != 2 {

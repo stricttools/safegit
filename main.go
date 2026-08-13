@@ -63,6 +63,31 @@ type globalFlags struct {
 // mutation through it so that --dry-run records instead of executing.
 func (g globalFlags) effects() *strictcli.Effects { return g.sc.Effects() }
 
+// payload supplies this dispatch's machine payload. The framework validates it
+// against the command's declared schema and emits it as the envelope's payload
+// member under --json; outside machine mode it is not printed at all, so the
+// call is unconditional and handlers never branch on the mode to build it.
+//
+// Only commands that declare a PayloadSchema may call this: without a
+// declaration the framework has nothing to validate against and refuses.
+func (g globalFlags) payload(value interface{}) {
+	if g.sc == nil {
+		return
+	}
+	g.sc.Payload(value)
+}
+
+// silent reports that safegit must not write human text to stdout.
+//
+// Two independent reasons, and neither is the other: --quiet is the operator
+// asking for silence, and machine mode is stdout being owned by the framework's
+// envelope. safegit's handlers print with fmt.Printf rather than through the
+// context writers, so those writes bypass the framework entirely (contract
+// §19.1's accepted ceiling) and would land beside the envelope as a second
+// document. Machine mode therefore suppresses them here -- it does NOT set
+// quiet: ctx.Quiet() keeps reporting exactly what the operator passed.
+func (g globalFlags) silent() bool { return g.quiet || g.json }
+
 func main() {
 	newApp().Run()
 }
@@ -81,8 +106,11 @@ func newApp() *strictcli.App {
 	// delivered on the Context. Registering them here is a hard error, and
 	// their former short forms (-q, -n, -y) are gone with them -- the reserved
 	// quartet has no short forms by ratified design.
+	// --json is framework-owned too, on the same unconditional every-level
+	// tier as the quartet: it selects machine mode, where stdout carries the
+	// framework's envelope and nothing else. Declaring it here is a hard error,
+	// and the value reaches handlers through ctx.JSON() like the other four.
 	app.GlobalFlag(strictcli.StringFlag("config-file", "path to a custom safegit config file instead of the default location", strictcli.Default("")))
-	app.GlobalFlag(strictcli.BoolFlag("json", "emit machine-readable JSON output to stdout instead of human text", strictcli.Default(false)))
 
 	pt := func(ctx *strictcli.Context, name string, args []string, globals map[string]interface{}) int {
 		gf := globalsToFlags(ctx, globals)
@@ -350,12 +378,14 @@ func newApp() *strictcli.App {
 	},
 		strictcli.WithEffect(strictcli.EffectReadOnly),
 		strictcli.WithTags("json"),
+		strictcli.PayloadSchema(authorListPayloadSchema),
 	)
 	ag.Command("check", "check that all commits use the expected author and committer identity by scanning every commit in the repository history, reporting any deviations with the exact commit hashes and mismatched fields, and suggesting the corresponding safegit author rewrite command to fix each deviation found", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(runAuthorCheck(globalsToFlags(ctx, kwargs), kwargs))
 	},
 		strictcli.WithEffect(strictcli.EffectReadOnly),
 		strictcli.WithTags("json"),
+		strictcli.PayloadSchema(authorCheckPayloadSchema),
 		strictcli.WithFlags(
 			strictcli.StringFlag("name", "expected author and committer display name that all commits should use", strictcli.Default(nil)),
 			strictcli.StringFlag("email", "expected author and committer email address that all commits should use", strictcli.Default(nil)),
@@ -459,6 +489,7 @@ func newApp() *strictcli.App {
 	},
 		strictcli.WithEffect(strictcli.EffectReadOnly),
 		strictcli.WithTags("json"),
+		strictcli.PayloadSchema(scrubVerifyPayloadSchema),
 	)
 	app.Passthrough("cherry-pick", "cherry-pick one or more commits onto HEAD with safety guards", pt, strictcli.WithEffect(strictcli.EffectMutating))
 	app.Passthrough("revert", "revert one or more commits creating inverse patches, with safety guards", pt, strictcli.WithEffect(strictcli.EffectMutating))
@@ -494,6 +525,7 @@ func newApp() *strictcli.App {
 	},
 		strictcli.WithEffect(strictcli.EffectReadOnly),
 		strictcli.WithTags("json"),
+		strictcli.PayloadSchema(scanPayloadSchema),
 		strictcli.WithFlags(
 			strictcli.StringFlag("pattern", "regular expression pattern to search for across all objects in history"),
 			strictcli.StringFlag("scope", "glob pattern limiting which blob file paths are included (e.g. '*.env', 'config/**')", strictcli.Default(nil)),
@@ -505,7 +537,7 @@ func newApp() *strictcli.App {
 	app.Command("version", "print safegit version, Go runtime version, and git version", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		runVersion(globalsToFlags(ctx, kwargs))
 		return strictcli.Exit(0)
-	}, strictcli.WithEffect(strictcli.EffectReadOnly))
+	}, strictcli.WithEffect(strictcli.EffectReadOnly), strictcli.PayloadSchema(versionPayloadSchema))
 
 	return app
 }
@@ -524,9 +556,9 @@ func kwargsStrSlice(v interface{}) []string {
 	return out
 }
 
-// reservedFlags is the framework-owned quartet, read off the Context. It is a
-// separate struct so the --json/--approve-consequential coupling below stays
-// testable without a live dispatch context.
+// reservedFlags is the framework-owned quartet plus --json, all read off the
+// Context. It is a separate struct so the --json/--approve-consequential
+// independence below stays testable without a live dispatch context.
 type reservedFlags struct {
 	quiet    bool
 	verbose  bool
@@ -534,10 +566,16 @@ type reservedFlags struct {
 	approved bool
 }
 
-// newGlobalFlags applies safegit's own coupling rules to the reserved quartet
-// and its app-level flags.
+// newGlobalFlags carries the reserved flags and safegit's app-level flags into
+// the handler-facing struct.
+//
+// Machine mode does not rewrite any of them. It used to force quiet, which made
+// ctx.Quiet() and flags.quiet disagree and pushed every command into a separate
+// machine-mode code path; the envelope is structurally exempt from quiet, so
+// there is nothing left for the coupling to protect. Suppressing safegit's own
+// stdout writes in machine mode is silent()'s job and stays there.
 func newGlobalFlags(r reservedFlags, configPath string, jsonOut bool) globalFlags {
-	gf := globalFlags{
+	return globalFlags{
 		quiet:      r.quiet,
 		verbose:    r.verbose,
 		dryRun:     r.dryRun,
@@ -545,12 +583,6 @@ func newGlobalFlags(r reservedFlags, configPath string, jsonOut bool) globalFlag
 		configPath: configPath,
 		json:       jsonOut,
 	}
-	if gf.json {
-		// Human-readable chatter would corrupt the JSON stream. Consent is a
-		// separate question and --json does not answer it.
-		gf.quiet = true
-	}
-	return gf
 }
 
 // globalsToFlags builds globalFlags from the dispatch context (the reserved
@@ -565,17 +597,46 @@ func globalsToFlags(ctx *strictcli.Context, globals map[string]interface{}) glob
 			approved: ctx.ApproveConsequential(),
 		},
 		globals["config_file"].(string),
-		globals["json"].(bool),
+		ctx.JSON(),
 	)
 	gf.sc = ctx
 	return gf
 }
 
+// versionResult is what `version` reports, in both renderings.
+type versionResult struct {
+	Safegit string `json:"safegit"`
+	Go      string `json:"go"`
+	OS      string `json:"os"`
+	Arch    string `json:"arch"`
+	Git     string `json:"git"`
+}
+
+// versionPayloadSchema declares what `version` puts in the envelope's payload.
+var versionPayloadSchema = strictcli.SchemaObject(
+	map[string]interface{}{
+		"safegit": strictcli.SchemaType("string"),
+		"go":      strictcli.SchemaType("string"),
+		"os":      strictcli.SchemaType("string"),
+		"arch":    strictcli.SchemaType("string"),
+		"git":     strictcli.SchemaType("string"),
+	},
+	[]string{"safegit", "go", "os", "arch", "git"},
+	false,
+)
+
 func runVersion(flags globalFlags) {
-	gitVer := gitVersion()
-	fmt.Printf("safegit %s\n", version)
-	fmt.Printf("go      %s %s/%s\n", runtime.Version(), runtime.GOOS, runtime.GOARCH)
-	fmt.Printf("git     %s\n", gitVer)
+	v := versionResult{
+		Safegit: version,
+		Go:      runtime.Version(),
+		OS:      runtime.GOOS,
+		Arch:    runtime.GOARCH,
+		Git:     gitVersion(),
+	}
+	flags.payload(v)
+	outf(flags, "safegit %s\n", v.Safegit)
+	outf(flags, "go      %s %s/%s\n", v.Go, v.OS, v.Arch)
+	outf(flags, "git     %s\n", v.Git)
 }
 
 func gitVersion() string {
@@ -673,9 +734,19 @@ func confirmDeliberate(flags globalFlags, c consent, format string, args ...inte
 	return answer == "y" || answer == "Y"
 }
 
-// infof prints a formatted message unless quiet mode is active.
+// infof prints a formatted message unless the run is silent (see silent()).
 func infof(flags globalFlags, format string, args ...interface{}) {
-	if !flags.quiet {
+	if !flags.silent() {
+		fmt.Printf(format, args...)
+	}
+}
+
+// outf prints a command's own result text -- the thing the command exists to
+// say, which --quiet deliberately does NOT suppress (a `config get` is its
+// output). Machine mode still suppresses it: stdout there carries the
+// envelope and nothing else.
+func outf(flags globalFlags, format string, args ...interface{}) {
+	if !flags.json {
 		fmt.Printf(format, args...)
 	}
 }

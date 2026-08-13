@@ -123,7 +123,7 @@ func maybeAutoBumpParent(ctx context.Context, flags globalFlags, gitDir, newHead
 	// directory created there, no config read-modify, and above all no commit.
 	// The preview says what the real run would attempt.
 	if flags.dryRun {
-		if !flags.quiet {
+		if !flags.silent() {
 			fmt.Fprintf(os.Stderr, "  parent: would bump %s pointer (dry run; parent repo untouched)\n", subRelPath)
 		}
 		return nil
@@ -173,7 +173,7 @@ func maybeAutoBumpParent(ctx context.Context, flags globalFlags, gitDir, newHead
 			},
 		})
 
-		if !flags.quiet {
+		if !flags.silent() {
 			fmt.Fprintf(os.Stderr, "  parent: bumped %s pointer (%s)\n", subRelPath, sha[:8])
 		}
 	}

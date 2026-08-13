@@ -97,7 +97,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	// hooks.RunAll feeds it stdin -- something the effects handle's closed
 	// method set has no way to express (see docs/dry-run notes).
 	var hookResults []hooks.HookResult
-	if !noPrePrePush && flags.dryRun && !flags.quiet {
+	if !noPrePrePush && flags.dryRun && !flags.silent() {
 		fmt.Fprintln(os.Stderr, "  pre-pre-push hooks are not run under --dry-run")
 	}
 	if !noPrePrePush && !flags.dryRun {
@@ -178,7 +178,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 			backoff := time.Duration(1<<(attempt-1)) * time.Second
 			if flags.verbose {
 				fmt.Fprintf(os.Stderr, "  retry %d/%d after %v\n", attempt+1, retryAttempts, backoff)
-			} else if !flags.quiet {
+			} else if !flags.silent() {
 				fmt.Fprintf(os.Stderr, "transport error, retrying in %v (attempt %d/%d)...\n", backoff, attempt+1, retryAttempts)
 			}
 			time.Sleep(backoff)
@@ -214,7 +214,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	}
 
 	// Output result
-	if !flags.quiet && !flags.dryRun {
+	if !flags.silent() && !flags.dryRun {
 		for _, r := range refs {
 			fmt.Printf("  %s -> %s\n", shortRef(r.LocalRef), shortRef(r.RemoteRef))
 		}
