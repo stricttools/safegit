@@ -228,6 +228,30 @@ func TestScrubMatchZeroMatchPreviewPromisesNothing(t *testing.T) {
 	}
 }
 
+// TestScrubMatchScopedToNothingPreviewPromisesNothing: the second refusal the
+// execute path has -- matches exist, but --scope keeps none of them -- reaches
+// the preview too, with the sentence the execute path prints for it.
+func TestScrubMatchScopedToNothingPreviewPromisesNothing(t *testing.T) {
+	dir, _ := newSecretRepo(t)
+
+	human, stderr, code := runSafegitEnv(t, dir, previewEnv, "--dry-run", "scrub", "match",
+		"--pattern", "hunter2", "--replace", "GONE", "--reason", "preview",
+		"--scope", "nowhere/*", "--entire-history")
+	if code != 0 {
+		t.Fatalf("human dry run failed (%d): %s", code, stderr)
+	}
+	if !strings.Contains(human, "No matches found within scope. Nothing to rewrite.") {
+		t.Errorf("a scoped-to-nothing preview must say what a scoped-to-nothing run says, got:\n%s", human)
+	}
+	if body := wouldDoLines(human); len(body) != 0 {
+		t.Errorf("a scoped-to-nothing preview promised %d mutations a real run would never make:\n%s",
+			len(body), strings.Join(body, "\n"))
+	}
+	if !secretSurvives(t, dir) {
+		t.Error("a dry run must not rewrite history")
+	}
+}
+
 // TestScrubRunPreviewFiguresAgree: the recipe preview's totals agree line for
 // member, and its rewrite is minted like the other two.
 func TestScrubRunPreviewFiguresAgree(t *testing.T) {
