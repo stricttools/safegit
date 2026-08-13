@@ -220,6 +220,11 @@ func scrubMatchDryRun(ctx context.Context, flags globalFlags, cmd string, compil
 	type subScanResult struct {
 		sub     submodule.SubmoduleInfo
 		results *scan.ScanResults
+		// Categorized once, with the scope filter already applied to blobs, and
+		// read twice: by the rewritable-match count and by the printing below.
+		blobs   []scan.Match
+		commits []scan.Match
+		tags    []scan.Match
 	}
 	var subResults []subScanResult
 
@@ -242,7 +247,26 @@ func scrubMatchDryRun(ctx context.Context, flags globalFlags, cmd string, compil
 				fmt.Fprintf(os.Stderr, "warning: adding attribution for submodule %s: %v\n", sub.RelativePath, err)
 			}
 			if len(subScan.Matches) > 0 {
-				subResults = append(subResults, subScanResult{sub: sub, results: subScan})
+				sr := subScanResult{sub: sub, results: subScan}
+				for _, m := range subScan.Matches {
+					switch m.ObjectType {
+					case "blob":
+						// Scope patterns are written against parent-repo paths:
+						// strip the submodule prefix before matching.
+						if scope != nil {
+							subScope := scopeForSubmodule(*scope, sub.RelativePath)
+							if subScope == "" || !matchScope(subScope, m.Path) {
+								continue
+							}
+						}
+						sr.blobs = append(sr.blobs, m)
+					case "commit":
+						sr.commits = append(sr.commits, m)
+					case "tag":
+						sr.tags = append(sr.tags, m)
+					}
+				}
+				subResults = append(subResults, sr)
 			}
 		}
 	}
@@ -308,6 +332,36 @@ func scrubMatchDryRun(ctx context.Context, flags globalFlags, cmd string, compil
 		EstimatedCommits: intPtr(estimateCommitCount(ctx, fromSHA, entireHistory)),
 	}
 
+	// Only object-store matches are rewritable, and only the ones the scope
+	// filter keeps. The execute path returns before a single ref moves in both
+	// of those cases -- "No matches found. Nothing to rewrite." when the scan
+	// finds nothing, "No matches found within scope. Nothing to rewrite." when
+	// --scope leaves nothing -- so a preview that minted the rewrite here
+	// promised four mutations (update-ref, reflog expire, repack, prune) that a
+	// real run would never make. This is the guard scrubRunDryRun already has.
+	// Non-object matches (working tree files, .git/config, hooks) are reported
+	// because they were found, but no history rewrite touches them.
+	rewritable := len(blobMatches) + len(commitMatches) + len(tagMatches)
+	for _, sr := range subResults {
+		rewritable += len(sr.blobs) + len(sr.commits) + len(sr.tags)
+	}
+	if rewritable == 0 {
+		flags.payload(result)
+		if len(nonObjectMatches) > 0 {
+			infof(flags, "Found %d matches in non-object files:\n", len(nonObjectMatches))
+			for _, m := range nonObjectMatches {
+				infof(flags, "  %s (line %d): %s\n", m.Path, m.Line, m.Context)
+			}
+			infof(flags, "\n")
+		}
+		if scope != nil && len(results.Matches) > 0 {
+			infof(flags, "No matches found within scope. Nothing to rewrite.\n")
+		} else {
+			infof(flags, "No matches found. Nothing to rewrite.\n")
+		}
+		return 0
+	}
+
 	infof(flags, "Found %d matches in %d objects:\n", *result.TotalMatches, *result.ObjectsMatched)
 
 	// Print parent repo header only if submodules have matches too.
@@ -355,25 +409,7 @@ func scrubMatchDryRun(ctx context.Context, flags globalFlags, cmd string, compil
 	// Print submodule results grouped by submodule.
 	for _, sr := range subResults {
 		infof(flags, "\n[%s]:\n", sr.sub.RelativePath)
-		var subBlobs, subCommits, subTags []scan.Match
-		for _, m := range sr.results.Matches {
-			switch m.ObjectType {
-			case "blob":
-				// Apply scope filtering for submodule blobs: strip submodule
-				// prefix from scope before matching.
-				if scope != nil {
-					subScope := scopeForSubmodule(*scope, sr.sub.RelativePath)
-					if subScope == "" || !matchScope(subScope, m.Path) {
-						continue
-					}
-				}
-				subBlobs = append(subBlobs, m)
-			case "commit":
-				subCommits = append(subCommits, m)
-			case "tag":
-				subTags = append(subTags, m)
-			}
-		}
+		subBlobs, subCommits, subTags := sr.blobs, sr.commits, sr.tags
 		if len(subBlobs) > 0 {
 			infof(flags, "  Blobs:\n")
 			for _, m := range subBlobs {
