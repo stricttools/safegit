@@ -283,6 +283,225 @@
       ],
       "help": "search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection",
       "name": "scan",
+      "payload_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "binary_skipped": {
+            "type": "integer"
+          },
+          "blob_matches": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "commit_sha": {
+                  "type": "string"
+                },
+                "context": {
+                  "type": "string"
+                },
+                "line": {
+                  "type": "integer"
+                },
+                "object_type": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "reachable": {
+                  "type": "boolean"
+                },
+                "sha": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "object_type",
+                "line",
+                "reachable",
+                "context"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "commit_matches": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "commit_sha": {
+                  "type": "string"
+                },
+                "context": {
+                  "type": "string"
+                },
+                "line": {
+                  "type": "integer"
+                },
+                "object_type": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "reachable": {
+                  "type": "boolean"
+                },
+                "sha": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "object_type",
+                "line",
+                "reachable",
+                "context"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "file_matches": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "commit_sha": {
+                  "type": "string"
+                },
+                "context": {
+                  "type": "string"
+                },
+                "line": {
+                  "type": "integer"
+                },
+                "object_type": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "reachable": {
+                  "type": "boolean"
+                },
+                "sha": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "object_type",
+                "line",
+                "reachable",
+                "context"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "objects_scanned": {
+            "type": "integer"
+          },
+          "pattern": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "tag_matches": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "commit_sha": {
+                  "type": "string"
+                },
+                "context": {
+                  "type": "string"
+                },
+                "line": {
+                  "type": "integer"
+                },
+                "object_type": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "reachable": {
+                  "type": "boolean"
+                },
+                "sha": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "object_type",
+                "line",
+                "reachable",
+                "context"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "target": {
+            "type": "string"
+          },
+          "total_matches": {
+            "type": "integer"
+          },
+          "trailer_matches": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "commit_sha": {
+                  "type": "string"
+                },
+                "context": {
+                  "type": "string"
+                },
+                "line": {
+                  "type": "integer"
+                },
+                "object_type": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "reachable": {
+                  "type": "boolean"
+                },
+                "sha": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "object_type",
+                "line",
+                "reachable",
+                "context"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "version": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "pattern",
+          "objects_scanned",
+          "binary_skipped",
+          "total_matches",
+          "blob_matches",
+          "commit_matches",
+          "tag_matches",
+          "trailer_matches",
+          "file_matches"
+        ],
+        "type": "object"
+      },
       "tags": [
         "json"
       ]
@@ -328,7 +547,35 @@
     "version": {
       "effect": "read_only",
       "help": "print safegit version, Go runtime version, and git version",
-      "name": "version"
+      "name": "version",
+      "payload_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "arch": {
+            "type": "string"
+          },
+          "git": {
+            "type": "string"
+          },
+          "go": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "safegit": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "safegit",
+          "go",
+          "os",
+          "arch",
+          "git"
+        ],
+        "type": "object"
+      }
     }
   },
   "defaults": {
@@ -386,13 +633,6 @@
       "help": "path to a custom safegit config file instead of the default location",
       "name": "config-file",
       "type": "str"
-    },
-    {
-      "default": false,
-      "help": "emit machine-readable JSON output to stdout instead of human text",
-      "name": "json",
-      "negatable": true,
-      "type": "bool"
     }
   ],
   "groups": {
@@ -414,14 +654,98 @@
           ],
           "help": "check that all commits use the expected author and committer identity by scanning every commit in the repository history, reporting any deviations with the exact commit hashes and mismatched fields, and suggesting the corresponding safegit author rewrite command to fix each deviation found",
           "name": "check",
+          "payload_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "deviations": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "author_email": {
+                      "type": "string"
+                    },
+                    "author_name": {
+                      "type": "string"
+                    },
+                    "committer_email": {
+                      "type": "string"
+                    },
+                    "committer_name": {
+                      "type": "string"
+                    },
+                    "sha": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "sha",
+                    "author_name",
+                    "author_email",
+                    "committer_name",
+                    "committer_email"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "expected": {
+                "additionalProperties": false,
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            },
+            "required": [
+              "expected",
+              "deviations"
+            ],
+            "type": "object"
+          },
           "tags": [
             "json"
           ]
         },
         "list": {
           "effect": "read_only",
-          "help": "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity \u2014 useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite",
+          "help": "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite",
           "name": "list",
+          "payload_schema": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "count": {
+                  "type": "integer"
+                },
+                "email": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "enum": [
+                    "author",
+                    "committer",
+                    "both"
+                  ]
+                }
+              },
+              "required": [
+                "name",
+                "email",
+                "role",
+                "count"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
           "tags": [
             "json"
           ]
@@ -469,12 +793,94 @@
           ],
           "help": "rewrite author and committer name or email across all commit history using git filter-branch style rewriting, replacing every occurrence of the old identity with the new one in both author and committer fields while preserving timestamps, commit messages, tree contents, and parent relationships so the rewritten history is otherwise identical to the original",
           "name": "rewrite",
+          "payload_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "commits_matched": {
+                "type": "integer"
+              },
+              "commits_rewritten": {
+                "type": "integer"
+              },
+              "commits_to_check": {
+                "type": "integer"
+              },
+              "dry_run": {
+                "type": "boolean"
+              },
+              "name_changed": {
+                "type": "integer"
+              },
+              "new_email": {
+                "type": "string"
+              },
+              "new_head": {
+                "type": "string"
+              },
+              "new_name": {
+                "type": "string"
+              },
+              "old_email": {
+                "type": "string"
+              },
+              "old_head": {
+                "type": "string"
+              },
+              "old_name": {
+                "type": "string"
+              },
+              "parent_only": {
+                "type": "integer"
+              },
+              "rewrites": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "tags": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "annotated": {
+                      "type": "boolean"
+                    },
+                    "new_sha": {
+                      "type": "string"
+                    },
+                    "old_sha": {
+                      "type": "string"
+                    },
+                    "refname": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "refname",
+                    "old_sha",
+                    "new_sha",
+                    "annotated"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "version",
+              "dry_run"
+            ],
+            "type": "object"
+          },
           "tags": [
             "json"
           ]
         }
       },
-      "help": "audit and rewrite commit author/committer identity \u2014 list all identities, check against expected values, and rewrite name or email across history",
+      "help": "audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history",
       "name": "author"
     },
     "backup": {
@@ -516,7 +922,7 @@
               "reason": "a backup slot is a single overwritten slot, pinned by a lease to the SHA observed a moment earlier"
             }
           ],
-          "help": "push the current branch to its backup slot refs/backups/<branch> on the remote, after fetching that slot and refusing when it holds commits your history does not contain; the push is pinned with --force-with-lease to the exact SHA that was just observed (or to \"this ref must not exist\" for a first backup), so a concurrent backup from another machine is rejected rather than clobbered; plain git equivalent: git push --force-with-lease=refs/backups/<branch>:<observed-sha> <remote> HEAD:refs/backups/<branch>",
+          "help": "push the current branch to its backup slot refs/backups/\u003cbranch\u003e on the remote, after fetching that slot and refusing when it holds commits your history does not contain; the push is pinned with --force-with-lease to the exact SHA that was just observed (or to \"this ref must not exist\" for a first backup), so a concurrent backup from another machine is rejected rather than clobbered; plain git equivalent: git push --force-with-lease=refs/backups/\u003cbranch\u003e:\u003cobserved-sha\u003e \u003cremote\u003e HEAD:refs/backups/\u003cbranch\u003e",
           "name": "backup"
         },
         "list": {
@@ -528,7 +934,7 @@
             }
           ],
           "effect": "read_only",
-          "help": "list every backup slot present on the remote with the branch name and the commit each slot points at, so you can see which branches are backed up from which machine before restoring one; plain git equivalent: git ls-remote <remote> 'refs/backups/*'",
+          "help": "list every backup slot present on the remote with the branch name and the commit each slot points at, so you can see which branches are backed up from which machine before restoring one; plain git equivalent: git ls-remote \u003cremote\u003e 'refs/backups/*'",
           "name": "list"
         },
         "restore": {
@@ -540,7 +946,7 @@
             }
           ],
           "effect": "mutating",
-          "help": "fetch the current branch's backup slot from the remote and fast-forward the branch onto it, refusing when the local branch carries commits the backup does not contain so no local work is ever discarded; plain git equivalent: git fetch <remote> refs/backups/<branch> && git merge --ff-only FETCH_HEAD",
+          "help": "fetch the current branch's backup slot from the remote and fast-forward the branch onto it, refusing when the local branch carries commits the backup does not contain so no local work is ever discarded; plain git equivalent: git fetch \u003cremote\u003e refs/backups/\u003cbranch\u003e \u0026\u0026 git merge --ff-only FETCH_HEAD",
           "name": "restore"
         }
       },
@@ -653,6 +1059,102 @@
           ],
           "help": "replace or remove a specific file across all commits in the repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized version or delete the file entirely from every historical snapshot",
           "name": "file",
+          "payload_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "cleanup_errors": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "cleanup_ok": {
+                "type": "boolean"
+              },
+              "commit_count": {
+                "type": "integer"
+              },
+              "commits_rewritten": {
+                "type": "integer"
+              },
+              "dry_run": {
+                "type": "boolean"
+              },
+              "file": {
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              },
+              "mode": {
+                "enum": [
+                  "replace",
+                  "remove"
+                ]
+              },
+              "new_blob_sha": {
+                "type": "string"
+              },
+              "new_head": {
+                "type": "string"
+              },
+              "old_head": {
+                "type": "string"
+              },
+              "pre_rewrite_remotes": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "rewrites": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "tags": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "annotated": {
+                      "type": "boolean"
+                    },
+                    "new_sha": {
+                      "type": "string"
+                    },
+                    "old_sha": {
+                      "type": "string"
+                    },
+                    "refname": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "refname",
+                    "old_sha",
+                    "new_sha",
+                    "annotated"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "version",
+              "dry_run",
+              "file",
+              "mode",
+              "from",
+              "commit_count",
+              "old_head"
+            ],
+            "type": "object"
+          },
           "tags": [
             "json"
           ]
@@ -727,6 +1229,128 @@
           ],
           "help": "replace all occurrences of a regex pattern across every blob in the repository history, rewriting commit trees to substitute matched text with a replacement string so that sensitive values like secrets and credentials are permanently removed from all historical snapshots",
           "name": "match",
+          "payload_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "binary_skipped": {
+                "type": "integer"
+              },
+              "blob_matches": {
+                "type": "integer"
+              },
+              "blobs_replaced": {
+                "type": "integer"
+              },
+              "cleanup_errors": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "cleanup_ok": {
+                "type": "boolean"
+              },
+              "commit_matches": {
+                "type": "integer"
+              },
+              "commits_rewritten": {
+                "type": "integer"
+              },
+              "dry_run": {
+                "type": "boolean"
+              },
+              "estimated_commits": {
+                "type": "integer"
+              },
+              "file_matches": {
+                "type": "integer"
+              },
+              "messages_modified": {
+                "type": "integer"
+              },
+              "new_head": {
+                "type": "string"
+              },
+              "objects_matched": {
+                "type": "integer"
+              },
+              "objects_scanned": {
+                "type": "integer"
+              },
+              "old_head": {
+                "type": "string"
+              },
+              "pattern": {
+                "type": "string"
+              },
+              "pre_rewrite_remotes": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "rewrites": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "scope": {
+                "enum": [
+                  "range",
+                  "entire_history"
+                ]
+              },
+              "scope_filter": {
+                "type": "string"
+              },
+              "tag_matches": {
+                "type": "integer"
+              },
+              "tags": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "annotated": {
+                      "type": "boolean"
+                    },
+                    "new_sha": {
+                      "type": "string"
+                    },
+                    "old_sha": {
+                      "type": "string"
+                    },
+                    "refname": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "refname",
+                    "old_sha",
+                    "new_sha",
+                    "annotated"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "tags_rewritten": {
+                "type": "integer"
+              },
+              "total_matches": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "version",
+              "dry_run",
+              "pattern"
+            ],
+            "type": "object"
+          },
           "tags": [
             "json"
           ]
@@ -789,8 +1413,217 @@
               "type": "bool"
             }
           ],
-          "help": "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store \u2014 use --diff to preview all changes as unified diffs before committing to the rewrite",
+          "help": "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite",
           "name": "run",
+          "payload_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "binary_skipped": {
+                "type": "integer"
+              },
+              "blob_diffs": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "diff": {
+                      "type": "string"
+                    },
+                    "new_sha": {
+                      "type": "string"
+                    },
+                    "old_sha": {
+                      "type": "string"
+                    },
+                    "paths": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "old_sha",
+                    "paths",
+                    "diff"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "blobs_replaced": {
+                "type": "integer"
+              },
+              "cleanup_errors": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "cleanup_ok": {
+                "type": "boolean"
+              },
+              "commits_rewritten": {
+                "type": "integer"
+              },
+              "diff": {
+                "type": "boolean"
+              },
+              "dry_run": {
+                "type": "boolean"
+              },
+              "estimated_commits": {
+                "type": "integer"
+              },
+              "message_diffs": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "commit_sha": {
+                      "type": "string"
+                    },
+                    "new_message": {
+                      "type": "string"
+                    },
+                    "old_message": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "commit_sha",
+                    "old_message",
+                    "new_message"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "messages_modified": {
+                "type": "integer"
+              },
+              "new_head": {
+                "type": "string"
+              },
+              "objects_scanned": {
+                "type": "integer"
+              },
+              "old_head": {
+                "type": "string"
+              },
+              "operation_count": {
+                "type": "integer"
+              },
+              "operations": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "affected_files": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "blob_matches": {
+                      "type": "integer"
+                    },
+                    "commit_matches": {
+                      "type": "integer"
+                    },
+                    "index": {
+                      "type": "integer"
+                    },
+                    "pattern": {
+                      "type": "string"
+                    },
+                    "tag_matches": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "index",
+                    "pattern",
+                    "blob_matches",
+                    "commit_matches",
+                    "tag_matches",
+                    "affected_files"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "pre_rewrite_remotes": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "rewrites": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "shown": {
+                "type": "integer"
+              },
+              "tags": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "annotated": {
+                      "type": "boolean"
+                    },
+                    "new_sha": {
+                      "type": "string"
+                    },
+                    "old_sha": {
+                      "type": "string"
+                    },
+                    "refname": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "refname",
+                    "old_sha",
+                    "new_sha",
+                    "annotated"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "tags_rewritten": {
+                "type": "integer"
+              },
+              "total_affected_files": {
+                "type": "integer"
+              },
+              "total_blob_matches": {
+                "type": "integer"
+              },
+              "total_blobs": {
+                "type": "integer"
+              },
+              "total_commit_matches": {
+                "type": "integer"
+              },
+              "total_tag_matches": {
+                "type": "integer"
+              },
+              "truncated": {
+                "type": "boolean"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "version",
+              "dry_run",
+              "operation_count"
+            ],
+            "type": "object"
+          },
           "tags": [
             "json"
           ]
@@ -799,6 +1632,63 @@
           "effect": "read_only",
           "help": "check all scrub policies defined in the repository configuration to confirm that previously scrubbed secrets and sensitive patterns remain completely absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-policy pass or fail results with match locations for any violations found",
           "name": "verify",
+          "payload_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "failed": {
+                "type": "integer"
+              },
+              "passed": {
+                "type": "integer"
+              },
+              "policies": {
+                "type": "integer"
+              },
+              "results": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "details": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "pass": {
+                      "type": "boolean"
+                    },
+                    "pattern": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    },
+                    "scope": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "pattern",
+                    "reason",
+                    "pass"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "version",
+              "policies",
+              "passed",
+              "failed",
+              "results"
+            ],
+            "type": "object"
+          },
           "tags": [
             "json"
           ]
@@ -820,5 +1710,5 @@
   "name": "safegit",
   "project_id": "github.com/smm-h/safegit",
   "schema_version": 1,
-  "version": "0.26.0"
+  "version": "dev"
 }
