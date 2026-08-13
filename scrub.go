@@ -13,26 +13,16 @@ import (
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/submodule"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
-// ScrubFileResult is the JSON output for `scrub file` in execute mode.
+// ScrubFileResult is what `scrub file` reports -- in both modes and in both
+// renderings. There is no separate dry-run struct: a preview and an execution
+// answer the same questions about the same rewrite, and every figure here is
+// the one the human summary prints. The fields only an executed rewrite can
+// know are pointers or omitempty, so a preview omits them rather than
+// publishing a zero that reads as a fact.
 type ScrubFileResult struct {
-	Version           int               `json:"version"`
-	DryRun            bool              `json:"dry_run"`
-	File              string            `json:"file"`
-	Mode              string            `json:"mode"`
-	Rewrites          map[string]string `json:"rewrites"`
-	Tags              []TagRewrite      `json:"tags"`
-	CommitsRewritten  int               `json:"commits_rewritten"`
-	OldHead           string            `json:"old_head"`
-	NewHead           string            `json:"new_head"`
-	PreRewriteRemotes map[string]string `json:"pre_rewrite_remotes"`
-	CleanupOK         bool              `json:"cleanup_ok"`
-	CleanupErrors     []string          `json:"cleanup_errors"`
-}
-
-// ScrubFileDryRunResult is the JSON output for `scrub file --dry-run`.
-type ScrubFileDryRunResult struct {
 	Version     int    `json:"version"`
 	DryRun      bool   `json:"dry_run"`
 	File        string `json:"file"`
@@ -41,7 +31,41 @@ type ScrubFileDryRunResult struct {
 	CommitCount int    `json:"commit_count"`
 	OldHead     string `json:"old_head"`
 	NewBlobSHA  string `json:"new_blob_sha,omitempty"`
+
+	// Execute-only.
+	Rewrites          map[string]string `json:"rewrites,omitempty"`
+	Tags              []TagRewrite      `json:"tags,omitempty"`
+	CommitsRewritten  *int              `json:"commits_rewritten,omitempty"`
+	NewHead           string            `json:"new_head,omitempty"`
+	PreRewriteRemotes map[string]string `json:"pre_rewrite_remotes,omitempty"`
+	CleanupOK         *bool             `json:"cleanup_ok,omitempty"`
+	CleanupErrors     []string          `json:"cleanup_errors,omitempty"`
 }
+
+// scrubFilePayloadSchema declares what `scrub file` puts in the envelope's
+// payload. The execute-only members are declared but not required: a preview
+// carries the range it would rewrite, an execution carries what it did.
+var scrubFilePayloadSchema = strictcli.SchemaObject(
+	map[string]interface{}{
+		"version":             strictcli.SchemaType("integer"),
+		"dry_run":             strictcli.SchemaType("boolean"),
+		"file":                strictcli.SchemaType("string"),
+		"mode":                strictcli.SchemaEnum("replace", "remove"),
+		"from":                strictcli.SchemaType("string"),
+		"commit_count":        strictcli.SchemaType("integer"),
+		"old_head":            strictcli.SchemaType("string"),
+		"new_blob_sha":        strictcli.SchemaType("string"),
+		"rewrites":            scrubRewritesSchema,
+		"tags":                scrubTagsSchema,
+		"commits_rewritten":   strictcli.SchemaType("integer"),
+		"new_head":            strictcli.SchemaType("string"),
+		"pre_rewrite_remotes": scrubRewritesSchema,
+		"cleanup_ok":          strictcli.SchemaType("boolean"),
+		"cleanup_errors":      strictcli.SchemaArray(strictcli.SchemaType("string")),
+	},
+	[]string{"version", "dry_run", "file", "mode", "from", "commit_count", "old_head"},
+	false,
+)
 
 func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	const cmd = "scrub file"
@@ -140,12 +164,25 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 	commitCount := exclusiveCount + 1 // inclusive of fromSHA
 
+	// The one computation both renderings read: the human summary below and the
+	// payload state the same file, mode, range and commit count.
+	result := ScrubFileResult{
+		Version:     1,
+		DryRun:      flags.dryRun,
+		File:        filePath,
+		Mode:        mode,
+		From:        fromSHA,
+		CommitCount: commitCount,
+		OldHead:     oldHeadSHA,
+		NewBlobSHA:  newBlobSHA,
+	}
+
 	// Summary
 	infof(flags, "Scrub summary:\n")
-	infof(flags, "  File:    %s\n", filePath)
-	infof(flags, "  Mode:    %s\n", mode)
-	infof(flags, "  From:    %s\n", fromSHA[:12])
-	infof(flags, "  Commits: %d\n", commitCount)
+	infof(flags, "  File:    %s\n", result.File)
+	infof(flags, "  Mode:    %s\n", result.Mode)
+	infof(flags, "  From:    %s\n", result.From[:12])
+	infof(flags, "  Commits: %d\n", result.CommitCount)
 	infof(flags, "  Reason:  %s\n", reason)
 
 	// `scrub file` declares itself consequential, so the framework's confirm
@@ -153,24 +190,15 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	// The summary above says what and how much; a second prompt only asked the
 	// question the framework had just had answered.
 	if !flags.dryRun {
-		infof(flags, "Rewriting %d commits. This cannot be undone.\n", commitCount)
+		infof(flags, "Rewriting %d commits. This cannot be undone.\n", result.CommitCount)
 	}
 
-	// Dry-run check: purely read-only, no lock needed.
+	// Dry-run check: purely read-only, no lock needed. The rewrite is minted
+	// through the effects handle, so the framework renders it -- as the would-do
+	// log in human mode, as the envelope's preview member in machine mode.
 	if flags.dryRun {
-		if flags.json {
-			result := ScrubFileDryRunResult{
-				Version:     1,
-				DryRun:      true,
-				File:        filePath,
-				Mode:        mode,
-				From:        fromSHA,
-				CommitCount: commitCount,
-				OldHead:     oldHeadSHA,
-				NewBlobSHA:  newBlobSHA,
-			}
-			emitJSON(result)
-		}
+		recordHistoryRewrite(ctx, flags, oldHeadSHA)
+		flags.payload(result)
 		infof(flags, "Dry run: no changes made.\n")
 		return 0
 	}
@@ -251,7 +279,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 
 	// Populate RewriteResult for the shared post-rewrite pipeline.
 	exitCode := 0
-	result := RewriteResult{
+	rewriteResult := RewriteResult{
 		ShaMap:         shaMap,
 		RewrittenCount: rewrittenCount,
 		OldHeadSHA:     oldHeadSHA,
@@ -299,45 +327,36 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		return nil // non-fatal: exitCode tracks failures
 	}
 
-	if err := result.Finalize(ctx, flags, cmd, nil, verifyFunc); err != nil {
+	if err := rewriteResult.Finalize(ctx, flags, cmd, nil, verifyFunc); err != nil {
 		die(flags, cmd, 1, err.Error())
 	}
 
-	// JSON output
-	if flags.json {
-		rewrites := make(map[string]string)
-		for old, new_ := range shaMap {
-			if old != new_ {
-				rewrites[old] = new_
-			}
+	// The executed rewrite's own figures, added to the same struct the preview
+	// would have carried.
+	rewrites := make(map[string]string)
+	for old, new_ := range shaMap {
+		if old != new_ {
+			rewrites[old] = new_
 		}
-		tags := result.TagRewrites
-		if tags == nil {
-			tags = []TagRewrite{}
-		}
-		jsonResult := ScrubFileResult{
-			Version:           1,
-			DryRun:            false,
-			File:              filePath,
-			Mode:              mode,
-			Rewrites:          rewrites,
-			Tags:              tags,
-			CommitsRewritten:  rewrittenCount,
-			OldHead:           oldHeadSHA,
-			NewHead:           result.NewHeadSHA,
-			PreRewriteRemotes: nonNilStringMap(result.PreRewriteRemotes),
-			CleanupOK:         result.CleanupOK,
-			CleanupErrors:     nonNilStrings(result.CleanupErrors),
-		}
-		emitJSON(jsonResult)
-		return exitCode
 	}
+	tags := rewriteResult.TagRewrites
+	if tags == nil {
+		tags = []TagRewrite{}
+	}
+	result.Rewrites = rewrites
+	result.Tags = tags
+	result.CommitsRewritten = intPtr(rewrittenCount)
+	result.NewHead = rewriteResult.NewHeadSHA
+	result.PreRewriteRemotes = nonNilStringMap(rewriteResult.PreRewriteRemotes)
+	result.CleanupOK = boolPtr(rewriteResult.CleanupOK)
+	result.CleanupErrors = nonNilStrings(rewriteResult.CleanupErrors)
+	flags.payload(result)
 
 	// Summary
 	infof(flags, "\nScrub complete:\n")
-	infof(flags, "  %d commits rewritten\n", rewrittenCount)
-	infof(flags, "  Old HEAD: %s\n", oldHeadSHA[:12])
-	infof(flags, "  New HEAD: %s\n", result.NewHeadSHA[:12])
+	infof(flags, "  %d commits rewritten\n", *result.CommitsRewritten)
+	infof(flags, "  Old HEAD: %s\n", result.OldHead[:12])
+	infof(flags, "  New HEAD: %s\n", result.NewHead[:12])
 
 	return exitCode
 }
@@ -420,11 +439,24 @@ func runScrubFileInSubmodule(
 
 	subCommitCount := len(subSHAs)
 
+	// The one computation both renderings read, exactly as on the non-submodule
+	// path. commit_count is the submodule commit count -- the number the summary
+	// line prints -- and the parent's gitlink commits follow from it.
+	result := ScrubFileResult{
+		Version:     1,
+		DryRun:      flags.dryRun,
+		File:        fullPath,
+		Mode:        mode,
+		From:        from,
+		CommitCount: subCommitCount,
+		NewBlobSHA:  newBlobSHA,
+	}
+
 	// Summary
 	infof(flags, "Scrub summary:\n")
 	infof(flags, "  File:       %s (in submodule %s)\n", subFilePath, sub.RelativePath)
-	infof(flags, "  Mode:       %s\n", mode)
-	infof(flags, "  Sub commits: %d\n", subCommitCount)
+	infof(flags, "  Mode:       %s\n", result.Mode)
+	infof(flags, "  Sub commits: %d\n", result.CommitCount)
 	infof(flags, "  Reason:     %s\n", reason)
 
 	// Same as the non-submodule path: consent for the rewrite was taken by the
@@ -436,19 +468,10 @@ func runScrubFileInSubmodule(
 	}
 
 	if flags.dryRun {
-		if flags.json {
-			result := ScrubFileDryRunResult{
-				Version:     1,
-				DryRun:      true,
-				File:        fullPath,
-				Mode:        mode,
-				From:        from,
-				CommitCount: subCommitCount,
-				OldHead:     "", // not yet resolved in submodule dry-run
-				NewBlobSHA:  newBlobSHA,
-			}
-			emitJSON(result)
-		}
+		// old_head stays empty here: the parent's HEAD is resolved on the
+		// execute path below, and a preview states nothing it has not read.
+		recordHistoryRewrite(ctx, flags, result.OldHead)
+		flags.payload(result)
 		infof(flags, "Dry run: no changes made.\n")
 		return 0
 	}
@@ -626,42 +649,34 @@ func runScrubFileInSubmodule(
 		die(flags, cmd, 1, fmt.Sprintf("parent finalize: %v", err))
 	}
 
-	// JSON output
-	if flags.json {
-		rewrites := make(map[string]string)
-		for old, new_ := range parentShaMap {
-			if old != new_ {
-				rewrites[old] = new_
-			}
+	// The executed rewrite's own figures, added to the same struct the preview
+	// carried.
+	rewrites := make(map[string]string)
+	for old, new_ := range parentShaMap {
+		if old != new_ {
+			rewrites[old] = new_
 		}
-		allTagRewrites := append(subTagRewrites, parentResult.TagRewrites...)
-		if allTagRewrites == nil {
-			allTagRewrites = []TagRewrite{}
-		}
-		jsonResult := ScrubFileResult{
-			Version:           1,
-			DryRun:            false,
-			File:              fullPath,
-			Mode:              mode,
-			Rewrites:          rewrites,
-			Tags:              allTagRewrites,
-			CommitsRewritten:  parentRewrittenCount + subRewrittenCount,
-			OldHead:           oldHeadSHA,
-			NewHead:           parentResult.NewHeadSHA,
-			PreRewriteRemotes: nonNilStringMap(parentResult.PreRewriteRemotes),
-			CleanupOK:         parentResult.CleanupOK,
-			CleanupErrors:     nonNilStrings(parentResult.CleanupErrors),
-		}
-		emitJSON(jsonResult)
-		return exitCode
 	}
+	allTagRewrites := append(subTagRewrites, parentResult.TagRewrites...)
+	if allTagRewrites == nil {
+		allTagRewrites = []TagRewrite{}
+	}
+	result.Rewrites = rewrites
+	result.Tags = allTagRewrites
+	result.CommitsRewritten = intPtr(parentRewrittenCount + subRewrittenCount)
+	result.OldHead = oldHeadSHA
+	result.NewHead = parentResult.NewHeadSHA
+	result.PreRewriteRemotes = nonNilStringMap(parentResult.PreRewriteRemotes)
+	result.CleanupOK = boolPtr(parentResult.CleanupOK)
+	result.CleanupErrors = nonNilStrings(parentResult.CleanupErrors)
+	flags.payload(result)
 
 	// Summary.
 	infof(flags, "\nScrub complete:\n")
 	infof(flags, "  %d submodule commits rewritten\n", subRewrittenCount)
 	infof(flags, "  %d parent commits rewritten (gitlink updates)\n", parentRewrittenCount)
-	infof(flags, "  Old HEAD: %s\n", oldHeadSHA[:12])
-	infof(flags, "  New HEAD: %s\n", parentResult.NewHeadSHA[:12])
+	infof(flags, "  Old HEAD: %s\n", result.OldHead[:12])
+	infof(flags, "  New HEAD: %s\n", result.NewHead[:12])
 
 	return exitCode
 }

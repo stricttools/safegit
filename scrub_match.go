@@ -17,41 +17,83 @@ import (
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/scan"
 	"github.com/smm-h/safegit/internal/submodule"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
-// ScrubMatchResult is the JSON output for `scrub match` in execute mode.
+// ScrubMatchResult is what `scrub match` reports -- in both modes and in both
+// renderings. There is no separate dry-run struct: the preview's scan figures
+// and the execution's rewrite figures are members of one result, each present
+// exactly when it was measured.
+//
+// objects_matched exists because the human preview's "in N objects" was never
+// objects_scanned: it counts the DISTINCT objects that matched, and the two
+// numbers used to live in disjoint branches under names close enough to read as
+// the same thing. Both are here now, named for what they count.
 type ScrubMatchResult struct {
-	Version           int               `json:"version"`
-	DryRun            bool              `json:"dry_run"`
-	Rewrites          map[string]string `json:"rewrites"`
-	Tags              []TagRewrite      `json:"tags"`
-	CommitsRewritten  int               `json:"commits_rewritten"`
-	BlobsReplaced     int               `json:"blobs_replaced"`
-	MessagesModified  int               `json:"messages_modified"`
-	TagsRewritten     int               `json:"tags_rewritten"`
-	OldHead           string            `json:"old_head"`
-	NewHead           string            `json:"new_head"`
-	PreRewriteRemotes map[string]string `json:"pre_rewrite_remotes"`
-	CleanupOK         bool              `json:"cleanup_ok"`
-	CleanupErrors     []string          `json:"cleanup_errors"`
-}
+	Version int    `json:"version"`
+	DryRun  bool   `json:"dry_run"`
+	Pattern string `json:"pattern"`
 
-// ScrubMatchDryRunResult is the JSON output for `scrub match --dry-run`.
-type ScrubMatchDryRunResult struct {
-	Version          int    `json:"version"`
-	DryRun           bool   `json:"dry_run"`
-	Pattern          string `json:"pattern"`
+	// Preview-only: the scan behind the preview.
 	Scope            string `json:"scope,omitempty"`
 	ScopeFilter      string `json:"scope_filter,omitempty"`
-	ObjectsScanned   int    `json:"objects_scanned"`
-	BinarySkipped    int    `json:"binary_skipped"`
-	TotalMatches     int    `json:"total_matches"`
-	BlobMatches      int    `json:"blob_matches"`
-	CommitMatches    int    `json:"commit_matches"`
-	TagMatches       int    `json:"tag_matches"`
-	FileMatches      int    `json:"file_matches"`
-	EstimatedCommits int    `json:"estimated_commits,omitempty"`
+	ObjectsScanned   *int   `json:"objects_scanned,omitempty"`
+	ObjectsMatched   *int   `json:"objects_matched,omitempty"`
+	BinarySkipped    *int   `json:"binary_skipped,omitempty"`
+	TotalMatches     *int   `json:"total_matches,omitempty"`
+	BlobMatches      *int   `json:"blob_matches,omitempty"`
+	CommitMatches    *int   `json:"commit_matches,omitempty"`
+	TagMatches       *int   `json:"tag_matches,omitempty"`
+	FileMatches      *int   `json:"file_matches,omitempty"`
+	EstimatedCommits *int   `json:"estimated_commits,omitempty"`
+
+	// Execute-only: what the rewrite did.
+	Rewrites          map[string]string `json:"rewrites,omitempty"`
+	Tags              []TagRewrite      `json:"tags,omitempty"`
+	CommitsRewritten  *int              `json:"commits_rewritten,omitempty"`
+	BlobsReplaced     *int              `json:"blobs_replaced,omitempty"`
+	MessagesModified  *int              `json:"messages_modified,omitempty"`
+	TagsRewritten     *int              `json:"tags_rewritten,omitempty"`
+	OldHead           string            `json:"old_head,omitempty"`
+	NewHead           string            `json:"new_head,omitempty"`
+	PreRewriteRemotes map[string]string `json:"pre_rewrite_remotes,omitempty"`
+	CleanupOK         *bool             `json:"cleanup_ok,omitempty"`
+	CleanupErrors     []string          `json:"cleanup_errors,omitempty"`
 }
+
+// scrubMatchPayloadSchema declares what `scrub match` puts in the envelope's
+// payload.
+var scrubMatchPayloadSchema = strictcli.SchemaObject(
+	map[string]interface{}{
+		"version":             strictcli.SchemaType("integer"),
+		"dry_run":             strictcli.SchemaType("boolean"),
+		"pattern":             strictcli.SchemaType("string"),
+		"scope":               strictcli.SchemaEnum("range", "entire_history"),
+		"scope_filter":        strictcli.SchemaType("string"),
+		"objects_scanned":     strictcli.SchemaType("integer"),
+		"objects_matched":     strictcli.SchemaType("integer"),
+		"binary_skipped":      strictcli.SchemaType("integer"),
+		"total_matches":       strictcli.SchemaType("integer"),
+		"blob_matches":        strictcli.SchemaType("integer"),
+		"commit_matches":      strictcli.SchemaType("integer"),
+		"tag_matches":         strictcli.SchemaType("integer"),
+		"file_matches":        strictcli.SchemaType("integer"),
+		"estimated_commits":   strictcli.SchemaType("integer"),
+		"rewrites":            scrubRewritesSchema,
+		"tags":                scrubTagsSchema,
+		"commits_rewritten":   strictcli.SchemaType("integer"),
+		"blobs_replaced":      strictcli.SchemaType("integer"),
+		"messages_modified":   strictcli.SchemaType("integer"),
+		"tags_rewritten":      strictcli.SchemaType("integer"),
+		"old_head":            strictcli.SchemaType("string"),
+		"new_head":            strictcli.SchemaType("string"),
+		"pre_rewrite_remotes": scrubRewritesSchema,
+		"cleanup_ok":          strictcli.SchemaType("boolean"),
+		"cleanup_errors":      strictcli.SchemaArray(strictcli.SchemaType("string")),
+	},
+	[]string{"version", "dry_run", "pattern"},
+	false,
+)
 
 func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 	const cmd = "scrub match"
@@ -237,7 +279,36 @@ func scrubMatchDryRun(ctx context.Context, flags globalFlags, cmd string, compil
 		}
 	}
 
-	infof(flags, "Found %d matches in %d objects:\n", totalMatches, len(uniqueObjects)+len(nonObjectMatches))
+	// The one computation both renderings read. objectsMatched is the "in N
+	// objects" denominator the line below prints, and it is a payload member of
+	// its own -- it is NOT objects_scanned, which counts what the scan walked.
+	objectsMatched := len(uniqueObjects) + len(nonObjectMatches)
+	scopeStr := "entire_history"
+	if fromSHA != "" {
+		scopeStr = "range"
+	}
+	scopeFilter := ""
+	if scope != nil {
+		scopeFilter = *scope
+	}
+	result := ScrubMatchResult{
+		Version:          1,
+		DryRun:           true,
+		Pattern:          pattern,
+		Scope:            scopeStr,
+		ScopeFilter:      scopeFilter,
+		ObjectsScanned:   intPtr(results.Scanned),
+		ObjectsMatched:   intPtr(objectsMatched),
+		BinarySkipped:    intPtr(results.Skipped),
+		TotalMatches:     intPtr(totalMatches),
+		BlobMatches:      intPtr(len(blobMatches)),
+		CommitMatches:    intPtr(len(commitMatches)),
+		TagMatches:       intPtr(len(tagMatches)),
+		FileMatches:      intPtr(len(nonObjectMatches)),
+		EstimatedCommits: intPtr(estimateCommitCount(ctx, fromSHA, entireHistory)),
+	}
+
+	infof(flags, "Found %d matches in %d objects:\n", *result.TotalMatches, *result.ObjectsMatched)
 
 	// Print parent repo header only if submodules have matches too.
 	hasSubMatches := len(subResults) > 0
@@ -329,40 +400,19 @@ func scrubMatchDryRun(ctx context.Context, flags globalFlags, cmd string, compil
 		}
 	}
 
-	if flags.json {
-		estimatedCommits := estimateCommitCount(ctx, fromSHA, entireHistory)
-		scopeStr := "entire_history"
-		if fromSHA != "" {
-			scopeStr = "range"
-		}
-		scopeFilter := ""
-		if scope != nil {
-			scopeFilter = *scope
-		}
-		result := ScrubMatchDryRunResult{
-			Version:          1,
-			DryRun:           true,
-			Pattern:          pattern,
-			Scope:            scopeStr,
-			ScopeFilter:      scopeFilter,
-			ObjectsScanned:   results.Scanned,
-			BinarySkipped:    results.Skipped,
-			TotalMatches:     totalMatches,
-			BlobMatches:      len(blobMatches),
-			CommitMatches:    len(commitMatches),
-			TagMatches:       len(tagMatches),
-			FileMatches:      len(nonObjectMatches),
-			EstimatedCommits: estimatedCommits,
-		}
-		emitJSON(result)
-		return 0
-	}
+	// The rewrite this preview describes, minted so the framework renders it:
+	// the would-do log in human mode, the envelope's preview member in machine
+	// mode. A preview that recorded nothing read as "this would change nothing".
+	oldHeadSHA, _ := git.RevParse(ctx, "HEAD")
+	recordHistoryRewrite(ctx, flags, oldHeadSHA)
+	flags.payload(result)
 
 	infof(flags, "\nSummary: %d blob matches, %d message matches, %d tag matches, %d file matches\n",
-		len(blobMatches), len(commitMatches), len(tagMatches), len(nonObjectMatches))
-	if results.Skipped > 0 {
-		infof(flags, "Binary blobs skipped: %d\n", results.Skipped)
+		*result.BlobMatches, *result.CommitMatches, *result.TagMatches, *result.FileMatches)
+	if *result.BinarySkipped > 0 {
+		infof(flags, "Binary blobs skipped: %d\n", *result.BinarySkipped)
 	}
+	infof(flags, "Estimated commits in range: %d\n", *result.EstimatedCommits)
 
 	return 0
 }
@@ -869,37 +919,32 @@ func scrubMatchExecute(
 	// Combine ref-level tag rewrites with annotation tag rewrites.
 	allTagRewrites := append(result.TagRewrites, result.AnnotationTagRewrites...)
 
-	// JSON output
-	if flags.json {
-		rewrites := make(map[string]string)
-		for old, new_ := range result.ShaMap {
-			if old != new_ {
-				rewrites[old] = new_
-			}
+	// The one computation both renderings read: the payload's counts are the
+	// numbers the summary below prints.
+	rewrites := make(map[string]string)
+	for old, new_ := range result.ShaMap {
+		if old != new_ {
+			rewrites[old] = new_
 		}
-		combinedTagRewrites := make([]TagRewrite, 0, len(allTagRewrites))
-		combinedTagRewrites = append(combinedTagRewrites, allTagRewrites...)
-		jsonResult := ScrubMatchResult{
-			Version:           1,
-			DryRun:            false,
-			Rewrites:          rewrites,
-			Tags:              combinedTagRewrites,
-			CommitsRewritten:  result.RewrittenCount,
-			BlobsReplaced:     result.BlobsReplaced,
-			MessagesModified:  result.MessagesModified,
-			TagsRewritten:     result.TagsRewrittenCount,
-			OldHead:           result.OldHeadSHA,
-			NewHead:           result.NewHeadSHA,
-			PreRewriteRemotes: nonNilStringMap(result.PreRewriteRemotes),
-			CleanupOK:         result.CleanupOK,
-			CleanupErrors:     nonNilStrings(result.CleanupErrors),
-		}
-		if jsonResult.Tags == nil {
-			jsonResult.Tags = []TagRewrite{}
-		}
-		emitJSON(jsonResult)
-		return exitCode
 	}
+	combinedTagRewrites := make([]TagRewrite, 0, len(allTagRewrites))
+	combinedTagRewrites = append(combinedTagRewrites, allTagRewrites...)
+	flags.payload(ScrubMatchResult{
+		Version:           1,
+		DryRun:            false,
+		Pattern:           pattern,
+		Rewrites:          rewrites,
+		Tags:              combinedTagRewrites,
+		CommitsRewritten:  intPtr(result.RewrittenCount),
+		BlobsReplaced:     intPtr(result.BlobsReplaced),
+		MessagesModified:  intPtr(result.MessagesModified),
+		TagsRewritten:     intPtr(result.TagsRewrittenCount),
+		OldHead:           result.OldHeadSHA,
+		NewHead:           result.NewHeadSHA,
+		PreRewriteRemotes: nonNilStringMap(result.PreRewriteRemotes),
+		CleanupOK:         boolPtr(result.CleanupOK),
+		CleanupErrors:     nonNilStrings(result.CleanupErrors),
+	})
 
 	// Summary (push hint already printed by Finalize inside executeScrubRecipe)
 	infof(flags, "\nScrub complete:\n")
@@ -1182,4 +1227,3 @@ func mangleBytes(match []byte) []byte {
 	}
 	return result
 }
-

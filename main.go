@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -21,10 +20,6 @@ import (
 // Set via -ldflags "-X main.version=..." at build time.
 // Falls back to the module version embedded by go install.
 var version = ""
-
-// jsonEmitted tracks whether emitJSON has been called, so die() knows
-// whether a JSON error envelope is still needed.
-var jsonEmitted bool
 
 func init() {
 	if version != "" {
@@ -395,6 +390,7 @@ func newApp() *strictcli.App {
 		return strictcli.Exit(runRewriteAuthor(globalsToFlags(ctx, kwargs), kwargs))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
+		strictcli.PayloadSchema(rewriteAuthorPayloadSchema),
 		// Every commit from the rewrite point forward gets a new SHA. Anyone
 		// who already pulled this history keeps the old commits and will have
 		// to recover by hand, and the rewrite is not undoable from safegit's
@@ -418,6 +414,7 @@ func newApp() *strictcli.App {
 		return strictcli.Exit(runScrubFile(globalsToFlags(ctx, kwargs), kwargs))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
+		strictcli.PayloadSchema(scrubFilePayloadSchema),
 		// An irreversible history rewrite: every commit downstream of --from is
 		// replaced, refs move, and a clone that already pulled the old history
 		// cannot be reconciled automatically.
@@ -436,6 +433,7 @@ func newApp() *strictcli.App {
 		return strictcli.Exit(runScrubMatch(globalsToFlags(ctx, kwargs), kwargs))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
+		strictcli.PayloadSchema(scrubMatchPayloadSchema),
 		// Same irreversible rewrite as `scrub file`, driven by a regex whose
 		// blast radius is not visible in the command line.
 		strictcli.WithConsequential(),
@@ -463,6 +461,7 @@ func newApp() *strictcli.App {
 		return strictcli.Exit(runScrubRun(globalsToFlags(ctx, kwargs), kwargs))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
+		strictcli.PayloadSchema(scrubRunPayloadSchema),
 		// A recipe applies many irreversible rewrites in one coordinated pass;
 		// the operations live in a TOML file, so the command line shows even
 		// less about what is about to happen than `scrub file` does.
@@ -751,17 +750,6 @@ func outf(flags globalFlags, format string, args ...interface{}) {
 	}
 }
 
-// emitJSON marshals v as indented JSON to stdout. Exits on marshal error.
-func emitJSON(v interface{}) {
-	jsonEmitted = true
-	data, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: marshaling JSON: %v\n", err)
-		os.Exit(1)
-	}
-	fmt.Println(string(data))
-}
-
 // requireCleanTree dies if the working tree has uncommitted changes.
 func requireCleanTree(ctx context.Context, flags globalFlags, cmd string) {
 	statusOut, _, err := git.Run(ctx, "status", "--porcelain")
@@ -780,14 +768,13 @@ func commandHelp(cmd, usage string) {
 }
 
 // die prints an error for the given subcommand and exits with code.
-// When --json is active and no JSON has been emitted yet, it also writes
-// a JSON error envelope to stdout so callers always get structured output.
+//
+// It writes no JSON of its own any more. Machine mode's stdout carries the
+// framework's envelope and nothing else, and safegit cannot mint one: die exits
+// the process directly, below the seam that emits it. So an error path answers
+// with the exit code and the stderr line in both modes -- never with a second
+// document that would have to imitate the envelope.
 func die(flags globalFlags, cmd string, code int, msg string) {
-	if flags.json && !jsonEmitted {
-		emitJSON(struct {
-			Error string `json:"error"`
-		}{Error: msg})
-	}
 	fmt.Fprintf(os.Stderr, "error: %s\n", msg)
 	os.Exit(code)
 }

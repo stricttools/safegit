@@ -12,6 +12,7 @@ import (
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/trailer"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
 func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
@@ -80,22 +81,30 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 			}
 		}
 
+		// The one computation both renderings read: the preview's two counts
+		// are the two numbers the line below prints.
+		result := RewriteAuthorResult{
+			Version:        1,
+			DryRun:         true,
+			CommitsToCheck: intPtr(len(shas)),
+			CommitsMatched: intPtr(len(affected)),
+		}
+		if oldName != "" {
+			result.OldName = oldName
+			result.NewName = newName
+		}
+		if oldEmail != "" {
+			result.OldEmail = oldEmail
+			result.NewEmail = newEmail
+		}
+		// The rewrite this preview describes, minted so the framework renders
+		// it: the would-do log in human mode, the envelope's preview member in
+		// machine mode.
+		oldHeadSHA, _ := git.RevParse(ctx, "HEAD")
+		recordHistoryRewrite(ctx, flags, oldHeadSHA)
+		flags.payload(result)
+
 		if flags.json {
-			result := RewriteAuthorDryRunResult{
-				Version:        1,
-				DryRun:         true,
-				CommitsToCheck: len(shas),
-				CommitsMatched: len(affected),
-			}
-			if oldName != "" {
-				result.OldName = oldName
-				result.NewName = newName
-			}
-			if oldEmail != "" {
-				result.OldEmail = oldEmail
-				result.NewEmail = newEmail
-			}
-			emitJSON(result)
 			return 0
 		}
 
@@ -109,7 +118,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 			rewriteDesc = fmt.Sprintf("email: %s -> %s", oldEmail, newEmail)
 		}
 		fmt.Printf("Would rewrite %d of %d commits (%s)\n",
-			len(affected), len(shas), rewriteDesc)
+			*result.CommitsMatched, *result.CommitsToCheck, rewriteDesc)
 		limit := len(affected)
 		if limit > 5 {
 			limit = 5
@@ -240,40 +249,38 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		die(flags, cmd, 1, err.Error())
 	}
 
-	// JSON output
-	if flags.json {
-		rewrites := make(map[string]string)
-		for old, new_ := range shaMap {
-			if old != new_ {
-				rewrites[old] = new_
-			}
+	// The one computation both renderings read: the three counts below are the
+	// three numbers the sentence prints.
+	rewrites := make(map[string]string)
+	for old, new_ := range shaMap {
+		if old != new_ {
+			rewrites[old] = new_
 		}
-		tagRewrites := result.TagRewrites
-		if tagRewrites == nil {
-			tagRewrites = []TagRewrite{}
-		}
-		jsonResult := RewriteAuthorResult{
-			Version:          1,
-			DryRun:           false,
-			Rewrites:         rewrites,
-			Tags:             tagRewrites,
-			CommitsRewritten: total,
-			NameChanged:      nameChanged,
-			ParentOnly:       parentOnly,
-			OldHead:          oldHeadSHA,
-			NewHead:          result.NewHeadSHA,
-		}
-		if oldName != "" {
-			jsonResult.OldName = oldName
-			jsonResult.NewName = newName
-		}
-		if oldEmail != "" {
-			jsonResult.OldEmail = oldEmail
-			jsonResult.NewEmail = newEmail
-		}
-		emitJSON(jsonResult)
-		return 0
 	}
+	tagRewrites := result.TagRewrites
+	if tagRewrites == nil {
+		tagRewrites = []TagRewrite{}
+	}
+	payload := RewriteAuthorResult{
+		Version:          1,
+		DryRun:           false,
+		Rewrites:         rewrites,
+		Tags:             tagRewrites,
+		CommitsRewritten: intPtr(total),
+		NameChanged:      intPtr(nameChanged),
+		ParentOnly:       intPtr(parentOnly),
+		OldHead:          oldHeadSHA,
+		NewHead:          result.NewHeadSHA,
+	}
+	if oldName != "" {
+		payload.OldName = oldName
+		payload.NewName = newName
+	}
+	if oldEmail != "" {
+		payload.OldEmail = oldEmail
+		payload.NewEmail = newEmail
+	}
+	flags.payload(payload)
 
 	if parentOnly == 1 {
 		infof(flags, "Rewrote %d commits (%d had name changes, %d was inherited (ancestors changed))\n",
@@ -286,34 +293,55 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	return 0
 }
 
-// RewriteAuthorResult is the JSON output for `rewrite-author` in execute mode.
+// RewriteAuthorResult is what `author rewrite` reports -- in both modes and in
+// both renderings. There is no separate dry-run struct: the preview's counts
+// and the execution's counts are members of one result, each present exactly
+// when it was measured.
 type RewriteAuthorResult struct {
-	Version          int               `json:"version"`
-	DryRun           bool              `json:"dry_run"`
-	Rewrites         map[string]string `json:"rewrites"`
-	Tags             []TagRewrite      `json:"tags"`
-	CommitsRewritten int               `json:"commits_rewritten"`
-	NameChanged      int               `json:"name_changed"`
-	ParentOnly       int               `json:"parent_only"`
-	OldHead          string            `json:"old_head"`
-	NewHead          string            `json:"new_head"`
-	OldName          string            `json:"old_name,omitempty"`
-	NewName          string            `json:"new_name,omitempty"`
-	OldEmail         string            `json:"old_email,omitempty"`
-	NewEmail         string            `json:"new_email,omitempty"`
+	Version  int    `json:"version"`
+	DryRun   bool   `json:"dry_run"`
+	OldName  string `json:"old_name,omitempty"`
+	NewName  string `json:"new_name,omitempty"`
+	OldEmail string `json:"old_email,omitempty"`
+	NewEmail string `json:"new_email,omitempty"`
+
+	// Preview-only: the walk behind the preview.
+	CommitsToCheck *int `json:"commits_to_check,omitempty"`
+	CommitsMatched *int `json:"commits_matched,omitempty"`
+
+	// Execute-only: what the rewrite did.
+	Rewrites         map[string]string `json:"rewrites,omitempty"`
+	Tags             []TagRewrite      `json:"tags,omitempty"`
+	CommitsRewritten *int              `json:"commits_rewritten,omitempty"`
+	NameChanged      *int              `json:"name_changed,omitempty"`
+	ParentOnly       *int              `json:"parent_only,omitempty"`
+	OldHead          string            `json:"old_head,omitempty"`
+	NewHead          string            `json:"new_head,omitempty"`
 }
 
-// RewriteAuthorDryRunResult is the JSON output for `rewrite-author --dry-run`.
-type RewriteAuthorDryRunResult struct {
-	Version        int    `json:"version"`
-	DryRun         bool   `json:"dry_run"`
-	CommitsToCheck int    `json:"commits_to_check"`
-	CommitsMatched int    `json:"commits_matched"`
-	OldName        string `json:"old_name,omitempty"`
-	NewName        string `json:"new_name,omitempty"`
-	OldEmail       string `json:"old_email,omitempty"`
-	NewEmail       string `json:"new_email,omitempty"`
-}
+// rewriteAuthorPayloadSchema declares what `author rewrite` puts in the
+// envelope's payload.
+var rewriteAuthorPayloadSchema = strictcli.SchemaObject(
+	map[string]interface{}{
+		"version":           strictcli.SchemaType("integer"),
+		"dry_run":           strictcli.SchemaType("boolean"),
+		"old_name":          strictcli.SchemaType("string"),
+		"new_name":          strictcli.SchemaType("string"),
+		"old_email":         strictcli.SchemaType("string"),
+		"new_email":         strictcli.SchemaType("string"),
+		"commits_to_check":  strictcli.SchemaType("integer"),
+		"commits_matched":   strictcli.SchemaType("integer"),
+		"rewrites":          scrubRewritesSchema,
+		"tags":              scrubTagsSchema,
+		"commits_rewritten": strictcli.SchemaType("integer"),
+		"name_changed":      strictcli.SchemaType("integer"),
+		"parent_only":       strictcli.SchemaType("integer"),
+		"old_head":          strictcli.SchemaType("string"),
+		"new_head":          strictcli.SchemaType("string"),
+	},
+	[]string{"version", "dry_run"},
+	false,
+)
 
 // rewriteSnapshot captures the state of a repository's history for
 // verification before and after an author-rewrite operation. Fields
@@ -324,15 +352,15 @@ type rewriteSnapshot struct {
 	TagCount       int
 	BranchNames    []string
 	TagNames       []string
-	Messages       []string            // full commit messages, topo-order
-	AuthorDates    []string            // topo-order
-	CommitterDates []string            // topo-order
-	AuthorEmails   []string            // topo-order
-	AuthorNames    []string            // topo-order
-	CommitterNames []string            // topo-order
-	TreeHashes     []string            // topo-order
-	ParentCounts   []int               // topo-order
-	TagToMessage   map[string]string   // tag name -> subject of the commit it points to
+	Messages       []string          // full commit messages, topo-order
+	AuthorDates    []string          // topo-order
+	CommitterDates []string          // topo-order
+	AuthorEmails   []string          // topo-order
+	AuthorNames    []string          // topo-order
+	CommitterNames []string          // topo-order
+	TreeHashes     []string          // topo-order
+	ParentCounts   []int             // topo-order
+	TagToMessage   map[string]string // tag name -> subject of the commit it points to
 }
 
 // refGlobs limits rev-list/log walks to branches, tags, and remote tracking
