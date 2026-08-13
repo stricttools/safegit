@@ -18,13 +18,13 @@ import (
 // previewEnv is the controlled environment the scrub tests already use.
 var previewEnv = confirmEnv
 
-// wouldDoBody returns the would-do log's numbered lines (its body), which is
-// what an empty preview lacked.
-func wouldDoBody(t *testing.T, stdout string) []string {
-	t.Helper()
+// wouldDoLines returns the would-do log's numbered lines (its body), and
+// nothing at all when there is no log. A caller that requires a body uses
+// wouldDoBody; a caller checking that a preview promised nothing uses this.
+func wouldDoLines(stdout string) []string {
 	log := wouldDoLog(stdout)
 	if log == "" {
-		t.Fatalf("dry mode rendered no would-do log at all:\n%s", stdout)
+		return nil
 	}
 	var body []string
 	for _, line := range strings.Split(log, "\n") {
@@ -35,6 +35,16 @@ func wouldDoBody(t *testing.T, stdout string) []string {
 		body = append(body, trimmed)
 	}
 	return body
+}
+
+// wouldDoBody returns the would-do log's numbered lines (its body), which is
+// what an empty preview lacked.
+func wouldDoBody(t *testing.T, stdout string) []string {
+	t.Helper()
+	if wouldDoLog(stdout) == "" {
+		t.Fatalf("dry mode rendered no would-do log at all:\n%s", stdout)
+	}
+	return wouldDoLines(stdout)
 }
 
 // payloadInt reads one integer member out of a payload object.
@@ -173,6 +183,48 @@ func TestScrubMatchPreviewFiguresAgree(t *testing.T) {
 	}
 	if len(wouldDoBody(t, human)) != len(env.Preview) {
 		t.Errorf("the would-do log and the envelope's preview disagree on how many effects the rewrite has")
+	}
+}
+
+// TestScrubMatchZeroMatchPreviewPromisesNothing: a `scrub match --dry-run`
+// whose pattern matches nothing must preview nothing. The execute path returns
+// "No matches found. Nothing to rewrite." before a single ref moves, so a
+// preview that minted the rewrite's four mutations (update-ref, reflog expire,
+// repack, prune) described a run that would never happen. `scrub run` has had
+// this guard all along; `scrub match` had not.
+func TestScrubMatchZeroMatchPreviewPromisesNothing(t *testing.T) {
+	dir, _ := newSecretRepo(t)
+	const unmatched = "NOSUCHPATTERN_XYZ"
+
+	human, stderr, code := runSafegitEnv(t, dir, previewEnv, "--dry-run", "scrub", "match",
+		"--pattern", unmatched, "--replace", "GONE", "--reason", "preview", "--entire-history")
+	if code != 0 {
+		t.Fatalf("human dry run failed (%d): %s", code, stderr)
+	}
+	// The same sentence the execute path prints for the same repository state.
+	if !strings.Contains(human, "No matches found. Nothing to rewrite.") {
+		t.Errorf("a zero-match preview must say what a zero-match run says, got:\n%s", human)
+	}
+	if body := wouldDoLines(human); len(body) != 0 {
+		t.Errorf("a zero-match preview promised %d mutations a real run would never make:\n%s",
+			len(body), strings.Join(body, "\n"))
+	}
+
+	machine, stderr, code := runSafegitEnv(t, dir, previewEnv, "--json", "--dry-run", "scrub", "match",
+		"--pattern", unmatched, "--replace", "GONE", "--reason", "preview", "--entire-history")
+	if code != 0 {
+		t.Fatalf("machine dry run failed (%d): %s", code, stderr)
+	}
+	env := decodeEnvelope(t, machine)
+	if len(env.Preview) != 0 {
+		t.Errorf("the envelope previews %d effects for a rewrite that would not happen: %v",
+			len(env.Preview), env.Preview)
+	}
+	if got := payloadInt(t, string(env.Payload), "total_matches"); got != 0 {
+		t.Errorf("total_matches = %d for a pattern that matches nothing", got)
+	}
+	if !secretSurvives(t, dir) {
+		t.Error("a dry run must not rewrite history")
 	}
 }
 
