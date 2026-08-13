@@ -44,15 +44,15 @@ type pushRefInfo struct {
 }
 
 func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote string, mode pushMode) int {
-	gitDir := mustGitDir(flags, "push")
+	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(flags, "push", 1, err.Error())
+		die(1, err.Error())
 		return 1
 	}
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(flags, "push", 1, fmt.Sprintf("loading config: %v", err))
+		die(1, fmt.Sprintf("loading config: %v", err))
 		return 1
 	}
 
@@ -62,19 +62,19 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	ctx := context.Background()
 	remoteURL, err := resolveRemoteURL(ctx, remote)
 	if err != nil {
-		die(flags, "push", 1, fmt.Sprintf("resolving remote URL: %v", err))
+		die(1, fmt.Sprintf("resolving remote URL: %v", err))
 		return 1
 	}
 
 	// Resolve refs to push
 	refs, err := resolveRefsForPush(ctx, remote, mode)
 	if err != nil {
-		die(flags, "push", 1, fmt.Sprintf("resolving refs: %v", err))
+		die(1, fmt.Sprintf("resolving refs: %v", err))
 		return 1
 	}
 
 	if len(refs) == 0 {
-		die(flags, "push", 1, "nothing to push (no matching refs)")
+		die(1, "nothing to push (no matching refs)")
 		return 1
 	}
 
@@ -125,13 +125,13 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 			hookPaths, err = hooks.Discover(gitDir)
 		}
 		if err != nil {
-			die(flags, "push", 1, fmt.Sprintf("discovering hooks: %v", err))
+			die(1, fmt.Sprintf("discovering hooks: %v", err))
 			return 1
 		}
 
 		hookResults, err = hooks.RunAll(ctx, hookPaths, hookStdin, timeoutSec, hookEnv)
 		if err != nil {
-			die(flags, "push", 1, fmt.Sprintf("running hooks: %v", err))
+			die(1, fmt.Sprintf("running hooks: %v", err))
 			return 1
 		}
 

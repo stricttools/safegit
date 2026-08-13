@@ -56,7 +56,7 @@ func executeScrubRecipe(
 	}
 	combinedPattern, err := regexp.Compile(strings.Join(combinedPatternParts, "|"))
 	if err != nil {
-		die(flags, cmd, 2, fmt.Sprintf("compiling combined pattern: %v", err))
+		die(2, fmt.Sprintf("compiling combined pattern: %v", err))
 	}
 
 	// Scan for matching blobs. When scanEntireHistory is set, use EntireHistory
@@ -72,7 +72,7 @@ func executeScrubRecipe(
 	}
 	results, err := scan.ScanObjects(ctx, combinedPattern, scanOpts)
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("scanning objects: %v", err))
+		die(1, fmt.Sprintf("scanning objects: %v", err))
 	}
 
 	if len(results.Matches) == 0 && len(gitlinkMap) == 0 {
@@ -85,7 +85,7 @@ func executeScrubRecipe(
 	if scope != nil {
 		scopedBlobSHAs, err = buildScopedBlobSet(ctx, *scope)
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("building scoped blob set: %v", err))
+			die(1, fmt.Sprintf("building scoped blob set: %v", err))
 		}
 	}
 
@@ -138,7 +138,7 @@ func executeScrubRecipe(
 				// Build the set of blob SHAs at paths matching this op's scope.
 				opScopedBlobs, scopeErr := buildScopedBlobSet(ctx, *op.Scope)
 				if scopeErr != nil {
-					die(flags, cmd, 1, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
+					die(1, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
 				}
 				for _, sha := range blobSHAList {
 					if opScopedBlobs[sha] {
@@ -153,7 +153,7 @@ func executeScrubRecipe(
 	infof(flags, "Building blob replacement map (%d candidate blobs)...\n", len(blobSHAList))
 	blobMap, err := buildRecipeBlobMap(ctx, recipe, blobSHAList, blobAllowedOps)
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("building blob map: %v", err))
+		die(1, fmt.Sprintf("building blob map: %v", err))
 	}
 
 	infof(flags, "Found %d blobs to replace, %d commit message matches, %d tag matches\n",
@@ -172,7 +172,7 @@ func executeScrubRecipe(
 	// Capture old HEAD
 	oldHeadSHA, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("resolving HEAD: %v", err))
+		die(1, fmt.Sprintf("resolving HEAD: %v", err))
 	}
 
 	// Determine commit range
@@ -180,13 +180,13 @@ func executeScrubRecipe(
 	if entireHistory {
 		out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", "HEAD")
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("listing commits: %v", err))
+			die(1, fmt.Sprintf("listing commits: %v", err))
 		}
 		shas = git.SplitNonEmpty(out)
 	} else {
 		out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", fromSHA+"..HEAD")
 		if err != nil {
-			die(flags, cmd, 1, fmt.Sprintf("listing commits: %v", err))
+			die(1, fmt.Sprintf("listing commits: %v", err))
 		}
 		shas = append([]string{fromSHA}, git.SplitNonEmpty(out)...)
 	}
@@ -253,7 +253,7 @@ func executeScrubRecipe(
 		return xform, nil
 	}, flags.verbose)
 	if err != nil {
-		die(flags, cmd, 1, err.Error())
+		die(1, err.Error())
 	}
 	remap.reportStale(flags)
 
@@ -324,7 +324,7 @@ func executeScrubRecipe(
 		PolicyData:     policyData,
 	}
 	if err := result.Finalize(ctx, flags, cmd, parentAnnotFunc, parentVerifyFunc); err != nil {
-		die(flags, cmd, 1, err.Error())
+		die(1, err.Error())
 	}
 
 	// Populate post-execution metrics for callers. (TagsRewrittenCount and

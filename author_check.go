@@ -62,8 +62,6 @@ var authorCheckPayloadSchema = strictcli.SchemaObject(
 )
 
 func runAuthorCheck(flags globalFlags, kwargs map[string]interface{}) int {
-	const cmd = "author check"
-
 	var expectName, expectEmail string
 	if v := kwargs["name"]; v != nil {
 		expectName = v.(string)
@@ -84,7 +82,7 @@ func runAuthorCheck(flags globalFlags, kwargs map[string]interface{}) int {
 	// Format: sha\x01author_name\x01author_email\x01committer_name\x01committer_email
 	out, _, err := git.Run(ctx, "log", "--all", "--format=%H\x01%an\x01%ae\x01%cn\x01%ce")
 	if err != nil {
-		die(flags, cmd, 1, fmt.Sprintf("reading git log: %v", err))
+		die(1, fmt.Sprintf("reading git log: %v", err))
 	}
 
 	lines := git.SplitNonEmpty(out)
