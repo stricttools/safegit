@@ -26,8 +26,17 @@ type checkResult struct {
 // refusal, not a success: it exits nonzero so a script or agent cannot read
 // "aborted" as "done".
 func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
+	diagnose := kwargs["diagnose"].(bool)
 	fix := kwargs["fix"].(bool)
 	uninstall := kwargs["uninstall"].(bool)
+
+	// --diagnose is the read-only mode and needs no branch of its own: it is
+	// what the rest of this function does. It is read anyway so that a state
+	// the mutex cannot produce -- none of the three elected -- is a hard error
+	// instead of silently running the diagnose path.
+	if !diagnose && !fix && !uninstall {
+		die(70, "unreachable: the doctor mutex guarantees exactly one of --diagnose, --fix, --uninstall")
+	}
 
 	gitDir := mustGitDir()
 
