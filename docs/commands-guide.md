@@ -1,6 +1,6 @@
 ---
 title: Commands Guide
-description: "Complete reference for every safegit command: commit, undo, push, pull, backup, scan, scrub, doctor and author, with flags, examples and safety guarantees."
+description: "Complete reference for every safegit command: commit, undo, push, pull, backup, scan, scrub, doctor and author, with flags, machine-mode output, examples and safety guarantees."
 ---
 
 # Commands Guide

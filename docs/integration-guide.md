@@ -1,6 +1,6 @@
 ---
 title: Integration Guide
-description: "How to integrate safegit with other tools: Claude Code sessions, rlsbl release workflows, pre-push hooks, scrub orchestration, and environment variables."
+description: "How to integrate safegit with other tools: Claude Code sessions, rlsbl release workflows, pre-push hooks, scrub orchestration, machine mode's JSON envelope, and environment variables."
 nav_group: "Guides"
 nav_order: 100
 ---
