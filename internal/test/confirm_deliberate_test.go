@@ -90,8 +90,12 @@ func TestScrubFileDryRunPreviewsWithoutConsent(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("a --json dry run must preview without consent, got code %d: %s", code, stderr)
 	}
-	if !strings.Contains(stdout, "\"dry_run\": true") {
-		t.Errorf("expected the dry-run JSON payload on stdout, got: %s", stdout)
+	env := decodeEnvelope(t, stdout)
+	if !env.DryRun {
+		t.Errorf("expected a dry-run envelope on stdout, got: %s", stdout)
+	}
+	if !strings.Contains(string(env.Payload), `"dry_run":true`) {
+		t.Errorf("expected the preview payload on stdout, got: %s", stdout)
 	}
 	if !secretSurvives(t, dir) {
 		t.Error("a dry run must not rewrite history")
