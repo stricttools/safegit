@@ -112,8 +112,8 @@
     "schema_hash": "1652cfe6ec02428a89602f18e3f0cb0060f7e72691bc325404460118eb324182"
   },
   "en/commands-guide.md": {
-    "content": "3d5cc6aa57ca9eeb2be3a7ac36168a0d8e369762f0f7a75f810bf64c4bd4519b",
-    "description": "568d72e97ea93d5af3e952e0c716701aed6ebdd0d5c9254d09890a8de52b1def"
+    "content": "5a6717305886d3c75612489b585ec5152a5bc0059436b40eca83edf5520852a6",
+    "description": "27132e78985f8d7ae789460ba3653d12b2231a6431b5c14454f990b643875045"
   },
   "en/concurrency-guide.md": {
     "content": "f754c99379162ce40497b64b76fc670b671c2c5d2345b3b39ec6d200655335e6",
@@ -131,8 +131,8 @@
     "source_docstring": "5dbb2e0ccd4d28c3d446635ad9b1e5a0fd87522c6367ff1c26e63aecf4472894"
   },
   "en/integration-guide.md": {
-    "content": "f856883193cbfc62eb7116554ffd97ddb6a280c1ed318426a6ddc959011eba50",
-    "description": "25244bcec311260a06183757cfc2f56c77b776f6c6db019047f6403ecfe3bfc9"
+    "content": "8d5a63354374e71755e29500cd635eb162c77d92281c5d29e6b9596a9a124cee",
+    "description": "b3773a857d7cbb6a90add0f1972d758fde1d1f78c2e0916af039105fedd3def5"
   },
   "en/internal-commit.md": {
     "content": "213f1a5c7dc3b63f9530f93a459fd56d7fb51844d4b743b28a3c90360495e469",
