@@ -214,10 +214,9 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 		}
 	}
 
-	// Neither --from nor --entire-history provided
-	if from == nil && !entireHistory {
-		die(2, "one of --from or --entire-history is required")
-	}
+	// The range is not checked here: --from and --entire-history are a mutex
+	// group, and the parser refuses an invocation that elects neither (typing
+	// only --no-entire-history declines an option rather than choosing one).
 
 	// --dry-run preview mode: scan per-operation and show match counts.
 	// Purely read-only, no lock needed, no objects written.
