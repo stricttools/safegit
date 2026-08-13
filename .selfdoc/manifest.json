@@ -1470,87 +1470,87 @@
         },
         {
           "level": 2,
-          "text": "internal/commit",
+          "text": "`internal/commit`",
           "anchor": "internalcommit"
         },
         {
           "level": 3,
-          "text": "ExitCASExhausted",
+          "text": "`ExitCASExhausted`",
           "anchor": "exitcasexhausted"
         },
         {
           "level": 3,
-          "text": "ExitWriteTree",
+          "text": "`ExitWriteTree`",
           "anchor": "exitwritetree"
         },
         {
           "level": 3,
-          "text": "ExitCommitTree",
+          "text": "`ExitCommitTree`",
           "anchor": "exitcommittree"
         },
         {
           "level": 3,
-          "text": "AmendRequest",
+          "text": "`AmendRequest`",
           "anchor": "amendrequest"
         },
         {
           "level": 3,
-          "text": "AmendResult",
+          "text": "`AmendResult`",
           "anchor": "amendresult"
         },
         {
           "level": 3,
-          "text": "RewordRequest",
+          "text": "`RewordRequest`",
           "anchor": "rewordrequest"
         },
         {
           "level": 3,
-          "text": "RewordResult",
+          "text": "`RewordResult`",
           "anchor": "rewordresult"
         },
         {
           "level": 3,
-          "text": "CommitError",
+          "text": "`CommitError`",
           "anchor": "commiterror"
         },
         {
           "level": 3,
-          "text": "Pipeline",
+          "text": "`Pipeline`",
           "anchor": "pipeline"
         },
         {
           "level": 3,
-          "text": "FileSpec",
+          "text": "`FileSpec`",
           "anchor": "filespec"
         },
         {
           "level": 3,
-          "text": "CommitRequest",
+          "text": "`CommitRequest`",
           "anchor": "commitrequest"
         },
         {
           "level": 3,
-          "text": "CommitResult",
+          "text": "`CommitResult`",
           "anchor": "commitresult"
         },
         {
           "level": 3,
-          "text": "Pipeline.Amend",
+          "text": "`Pipeline.Amend`",
           "anchor": "pipelineamend"
         },
         {
           "level": 3,
-          "text": "Pipeline.Reword",
+          "text": "`Pipeline.Reword`",
           "anchor": "pipelinereword"
         },
         {
           "level": 3,
-          "text": "CommitError.Error",
+          "text": "`CommitError.Error`",
           "anchor": "commiterrorerror"
         },
         {
           "level": 3,
-          "text": "Pipeline.Execute",
+          "text": "`Pipeline.Execute`",
           "anchor": "pipelineexecute"
         },
         {
@@ -1560,37 +1560,37 @@
         },
         {
           "level": 2,
-          "text": "internal/index",
+          "text": "`internal/index`",
           "anchor": "internalindex"
         },
         {
           "level": 3,
-          "text": "TmpIndex",
+          "text": "`TmpIndex`",
           "anchor": "tmpindex"
         },
         {
           "level": 3,
-          "text": "New",
+          "text": "`New`",
           "anchor": "new"
         },
         {
           "level": 3,
-          "text": "NewEmpty",
+          "text": "`NewEmpty`",
           "anchor": "newempty"
         },
         {
           "level": 3,
-          "text": "GarbageCollect",
+          "text": "`GarbageCollect`",
           "anchor": "garbagecollect"
         },
         {
           "level": 3,
-          "text": "GarbageCollectDryRun",
+          "text": "`GarbageCollectDryRun`",
           "anchor": "garbagecollectdryrun"
         },
         {
           "level": 3,
-          "text": "TmpIndex.Cleanup",
+          "text": "`TmpIndex.Cleanup`",
           "anchor": "tmpindexcleanup"
         },
         {
@@ -1600,37 +1600,37 @@
         },
         {
           "level": 2,
-          "text": "internal/lock",
+          "text": "`internal/lock`",
           "anchor": "internallock"
         },
         {
           "level": 3,
-          "text": "RefLock",
+          "text": "`RefLock`",
           "anchor": "reflock"
         },
         {
           "level": 3,
-          "text": "Acquire",
+          "text": "`Acquire`",
           "anchor": "acquire"
         },
         {
           "level": 3,
-          "text": "IsStale",
+          "text": "`IsStale`",
           "anchor": "isstale"
         },
         {
           "level": 3,
-          "text": "ForceRelease",
+          "text": "`ForceRelease`",
           "anchor": "forcerelease"
         },
         {
           "level": 3,
-          "text": "ParsePID",
+          "text": "`ParsePID`",
           "anchor": "parsepid"
         },
         {
           "level": 3,
-          "text": "RefLock.Release",
+          "text": "`RefLock.Release`",
           "anchor": "reflockrelease"
         },
         {
@@ -1675,262 +1675,262 @@
         },
         {
           "level": 2,
-          "text": "internal/git",
+          "text": "`internal/git`",
           "anchor": "internalgit"
         },
         {
           "level": 3,
-          "text": "ErrDetachedHead",
+          "text": "`ErrDetachedHead`",
           "anchor": "errdetachedhead"
         },
         {
           "level": 3,
-          "text": "AuthorInfo",
+          "text": "`AuthorInfo`",
           "anchor": "authorinfo"
         },
         {
           "level": 3,
-          "text": "CommitInfo",
+          "text": "`CommitInfo`",
           "anchor": "commitinfo"
         },
         {
           "level": 3,
-          "text": "TreeEntry",
+          "text": "`TreeEntry`",
           "anchor": "treeentry"
         },
         {
           "level": 3,
-          "text": "ObjectEntry",
+          "text": "`ObjectEntry`",
           "anchor": "objectentry"
         },
         {
           "level": 3,
-          "text": "ObjectIterator",
+          "text": "`ObjectIterator`",
           "anchor": "objectiterator"
         },
         {
           "level": 3,
-          "text": "WithDir",
+          "text": "`WithDir`",
           "anchor": "withdir"
         },
         {
           "level": 3,
-          "text": "Run",
+          "text": "`Run`",
           "anchor": "run"
         },
         {
           "level": 3,
-          "text": "RunWithEnv",
+          "text": "`RunWithEnv`",
           "anchor": "runwithenv"
         },
         {
           "level": 3,
-          "text": "RunWithEnvStdin",
+          "text": "`RunWithEnvStdin`",
           "anchor": "runwithenvstdin"
         },
         {
           "level": 3,
-          "text": "RepoRoot",
+          "text": "`RepoRoot`",
           "anchor": "reporoot"
         },
         {
           "level": 3,
-          "text": "GitDir",
+          "text": "`GitDir`",
           "anchor": "gitdir"
         },
         {
           "level": 3,
-          "text": "HeadRef",
+          "text": "`HeadRef`",
           "anchor": "headref"
         },
         {
           "level": 3,
-          "text": "RevParse",
+          "text": "`RevParse`",
           "anchor": "revparse"
         },
         {
           "level": 3,
-          "text": "ReadTree",
+          "text": "`ReadTree`",
           "anchor": "readtree"
         },
         {
           "level": 3,
-          "text": "WriteTree",
+          "text": "`WriteTree`",
           "anchor": "writetree"
         },
         {
           "level": 3,
-          "text": "CommitTree",
+          "text": "`CommitTree`",
           "anchor": "committree"
         },
         {
           "level": 3,
-          "text": "UpdateRef",
+          "text": "`UpdateRef`",
           "anchor": "updateref"
         },
         {
           "level": 3,
-          "text": "DeleteRef",
+          "text": "`DeleteRef`",
           "anchor": "deleteref"
         },
         {
           "level": 3,
-          "text": "AddFile",
+          "text": "`AddFile`",
           "anchor": "addfile"
         },
         {
           "level": 3,
-          "text": "RmCached",
+          "text": "`RmCached`",
           "anchor": "rmcached"
         },
         {
           "level": 3,
-          "text": "IsTracked",
+          "text": "`IsTracked`",
           "anchor": "istracked"
         },
         {
           "level": 3,
-          "text": "ListSkipWorktreeFiles",
+          "text": "`ListSkipWorktreeFiles`",
           "anchor": "listskipworktreefiles"
         },
         {
           "level": 3,
-          "text": "ListTrackedIgnoredFiles",
+          "text": "`ListTrackedIgnoredFiles`",
           "anchor": "listtrackedignoredfiles"
         },
         {
           "level": 3,
-          "text": "SyncMainIndex",
+          "text": "`SyncMainIndex`",
           "anchor": "syncmainindex"
         },
         {
           "level": 3,
-          "text": "SyncMainIndexWithWorktree",
+          "text": "`SyncMainIndexWithWorktree`",
           "anchor": "syncmainindexwithworktree"
         },
         {
           "level": 3,
-          "text": "RunPassthrough",
+          "text": "`RunPassthrough`",
           "anchor": "runpassthrough"
         },
         {
           "level": 3,
-          "text": "CommonGitDir",
+          "text": "`CommonGitDir`",
           "anchor": "commongitdir"
         },
         {
           "level": 3,
-          "text": "CommonGitDirOf",
+          "text": "`CommonGitDirOf`",
           "anchor": "commongitdirof"
         },
         {
           "level": 3,
-          "text": "IsIgnored",
+          "text": "`IsIgnored`",
           "anchor": "isignored"
         },
         {
           "level": 3,
-          "text": "IsAncestorOf",
+          "text": "`IsAncestorOf`",
           "anchor": "isancestorof"
         },
         {
           "level": 3,
-          "text": "CommitMessage",
+          "text": "`CommitMessage`",
           "anchor": "commitmessage"
         },
         {
           "level": 3,
-          "text": "ParseCommit",
+          "text": "`ParseCommit`",
           "anchor": "parsecommit"
         },
         {
           "level": 3,
-          "text": "CommitTreeWithAuthor",
+          "text": "`CommitTreeWithAuthor`",
           "anchor": "committreewithauthor"
         },
         {
           "level": 3,
-          "text": "LsTreeAll",
+          "text": "`LsTreeAll`",
           "anchor": "lstreeall"
         },
         {
           "level": 3,
-          "text": "LsTree",
+          "text": "`LsTree`",
           "anchor": "lstree"
         },
         {
           "level": 3,
-          "text": "HashObject",
+          "text": "`HashObject`",
           "anchor": "hashobject"
         },
         {
           "level": 3,
-          "text": "HashObjectWrite",
+          "text": "`HashObjectWrite`",
           "anchor": "hashobjectwrite"
         },
         {
           "level": 3,
-          "text": "HashObjectWriteBytes",
+          "text": "`HashObjectWriteBytes`",
           "anchor": "hashobjectwritebytes"
         },
         {
           "level": 3,
-          "text": "CatFileBlob",
+          "text": "`CatFileBlob`",
           "anchor": "catfileblob"
         },
         {
           "level": 3,
-          "text": "MkTree",
+          "text": "`MkTree`",
           "anchor": "mktree"
         },
         {
           "level": 3,
-          "text": "CatFileBatchAll",
+          "text": "`CatFileBatchAll`",
           "anchor": "catfilebatchall"
         },
         {
           "level": 3,
-          "text": "CatFileBatchSHAs",
+          "text": "`CatFileBatchSHAs`",
           "anchor": "catfilebatchshas"
         },
         {
           "level": 3,
-          "text": "RunWithGitDir",
+          "text": "`RunWithGitDir`",
           "anchor": "runwithgitdir"
         },
         {
           "level": 3,
-          "text": "CatFileBatchAllWithDir",
+          "text": "`CatFileBatchAllWithDir`",
           "anchor": "catfilebatchallwithdir"
         },
         {
           "level": 3,
-          "text": "CatFileBatchSHAsWithDir",
+          "text": "`CatFileBatchSHAsWithDir`",
           "anchor": "catfilebatchshaswithdir"
         },
         {
           "level": 3,
-          "text": "SplitNonEmpty",
+          "text": "`SplitNonEmpty`",
           "anchor": "splitnonempty"
         },
         {
           "level": 3,
-          "text": "ForEachRef",
+          "text": "`ForEachRef`",
           "anchor": "foreachref"
         },
         {
           "level": 3,
-          "text": "LsRemoteBulk",
+          "text": "`LsRemoteBulk`",
           "anchor": "lsremotebulk"
         },
         {
           "level": 3,
-          "text": "ObjectIterator.Next",
+          "text": "`ObjectIterator.Next`",
           "anchor": "objectiteratornext"
         },
         {
           "level": 3,
-          "text": "ObjectIterator.Close",
+          "text": "`ObjectIterator.Close`",
           "anchor": "objectiteratorclose"
         },
         {
@@ -1940,47 +1940,47 @@
         },
         {
           "level": 2,
-          "text": "internal/oplog",
+          "text": "`internal/oplog`",
           "anchor": "internaloplog"
         },
         {
           "level": 3,
-          "text": "Entry",
+          "text": "`Entry`",
           "anchor": "entry"
         },
         {
           "level": 3,
-          "text": "Append",
+          "text": "`Append`",
           "anchor": "append"
         },
         {
           "level": 3,
-          "text": "Read",
+          "text": "`Read`",
           "anchor": "read"
         },
         {
           "level": 3,
-          "text": "LogSize",
+          "text": "`LogSize`",
           "anchor": "logsize"
         },
         {
           "level": 3,
-          "text": "Rotate",
+          "text": "`Rotate`",
           "anchor": "rotate"
         },
         {
           "level": 3,
-          "text": "LastRefUpdate",
+          "text": "`LastRefUpdate`",
           "anchor": "lastrefupdate"
         },
         {
           "level": 3,
-          "text": "LastRefUpdateForSession",
+          "text": "`LastRefUpdateForSession`",
           "anchor": "lastrefupdateforsession"
         },
         {
           "level": 3,
-          "text": "TipSHA",
+          "text": "`TipSHA`",
           "anchor": "tipsha"
         },
         {
@@ -1990,22 +1990,22 @@
         },
         {
           "level": 2,
-          "text": "internal/coord",
+          "text": "`internal/coord`",
           "anchor": "internalcoord"
         },
         {
           "level": 3,
-          "text": "DirtyState",
+          "text": "`DirtyState`",
           "anchor": "dirtystate"
         },
         {
           "level": 3,
-          "text": "Check",
+          "text": "`Check`",
           "anchor": "check"
         },
         {
           "level": 3,
-          "text": "DirtyState.Refuse",
+          "text": "`DirtyState.Refuse`",
           "anchor": "dirtystaterefuse"
         },
         {
@@ -2015,32 +2015,32 @@
         },
         {
           "level": 2,
-          "text": "internal/trailer",
+          "text": "`internal/trailer`",
           "anchor": "internaltrailer"
         },
         {
           "level": 3,
-          "text": "SessionKey",
+          "text": "`SessionKey`",
           "anchor": "sessionkey"
         },
         {
           "level": 3,
-          "text": "Inject",
+          "text": "`Inject`",
           "anchor": "inject"
         },
         {
           "level": 3,
-          "text": "AppendCustom",
+          "text": "`AppendCustom`",
           "anchor": "appendcustom"
         },
         {
           "level": 3,
-          "text": "SplitBodyTrailers",
+          "text": "`SplitBodyTrailers`",
           "anchor": "splitbodytrailers"
         },
         {
           "level": 3,
-          "text": "ReplaceIdentity",
+          "text": "`ReplaceIdentity`",
           "anchor": "replaceidentity"
         },
         {
@@ -2050,127 +2050,127 @@
         },
         {
           "level": 2,
-          "text": "internal/repo",
+          "text": "`internal/repo`",
           "anchor": "internalrepo"
         },
         {
           "level": 3,
-          "text": "Config",
+          "text": "`Config`",
           "anchor": "config"
         },
         {
           "level": 3,
-          "text": "CommitConfig",
+          "text": "`CommitConfig`",
           "anchor": "commitconfig"
         },
         {
           "level": 3,
-          "text": "LockConfig",
+          "text": "`LockConfig`",
           "anchor": "lockconfig"
         },
         {
           "level": 3,
-          "text": "HooksConfig",
+          "text": "`HooksConfig`",
           "anchor": "hooksconfig"
         },
         {
           "level": 3,
-          "text": "PrePrePushConfig",
+          "text": "`PrePrePushConfig`",
           "anchor": "preprepushconfig"
         },
         {
           "level": 3,
-          "text": "PushConfig",
+          "text": "`PushConfig`",
           "anchor": "pushconfig"
         },
         {
           "level": 3,
-          "text": "LogConfig",
+          "text": "`LogConfig`",
           "anchor": "logconfig"
         },
         {
           "level": 3,
-          "text": "DefaultConfig",
+          "text": "`DefaultConfig`",
           "anchor": "defaultconfig"
         },
         {
           "level": 3,
-          "text": "SafegitDir",
+          "text": "`SafegitDir`",
           "anchor": "safegitdir"
         },
         {
           "level": 3,
-          "text": "SharedSafegitDir",
+          "text": "`SharedSafegitDir`",
           "anchor": "sharedsafegitdir"
         },
         {
           "level": 3,
-          "text": "IsInitialized",
+          "text": "`IsInitialized`",
           "anchor": "isinitialized"
         },
         {
           "level": 3,
-          "text": "Init",
+          "text": "`Init`",
           "anchor": "init"
         },
         {
           "level": 3,
-          "text": "EnsureInitialized",
+          "text": "`EnsureInitialized`",
           "anchor": "ensureinitialized"
         },
         {
           "level": 3,
-          "text": "Uninstall",
+          "text": "`Uninstall`",
           "anchor": "uninstall"
         },
         {
           "level": 3,
-          "text": "LoadConfig",
+          "text": "`LoadConfig`",
           "anchor": "loadconfig"
         },
         {
           "level": 3,
-          "text": "LoadConfigFrom",
+          "text": "`LoadConfigFrom`",
           "anchor": "loadconfigfrom"
         },
         {
           "level": 3,
-          "text": "MarshalConfig",
+          "text": "`MarshalConfig`",
           "anchor": "marshalconfig"
         },
         {
           "level": 3,
-          "text": "ConfigPath",
+          "text": "`ConfigPath`",
           "anchor": "configpath"
         },
         {
           "level": 3,
-          "text": "SaveConfigTo",
+          "text": "`SaveConfigTo`",
           "anchor": "saveconfigto"
         },
         {
           "level": 3,
-          "text": "SaveConfig",
+          "text": "`SaveConfig`",
           "anchor": "saveconfig"
         },
         {
           "level": 3,
-          "text": "GetConfigValue",
+          "text": "`GetConfigValue`",
           "anchor": "getconfigvalue"
         },
         {
           "level": 3,
-          "text": "SetConfigValue",
+          "text": "`SetConfigValue`",
           "anchor": "setconfigvalue"
         },
         {
           "level": 3,
-          "text": "ValidConfigKeys",
+          "text": "`ValidConfigKeys`",
           "anchor": "validconfigkeys"
         },
         {
           "level": 3,
-          "text": "Config.Validate",
+          "text": "`Config.Validate`",
           "anchor": "configvalidate"
         },
         {
@@ -2235,37 +2235,37 @@
         },
         {
           "level": 2,
-          "text": "internal/index",
+          "text": "`internal/index`",
           "anchor": "internalindex-1"
         },
         {
           "level": 3,
-          "text": "TmpIndex",
+          "text": "`TmpIndex`",
           "anchor": "tmpindex-1"
         },
         {
           "level": 3,
-          "text": "New",
+          "text": "`New`",
           "anchor": "new-1"
         },
         {
           "level": 3,
-          "text": "NewEmpty",
+          "text": "`NewEmpty`",
           "anchor": "newempty-1"
         },
         {
           "level": 3,
-          "text": "GarbageCollect",
+          "text": "`GarbageCollect`",
           "anchor": "garbagecollect-1"
         },
         {
           "level": 3,
-          "text": "GarbageCollectDryRun",
+          "text": "`GarbageCollectDryRun`",
           "anchor": "garbagecollectdryrun-1"
         },
         {
           "level": 3,
-          "text": "TmpIndex.Cleanup",
+          "text": "`TmpIndex.Cleanup`",
           "anchor": "tmpindexcleanup-1"
         }
       ]
@@ -2299,167 +2299,142 @@
         },
         {
           "level": 2,
-          "text": ".",
+          "text": "`.`",
           "anchor": ""
         },
         {
           "level": 3,
-          "text": "ScrubVerifyPolicyResult",
+          "text": "`ScrubVerifyPolicyResult`",
           "anchor": "scrubverifypolicyresult"
         },
         {
           "level": 3,
-          "text": "ScrubVerifyResult",
+          "text": "`ScrubVerifyResult`",
           "anchor": "scrubverifyresult"
         },
         {
           "level": 3,
-          "text": "Recipe",
+          "text": "`Recipe`",
           "anchor": "recipe"
         },
         {
           "level": 3,
-          "text": "RecipeOperation",
+          "text": "`RecipeOperation`",
           "anchor": "recipeoperation"
         },
         {
           "level": 3,
-          "text": "ParsedRecipe",
+          "text": "`ParsedRecipe`",
           "anchor": "parsedrecipe"
         },
         {
           "level": 3,
-          "text": "RewriteAuthorResult",
+          "text": "`RewriteAuthorResult`",
           "anchor": "rewriteauthorresult"
         },
         {
           "level": 3,
-          "text": "RewriteAuthorDryRunResult",
-          "anchor": "rewriteauthordryrunresult"
-        },
-        {
-          "level": 3,
-          "text": "RewriteMapStart",
+          "text": "`RewriteMapStart`",
           "anchor": "rewritemapstart"
         },
         {
           "level": 3,
-          "text": "RewriteMapRefs",
+          "text": "`RewriteMapRefs`",
           "anchor": "rewritemaprefs"
         },
         {
           "level": 3,
-          "text": "RewriteMapComplete",
+          "text": "`RewriteMapComplete`",
           "anchor": "rewritemapcomplete"
         },
         {
           "level": 3,
-          "text": "AnnotationRewriteFunc",
+          "text": "`AnnotationRewriteFunc`",
           "anchor": "annotationrewritefunc"
         },
         {
           "level": 3,
-          "text": "VerifyFunc",
+          "text": "`VerifyFunc`",
           "anchor": "verifyfunc"
         },
         {
           "level": 3,
-          "text": "RewriteResult",
+          "text": "`RewriteResult`",
           "anchor": "rewriteresult"
         },
         {
           "level": 3,
-          "text": "ScanResult",
+          "text": "`ScanResult`",
           "anchor": "scanresult"
         },
         {
           "level": 3,
-          "text": "ScanMatchJSON",
+          "text": "`ScanMatchJSON`",
           "anchor": "scanmatchjson"
         },
         {
           "level": 3,
-          "text": "ScrubFileResult",
+          "text": "`ScrubFileResult`",
           "anchor": "scrubfileresult"
         },
         {
           "level": 3,
-          "text": "ScrubFileDryRunResult",
-          "anchor": "scrubfiledryrunresult"
-        },
-        {
-          "level": 3,
-          "text": "TagBodyTransformFunc",
+          "text": "`TagBodyTransformFunc`",
           "anchor": "tagbodytransformfunc"
         },
         {
           "level": 3,
-          "text": "ScrubMatchResult",
+          "text": "`ScrubMatchResult`",
           "anchor": "scrubmatchresult"
         },
         {
           "level": 3,
-          "text": "ScrubMatchDryRunResult",
-          "anchor": "scrubmatchdryrunresult"
-        },
-        {
-          "level": 3,
-          "text": "ScrubPolicy",
+          "text": "`ScrubPolicy`",
           "anchor": "scrubpolicy"
         },
         {
           "level": 3,
-          "text": "ScrubRunResult",
+          "text": "`ScrubRunResult`",
           "anchor": "scrubrunresult"
         },
         {
           "level": 3,
-          "text": "ScrubRunDiffEntry",
+          "text": "`ScrubRunDiffEntry`",
           "anchor": "scrubrundiffentry"
         },
         {
           "level": 3,
-          "text": "ScrubRunDiffResult",
-          "anchor": "scrubrundiffresult"
-        },
-        {
-          "level": 3,
-          "text": "MessageDiffEntry",
+          "text": "`MessageDiffEntry`",
           "anchor": "messagediffentry"
         },
         {
           "level": 3,
-          "text": "ScrubRunDryRunOpResult",
-          "anchor": "scrubrundryrunopresult"
+          "text": "`ScrubRunOpMatches`",
+          "anchor": "scrubrunopmatches"
         },
         {
           "level": 3,
-          "text": "ScrubRunDryRunResult",
-          "anchor": "scrubrundryrunresult"
-        },
-        {
-          "level": 3,
-          "text": "TagRewrite",
+          "text": "`TagRewrite`",
           "anchor": "tagrewrite"
         },
         {
           "level": 3,
-          "text": "CommitTransform",
+          "text": "`CommitTransform`",
           "anchor": "committransform"
         },
         {
           "level": 3,
-          "text": "TransformFunc",
+          "text": "`TransformFunc`",
           "anchor": "transformfunc"
         },
         {
           "level": 3,
-          "text": "BuildRecipeBlobContent",
+          "text": "`BuildRecipeBlobContent`",
           "anchor": "buildrecipeblobcontent"
         },
         {
           "level": 3,
-          "text": "RewriteResult.Finalize",
+          "text": "`RewriteResult.Finalize`",
           "anchor": "rewriteresultfinalize"
         }
       ]
@@ -2601,8 +2576,8 @@
         },
         {
           "level": 2,
-          "text": "JSON output mode",
-          "anchor": "json-output-mode"
+          "text": "Machine mode (`--json`)",
+          "anchor": "machine-mode-json"
         }
       ]
     },
@@ -2618,87 +2593,87 @@
         },
         {
           "level": 2,
-          "text": "internal/commit",
+          "text": "`internal/commit`",
           "anchor": "internalcommit"
         },
         {
           "level": 3,
-          "text": "ExitCASExhausted",
+          "text": "`ExitCASExhausted`",
           "anchor": "exitcasexhausted"
         },
         {
           "level": 3,
-          "text": "ExitWriteTree",
+          "text": "`ExitWriteTree`",
           "anchor": "exitwritetree"
         },
         {
           "level": 3,
-          "text": "ExitCommitTree",
+          "text": "`ExitCommitTree`",
           "anchor": "exitcommittree"
         },
         {
           "level": 3,
-          "text": "AmendRequest",
+          "text": "`AmendRequest`",
           "anchor": "amendrequest"
         },
         {
           "level": 3,
-          "text": "AmendResult",
+          "text": "`AmendResult`",
           "anchor": "amendresult"
         },
         {
           "level": 3,
-          "text": "RewordRequest",
+          "text": "`RewordRequest`",
           "anchor": "rewordrequest"
         },
         {
           "level": 3,
-          "text": "RewordResult",
+          "text": "`RewordResult`",
           "anchor": "rewordresult"
         },
         {
           "level": 3,
-          "text": "CommitError",
+          "text": "`CommitError`",
           "anchor": "commiterror"
         },
         {
           "level": 3,
-          "text": "Pipeline",
+          "text": "`Pipeline`",
           "anchor": "pipeline"
         },
         {
           "level": 3,
-          "text": "FileSpec",
+          "text": "`FileSpec`",
           "anchor": "filespec"
         },
         {
           "level": 3,
-          "text": "CommitRequest",
+          "text": "`CommitRequest`",
           "anchor": "commitrequest"
         },
         {
           "level": 3,
-          "text": "CommitResult",
+          "text": "`CommitResult`",
           "anchor": "commitresult"
         },
         {
           "level": 3,
-          "text": "Pipeline.Amend",
+          "text": "`Pipeline.Amend`",
           "anchor": "pipelineamend"
         },
         {
           "level": 3,
-          "text": "Pipeline.Reword",
+          "text": "`Pipeline.Reword`",
           "anchor": "pipelinereword"
         },
         {
           "level": 3,
-          "text": "CommitError.Error",
+          "text": "`CommitError.Error`",
           "anchor": "commiterrorerror"
         },
         {
           "level": 3,
-          "text": "Pipeline.Execute",
+          "text": "`Pipeline.Execute`",
           "anchor": "pipelineexecute"
         }
       ]
@@ -2715,22 +2690,22 @@
         },
         {
           "level": 2,
-          "text": "internal/coord",
+          "text": "`internal/coord`",
           "anchor": "internalcoord"
         },
         {
           "level": 3,
-          "text": "DirtyState",
+          "text": "`DirtyState`",
           "anchor": "dirtystate"
         },
         {
           "level": 3,
-          "text": "Check",
+          "text": "`Check`",
           "anchor": "check"
         },
         {
           "level": 3,
-          "text": "DirtyState.Refuse",
+          "text": "`DirtyState.Refuse`",
           "anchor": "dirtystaterefuse"
         }
       ]
@@ -2747,12 +2722,12 @@
         },
         {
           "level": 2,
-          "text": "internal/filelock",
+          "text": "`internal/filelock`",
           "anchor": "internalfilelock"
         },
         {
           "level": 3,
-          "text": "LockedAppend",
+          "text": "`LockedAppend`",
           "anchor": "lockedappend"
         }
       ]
@@ -2769,262 +2744,262 @@
         },
         {
           "level": 2,
-          "text": "internal/git",
+          "text": "`internal/git`",
           "anchor": "internalgit"
         },
         {
           "level": 3,
-          "text": "ErrDetachedHead",
+          "text": "`ErrDetachedHead`",
           "anchor": "errdetachedhead"
         },
         {
           "level": 3,
-          "text": "AuthorInfo",
+          "text": "`AuthorInfo`",
           "anchor": "authorinfo"
         },
         {
           "level": 3,
-          "text": "CommitInfo",
+          "text": "`CommitInfo`",
           "anchor": "commitinfo"
         },
         {
           "level": 3,
-          "text": "TreeEntry",
+          "text": "`TreeEntry`",
           "anchor": "treeentry"
         },
         {
           "level": 3,
-          "text": "ObjectEntry",
+          "text": "`ObjectEntry`",
           "anchor": "objectentry"
         },
         {
           "level": 3,
-          "text": "ObjectIterator",
+          "text": "`ObjectIterator`",
           "anchor": "objectiterator"
         },
         {
           "level": 3,
-          "text": "WithDir",
+          "text": "`WithDir`",
           "anchor": "withdir"
         },
         {
           "level": 3,
-          "text": "Run",
+          "text": "`Run`",
           "anchor": "run"
         },
         {
           "level": 3,
-          "text": "RunWithEnv",
+          "text": "`RunWithEnv`",
           "anchor": "runwithenv"
         },
         {
           "level": 3,
-          "text": "RunWithEnvStdin",
+          "text": "`RunWithEnvStdin`",
           "anchor": "runwithenvstdin"
         },
         {
           "level": 3,
-          "text": "RepoRoot",
+          "text": "`RepoRoot`",
           "anchor": "reporoot"
         },
         {
           "level": 3,
-          "text": "GitDir",
+          "text": "`GitDir`",
           "anchor": "gitdir"
         },
         {
           "level": 3,
-          "text": "HeadRef",
+          "text": "`HeadRef`",
           "anchor": "headref"
         },
         {
           "level": 3,
-          "text": "RevParse",
+          "text": "`RevParse`",
           "anchor": "revparse"
         },
         {
           "level": 3,
-          "text": "ReadTree",
+          "text": "`ReadTree`",
           "anchor": "readtree"
         },
         {
           "level": 3,
-          "text": "WriteTree",
+          "text": "`WriteTree`",
           "anchor": "writetree"
         },
         {
           "level": 3,
-          "text": "CommitTree",
+          "text": "`CommitTree`",
           "anchor": "committree"
         },
         {
           "level": 3,
-          "text": "UpdateRef",
+          "text": "`UpdateRef`",
           "anchor": "updateref"
         },
         {
           "level": 3,
-          "text": "DeleteRef",
+          "text": "`DeleteRef`",
           "anchor": "deleteref"
         },
         {
           "level": 3,
-          "text": "AddFile",
+          "text": "`AddFile`",
           "anchor": "addfile"
         },
         {
           "level": 3,
-          "text": "RmCached",
+          "text": "`RmCached`",
           "anchor": "rmcached"
         },
         {
           "level": 3,
-          "text": "IsTracked",
+          "text": "`IsTracked`",
           "anchor": "istracked"
         },
         {
           "level": 3,
-          "text": "ListSkipWorktreeFiles",
+          "text": "`ListSkipWorktreeFiles`",
           "anchor": "listskipworktreefiles"
         },
         {
           "level": 3,
-          "text": "ListTrackedIgnoredFiles",
+          "text": "`ListTrackedIgnoredFiles`",
           "anchor": "listtrackedignoredfiles"
         },
         {
           "level": 3,
-          "text": "SyncMainIndex",
+          "text": "`SyncMainIndex`",
           "anchor": "syncmainindex"
         },
         {
           "level": 3,
-          "text": "SyncMainIndexWithWorktree",
+          "text": "`SyncMainIndexWithWorktree`",
           "anchor": "syncmainindexwithworktree"
         },
         {
           "level": 3,
-          "text": "RunPassthrough",
+          "text": "`RunPassthrough`",
           "anchor": "runpassthrough"
         },
         {
           "level": 3,
-          "text": "CommonGitDir",
+          "text": "`CommonGitDir`",
           "anchor": "commongitdir"
         },
         {
           "level": 3,
-          "text": "CommonGitDirOf",
+          "text": "`CommonGitDirOf`",
           "anchor": "commongitdirof"
         },
         {
           "level": 3,
-          "text": "IsIgnored",
+          "text": "`IsIgnored`",
           "anchor": "isignored"
         },
         {
           "level": 3,
-          "text": "IsAncestorOf",
+          "text": "`IsAncestorOf`",
           "anchor": "isancestorof"
         },
         {
           "level": 3,
-          "text": "CommitMessage",
+          "text": "`CommitMessage`",
           "anchor": "commitmessage"
         },
         {
           "level": 3,
-          "text": "ParseCommit",
+          "text": "`ParseCommit`",
           "anchor": "parsecommit"
         },
         {
           "level": 3,
-          "text": "CommitTreeWithAuthor",
+          "text": "`CommitTreeWithAuthor`",
           "anchor": "committreewithauthor"
         },
         {
           "level": 3,
-          "text": "LsTreeAll",
+          "text": "`LsTreeAll`",
           "anchor": "lstreeall"
         },
         {
           "level": 3,
-          "text": "LsTree",
+          "text": "`LsTree`",
           "anchor": "lstree"
         },
         {
           "level": 3,
-          "text": "HashObject",
+          "text": "`HashObject`",
           "anchor": "hashobject"
         },
         {
           "level": 3,
-          "text": "HashObjectWrite",
+          "text": "`HashObjectWrite`",
           "anchor": "hashobjectwrite"
         },
         {
           "level": 3,
-          "text": "HashObjectWriteBytes",
+          "text": "`HashObjectWriteBytes`",
           "anchor": "hashobjectwritebytes"
         },
         {
           "level": 3,
-          "text": "CatFileBlob",
+          "text": "`CatFileBlob`",
           "anchor": "catfileblob"
         },
         {
           "level": 3,
-          "text": "MkTree",
+          "text": "`MkTree`",
           "anchor": "mktree"
         },
         {
           "level": 3,
-          "text": "CatFileBatchAll",
+          "text": "`CatFileBatchAll`",
           "anchor": "catfilebatchall"
         },
         {
           "level": 3,
-          "text": "CatFileBatchSHAs",
+          "text": "`CatFileBatchSHAs`",
           "anchor": "catfilebatchshas"
         },
         {
           "level": 3,
-          "text": "RunWithGitDir",
+          "text": "`RunWithGitDir`",
           "anchor": "runwithgitdir"
         },
         {
           "level": 3,
-          "text": "CatFileBatchAllWithDir",
+          "text": "`CatFileBatchAllWithDir`",
           "anchor": "catfilebatchallwithdir"
         },
         {
           "level": 3,
-          "text": "CatFileBatchSHAsWithDir",
+          "text": "`CatFileBatchSHAsWithDir`",
           "anchor": "catfilebatchshaswithdir"
         },
         {
           "level": 3,
-          "text": "SplitNonEmpty",
+          "text": "`SplitNonEmpty`",
           "anchor": "splitnonempty"
         },
         {
           "level": 3,
-          "text": "ForEachRef",
+          "text": "`ForEachRef`",
           "anchor": "foreachref"
         },
         {
           "level": 3,
-          "text": "LsRemoteBulk",
+          "text": "`LsRemoteBulk`",
           "anchor": "lsremotebulk"
         },
         {
           "level": 3,
-          "text": "ObjectIterator.Next",
+          "text": "`ObjectIterator.Next`",
           "anchor": "objectiteratornext"
         },
         {
           "level": 3,
-          "text": "ObjectIterator.Close",
+          "text": "`ObjectIterator.Close`",
           "anchor": "objectiteratorclose"
         }
       ]
@@ -3041,57 +3016,57 @@
         },
         {
           "level": 2,
-          "text": "internal/hooks",
+          "text": "`internal/hooks`",
           "anchor": "internalhooks"
         },
         {
           "level": 3,
-          "text": "HookResult",
+          "text": "`HookResult`",
           "anchor": "hookresult"
         },
         {
           "level": 3,
-          "text": "SetOutput",
+          "text": "`SetOutput`",
           "anchor": "setoutput"
         },
         {
           "level": 3,
-          "text": "Discover",
+          "text": "`Discover`",
           "anchor": "discover"
         },
         {
           "level": 3,
-          "text": "DiscoverMulti",
+          "text": "`DiscoverMulti`",
           "anchor": "discovermulti"
         },
         {
           "level": 3,
-          "text": "Run",
+          "text": "`Run`",
           "anchor": "run"
         },
         {
           "level": 3,
-          "text": "RunAll",
+          "text": "`RunAll`",
           "anchor": "runall"
         },
         {
           "level": 3,
-          "text": "RunSingle",
+          "text": "`RunSingle`",
           "anchor": "runsingle"
         },
         {
           "level": 3,
-          "text": "PlanInstall",
+          "text": "`PlanInstall`",
           "anchor": "planinstall"
         },
         {
           "level": 3,
-          "text": "Install",
+          "text": "`Install`",
           "anchor": "install"
         },
         {
           "level": 3,
-          "text": "InstallPlaceholder",
+          "text": "`InstallPlaceholder`",
           "anchor": "installplaceholder"
         }
       ]
@@ -3108,37 +3083,37 @@
         },
         {
           "level": 2,
-          "text": "internal/index",
+          "text": "`internal/index`",
           "anchor": "internalindex"
         },
         {
           "level": 3,
-          "text": "TmpIndex",
+          "text": "`TmpIndex`",
           "anchor": "tmpindex"
         },
         {
           "level": 3,
-          "text": "New",
+          "text": "`New`",
           "anchor": "new"
         },
         {
           "level": 3,
-          "text": "NewEmpty",
+          "text": "`NewEmpty`",
           "anchor": "newempty"
         },
         {
           "level": 3,
-          "text": "GarbageCollect",
+          "text": "`GarbageCollect`",
           "anchor": "garbagecollect"
         },
         {
           "level": 3,
-          "text": "GarbageCollectDryRun",
+          "text": "`GarbageCollectDryRun`",
           "anchor": "garbagecollectdryrun"
         },
         {
           "level": 3,
-          "text": "TmpIndex.Cleanup",
+          "text": "`TmpIndex.Cleanup`",
           "anchor": "tmpindexcleanup"
         }
       ]
@@ -3155,37 +3130,37 @@
         },
         {
           "level": 2,
-          "text": "internal/lock",
+          "text": "`internal/lock`",
           "anchor": "internallock"
         },
         {
           "level": 3,
-          "text": "RefLock",
+          "text": "`RefLock`",
           "anchor": "reflock"
         },
         {
           "level": 3,
-          "text": "Acquire",
+          "text": "`Acquire`",
           "anchor": "acquire"
         },
         {
           "level": 3,
-          "text": "IsStale",
+          "text": "`IsStale`",
           "anchor": "isstale"
         },
         {
           "level": 3,
-          "text": "ForceRelease",
+          "text": "`ForceRelease`",
           "anchor": "forcerelease"
         },
         {
           "level": 3,
-          "text": "ParsePID",
+          "text": "`ParsePID`",
           "anchor": "parsepid"
         },
         {
           "level": 3,
-          "text": "RefLock.Release",
+          "text": "`RefLock.Release`",
           "anchor": "reflockrelease"
         }
       ]
@@ -3202,47 +3177,47 @@
         },
         {
           "level": 2,
-          "text": "internal/oplog",
+          "text": "`internal/oplog`",
           "anchor": "internaloplog"
         },
         {
           "level": 3,
-          "text": "Entry",
+          "text": "`Entry`",
           "anchor": "entry"
         },
         {
           "level": 3,
-          "text": "Append",
+          "text": "`Append`",
           "anchor": "append"
         },
         {
           "level": 3,
-          "text": "Read",
+          "text": "`Read`",
           "anchor": "read"
         },
         {
           "level": 3,
-          "text": "LogSize",
+          "text": "`LogSize`",
           "anchor": "logsize"
         },
         {
           "level": 3,
-          "text": "Rotate",
+          "text": "`Rotate`",
           "anchor": "rotate"
         },
         {
           "level": 3,
-          "text": "LastRefUpdate",
+          "text": "`LastRefUpdate`",
           "anchor": "lastrefupdate"
         },
         {
           "level": 3,
-          "text": "LastRefUpdateForSession",
+          "text": "`LastRefUpdateForSession`",
           "anchor": "lastrefupdateforsession"
         },
         {
           "level": 3,
-          "text": "TipSHA",
+          "text": "`TipSHA`",
           "anchor": "tipsha"
         }
       ]
@@ -3259,17 +3234,17 @@
         },
         {
           "level": 2,
-          "text": "internal/procutil",
+          "text": "`internal/procutil`",
           "anchor": "internalprocutil"
         },
         {
           "level": 3,
-          "text": "ProcessAlive",
+          "text": "`ProcessAlive`",
           "anchor": "processalive"
         },
         {
           "level": 3,
-          "text": "ProcessAlive",
+          "text": "`ProcessAlive`",
           "anchor": "processalive-1"
         }
       ]
@@ -3286,127 +3261,127 @@
         },
         {
           "level": 2,
-          "text": "internal/repo",
+          "text": "`internal/repo`",
           "anchor": "internalrepo"
         },
         {
           "level": 3,
-          "text": "Config",
+          "text": "`Config`",
           "anchor": "config"
         },
         {
           "level": 3,
-          "text": "CommitConfig",
+          "text": "`CommitConfig`",
           "anchor": "commitconfig"
         },
         {
           "level": 3,
-          "text": "LockConfig",
+          "text": "`LockConfig`",
           "anchor": "lockconfig"
         },
         {
           "level": 3,
-          "text": "HooksConfig",
+          "text": "`HooksConfig`",
           "anchor": "hooksconfig"
         },
         {
           "level": 3,
-          "text": "PrePrePushConfig",
+          "text": "`PrePrePushConfig`",
           "anchor": "preprepushconfig"
         },
         {
           "level": 3,
-          "text": "PushConfig",
+          "text": "`PushConfig`",
           "anchor": "pushconfig"
         },
         {
           "level": 3,
-          "text": "LogConfig",
+          "text": "`LogConfig`",
           "anchor": "logconfig"
         },
         {
           "level": 3,
-          "text": "DefaultConfig",
+          "text": "`DefaultConfig`",
           "anchor": "defaultconfig"
         },
         {
           "level": 3,
-          "text": "SafegitDir",
+          "text": "`SafegitDir`",
           "anchor": "safegitdir"
         },
         {
           "level": 3,
-          "text": "SharedSafegitDir",
+          "text": "`SharedSafegitDir`",
           "anchor": "sharedsafegitdir"
         },
         {
           "level": 3,
-          "text": "IsInitialized",
+          "text": "`IsInitialized`",
           "anchor": "isinitialized"
         },
         {
           "level": 3,
-          "text": "Init",
+          "text": "`Init`",
           "anchor": "init"
         },
         {
           "level": 3,
-          "text": "EnsureInitialized",
+          "text": "`EnsureInitialized`",
           "anchor": "ensureinitialized"
         },
         {
           "level": 3,
-          "text": "Uninstall",
+          "text": "`Uninstall`",
           "anchor": "uninstall"
         },
         {
           "level": 3,
-          "text": "LoadConfig",
+          "text": "`LoadConfig`",
           "anchor": "loadconfig"
         },
         {
           "level": 3,
-          "text": "LoadConfigFrom",
+          "text": "`LoadConfigFrom`",
           "anchor": "loadconfigfrom"
         },
         {
           "level": 3,
-          "text": "MarshalConfig",
+          "text": "`MarshalConfig`",
           "anchor": "marshalconfig"
         },
         {
           "level": 3,
-          "text": "ConfigPath",
+          "text": "`ConfigPath`",
           "anchor": "configpath"
         },
         {
           "level": 3,
-          "text": "SaveConfigTo",
+          "text": "`SaveConfigTo`",
           "anchor": "saveconfigto"
         },
         {
           "level": 3,
-          "text": "SaveConfig",
+          "text": "`SaveConfig`",
           "anchor": "saveconfig"
         },
         {
           "level": 3,
-          "text": "GetConfigValue",
+          "text": "`GetConfigValue`",
           "anchor": "getconfigvalue"
         },
         {
           "level": 3,
-          "text": "SetConfigValue",
+          "text": "`SetConfigValue`",
           "anchor": "setconfigvalue"
         },
         {
           "level": 3,
-          "text": "ValidConfigKeys",
+          "text": "`ValidConfigKeys`",
           "anchor": "validconfigkeys"
         },
         {
           "level": 3,
-          "text": "Config.Validate",
+          "text": "`Config.Validate`",
           "anchor": "configvalidate"
         }
       ]
@@ -3423,42 +3398,42 @@
         },
         {
           "level": 2,
-          "text": "internal/scan",
+          "text": "`internal/scan`",
           "anchor": "internalscan"
         },
         {
           "level": 3,
-          "text": "Match",
+          "text": "`Match`",
           "anchor": "match"
         },
         {
           "level": 3,
-          "text": "ScanResults",
+          "text": "`ScanResults`",
           "anchor": "scanresults"
         },
         {
           "level": 3,
-          "text": "ScanOpts",
+          "text": "`ScanOpts`",
           "anchor": "scanopts"
         },
         {
           "level": 3,
-          "text": "AddAttribution",
+          "text": "`AddAttribution`",
           "anchor": "addattribution"
         },
         {
           "level": 3,
-          "text": "ScanNonObjects",
+          "text": "`ScanNonObjects`",
           "anchor": "scannonobjects"
         },
         {
           "level": 3,
-          "text": "ScanObjectsMulti",
+          "text": "`ScanObjectsMulti`",
           "anchor": "scanobjectsmulti"
         },
         {
           "level": 3,
-          "text": "ScanObjects",
+          "text": "`ScanObjects`",
           "anchor": "scanobjects"
         }
       ]
@@ -3475,42 +3450,42 @@
         },
         {
           "level": 2,
-          "text": "internal/stage",
+          "text": "`internal/stage`",
           "anchor": "internalstage"
         },
         {
           "level": 3,
-          "text": "Hunk",
+          "text": "`Hunk`",
           "anchor": "hunk"
         },
         {
           "level": 3,
-          "text": "ExtractHunks",
+          "text": "`ExtractHunks`",
           "anchor": "extracthunks"
         },
         {
           "level": 3,
-          "text": "ParseDiff",
+          "text": "`ParseDiff`",
           "anchor": "parsediff"
         },
         {
           "level": 3,
-          "text": "BuildPatch",
+          "text": "`BuildPatch`",
           "anchor": "buildpatch"
         },
         {
           "level": 3,
-          "text": "ApplyPatch",
+          "text": "`ApplyPatch`",
           "anchor": "applypatch"
         },
         {
           "level": 3,
-          "text": "StageHunks",
+          "text": "`StageHunks`",
           "anchor": "stagehunks"
         },
         {
           "level": 3,
-          "text": "ParseHunkSpec",
+          "text": "`ParseHunkSpec`",
           "anchor": "parsehunkspec"
         }
       ]
@@ -3527,32 +3502,32 @@
         },
         {
           "level": 2,
-          "text": "internal/submodule",
+          "text": "`internal/submodule`",
           "anchor": "internalsubmodule"
         },
         {
           "level": 3,
-          "text": "ErrNestedSubmodules",
+          "text": "`ErrNestedSubmodules`",
           "anchor": "errnestedsubmodules"
         },
         {
           "level": 3,
-          "text": "SubmoduleInfo",
+          "text": "`SubmoduleInfo`",
           "anchor": "submoduleinfo"
         },
         {
           "level": 3,
-          "text": "Enumerate",
+          "text": "`Enumerate`",
           "anchor": "enumerate"
         },
         {
           "level": 3,
-          "text": "CheckNested",
+          "text": "`CheckNested`",
           "anchor": "checknested"
         },
         {
           "level": 3,
-          "text": "DetectParent",
+          "text": "`DetectParent`",
           "anchor": "detectparent"
         }
       ]
@@ -3569,47 +3544,47 @@
         },
         {
           "level": 2,
-          "text": "internal/testutil",
+          "text": "`internal/testutil`",
           "anchor": "internaltestutil"
         },
         {
           "level": 3,
-          "text": "IdentityName",
+          "text": "`IdentityName`",
           "anchor": "identityname"
         },
         {
           "level": 3,
-          "text": "IdentityEmail",
+          "text": "`IdentityEmail`",
           "anchor": "identityemail"
         },
         {
           "level": 3,
-          "text": "SubmoduleRepo",
+          "text": "`SubmoduleRepo`",
           "anchor": "submodulerepo"
         },
         {
           "level": 3,
-          "text": "InitRepoWithSubmodule",
+          "text": "`InitRepoWithSubmodule`",
           "anchor": "initrepowithsubmodule"
         },
         {
           "level": 3,
-          "text": "InitRepoWithTwoSubmodules",
+          "text": "`InitRepoWithTwoSubmodules`",
           "anchor": "initrepowithtwosubmodules"
         },
         {
           "level": 3,
-          "text": "InitRepo",
+          "text": "`InitRepo`",
           "anchor": "initrepo"
         },
         {
           "level": 3,
-          "text": "InitBareRepo",
+          "text": "`InitBareRepo`",
           "anchor": "initbarerepo"
         },
         {
           "level": 3,
-          "text": "Chdir",
+          "text": "`Chdir`",
           "anchor": "chdir"
         }
       ]
@@ -3626,32 +3601,32 @@
         },
         {
           "level": 2,
-          "text": "internal/trailer",
+          "text": "`internal/trailer`",
           "anchor": "internaltrailer"
         },
         {
           "level": 3,
-          "text": "SessionKey",
+          "text": "`SessionKey`",
           "anchor": "sessionkey"
         },
         {
           "level": 3,
-          "text": "Inject",
+          "text": "`Inject`",
           "anchor": "inject"
         },
         {
           "level": 3,
-          "text": "AppendCustom",
+          "text": "`AppendCustom`",
           "anchor": "appendcustom"
         },
         {
           "level": 3,
-          "text": "SplitBodyTrailers",
+          "text": "`SplitBodyTrailers`",
           "anchor": "splitbodytrailers"
         },
         {
           "level": 3,
-          "text": "ReplaceIdentity",
+          "text": "`ReplaceIdentity`",
           "anchor": "replaceidentity"
         }
       ]
@@ -3977,172 +3952,147 @@
         },
         {
           "level": 2,
-          "text": ".",
+          "text": "`.`",
           "anchor": ""
         },
         {
           "level": 3,
-          "text": "ScrubVerifyPolicyResult",
+          "text": "`ScrubVerifyPolicyResult`",
           "anchor": "scrubverifypolicyresult"
         },
         {
           "level": 3,
-          "text": "ScrubVerifyResult",
+          "text": "`ScrubVerifyResult`",
           "anchor": "scrubverifyresult"
         },
         {
           "level": 3,
-          "text": "Recipe",
+          "text": "`Recipe`",
           "anchor": "recipe"
         },
         {
           "level": 3,
-          "text": "RecipeOperation",
+          "text": "`RecipeOperation`",
           "anchor": "recipeoperation"
         },
         {
           "level": 3,
-          "text": "ParsedRecipe",
+          "text": "`ParsedRecipe`",
           "anchor": "parsedrecipe"
         },
         {
           "level": 3,
-          "text": "RewriteAuthorResult",
+          "text": "`RewriteAuthorResult`",
           "anchor": "rewriteauthorresult"
         },
         {
           "level": 3,
-          "text": "RewriteAuthorDryRunResult",
-          "anchor": "rewriteauthordryrunresult"
-        },
-        {
-          "level": 3,
-          "text": "RewriteMapStart",
+          "text": "`RewriteMapStart`",
           "anchor": "rewritemapstart"
         },
         {
           "level": 3,
-          "text": "RewriteMapRefs",
+          "text": "`RewriteMapRefs`",
           "anchor": "rewritemaprefs"
         },
         {
           "level": 3,
-          "text": "RewriteMapComplete",
+          "text": "`RewriteMapComplete`",
           "anchor": "rewritemapcomplete"
         },
         {
           "level": 3,
-          "text": "AnnotationRewriteFunc",
+          "text": "`AnnotationRewriteFunc`",
           "anchor": "annotationrewritefunc"
         },
         {
           "level": 3,
-          "text": "VerifyFunc",
+          "text": "`VerifyFunc`",
           "anchor": "verifyfunc"
         },
         {
           "level": 3,
-          "text": "RewriteResult",
+          "text": "`RewriteResult`",
           "anchor": "rewriteresult"
         },
         {
           "level": 3,
-          "text": "ScanResult",
+          "text": "`ScanResult`",
           "anchor": "scanresult"
         },
         {
           "level": 3,
-          "text": "ScanMatchJSON",
+          "text": "`ScanMatchJSON`",
           "anchor": "scanmatchjson"
         },
         {
           "level": 3,
-          "text": "ScrubFileResult",
+          "text": "`ScrubFileResult`",
           "anchor": "scrubfileresult"
         },
         {
           "level": 3,
-          "text": "ScrubFileDryRunResult",
-          "anchor": "scrubfiledryrunresult"
-        },
-        {
-          "level": 3,
-          "text": "TagBodyTransformFunc",
+          "text": "`TagBodyTransformFunc`",
           "anchor": "tagbodytransformfunc"
         },
         {
           "level": 3,
-          "text": "ScrubMatchResult",
+          "text": "`ScrubMatchResult`",
           "anchor": "scrubmatchresult"
         },
         {
           "level": 3,
-          "text": "ScrubMatchDryRunResult",
-          "anchor": "scrubmatchdryrunresult"
-        },
-        {
-          "level": 3,
-          "text": "ScrubPolicy",
+          "text": "`ScrubPolicy`",
           "anchor": "scrubpolicy"
         },
         {
           "level": 3,
-          "text": "ScrubRunResult",
+          "text": "`ScrubRunResult`",
           "anchor": "scrubrunresult"
         },
         {
           "level": 3,
-          "text": "ScrubRunDiffEntry",
+          "text": "`ScrubRunDiffEntry`",
           "anchor": "scrubrundiffentry"
         },
         {
           "level": 3,
-          "text": "ScrubRunDiffResult",
-          "anchor": "scrubrundiffresult"
-        },
-        {
-          "level": 3,
-          "text": "MessageDiffEntry",
+          "text": "`MessageDiffEntry`",
           "anchor": "messagediffentry"
         },
         {
           "level": 3,
-          "text": "ScrubRunDryRunOpResult",
-          "anchor": "scrubrundryrunopresult"
+          "text": "`ScrubRunOpMatches`",
+          "anchor": "scrubrunopmatches"
         },
         {
           "level": 3,
-          "text": "ScrubRunDryRunResult",
-          "anchor": "scrubrundryrunresult"
-        },
-        {
-          "level": 3,
-          "text": "TagRewrite",
+          "text": "`TagRewrite`",
           "anchor": "tagrewrite"
         },
         {
           "level": 3,
-          "text": "CommitTransform",
+          "text": "`CommitTransform`",
           "anchor": "committransform"
         },
         {
           "level": 3,
-          "text": "TransformFunc",
+          "text": "`TransformFunc`",
           "anchor": "transformfunc"
         },
         {
           "level": 3,
-          "text": "BuildRecipeBlobContent",
+          "text": "`BuildRecipeBlobContent`",
           "anchor": "buildrecipeblobcontent"
         },
         {
           "level": 3,
-          "text": "RewriteResult.Finalize",
+          "text": "`RewriteResult.Finalize`",
           "anchor": "rewriteresultfinalize"
         }
       ]
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-12T03:47:54.936379+00:00"
+  "last_gen": "2026-08-13T05:29:33.514202+00:00"
 }

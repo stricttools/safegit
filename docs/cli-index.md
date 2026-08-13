@@ -45,7 +45,6 @@ Version: :-: var key="project.version"
 | Name | Short | Type | Default | Env | Description |
 | --- | --- | --- | --- | --- | --- |
 | `--config-file` |  | str |  |  | path to a custom safegit config file instead of the default location |
-| `--json` |  | bool |  |  | emit machine-readable JSON output to stdout instead of human text |
 
 ## Framework flags
 
