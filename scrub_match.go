@@ -100,12 +100,17 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 
 	// Flag extraction
 	pattern := kwargs["pattern"].(string)
+	// Mangle mode is read from --mangle itself, never inferred from "--replace
+	// is absent": inferring it is how `--no-mangle` alone used to mangle the
+	// whole history. The mutex elects exactly one of the two, so neither
+	// elected cannot arrive from the CLI -- and if it ever did, it is a hard
+	// error rather than a rewrite nobody asked for.
+	mangleMode := kwargs["mangle"].(bool)
 	var replace string
-	var mangleMode bool
 	if kwargs["replace"] != nil {
 		replace = kwargs["replace"].(string)
-	} else {
-		mangleMode = true
+	} else if !mangleMode {
+		die(70, "unreachable: the scrub match mutex guarantees exactly one of --replace, --mangle")
 	}
 	reason := kwargs["reason"].(string)
 

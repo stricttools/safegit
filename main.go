@@ -191,6 +191,13 @@ func newApp() *strictcli.App {
 			mode = pushModeTags
 		case bothBranchesAndTags:
 			mode = pushModeBoth
+		default:
+			// The push-mode mutex elects exactly one member, so no fifth state
+			// can arrive from the CLI. Refusing loudly keeps the zero value
+			// (pushModeHead) from silently becoming the answer for any future
+			// non-CLI caller: that silent fall-through is exactly how
+			// `--no-only-tags` used to push HEAD.
+			die(70, "unreachable: the push-mode mutex guarantees exactly one of --only-head, --only-branches, --only-tags, --both-branches-and-tags")
 		}
 		return strictcli.Exit(runPush(gf, !prePushHook, forceWithLease, remote, mode))
 	},
