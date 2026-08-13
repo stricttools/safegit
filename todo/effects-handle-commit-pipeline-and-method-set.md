@@ -1,9 +1,12 @@
-# Effects-handle wiring: the three remaining items
+# Effects-handle wiring: the two remaining items
 
-Successor to `todo/.done/effects-adoption-residue.md` (split 2026-08-07). Its
+Successor to `todo/effects-handle-remaining-wiring.md` (split 2026-08-13). Its
+item 3 (rewrite commands render an empty would-do body) is delivered and moved
+to `todo/.done/effects-handle-rewrite-preview-body.md`. That file was itself the
+successor to `todo/.done/effects-adoption-residue.md` (split 2026-08-07), whose
 item 1 (two confirmation layers in series) shipped in 0.26.0: per-condition
 consent flags where the framework cannot see the condition, notices where the
-framework's consequential gate already asked. These remain:
+framework's consequential check already asked. These remain:
 
 ## 1. The commit pipeline is not on the effects handle
 
@@ -24,16 +27,7 @@ methods exist. Interim state is honest as of 0.26.0: `hook run` declares
 `dry_run_supported=false` naming exactly this gap; `push` documents that hooks
 do not run under `--dry-run`.
 
-## 3. Rewrite commands render an empty would-do body
-
-`scrub file`/`match`/`run` and `author rewrite` return from their own dry-run
-branch before any mint, so their preview is the summary text with no recorded
-effects beneath it. Expressing a history rewrite as effects is a design round
-(the rewrite is thousands of object writes; the honest preview is probably a
-declared plan table, the pattern the release-tooling flagship established) —
-not a mechanical migration.
-
 ## Effort
 
 Item 1 medium (CAS loop as declared captures); item 2 blocked on the
-framework, then small; item 3 a design round + medium implementation.
+framework, then small.
