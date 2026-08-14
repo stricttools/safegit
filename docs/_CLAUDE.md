@@ -48,7 +48,7 @@ This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestrat
 ## Conventions
 
 - Always use `safegit commit` (not raw `git commit`) when committing to this repo, if safegit is installed
-- Ordinary commands need no approval flag. `safegit commit -m "msg" -- file` is the bare, correct invocation from a script, hook or agent. The CLI framework's confirm protocol prompts only for commands that declare themselves `consequential`, and in safegit that is exactly `scrub file`, `scrub match`, `scrub run` and `author rewrite`; those four refuse with `error: stdin is not interactive; pass --approve-consequential to confirm` when there is no terminal, so a script that means to run one passes `--approve-consequential`
+- Ordinary commands need no approval flag. `safegit commit -m "msg" -- file` is the bare, correct invocation from a script, hook or agent. The CLI framework's confirm protocol prompts only for commands that declare themselves `consequential`, and in safegit that is exactly `scrub file`, `scrub match`, `scrub run` and `author rewrite`; those four refuse with `error: stdin is not interactive; a consequential command must be confirmed at a terminal` when there is no terminal, so a script that means to run one passes `--approve-consequential`
 - `--quiet`, `--verbose`, `--dry-run` and `--approve-consequential` are framework-owned: no short forms (`-q`/`-n`/`-y` are gone) and recognized anywhere in the command line
 - All git plumbing calls go through internal/git (never shell out to git directly from other packages)
 - Per-invocation tmp indexes: never write to the shared .git/index
