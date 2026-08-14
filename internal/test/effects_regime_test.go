@@ -106,7 +106,7 @@ func TestConsequentialCommandRefusesWithoutConsent(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("an unapproved consequential command must not succeed; stderr=%s", stderr)
 	}
-	if !strings.Contains(stderr, "--approve-consequential") && !strings.Contains(stderr, "aborted") {
+	if !strings.Contains(stderr, "must be confirmed at a terminal") && !strings.Contains(stderr, "aborted") {
 		t.Errorf("the refusal must show that approval was missing, got: %s", stderr)
 	}
 	if after := revParseHEAD(t, dir); after != before {
@@ -115,8 +115,9 @@ func TestConsequentialCommandRefusesWithoutConsent(t *testing.T) {
 }
 
 // TestConsequentialNonInteractiveMessageIsPinned: the exact stderr line a
-// non-TTY stdin gets, verbatim from the contract (§8.3). It names the one flag
-// that consents, so a script or agent that trips it can fix itself.
+// non-TTY stdin gets, verbatim from the contract (§8.3). It states why the run
+// was refused -- there was no terminal to confirm at -- so a script or agent
+// that trips it can tell this apart from an ordinary failure.
 func TestConsequentialNonInteractiveMessageIsPinned(t *testing.T) {
 	dir := newRepo(t)
 	writeFile(t, dir, "a.txt", "one\n")
@@ -126,7 +127,7 @@ func TestConsequentialNonInteractiveMessageIsPinned(t *testing.T) {
 
 	_, stderr, code := runSafegitNoConsent(t, dir, nil,
 		"author", "rewrite", "--old-name=Test", "--new-name=Renamed")
-	const want = "error: stdin is not interactive; pass --approve-consequential to confirm"
+	const want = "error: stdin is not interactive; a consequential command must be confirmed at a terminal"
 	if code == 0 || !strings.Contains(stderr, want) {
 		t.Errorf("expected %q on stderr (code %d), got: %s", want, code, stderr)
 	}

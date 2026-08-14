@@ -24,16 +24,22 @@ import (
 var confirmEnv = []string{"CLAUDE_CODE_SESSION_ID=confirm-test"}
 
 // assertRefusedForConsent checks the shape of a refusal: the run failed to do
-// the thing, and it made clear that consent was missing. Both the framework's
-// non-interactive refusal ("pass --approve-consequential to confirm") and its declined prompt
-// ("Proceed? [y/N] aborted") qualify -- which of the two a spawned process gets
-// depends on whether its stdin happens to be a character device.
+// the thing, and it made clear that consent was missing. Three refusals
+// qualify: the framework's non-interactive refusal ("a consequential command
+// must be confirmed at a terminal"), its declined prompt ("Proceed? [y/N]
+// aborted") -- which of those two a spawned process gets depends on whether its
+// stdin happens to be a character device -- and safegit's own refusals for the
+// conditions the framework cannot see (doctor --uninstall, a public backup
+// remote), which name the consent flag themselves.
 func assertRefusedForConsent(t *testing.T, code int, stderr string) {
 	t.Helper()
 	if code == 0 {
 		t.Errorf("an unconsented destructive run must not succeed; stderr: %s", stderr)
 	}
-	if !strings.Contains(stderr, "--approve-consequential") && !strings.Contains(stderr, "aborted") {
+	refused := strings.Contains(stderr, "must be confirmed at a terminal") ||
+		strings.Contains(stderr, "aborted") ||
+		strings.Contains(stderr, "--approve-consequential")
+	if !refused {
 		t.Errorf("the refusal must show that consent was missing, got: %s", stderr)
 	}
 }
