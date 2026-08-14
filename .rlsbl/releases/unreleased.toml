@@ -2,11 +2,21 @@
 format_version = 1
 # Version bump type: patch, minor, major, infra, or prerelease
 #   prerelease: advance an existing pre-release (0.6.0-beta.0 -> -beta.1)
-bump = ""
+bump = "minor"
 # Short description of this release (required)
-description = ""
+description = "safegit adopts the framework's machine-output envelope: --json now emits the strictcli envelope as the sole stdout document with a command's own data as its payload, and machine mode no longer forces --quiet. The four history rewrites mint real effects, so a dry-run preview finally lists what it would do. Three dry-run bugs are fixed: a preview no longer writes under .git/, and it no longer refuses a dirty working tree."
 # Optional context explaining why these changes were made
-context = ""
+context = """
+The dependency on the CLI framework moved off a local workspace and onto the
+released strictcli go v0.32.0, which publishes the machine-mode envelope API
+this work is written against. That release also reworded the refusal a
+consequential command gives when stdin is not a terminal, so safegit's pinned
+copy of that string is updated to match.
+
+This is the version rlsbl's scrub path requires: rlsbl pins
+SAFEGIT_MIN_VERSION = 0.27.0 for the rewrite journal and the JSONL hash
+remapping it drives from it.
+"""
 # Pre-release channel: alpha, beta, rc, or stable (ordered;
 # demotion is an error). With patch/minor/major it ENTERS the
 # channel (0.5.2 + minor + alpha -> 0.6.0-alpha.0); with
