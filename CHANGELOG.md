@@ -2,6 +2,37 @@
 
 # Changelog
 
+## 0.27.0
+
+safegit adopts the framework's machine-output envelope: --json now emits the strictcli envelope as the sole stdout document with a command's own data as its payload, and machine mode no longer forces --quiet. The four history rewrites mint real effects, so a dry-run preview finally lists what it would do. Three dry-run bugs are fixed: a preview no longer writes under .git/, and it no longer refuses a dirty working tree.
+
+<details>
+<summary>Context</summary>
+
+The dependency on the CLI framework moved off a local workspace and onto the
+released strictcli go v0.32.0, which publishes the machine-mode envelope API
+this work is written against. That release also reworded the refusal a
+consequential command gives when stdin is not a terminal, so safegit's pinned
+copy of that string is updated to match.
+
+This is the version rlsbl's scrub path requires: rlsbl pins
+SAFEGIT_MIN_VERSION = 0.27.0 for the rewrite journal and the JSONL hash
+remapping it drives from it.
+
+</details>
+
+### Breaking
+
+- **`--json` is now the framework's machine mode, and its output shape changed.** stdout carries exactly one document -- the strictcli envelope (`interface_version`, `app`, `command`, `exit_code`, `payload`, `dry_run`, `preview`, `preview_error`, `diagnostics`) -- and a command's own data is its `payload` member rather than the whole stream. `--json` is no longer a safegit flag (it is framework-owned and recognized anywhere in argv), it no longer implies `--quiet` (the envelope is exempt from quiet, so `--json --quiet` emits the complete document), a failing command answers with its exit code and stderr instead of a `{"error": ...}` object, and a dry run's recorded effects ride the envelope's `preview` member instead of a would-do log printed after the JSON. Every payload-producing command declares a JSON Schema the framework validates at emission and `--dump-schema` publishes verbatim. Anything parsing safegit's JSON must read the payload.
+- **The refusal a consequential command gives when there is no terminal is reworded.** `scrub file`, `scrub match`, `scrub run` and `author rewrite` refused a non-interactive run with `error: stdin is not interactive; pass --approve-consequential to confirm`; against the released strictcli v0.32.0 that line now reads `error: stdin is not interactive; a consequential command must be confirmed at a terminal`. The behaviour is unchanged -- the four commands still refuse without a terminal, and `--approve-consequential` still consents -- but a script or hook matching on the old text will no longer recognize it. safegit's own refusals for the conditions the framework cannot see (`doctor --uninstall`, a `backup backup` to a public remote) are unchanged and still name their consent flag.
+
+### Fixes
+
+- **Dry-run scrub no longer writes to disk or refuses a dirty working tree.** `safegit --dry-run scrub file|match|run` created `.git/safegit/` (config.json, the operation log, lock directories) before previewing anything, and refused to run at all when the working tree had uncommitted changes -- the state a preview is most useful in. A preview now leaves the repository byte-for-byte untouched and runs on a dirty tree; every execute path still requires a clean one.
+- **A dry-run commit no longer writes to disk, and a half-initialized repository repairs itself.** `safegit --dry-run commit` created its per-invocation temporary index under `.git/safegit/tmp/` and left that directory behind, which made the repository read as initialized while `config.json` was absent -- after which every safegit command there failed with `reading config.json: no such file or directory` until `.git/safegit` was deleted by hand. A preview now stages into an OS temporary directory and touches nothing under `.git/`, and a `.git/safegit` without `config.json` is completed on the next executing command instead of being trusted as complete.
+- **A dry-run `author rewrite` works on a dirty working tree.** `safegit --dry-run author rewrite` refused when the working tree had uncommitted changes -- exactly the state a preview is wanted in -- because the clean-tree requirement ran before the preview branch. The preview now runs on a dirty tree; an executing rewrite still requires a clean one.
+- **A dry-run history rewrite finally says what it would do, and both renderings agree.** `scrub file`, `scrub match`, `scrub run` and `author rewrite` minted no effects, so `--dry-run` printed the would-do log's header over an empty body -- reading as "this would change nothing" about a preview of an irreversible rewrite. The rewrite is now recorded through the effects handle, so the log lists the ref move and the reflog/repack/prune cleanup that follows it (and the same records ride the envelope's `preview` in machine mode). The human and machine outputs are also one computation now: `estimated_commits` used to exist only in the machine branch, and the human "in N objects" count was a different denominator from the machine field it read like. `scrub match` reports both, as `objects_matched` and `objects_scanned`.
+
 ## 0.26.0
 
 Each confirmation now owns its consent flag, `hook run` stops pretending to have a dry run, and the command surface is pinned by tests.
