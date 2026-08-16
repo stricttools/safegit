@@ -15,10 +15,10 @@ reverse the last commit, amend, or reword operation using the oplog
 
 ## Flags
 
-| Name | Short | Type | Default | Env | Description |
+| Name | Short | Type | Presence | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--bypass-session` |  | bool |  |  | undo across all sessions by ignoring the session ID ownership check |
-| `--count` |  | int | 1 |  | number of oplog operations to undo in a single invocation |
+| `--bypass-session`, `--no-bypass-session` |  | bool | optional |  | undo across all sessions by ignoring the session ID ownership check; omitted means only this session's operations are undone |
+| `--count` |  | int | optional |  | number of oplog operations to undo in a single invocation; omitted means one |
 
 ## Grants
 

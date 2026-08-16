@@ -16,10 +16,10 @@ search git history for regex pattern matches across all objects and working tree
 
 ## Flags
 
-| Name | Short | Type | Default | Env | Description |
+| Name | Short | Type | Presence | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--pattern` |  | str |  |  | regular expression pattern to search for across all objects in history |
-| `--scope` |  | str |  |  | glob pattern limiting which blob file paths are included (e.g. '*.env', 'config/**') |
-| `--from` |  | str |  |  | first commit hash to include when scanning history (mutually exclusive with --entire-history) |
-| `--entire-history` |  | bool |  |  | scan all commits from the root of the repository to HEAD (mutually exclusive with --from) |
-| `--target` |  | str |  |  | comma-separated list of match types to include: blobs,commits,tags,trailers,files (default: all) |
+| `--pattern` |  | str | required |  | regular expression pattern to search for across all objects in history |
+| `--scope` |  | str | optional |  | glob pattern limiting which blob file paths are included (e.g. '*.env', 'config/**') |
+| `--from` |  | str | optional |  | first commit hash to include when scanning history (mutually exclusive with --entire-history) |
+| `--entire-history`, `--no-entire-history` |  | bool | default: `false` |  | scan all commits from the root of the repository to HEAD (mutually exclusive with --from) |
+| `--target` |  | str | optional |  | comma-separated list of match types to include: blobs,commits,tags,trailers,files (default: all) |

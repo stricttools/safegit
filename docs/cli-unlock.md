@@ -15,6 +15,6 @@ release a stale .lock file left behind by a crashed git process
 
 ## Arguments
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `ref` | yes | the ref name (e.g. refs/heads/main) whose stale .lock file to remove |
+| Name | Type | Presence | Description |
+| --- | --- | --- | --- |
+| `ref` | str | required | the ref name (e.g. refs/heads/main) whose stale .lock file to remove |

@@ -11,6 +11,12 @@ nav_order: 7
 
 show, get, or set safegit configuration key-value pairs
 
+## config show
+
+show all configuration values currently in effect for this repository, including built-in defaults and any user overrides from the .git/safegit/config.json file, printed as key-value pairs to stdout for inspection and debugging purposes
+
+**Effect:** read_only
+
 ## config get
 
 get the current value of a single configuration key from the .git/safegit/config.json file, printing the raw value to stdout so it can be captured by scripts or used in automation pipelines
@@ -19,9 +25,9 @@ get the current value of a single configuration key from the .git/safegit/config
 
 ### Arguments
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `key` | yes | the configuration key whose current value should be retrieved |
+| Name | Type | Presence | Description |
+| --- | --- | --- | --- |
+| `key` | str | required | the configuration key whose current value should be retrieved |
 
 ## config set
 
@@ -31,13 +37,7 @@ set a configuration key to a new value in the .git/safegit/config.json file, cre
 
 ### Arguments
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `key` | yes | the configuration key to set to the specified value in config.json |
-| `value` | yes | the new value to assign to the specified configuration key |
-
-## config show
-
-show all configuration values currently in effect for this repository, including built-in defaults and any user overrides from the .git/safegit/config.json file, printed as key-value pairs to stdout for inspection and debugging purposes
-
-**Effect:** read_only
+| Name | Type | Presence | Description |
+| --- | --- | --- | --- |
+| `key` | str | required | the configuration key to set to the specified value in config.json |
+| `value` | str | required | the new value to assign to the specified configuration key |

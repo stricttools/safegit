@@ -12,6 +12,12 @@ nav_order: 1
 
 audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history
 
+## author list
+
+list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite
+
+**Effect:** read_only
+
 ## author check
 
 check that all commits use the expected author and committer identity by scanning every commit in the repository history, reporting any deviations with the exact commit hashes and mismatched fields, and suggesting the corresponding safegit author rewrite command to fix each deviation found
@@ -20,16 +26,10 @@ check that all commits use the expected author and committer identity by scannin
 
 ### Flags
 
-| Name | Short | Type | Default | Env | Description |
+| Name | Short | Type | Presence | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--name` |  | str |  |  | expected author and committer display name that all commits should use |
-| `--email` |  | str |  |  | expected author and committer email address that all commits should use |
-
-## author list
-
-list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite
-
-**Effect:** read_only
+| `--name` |  | str | optional |  | expected author and committer display name that all commits should use |
+| `--email` |  | str | optional |  | expected author and committer email address that all commits should use |
 
 ## author rewrite
 
@@ -39,9 +39,19 @@ rewrite author and committer name or email across all commit history using git f
 
 ### Flags
 
-| Name | Short | Type | Default | Env | Description |
+| Name | Short | Type | Presence | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--old-name` |  | str |  |  | current author or committer display name to search for and replace |
-| `--new-name` |  | str |  |  | new display name to substitute wherever the old name is found in history |
-| `--old-email` |  | str |  |  | current author or committer email address to search for and replace |
-| `--new-email` |  | str |  |  | new email address to substitute wherever the old email is found in history |
+| `--old-name` |  | str | optional |  | current author or committer display name to search for and replace |
+| `--new-name` |  | str | optional |  | new display name to substitute wherever the old name is found in history |
+| `--old-email` |  | str | optional |  | current author or committer email address to search for and replace |
+| `--new-email` |  | str | optional |  | new email address to substitute wherever the old email is found in history |
+
+### Constraints
+
+The framework enforces these before the command runs.
+
+| Rule | What it requires |
+| --- | --- |
+| `author-name` | All or none of `--old-name` (when supplied), `--new-name` (when supplied). |
+| `author-email` | All or none of `--old-email` (when supplied), `--new-email` (when supplied). |
+| `author-change` | At least one of the `author-name` rule, the `author-email` rule. |

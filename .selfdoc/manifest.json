@@ -2,7 +2,7 @@
   "schema_version": 1,
   "name": "safegit",
   "slug": "safegit",
-  "version": "0.26.0",
+  "version": "0.27.0",
   "description": "",
   "language": "go",
   "base_url": "https://safegit.smmh.dev",
@@ -211,6 +211,11 @@
         },
         {
           "level": 2,
+          "text": "author list",
+          "anchor": "author-list"
+        },
+        {
+          "level": 2,
           "text": "author check",
           "anchor": "author-check"
         },
@@ -221,11 +226,6 @@
         },
         {
           "level": 2,
-          "text": "author list",
-          "anchor": "author-list"
-        },
-        {
-          "level": 2,
           "text": "author rewrite",
           "anchor": "author-rewrite"
         },
@@ -233,6 +233,11 @@
           "level": 3,
           "text": "Flags",
           "anchor": "flags-1"
+        },
+        {
+          "level": 3,
+          "text": "Constraints",
+          "anchor": "constraints"
         }
       ]
     },
@@ -363,6 +368,11 @@
         },
         {
           "level": 2,
+          "text": "config show",
+          "anchor": "config-show"
+        },
+        {
+          "level": 2,
           "text": "config get",
           "anchor": "config-get"
         },
@@ -380,11 +390,6 @@
           "level": 3,
           "text": "Arguments",
           "anchor": "arguments-1"
-        },
-        {
-          "level": 2,
-          "text": "config show",
-          "anchor": "config-show"
         }
       ]
     },
@@ -417,8 +422,13 @@
         },
         {
           "level": 2,
-          "text": "hook install",
-          "anchor": "hook-install"
+          "text": "hook list",
+          "anchor": "hook-list"
+        },
+        {
+          "level": 2,
+          "text": "hook run",
+          "anchor": "hook-run"
         },
         {
           "level": 3,
@@ -427,13 +437,8 @@
         },
         {
           "level": 2,
-          "text": "hook list",
-          "anchor": "hook-list"
-        },
-        {
-          "level": 2,
-          "text": "hook run",
-          "anchor": "hook-run"
+          "text": "hook install",
+          "anchor": "hook-install"
         },
         {
           "level": 3,
@@ -798,8 +803,8 @@
         },
         {
           "level": 3,
-          "text": "Mutex Group (pick at most one)",
-          "anchor": "mutex-group-pick-at-most-one"
+          "text": "Required Choice: `--refs`",
+          "anchor": "required-choice-refs"
         },
         {
           "level": 3,
@@ -963,13 +968,13 @@
         },
         {
           "level": 3,
-          "text": "Mutex Group: Replacement Mode (pick one)",
-          "anchor": "mutex-group-replacement-mode-pick-one"
+          "text": "`substitution` \u2014 required, exactly one",
+          "anchor": "substitution-required-exactly-one"
         },
         {
           "level": 3,
-          "text": "Mutex Group: Range (pick one)",
-          "anchor": "mutex-group-range-pick-one"
+          "text": "`range` \u2014 required, exactly one",
+          "anchor": "range-required-exactly-one"
         },
         {
           "level": 3,
@@ -998,8 +1003,8 @@
         },
         {
           "level": 3,
-          "text": "Mutex Group: Range (pick one)",
-          "anchor": "mutex-group-range-pick-one-1"
+          "text": "`range` \u2014 required, exactly one",
+          "anchor": "range-required-exactly-one-1"
         },
         {
           "level": 3,
@@ -1058,8 +1063,8 @@
         },
         {
           "level": 3,
-          "text": "Flags (Mutex Group -- pick at most one)",
-          "anchor": "flags-mutex-group-pick-at-most-one"
+          "text": "Required Choice: `--action`",
+          "anchor": "required-choice-action"
         },
         {
           "level": 3,
@@ -1073,8 +1078,8 @@
         },
         {
           "level": 3,
-          "text": "What `--fix` Repairs",
-          "anchor": "what-fix-repairs"
+          "text": "What `--action fix` Repairs",
+          "anchor": "what-action-fix-repairs"
         },
         {
           "level": 2,
@@ -1155,6 +1160,11 @@
           "level": 3,
           "text": "Flags",
           "anchor": "flags-11"
+        },
+        {
+          "level": 3,
+          "text": "Constraints",
+          "anchor": "constraints"
         },
         {
           "level": 3,
@@ -4094,6 +4104,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-14T03:40:02.955286+00:00",
+  "last_gen": "2026-08-16T13:31:35.994717+00:00",
   "theme": "minimal"
 }

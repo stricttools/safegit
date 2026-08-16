@@ -11,18 +11,6 @@ nav_order: 9
 
 manage pre-pre-push hook scripts that run before every push
 
-## hook install
-
-install a pre-pre-push hook by copying a script file into the .git/safegit/hooks directory, making it executable, and registering it so that safegit push will run it before any network I/O occurs
-
-**Effect:** mutating
-
-### Arguments
-
-| Name | Required | Description |
-| --- | --- | --- |
-| `path` | yes | filesystem path to the hook script file to install into safegit |
-
 ## hook list
 
 list all pre-pre-push hooks currently installed in the .git/safegit/hooks directory, showing each hook name, file path, and whether it is executable, so you can audit which checks run before every push
@@ -39,6 +27,18 @@ run all installed pre-pre-push hooks (or a single named hook) immediately withou
 
 ### Arguments
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `name` | no | name of a specific hook to run; omit to run all installed hooks |
+| Name | Type | Presence | Description |
+| --- | --- | --- | --- |
+| `name` | str | optional | name of a specific hook to run; omit to run all installed hooks |
+
+## hook install
+
+install a pre-pre-push hook by copying a script file into the .git/safegit/hooks directory, making it executable, and registering it so that safegit push will run it before any network I/O occurs
+
+**Effect:** mutating
+
+### Arguments
+
+| Name | Type | Presence | Description |
+| --- | --- | --- | --- |
+| `path` | str | required | filesystem path to the hook script file to install into safegit |

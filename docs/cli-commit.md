@@ -15,20 +15,20 @@ stage and commit specified files in a single atomic operation
 
 ## Flags
 
-| Name | Short | Type | Default | Env | Description |
+| Name | Short | Type | Presence | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--m` | `-m` | str |  |  | commit message line; can be repeated to build multi-line messages |
-| `--F` | `-F` | str |  |  | read the full commit message body from a file instead of --m flags |
-| `--branch` |  | str |  |  | commit the staged files onto a different branch without switching to it |
-| `--amend` |  | bool |  |  | amend the current HEAD commit by replacing it with updated content |
-| `--allow-empty` |  | bool |  |  | allow creating a commit even when no files have been changed |
-| `--trailer` |  | str |  |  | add a key-value trailer line to the commit message (repeatable) |
+| `--m` | `-m` | list[str] | optional |  | commit message line; can be repeated to build multi-line messages |
+| `--F` | `-F` | str | optional |  | read the full commit message body from a file instead of --m flags |
+| `--branch` |  | str | optional |  | commit the staged files onto a different branch without switching to it |
+| `--amend`, `--no-amend` |  | bool | optional |  | amend the current HEAD commit by replacing it with updated content; omitted means a new commit |
+| `--allow-empty`, `--no-allow-empty` |  | bool | optional |  | allow creating a commit even when no files have been changed; omitted means an empty commit is refused |
+| `--trailer` |  | list[str] | optional |  | add a key-value trailer line to the commit message (repeatable) |
 
 ## Arguments
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `files` | no | files to commit (supports hunk specs: file.go:1,3) |
+| Name | Type | Presence | Description |
+| --- | --- | --- | --- |
+| `files` | list[str] (variadic) | optional | files to commit (supports hunk specs: file.go:1,3) |
 
 ## Grants
 

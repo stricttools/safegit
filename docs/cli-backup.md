@@ -20,16 +20,16 @@ push the current branch to its backup slot refs/backups/<branch> on the remote, 
 
 ### Flags
 
-| Name | Short | Type | Default | Env | Description |
+| Name | Short | Type | Presence | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--overwrite-remote-backup` |  | bool |  |  | replace a backup slot whose commits are missing from your current history, leasing on the SHA observed during this run; without this flag such a slot is a hard error because overwriting it would drop work backed up from elsewhere |
-| `--allow-public-remote` |  | bool |  |  | consent to backing up to a remote that is public, or whose visibility safegit cannot determine; without this flag such a target is a question, asked at the terminal and refused outright when there is none, because a backup pushes the whole branch and --approve-consequential says nothing about where |
+| `--overwrite-remote-backup`, `--no-overwrite-remote-backup` |  | bool | optional |  | replace a backup slot whose commits are missing from your current history, leasing on the SHA observed during this run; omitted, and with --no-overwrite-remote-backup, such a slot is a hard error because overwriting it would drop work backed up from elsewhere |
+| `--allow-public-remote`, `--no-allow-public-remote` |  | bool | optional |  | consent to backing up to a remote that is public, or whose visibility safegit cannot determine; omitted, and with --no-allow-public-remote, such a target is a question, asked at the terminal and refused outright when there is none, because a backup pushes the whole branch and --approve-consequential says nothing about where |
 
 ### Arguments
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `remote` | no | name of the remote repository holding the backup slots (defaults to origin) |
+| Name | Type | Presence | Description |
+| --- | --- | --- | --- |
+| `remote` | str | optional | name of the remote repository holding the backup slots (defaults to origin) |
 
 ### Grants
 
@@ -46,9 +46,9 @@ list every backup slot present on the remote with the branch name and the commit
 
 ### Arguments
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `remote` | no | name of the remote repository holding the backup slots (defaults to origin) |
+| Name | Type | Presence | Description |
+| --- | --- | --- | --- |
+| `remote` | str | optional | name of the remote repository holding the backup slots (defaults to origin) |
 
 ## backup restore
 
@@ -58,6 +58,6 @@ fetch the current branch's backup slot from the remote and fast-forward the bran
 
 ### Arguments
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `remote` | no | name of the remote repository holding the backup slots (defaults to origin) |
+| Name | Type | Presence | Description |
+| --- | --- | --- | --- |
+| `remote` | str | optional | name of the remote repository holding the backup slots (defaults to origin) |
