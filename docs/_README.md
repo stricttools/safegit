@@ -37,11 +37,11 @@ Pre-built binaries are available on
 ```
 cd your-repo
 safegit commit -m "add feature X" -- src/foo.go src/bar.go
-safegit push
+safegit push --refs head
 ```
 
 safegit auto-initializes on first use (creates `.git/safegit/`).
-Use `safegit doctor --uninstall` to remove safegit from a repo.
+Use `safegit doctor --action uninstall` to remove safegit from a repo.
 
 ## Commands
 

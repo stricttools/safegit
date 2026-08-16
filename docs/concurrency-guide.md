@@ -202,7 +202,7 @@ A session can commit to a branch other than the one currently checked out using 
 
 ### Cleanup after crashes
 
-`safegit doctor --fix` performs three cleanup tasks relevant to concurrency: removing orphan temporary index directories left by crashed processes via PID liveness checks, releasing stale lock files whose owning processes are no longer alive, and detecting raw git commits that bypassed safegit's isolation guarantees by comparing the oplog against actual branch ref state:
+`safegit doctor --action fix` performs three cleanup tasks relevant to concurrency: removing orphan temporary index directories left by crashed processes via PID liveness checks, releasing stale lock files whose owning processes are no longer alive, and detecting raw git commits that bypassed safegit's isolation guarantees by comparing the oplog against actual branch ref state:
 
 - **Orphan tmp directories.** Temporary index directories from crashed processes are identified by checking PID liveness and removed.
 - **Stale lock files.** Lock files held by dead processes are removed.
@@ -214,4 +214,4 @@ Each invocation cleans up its own temporary index directory via `defer` on norma
 
 :-: ref path="internal/index" lang="go"
 
-This runs automatically during `safegit doctor --fix` and can also be triggered manually. The garbage collector never removes directories belonging to live processes, so it is safe to run while other sessions are actively committing.
+This runs automatically during `safegit doctor --action fix` and can also be triggered manually. The garbage collector never removes directories belonging to live processes, so it is safe to run while other sessions are actively committing.

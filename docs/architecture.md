@@ -63,7 +63,7 @@ Each safegit invocation creates an isolated temporary index file seeded from HEA
 
 There is no incremental staging across safegit invocations. Each `safegit commit` takes a complete file list and produces one commit. There is no `safegit session start`, no `SAFEGIT_SID`, no agent registration, no session GC.
 
-If the process is killed mid-invocation, the tmp directory leaks. `safegit doctor --fix` removes any tmp directory whose PID is dead.
+If the process is killed mid-invocation, the tmp directory leaks. `safegit doctor --action fix` removes any tmp directory whose PID is dead.
 
 ### Operation log schema
 
@@ -343,8 +343,8 @@ This section catalogs every known failure mode in safegit's operation, covering 
 ### Process crashes mid-stage
 
 - **Symptom:** orphan tmp directory at `.git/safegit/tmp/<pid>-<rand>/`.
-- **Detection:** `safegit doctor` and `safegit doctor --fix` list tmp directories, parse the leading PID, and call `kill -0 pid`. Dead PID = orphan.
-- **Recovery:** `safegit doctor --fix` removes the tmp directory. Object DB is unaffected (no orphan blobs from staging; staging only writes blobs for new tree contents and they're GC'd by `git gc` later if unreferenced).
+- **Detection:** `safegit doctor` and `safegit doctor --action fix` list tmp directories, parse the leading PID, and call `kill -0 pid`. Dead PID = orphan.
+- **Recovery:** `safegit doctor --action fix` removes the tmp directory. Object DB is unaffected (no orphan blobs from staging; staging only writes blobs for new tree contents and they're GC'd by `git gc` later if unreferenced).
 
 ### Process crashes mid-commit (lock held)
 
