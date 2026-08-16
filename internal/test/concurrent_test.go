@@ -531,7 +531,7 @@ func TestTmpDirGc(t *testing.T) {
 	}
 
 	// Run doctor --fix (replaces the former gc subcommand)
-	stdout, stderr, code := runSafegit(t, dir, "doctor", "--fix")
+	stdout, stderr, code := runSafegit(t, dir, "doctor", "--action", "fix")
 	if code != 0 {
 		t.Fatalf("doctor --fix failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -737,7 +737,7 @@ func TestDoctorFixCleansMainRepoStaleLocks(t *testing.T) {
 	}
 
 	// Run doctor --fix --approve-consequential.
-	stdout, stderr, code := runSafegit(t, dir, "doctor", "--fix", "--approve-consequential")
+	stdout, stderr, code := runSafegit(t, dir, "doctor", "--action", "fix", "--approve-consequential")
 	if code != 0 {
 		t.Fatalf("doctor --fix failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -770,7 +770,7 @@ func TestDoctorDiagnosesMainRepoStaleLocks(t *testing.T) {
 	}
 
 	// Run doctor --diagnose (no --fix).
-	stdout, _, code := runSafegit(t, dir, "doctor", "--diagnose")
+	stdout, _, code := runSafegit(t, dir, "doctor", "--action", "diagnose")
 	if code != 0 {
 		t.Fatalf("doctor --diagnose failed (code %d)", code)
 	}

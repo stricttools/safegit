@@ -89,7 +89,7 @@ func TestPushOnlyHead(t *testing.T) {
 	}
 
 	// Push with --only-head
-	_, stderr, code = runSafegit(t, dir, "push", "--only-head", "origin")
+	_, stderr, code = runSafegit(t, dir, "push", "--refs", "head", "origin")
 	if code != 0 {
 		t.Fatalf("push --only-head failed (code %d): %s", code, stderr)
 	}
@@ -144,7 +144,7 @@ func TestPushOnlyBranches(t *testing.T) {
 	}
 
 	// Push with --only-branches
-	_, stderr, code = runSafegit(t, dir, "push", "--only-branches", "origin")
+	_, stderr, code = runSafegit(t, dir, "push", "--refs", "branches", "origin")
 	if code != 0 {
 		t.Fatalf("push --only-branches failed (code %d): %s", code, stderr)
 	}
@@ -171,7 +171,7 @@ func TestPushOnlyTags(t *testing.T) {
 	}
 
 	// Push with --only-tags
-	_, stderr, code := runSafegit(t, dir, "push", "--only-tags", "origin")
+	_, stderr, code := runSafegit(t, dir, "push", "--refs", "tags", "origin")
 	if code != 0 {
 		t.Fatalf("push --only-tags failed (code %d): %s", code, stderr)
 	}
@@ -211,7 +211,7 @@ func TestPushBothBranchesAndTags(t *testing.T) {
 	}
 
 	// Push with --both-branches-and-tags
-	_, stderr, code := runSafegit(t, dir, "push", "--both-branches-and-tags", "origin")
+	_, stderr, code := runSafegit(t, dir, "push", "--refs", "both", "origin")
 	if code != 0 {
 		t.Fatalf("push --both-branches-and-tags failed (code %d): %s", code, stderr)
 	}
@@ -237,7 +237,7 @@ func TestPushMutexEnforcement(t *testing.T) {
 	dir, _ := newRepoWithRemote(t)
 
 	// Two mode flags at once should error
-	_, stderr, code := runSafegit(t, dir, "push", "--only-head", "--only-branches", "origin")
+	_, stderr, code := runSafegit(t, dir, "push", "--refs", "head", "--only-branches", "origin")
 	if code == 0 {
 		t.Error("expected error when specifying two push mode flags, but got exit 0")
 	}
@@ -264,7 +264,7 @@ func TestPushOnlyHeadDetachedErrors(t *testing.T) {
 	}
 
 	// Push with --only-head should fail with detached HEAD error
-	_, stderr, code := runSafegit(t, dir, "push", "--only-head", "origin")
+	_, stderr, code := runSafegit(t, dir, "push", "--refs", "head", "origin")
 	if code == 0 {
 		t.Fatal("expected error pushing with detached HEAD, but got exit 0")
 	}

@@ -859,7 +859,7 @@ func TestDoctorCleansSubmoduleState(t *testing.T) {
 	}
 
 	// Run safegit doctor --fix from the parent repo.
-	stdout, stderr, code := runSafegit(t, parentDir, "doctor", "--fix")
+	stdout, stderr, code := runSafegit(t, parentDir, "doctor", "--action", "fix")
 	if code != 0 {
 		t.Fatalf("doctor --fix failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -939,7 +939,7 @@ func TestDoctorDryRunReportsSubmodules(t *testing.T) {
 	}
 
 	// Run safegit doctor --fix --dry-run from the parent repo.
-	stdout, stderr, code := runSafegit(t, parentDir, "doctor", "--fix", "--dry-run", "--approve-consequential")
+	stdout, stderr, code := runSafegit(t, parentDir, "doctor", "--action", "fix", "--dry-run", "--approve-consequential")
 	if code != 0 {
 		t.Fatalf("doctor --fix --dry-run failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -1056,7 +1056,7 @@ func TestPushHookCascadeFromParent(t *testing.T) {
 	}
 
 	// Push from the submodule using safegit
-	_, stderr, code = runSafegit(t, subDir, "push", "--only-head", "origin")
+	_, stderr, code = runSafegit(t, subDir, "push", "--refs", "head", "origin")
 	if code != 0 {
 		t.Fatalf("safegit push failed (code %d): %s", code, stderr)
 	}
@@ -1124,7 +1124,7 @@ func TestPushHookCascadeRejectsOnParentHookFailure(t *testing.T) {
 
 	// Push from the submodule using safegit -- should fail
 	// Exit code 20 = hook failure (exitPushHookFailed in push.go)
-	_, stderr, code = runSafegit(t, subDir, "push", "--only-head", "origin")
+	_, stderr, code = runSafegit(t, subDir, "push", "--refs", "head", "origin")
 	if code != 20 {
 		t.Errorf("expected exit code 20 (hook failure), got %d; stderr: %s", code, stderr)
 	}
