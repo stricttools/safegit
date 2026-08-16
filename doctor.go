@@ -26,23 +26,19 @@ type checkResult struct {
 // refusal, not a success: it exits nonzero so a script or agent cannot read
 // "aborted" as "done".
 func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
-	diagnose := kwargs["diagnose"].(bool)
-	fix := kwargs["fix"].(bool)
-	uninstall := kwargs["uninstall"].(bool)
-
-	// --diagnose is the read-only mode and needs no branch of its own: it is
-	// what the rest of this function does. It is read anyway so that a state
-	// the mutex cannot produce -- none of the three elected -- is a hard error
-	// instead of silently running the diagnose path.
-	if !diagnose && !fix && !uninstall {
-		die(70, "unreachable: the doctor mutex guarantees exactly one of --diagnose, --fix, --uninstall")
-	}
+	// --action is required and closed over its three declared choices, so the
+	// framework refuses anything else before dispatch. `diagnose` is the
+	// read-only mode and needs no branch of its own: it is what the rest of
+	// this function does.
+	action := kwargs["action"].(string)
+	fix := action == "fix"
+	uninstall := action == "uninstall"
 
 	gitDir := mustGitDir()
 
 	// --uninstall: remove safegit from this repo and exit.
 	if uninstall {
-		// doctor is not consequential at command granularity -- --diagnose only
+		// doctor is not consequential at command granularity -- `--action diagnose` only
 		// reads -- so the framework never prompts here and this seam is the only
 		// gate. The condition is the --uninstall flag the caller typed, so the
 		// blanket --approve-consequential is exactly the right consent for it.
@@ -89,7 +85,7 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 			checks = append(checks, checkResult{
 				Name:   "tmp_dirs",
 				Status: "warn",
-				Detail: fmt.Sprintf("%d orphan tmp dir(s) found (run 'safegit doctor --fix' to clean)", len(orphans)),
+				Detail: fmt.Sprintf("%d orphan tmp dir(s) found (run 'safegit doctor --action fix' to clean)", len(orphans)),
 			})
 		} else {
 			checks = append(checks, checkResult{Name: "tmp_dirs", Status: "ok"})

@@ -32,13 +32,11 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	if v := kwargs["new_email"]; v != nil {
 		newEmail = v.(string)
 	}
-	// At least one pair must be provided (CoRequired ensures pairs, but both
-	// pairs could be absent).
-	if oldName == "" && oldEmail == "" {
-		fmt.Fprintf(os.Stderr, "error: at least one of --old-name or --old-email is required\n")
-		fmt.Fprintf(os.Stderr, "Run 'safegit author rewrite --help' for usage.\n")
-		return 2
-	}
+	// The two all-or-none pairs and the at-least-one over them are declared
+	// constraints now (contract §26.7), so a command line naming neither pair,
+	// or half of one, is refused by the framework before dispatch. The hand
+	// guard that printed "at least one of --old-name or --old-email is
+	// required" and returned 2 is gone with them.
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {

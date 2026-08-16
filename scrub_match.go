@@ -100,17 +100,16 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 
 	// Flag extraction
 	pattern := kwargs["pattern"].(string)
-	// Mangle mode is read from --mangle itself, never inferred from "--replace
-	// is absent": inferring it is how `--no-mangle` alone used to mangle the
-	// whole history. The mutex elects exactly one of the two, so neither
-	// elected cannot arrive from the CLI -- and if it ever did, it is a hard
-	// error rather than a rewrite nobody asked for.
-	mangleMode := kwargs["mangle"].(bool)
+	// The substitution selector elects exactly one member, and the elected
+	// record is the only thing the handler reads. Mangle mode can no longer be
+	// inferred from "--replace is absent" -- inferring it is how `--no-mangle`
+	// alone used to mangle the whole history -- and a state where neither was
+	// elected is unrepresentable rather than refused by hand.
+	substitution := strictcli.GetElected(kwargs, "substitution")
+	mangleMode := substitution.Is(scrubMangleChoice)
 	var replace string
-	if kwargs["replace"] != nil {
-		replace = kwargs["replace"].(string)
-	} else if !mangleMode {
-		die(70, "unreachable: the scrub match mutex guarantees exactly one of --replace, --mangle")
+	if substitution.Is(scrubReplaceChoice) {
+		replace = strictcli.Get[string](substitution.Fields, "value")
 	}
 	reason := kwargs["reason"].(string)
 
@@ -124,12 +123,7 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 		}
 	}
 
-	var from *string
-	if v := kwargs["from"]; v != nil {
-		s := v.(string)
-		from = &s
-	}
-	entireHistory := kwargs["entire_history"].(bool)
+	from, entireHistory := scrubRange(kwargs)
 
 	remapGlobs := kwargsStrSlice(kwargs["remap_shas_in"])
 	validateRemapGlobs(remapGlobs)

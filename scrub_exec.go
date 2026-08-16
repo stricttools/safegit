@@ -9,7 +9,23 @@ import (
 
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/scan"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
+
+// scrubRange reads the `range` selector both `scrub match` and `scrub run`
+// declare and returns the two values the pipeline below takes: the first
+// commit to rewrite from, or nil when the whole history was elected.
+//
+// The selector is required and elects exactly one member, so "neither elected"
+// is unrepresentable rather than a state the handler has to refuse.
+func scrubRange(kwargs map[string]interface{}) (*string, bool) {
+	elected := strictcli.GetElected(kwargs, "range")
+	if elected.Is(scrubEntireHistoryChoice) {
+		return nil, true
+	}
+	s := strictcli.Get[string](elected.Fields, "value")
+	return &s, false
+}
 
 // executeScrubRecipe runs the shared execution pipeline for recipe-based scrub
 // operations (used by `scrub run` and `scrub match`). It handles:
