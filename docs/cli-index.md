@@ -16,35 +16,35 @@ Version: :-: var key="project.version"
 
 ## Commands
 
-- [bisect](../cli-bisect/) -- binary search through commits to find a bug, with safety guards
-- [checkout](../cli-checkout/) -- checkout a branch or ref with working-tree safety guards
-- [cherry-pick](../cli-cherry-pick/) -- cherry-pick one or more commits onto HEAD with safety guards
 - [commit](../cli-commit/) -- stage and commit specified files in a single atomic operation
-- [doctor](../cli-doctor/) -- run diagnostic health checks on the repository and optionally repair issues
+- [checkout](../cli-checkout/) -- checkout a branch or ref with working-tree safety guards
 - [merge](../cli-merge/) -- merge a branch into HEAD with working-tree safety guards
-- [pull](../cli-pull/) -- fetch from remote and merge, defaulting to fast-forward-only mode
-- [push](../cli-push/) -- push refs to remote with pre-pre-push hooks and automatic retry
 - [rebase](../cli-rebase/) -- rebase current branch onto upstream with safety guards
 - [reset](../cli-reset/) -- reset HEAD with guards that prevent accidental --hard data loss
+- [bisect](../cli-bisect/) -- binary search through commits to find a bug, with safety guards
+- [push](../cli-push/) -- push refs to remote with pre-pre-push hooks and automatic retry
+- [pull](../cli-pull/) -- fetch from remote and merge, defaulting to fast-forward-only mode
+- [doctor](../cli-doctor/) -- run diagnostic health checks on the repository and optionally repair issues
+- [cherry-pick](../cli-cherry-pick/) -- cherry-pick one or more commits onto HEAD with safety guards
 - [revert](../cli-revert/) -- revert one or more commits creating inverse patches, with safety guards
-- [scan](../cli-scan/) -- search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection
 - [undo](../cli-undo/) -- reverse the last commit, amend, or reword operation using the oplog
 - [unlock](../cli-unlock/) -- release a stale .lock file left behind by a crashed git process
+- [scan](../cli-scan/) -- search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection
 - [version](../cli-version/) -- print safegit version, Go runtime version, and git version
 
 ## Command Groups
 
-- [author](../cli-author/) -- audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history
 - [backup](../cli-backup/) -- push, list, and restore per-branch history backups held in the tool-owned refs/backups namespace on a remote, so uncommitted-to-the-world work survives a lost machine without ever touching refs/heads
 - [config](../cli-config/) -- show, get, or set safegit configuration key-value pairs
 - [hook](../cli-hook/) -- manage pre-pre-push hook scripts that run before every push
+- [author](../cli-author/) -- audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history
 - [scrub](../cli-scrub/) -- surgically rewrite git history to remove or replace sensitive content using 4 subcommands (file, match, run, verify) that operate on all commits, trees, and blobs in the repository
 
 ## Global flags
 
-| Name | Short | Type | Default | Env | Description |
+| Name | Short | Type | Presence | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--config-file` |  | str |  |  | path to a custom safegit config file instead of the default location |
+| `--config-file` |  | str | optional |  | path to a custom safegit config file instead of the default location; when omitted the default location is used |
 
 ## Framework flags
 

@@ -15,13 +15,13 @@ fetch from remote and merge, defaulting to fast-forward-only mode
 
 ## Flags
 
-| Name | Short | Type | Default | Env | Description |
+| Name | Short | Type | Presence | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--merge-strategy` |  | str |  |  | fast-forward merge strategy: ff, ff-only, or no-ff |
+| `--merge-strategy` |  | str | required |  | how the fetched commits are merged into the current branch Values: `ff` (fast-forward when possible, otherwise create a merge commit), `ff-only` (fast-forward only, refusing the pull when the branches have diverged), `no-ff` (always create a merge commit, even when a fast-forward is possible). |
 
 ## Arguments
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `remote` | no | name of the remote repository to pull from (defaults to origin) |
-| `branch` | no | name of the remote branch to fetch and merge into the current branch |
+| Name | Type | Presence | Description |
+| --- | --- | --- | --- |
+| `remote` | str | optional | name of the remote repository to pull from (defaults to origin) |
+| `branch` | str | optional | name of the remote branch to fetch and merge into the current branch |

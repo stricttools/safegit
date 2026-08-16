@@ -15,8 +15,6 @@ run diagnostic health checks on the repository and optionally repair issues
 
 ## Flags
 
-| Name | Short | Type | Default | Env | Description |
+| Name | Short | Type | Presence | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--diagnose` |  | bool |  |  | run all health checks and report results without fixing any issues |
-| `--fix` |  | bool |  |  | run all health checks and automatically repair any issues found |
-| `--uninstall` |  | bool |  |  | remove all safegit hooks and metadata from this repository entirely |
+| `--action` |  | str | required |  | what doctor does with the health checks it runs Values: `diagnose` (run all health checks and report results without fixing any issues), `fix` (run all health checks and automatically repair any issues found), `uninstall` (remove all safegit hooks and metadata from this repository entirely). |

@@ -36,47 +36,47 @@ Pre-built binaries are available on
 ```
 cd your-repo
 safegit commit -m "add feature X" -- src/foo.go src/bar.go
-safegit push
+safegit push --refs head
 ```
 
 safegit auto-initializes on first use (creates `.git/safegit/`).
-Use `safegit doctor --uninstall` to remove safegit from a repo.
+Use `safegit doctor --action uninstall` to remove safegit from a repo.
 
 ## Commands
 
 | Command | Description |
 | --- | --- |
-| `bisect` | binary search through commits to find a bug, with safety guards |
-| `checkout` | checkout a branch or ref with working-tree safety guards |
-| `cherry-pick` | cherry-pick one or more commits onto HEAD with safety guards |
 | `commit` | stage and commit specified files in a single atomic operation |
-| `doctor` | run diagnostic health checks on the repository and optionally repair issues |
+| `checkout` | checkout a branch or ref with working-tree safety guards |
 | `merge` | merge a branch into HEAD with working-tree safety guards |
-| `pull` | fetch from remote and merge, defaulting to fast-forward-only mode |
-| `push` | push refs to remote with pre-pre-push hooks and automatic retry |
 | `rebase` | rebase current branch onto upstream with safety guards |
 | `reset` | reset HEAD with guards that prevent accidental --hard data loss |
+| `bisect` | binary search through commits to find a bug, with safety guards |
+| `push` | push refs to remote with pre-pre-push hooks and automatic retry |
+| `pull` | fetch from remote and merge, defaulting to fast-forward-only mode |
+| `doctor` | run diagnostic health checks on the repository and optionally repair issues |
+| `cherry-pick` | cherry-pick one or more commits onto HEAD with safety guards |
 | `revert` | revert one or more commits creating inverse patches, with safety guards |
-| `scan` | search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection |
 | `undo` | reverse the last commit, amend, or reword operation using the oplog |
 | `unlock` | release a stale .lock file left behind by a crashed git process |
+| `scan` | search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection |
 | `version` | print safegit version, Go runtime version, and git version |
-| **author** | audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history |
-| `author check` | check that all commits use the expected author and committer identity by scanning every commit in the repository history, reporting any deviations with the exact commit hashes and mismatched fields, and suggesting the corresponding safegit author rewrite command to fix each deviation found |
-| `author list` | list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite |
-| `author rewrite` | rewrite author and committer name or email across all commit history using git filter-branch style rewriting, replacing every occurrence of the old identity with the new one in both author and committer fields while preserving timestamps, commit messages, tree contents, and parent relationships so the rewritten history is otherwise identical to the original |
 | **backup** | push, list, and restore per-branch history backups held in the tool-owned refs/backups namespace on a remote, so uncommitted-to-the-world work survives a lost machine without ever touching refs/heads |
 | `backup backup` | push the current branch to its backup slot refs/backups/<branch> on the remote, after fetching that slot and refusing when it holds commits your history does not contain; the push is pinned with --force-with-lease to the exact SHA that was just observed (or to "this ref must not exist" for a first backup), so a concurrent backup from another machine is rejected rather than clobbered; plain git equivalent: git push --force-with-lease=refs/backups/<branch>:<observed-sha> <remote> HEAD:refs/backups/<branch> |
 | `backup list` | list every backup slot present on the remote with the branch name and the commit each slot points at, so you can see which branches are backed up from which machine before restoring one; plain git equivalent: git ls-remote <remote> 'refs/backups/*' |
 | `backup restore` | fetch the current branch's backup slot from the remote and fast-forward the branch onto it, refusing when the local branch carries commits the backup does not contain so no local work is ever discarded; plain git equivalent: git fetch <remote> refs/backups/<branch> && git merge --ff-only FETCH_HEAD |
 | **config** | show, get, or set safegit configuration key-value pairs |
+| `config show` | show all configuration values currently in effect for this repository, including built-in defaults and any user overrides from the .git/safegit/config.json file, printed as key-value pairs to stdout for inspection and debugging purposes |
 | `config get` | get the current value of a single configuration key from the .git/safegit/config.json file, printing the raw value to stdout so it can be captured by scripts or used in automation pipelines |
 | `config set` | set a configuration key to a new value in the .git/safegit/config.json file, creating the file if it does not exist yet, and persisting the change for all future safegit invocations in this repository |
-| `config show` | show all configuration values currently in effect for this repository, including built-in defaults and any user overrides from the .git/safegit/config.json file, printed as key-value pairs to stdout for inspection and debugging purposes |
 | **hook** | manage pre-pre-push hook scripts that run before every push |
-| `hook install` | install a pre-pre-push hook by copying a script file into the .git/safegit/hooks directory, making it executable, and registering it so that safegit push will run it before any network I/O occurs |
 | `hook list` | list all pre-pre-push hooks currently installed in the .git/safegit/hooks directory, showing each hook name, file path, and whether it is executable, so you can audit which checks run before every push |
 | `hook run` | run all installed pre-pre-push hooks (or a single named hook) immediately without performing an actual push, so you can verify that all configured hooks pass before committing to a real push operation |
+| `hook install` | install a pre-pre-push hook by copying a script file into the .git/safegit/hooks directory, making it executable, and registering it so that safegit push will run it before any network I/O occurs |
+| **author** | audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history |
+| `author list` | list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite |
+| `author check` | check that all commits use the expected author and committer identity by scanning every commit in the repository history, reporting any deviations with the exact commit hashes and mismatched fields, and suggesting the corresponding safegit author rewrite command to fix each deviation found |
+| `author rewrite` | rewrite author and committer name or email across all commit history using git filter-branch style rewriting, replacing every occurrence of the old identity with the new one in both author and committer fields while preserving timestamps, commit messages, tree contents, and parent relationships so the rewritten history is otherwise identical to the original |
 | **scrub** | surgically rewrite git history to remove or replace sensitive content using 4 subcommands (file, match, run, verify) that operate on all commits, trees, and blobs in the repository |
 | `scrub file` | replace or remove a specific file across all commits in the repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized version or delete the file entirely from every historical snapshot |
 | `scrub match` | replace all occurrences of a regex pattern across every blob in the repository history, rewriting commit trees to substitute matched text with a replacement string so that sensitive values like secrets and credentials are permanently removed from all historical snapshots |

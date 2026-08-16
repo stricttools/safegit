@@ -19,17 +19,17 @@ replace or remove a specific file across all commits in the repository history, 
 
 ### Flags
 
-| Name | Short | Type | Default | Env | Description |
+| Name | Short | Type | Presence | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--from` |  | str |  |  | first commit hash to include when rewriting history (default: root commit) |
-| `--reason` |  | str |  |  | mandatory audit trail message explaining why this scrub operation is needed |
-| `--remap-shas-in` |  | str |  |  | glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories) |
+| `--from` |  | str | required |  | first commit hash to include when rewriting history |
+| `--reason` |  | str | required |  | mandatory audit trail message explaining why this scrub operation is needed |
+| `--remap-shas-in` |  | list[str] (unique) | optional |  | glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories) |
 
 ### Arguments
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `file` | yes | repository-relative path to the file that should be scrubbed from history |
+| Name | Type | Presence | Description |
+| --- | --- | --- | --- |
+| `file` | str | required | repository-relative path to the file that should be scrubbed from history |
 
 ## scrub match
 
@@ -39,16 +39,18 @@ replace all occurrences of a regex pattern across every blob in the repository h
 
 ### Flags
 
-| Name | Short | Type | Default | Env | Description |
+| Name | Short | Type | Presence | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--pattern` |  | str |  |  | regular expression pattern to search for across all blobs in history |
-| `--reason` |  | str |  |  | mandatory audit trail message explaining why this scrub operation is needed |
-| `--scope` |  | str |  |  | glob pattern limiting which file paths are searched (e.g. '*.env', 'config/**') |
-| `--remap-shas-in` |  | str |  |  | glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories) |
-| `--replace` |  | str |  |  | literal string to substitute for each regex match found in history |
-| `--mangle` |  | bool |  |  | replace matches with random printable ASCII of same length |
-| `--from` |  | str |  |  | first commit hash to include when rewriting history (default: root commit) |
-| `--entire-history` |  | bool |  |  | rewrite all commits from the root of the repository to HEAD |
+| `--pattern` |  | str | required |  | regular expression pattern to search for across all blobs in history |
+| `--reason` |  | str | required |  | mandatory audit trail message explaining why this scrub operation is needed |
+| `--scope` |  | str | optional |  | glob pattern limiting which file paths are searched (e.g. '*.env', 'config/**') |
+| `--remap-shas-in` |  | list[str] (unique) | optional |  | glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories) |
+| `substitution` |  | choice | required |  | Selection (not typed as a flag). Elect exactly one of `--replace`, `--mangle`. what replaces each match |
+| &nbsp;&nbsp;&nbsp;&nbsp;`--replace` |  | str | required |  | Elects `substitution` = `replace`. substitute a literal string for every match Its value: literal string to substitute for each regex match found in history |
+| &nbsp;&nbsp;&nbsp;&nbsp;`--mangle` |  |  | required |  | Elects `substitution` = `mangle`. substitute random printable ASCII of the same length for every match |
+| `range` |  | choice | required |  | Selection (not typed as a flag). Elect exactly one of `--from`, `--entire-history`. how much of the history is rewritten |
+| &nbsp;&nbsp;&nbsp;&nbsp;`--from` |  | str | required |  | Elects `range` = `from`. rewrite the commits from a given commit forward Its value: first commit hash to include when rewriting history |
+| &nbsp;&nbsp;&nbsp;&nbsp;`--entire-history` |  |  | required |  | Elects `range` = `entire-history`. rewrite every commit from the root of the repository to HEAD |
 
 ## scrub run
 
@@ -58,20 +60,21 @@ execute a multi-operation scrub recipe from a TOML file, applying all pattern re
 
 ### Flags
 
-| Name | Short | Type | Default | Env | Description |
+| Name | Short | Type | Presence | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--reason` |  | str |  |  | mandatory audit trail message explaining why this scrub operation is needed |
-| `--diff` |  | bool |  |  | preview what would change without modifying any objects, showing unified diffs |
-| `--limit` |  | int | 50 |  | maximum number of blob diffs to show in --diff mode (default: 50) |
-| `--remap-shas-in` |  | str |  |  | glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories) |
-| `--from` |  | str |  |  | first commit hash to include when rewriting history |
-| `--entire-history` |  | bool |  |  | rewrite all commits from the root of the repository to HEAD |
+| `--reason` |  | str | required |  | mandatory audit trail message explaining why this scrub operation is needed |
+| `--diff`, `--no-diff` |  | bool | optional |  | preview what would change without modifying any objects, showing unified diffs; omitted means the rewrite is performed |
+| `--limit` |  | int | optional |  | maximum number of blob diffs to show in --diff mode; omitted means 50 |
+| `--remap-shas-in` |  | list[str] (unique) | optional |  | glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories) |
+| `range` |  | choice | required |  | Selection (not typed as a flag). Elect exactly one of `--from`, `--entire-history`. how much of the history is rewritten |
+| &nbsp;&nbsp;&nbsp;&nbsp;`--from` |  | str | required |  | Elects `range` = `from`. rewrite the commits from a given commit forward Its value: first commit hash to include when rewriting history |
+| &nbsp;&nbsp;&nbsp;&nbsp;`--entire-history` |  |  | required |  | Elects `range` = `entire-history`. rewrite every commit from the root of the repository to HEAD |
 
 ### Arguments
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `recipe` | yes | path to the TOML recipe file containing scrub operations |
+| Name | Type | Presence | Description |
+| --- | --- | --- | --- |
+| `recipe` | str | required | path to the TOML recipe file containing scrub operations |
 
 ## scrub verify
 

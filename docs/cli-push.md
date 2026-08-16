@@ -15,20 +15,17 @@ push refs to remote with pre-pre-push hooks and automatic retry
 
 ## Flags
 
-| Name | Short | Type | Default | Env | Description |
+| Name | Short | Type | Presence | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--pre-push-hook` |  | bool | True |  | run pre-pre-push hook scripts before pushing to remote |
-| `--force-with-lease` |  | bool |  |  | force push using --force-with-lease to prevent overwriting others' work |
-| `--only-head` |  | bool |  |  | push only the current HEAD branch to the remote, ignoring other refs |
-| `--only-branches` |  | bool |  |  | push all local branches to the remote, ignoring tags and other refs |
-| `--only-tags` |  | bool |  |  | push all local tags to the remote without pushing any branches |
-| `--both-branches-and-tags` |  | bool |  |  | push all local branches and all tags to the remote in one operation |
+| `--pre-push-hook`, `--no-pre-push-hook` |  | bool | optional |  | run pre-pre-push hook scripts before pushing to remote; omitted means the hooks run |
+| `--force-with-lease`, `--no-force-with-lease` |  | bool | optional |  | force push using --force-with-lease to prevent overwriting others' work; omitted means an ordinary push |
+| `--refs` |  | str | required |  | which refs to push Values: `head` (push only the current HEAD branch to the remote, ignoring other refs), `branches` (push all local branches to the remote, ignoring tags and other refs), `tags` (push all local tags to the remote without pushing any branches), `both` (push all local branches and all tags to the remote in one operation). |
 
 ## Arguments
 
-| Name | Required | Description |
-| --- | --- | --- |
-| `remote` | no | name of the remote repository to push to (defaults to origin) |
+| Name | Type | Presence | Description |
+| --- | --- | --- | --- |
+| `remote` | str | optional | name of the remote repository to push to (defaults to origin) |
 
 ## Grants
 
