@@ -277,7 +277,7 @@ func pushHintForRepo(ctx context.Context) string {
 	root, err := git.RepoRoot(ctx)
 	if err != nil {
 		// Can't determine repo root; fall back to default hint.
-		return "To update the remote:\n  safegit push --both-branches-and-tags --force-with-lease"
+		return "To update the remote:\n  safegit push --refs both --force-with-lease"
 	}
 	return pushHintForDir(root)
 }
@@ -288,7 +288,7 @@ func pushHintForDir(dir string) string {
 	if isRlsblManaged(dir) {
 		return "This repository is managed by a release tool. Complete the rewrite via your release tooling."
 	}
-	return "To update the remote:\n  safegit push --both-branches-and-tags --force-with-lease"
+	return "To update the remote:\n  safegit push --refs both --force-with-lease"
 }
 
 // isRlsblManaged checks whether a directory contains .rlsbl/ or .rlsbl-monorepo/.
