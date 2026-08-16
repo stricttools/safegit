@@ -153,7 +153,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 
 	recipePath := kwargs["recipe"].(string)
 	reason := kwargs["reason"].(string)
-	diffMode := kwargs["diff"].(bool)
+	diffMode := optBool(kwargs["diff"], false)
 
 	// --dry-run and --diff are mutually exclusive: --diff shows content diffs,
 	// --dry-run shows match count summaries. Combining them is ambiguous.
@@ -161,19 +161,9 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 		die(2, "--dry-run and --diff are mutually exclusive")
 	}
 
-	var from *string
-	if v := kwargs["from"]; v != nil {
-		s := v.(string)
-		from = &s
-	}
-	entireHistory := kwargs["entire_history"].(bool)
+	from, entireHistory := scrubRange(kwargs)
 
-	var limit int
-	if v := kwargs["limit"]; v != nil {
-		limit = v.(int)
-	} else {
-		limit = 50
-	}
+	limit := optInt(kwargs["limit"], 50)
 
 	remapGlobs := kwargsStrSlice(kwargs["remap_shas_in"])
 	validateRemapGlobs(remapGlobs)
