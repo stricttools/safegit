@@ -184,13 +184,13 @@ func TestDoctorUninstallJSONDoesNotConfirm(t *testing.T) {
 	commitFileEnv(t, dir, confirmEnv, "file.txt", "content\n", "add file")
 	safegitDir := filepath.Join(dir, ".git", "safegit")
 
-	_, stderr, code := runSafegitNoConsent(t, dir, confirmEnv, "--json", "doctor", "--uninstall")
+	_, stderr, code := runSafegitNoConsent(t, dir, confirmEnv, "--json", "doctor", "--action", "uninstall")
 	assertRefusedForConsent(t, code, stderr)
 	if _, err := os.Stat(safegitDir); err != nil {
 		t.Errorf("--json must not answer the uninstall confirmation; %s is gone: %v", safegitDir, err)
 	}
 
-	if _, stderr, code := runSafegitNoConsent(t, dir, confirmEnv, "--json", "--approve-consequential", "doctor", "--uninstall"); code != 0 {
+	if _, stderr, code := runSafegitNoConsent(t, dir, confirmEnv, "--json", "--approve-consequential", "doctor", "--action", "uninstall"); code != 0 {
 		t.Fatalf("an explicit --approve-consequential must run the uninstall, got code %d: %s", code, stderr)
 	}
 	if _, err := os.Stat(safegitDir); !os.IsNotExist(err) {
@@ -257,7 +257,7 @@ func TestDeclinedDeliberateConfirmationExitsNonzero(t *testing.T) {
 		safegitDir := filepath.Join(dir, ".git", "safegit")
 
 		// Not a TTY, so the prompt reads EOF and declines.
-		_, stderr, code := runSafegitNoConsent(t, dir, confirmEnv, "doctor", "--uninstall")
+		_, stderr, code := runSafegitNoConsent(t, dir, confirmEnv, "doctor", "--action", "uninstall")
 		if code == 0 {
 			t.Errorf("a declined uninstall must exit nonzero, got 0; stderr: %s", stderr)
 		}

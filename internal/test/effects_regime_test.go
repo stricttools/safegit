@@ -41,7 +41,11 @@ func decodeEnvelope(t *testing.T, stdout string) machineEnvelope {
 	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
 		t.Fatalf("stdout is not a strictcli envelope: %v\nstdout: %s", err, stdout)
 	}
-	if env.InterfaceVersion != 1 {
+	// The envelope contract's own version. It became 2 when the framework
+	// added the update-command construct's `writes` member; safegit declares
+	// no update command, so no envelope it emits carries one, but the version
+	// it prints is the framework's and it is pinned here as such.
+	if env.InterfaceVersion != 2 {
 		t.Fatalf("unexpected envelope interface_version %d", env.InterfaceVersion)
 	}
 	return env
@@ -216,7 +220,7 @@ func TestPushDryRunDoesNotPush(t *testing.T) {
 	dir, remote := newRepoWithRemote(t)
 	commitFileIn(t, dir, "a.txt", "one\n", "first")
 
-	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "push", "--only-head")
+	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "push", "--refs", "head")
 	if code != 0 {
 		t.Fatalf("push --dry-run failed (%d): %s", code, stderr)
 	}

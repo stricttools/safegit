@@ -7,17 +7,24 @@ import (
 	"testing"
 )
 
-// The tests in this file pin the CLI-level consequences of strictcli's mutex
-// election rule: a bool mutex member elects its group only when its resolved
-// value is TRUE, so `--no-x` DECLINES the option instead of choosing one, and a
-// declined-only group is refused by the PARSER before any handler runs.
+// The tests in this file pin the CLI-level consequences of strictcli's
+// election rules, across the two shapes safegit now uses for an exactly-one
+// selection.
 //
-// Two of these invocations were actively dangerous before that rule existed:
-// `push --no-only-tags` elected the push-mode group, fell through safegit's
-// switch and pushed HEAD; `scrub match --no-mangle` elected the
-// replace/mangle group and mangled everything the pattern matched. Both are
-// now parse errors, and each test asserts BOTH the error text and that
-// nothing was pushed or rewritten.
+// `scrub match` and `scrub run` keep MEMBER spelling: each alternative is
+// still its own flag (`--replace`, `--mangle`, `--from`, `--entire-history`),
+// a bool member elects only when its resolved value is TRUE, so `--no-x`
+// DECLINES the option instead of choosing one, and a declined-only selection
+// is refused by the PARSER before any handler runs. `scrub match --no-mangle`
+// used to elect the replace/mangle group and mangle everything the pattern
+// matched; it is a parse error, and the tests assert both the error text and
+// that nothing was rewritten.
+//
+// `push` and `doctor` moved to a required VALUE flag over four and three
+// choices (`--refs`, `--action`). There is no per-alternative bool left, so
+// the negation spelling that made `push --no-only-tags` push HEAD does not
+// exist at all -- `--no-refs` is an unknown flag, not a declined election.
+// That is a stronger property than a refusal, and the tests pin it as one.
 
 var mutexElectionEnv = []string{"CLAUDE_CODE_SESSION_ID=mutex-election-test"}
 
@@ -35,7 +42,9 @@ func assertParseRefusal(t *testing.T, what, stderr string, code int, want string
 
 // TestPushDeclinedModeIsRefused covers the formerly dangerous fall-through:
 // `push --no-only-tags` used to push HEAD because the switch had no default
-// case and pushModeHead is the zero value.
+// case and pushModeHead is the zero value. After the move to `--refs` there
+// is no such flag to negate -- the negation is an unknown flag, refused
+// before anything about the push is decided.
 func TestPushDeclinedModeIsRefused(t *testing.T) {
 	dir, remoteDir := newRepoWithRemote(t)
 
@@ -44,60 +53,61 @@ func TestPushDeclinedModeIsRefused(t *testing.T) {
 	gitCmd(t, dir, "tag", "v0.0.1")
 	gitCmd(t, dir, "branch", "side")
 
-	_, stderr, code := runSafegit(t, dir, "push", "--no-only-tags", "origin")
-	assertParseRefusal(t, "push --no-only-tags", stderr, code,
-		"one of --only-head, --only-branches, --only-tags, --both-branches-and-tags is required (--no-only-tags declines an option; it does not choose one)")
+	for _, negation := range []string{"--no-refs", "--no-only-tags"} {
+		_, stderr, code := runSafegit(t, dir, "push", negation, "origin")
+		assertParseRefusal(t, "push "+negation, stderr, code,
+			"unknown flag '"+negation+"'")
+	}
 
 	if b := remoteBranches(t, remoteDir); len(b) != 0 {
-		t.Errorf("push --no-only-tags pushed branches to the remote: %v", b)
+		t.Errorf("a refused push pushed branches to the remote: %v", b)
 	}
 	if tg := remoteTags(t, remoteDir); len(tg) != 0 {
-		t.Errorf("push --no-only-tags pushed tags to the remote: %v", tg)
+		t.Errorf("a refused push pushed tags to the remote: %v", tg)
 	}
 }
 
-// TestPushNoModeIsRefused pins the no-clause form of the same error: nothing
-// was typed at all, so there is no declined member to teach about.
+// TestPushNoModeIsRefused pins the refusal when no mode was typed at all.
 func TestPushNoModeIsRefused(t *testing.T) {
 	dir, remoteDir := newRepoWithRemote(t)
 
 	_, stderr, code := runSafegit(t, dir, "push", "origin")
 	assertParseRefusal(t, "push (no mode)", stderr, code,
-		"one of --only-head, --only-branches, --only-tags, --both-branches-and-tags is required")
-	if strings.Contains(stderr, "declines an option") {
-		t.Errorf("push (no mode): unexpected decline clause in %q", stderr)
-	}
+		"flag '--refs' is required")
 
 	if b := remoteBranches(t, remoteDir); len(b) != 0 {
 		t.Errorf("push with no mode pushed branches: %v", b)
 	}
 }
 
-// TestPushRedundantNegationIsRefused pins the dedicated error for a negation
-// typed beside a real election: every typed token does something or errors.
-func TestPushRedundantNegationIsRefused(t *testing.T) {
+// TestPushUnknownRefsValueIsRefused pins that --refs is closed over exactly
+// four choices, so a fifth mode cannot reach the handler's switch.
+func TestPushUnknownRefsValueIsRefused(t *testing.T) {
 	dir, remoteDir := newRepoWithRemote(t)
 	gitCmd(t, dir, "tag", "v0.0.1")
 
-	_, stderr, code := runSafegit(t, dir, "push", "--only-tags", "--no-only-head", "origin")
-	assertParseRefusal(t, "push --only-tags --no-only-head", stderr, code,
-		"--no-only-head cannot be combined with --only-tags (--no-only-head declines an option; it does not choose one)")
+	_, stderr, code := runSafegit(t, dir, "push", "--refs", "everything", "origin")
+	assertParseRefusal(t, "push --refs everything", stderr, code,
+		"--refs: invalid value 'everything', must be one of: head, branches, tags, both")
 
 	if tg := remoteTags(t, remoteDir); len(tg) != 0 {
 		t.Errorf("refused push still pushed tags: %v", tg)
 	}
 }
 
-// TestDoctorDeclinedModeIsRefused pins the doctor group. `--no-fix` alone used
-// to elect the group and land in the diagnose path (--diagnose is never read).
+// TestDoctorDeclinedModeIsRefused pins the doctor selection. `--no-fix` alone
+// used to elect the mutex group and land in the diagnose path; after the move
+// to `--action` the flag it negated no longer exists.
 func TestDoctorDeclinedModeIsRefused(t *testing.T) {
 	dir := newRepo(t)
 
 	_, stderr, code := runSafegit(t, dir, "doctor", "--no-fix")
-	assertParseRefusal(t, "doctor --no-fix", stderr, code,
-		"one of --diagnose, --fix, --uninstall is required (--no-fix declines an option; it does not choose one)")
+	assertParseRefusal(t, "doctor --no-fix", stderr, code, "unknown flag '--no-fix'")
 
-	// A declined --uninstall must not have removed anything either.
+	_, stderr, code = runSafegit(t, dir, "doctor")
+	assertParseRefusal(t, "doctor (no action)", stderr, code, "flag '--action' is required")
+
+	// A refused doctor must not have removed anything either.
 	if _, err := os.Stat(filepath.Join(dir, ".git", "safegit")); err != nil {
 		t.Errorf(".git/safegit missing after a refused doctor: %v", err)
 	}

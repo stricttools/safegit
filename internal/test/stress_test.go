@@ -161,7 +161,7 @@ func TestRawGitBypassDetection(t *testing.T) {
 	}
 
 	// Run safegit doctor --diagnose
-	stdout, stderr, code := runSafegit(t, dir, "doctor", "--diagnose")
+	stdout, stderr, code := runSafegit(t, dir, "doctor", "--action", "diagnose")
 	if code != 0 {
 		t.Fatalf("doctor failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -235,7 +235,7 @@ func TestHookTimeout(t *testing.T) {
 	}
 
 	// Push should abort with hook timeout (exit code 21)
-	_, _, code := runSafegit(t, dir, "push", "--only-head", "origin")
+	_, _, code := runSafegit(t, dir, "push", "--refs", "head", "origin")
 	if code != 21 {
 		t.Errorf("expected exit code 21 (hook timeout), got %d", code)
 	}
@@ -333,7 +333,7 @@ func TestConcurrentPush(t *testing.T) {
 	codes := make([]int, 2)
 	stderrs := make([]string, 2)
 	parallel(2, func(i int) {
-		_, se, c := runSafegit(t, dir, "push", "--only-head", "origin")
+		_, se, c := runSafegit(t, dir, "push", "--refs", "head", "origin")
 		codes[i] = c
 		stderrs[i] = se
 	})
@@ -353,7 +353,7 @@ func TestConcurrentPush(t *testing.T) {
 
 	// If only one succeeded, push again to land the second
 	if successes == 1 {
-		_, _, code = runSafegit(t, dir, "push", "--only-head", "origin")
+		_, _, code = runSafegit(t, dir, "push", "--refs", "head", "origin")
 		if code != 0 {
 			t.Fatalf("retry push failed (code %d)", code)
 		}
@@ -425,7 +425,7 @@ func TestConcurrentDifferentBranchPush(t *testing.T) {
 	codes := make([]int, 2)
 	stderrs := make([]string, 2)
 	parallel(2, func(i int) {
-		_, se, c := runSafegit(t, dir, "push", "--only-branches", "origin")
+		_, se, c := runSafegit(t, dir, "push", "--refs", "branches", "origin")
 		codes[i] = c
 		stderrs[i] = se
 	})

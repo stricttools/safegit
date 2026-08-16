@@ -36,7 +36,7 @@ func TestPushHintForDir_NotManaged(t *testing.T) {
 	dir := t.TempDir()
 
 	hint := pushHintForDir(dir)
-	expected := "To update the remote:\n  safegit push --both-branches-and-tags --force-with-lease"
+	expected := "To update the remote:\n  safegit push --refs both --force-with-lease"
 	if hint != expected {
 		t.Errorf("expected default push hint, got: %s", hint)
 	}
@@ -50,7 +50,7 @@ func TestPushHintForDir_RlsblFileNotDir(t *testing.T) {
 	}
 
 	hint := pushHintForDir(dir)
-	expected := "To update the remote:\n  safegit push --both-branches-and-tags --force-with-lease"
+	expected := "To update the remote:\n  safegit push --refs both --force-with-lease"
 	if hint != expected {
 		t.Errorf("expected default push hint when .rlsbl is a file, got: %s", hint)
 	}
