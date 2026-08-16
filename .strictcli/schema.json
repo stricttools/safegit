@@ -1,288 +1,443 @@
 {
+  "schema_version": 2,
+  "defaults": {
+    "schema_version": 2,
+    "app": {
+      "env_prefix": null,
+      "config": false,
+      "config_format": "json",
+      "config_path": null,
+      "config_conflict_mode": "cli-wins",
+      "proc_observe_allowlist": [],
+      "global_flags": [],
+      "commands": {},
+      "groups": {},
+      "deprecated": {},
+      "tag_contracts": {},
+      "checks": {},
+      "config_fields": {},
+      "infra": {}
+    },
+    "flag": {
+      "short": null,
+      "env": null,
+      "env_separator": null,
+      "prefixed": true,
+      "choices": null,
+      "elect_by": null,
+      "unique": false,
+      "conflict_mode": null,
+      "negatable": null,
+      "nullable": false
+    },
+    "arg": {
+      "variadic": false,
+      "choices": null
+    },
+    "choice": {
+      "flags": []
+    },
+    "choice_record": {
+      "help": null
+    },
+    "command": {
+      "consequential": false,
+      "dry_run_supported": true,
+      "dry_run_unsupported_reason": null,
+      "update_of": null,
+      "write_mode": null,
+      "payload_schema": null,
+      "owns_stdout": false,
+      "passthrough": false,
+      "flags": [],
+      "flag_sets": [],
+      "args": [],
+      "tags": [],
+      "constraints": [],
+      "hidden": false,
+      "interactive": false,
+      "config_fields": [],
+      "grants": [],
+      "forwarding": null
+    },
+    "group": {
+      "commands": {},
+      "groups": {},
+      "deprecated": {},
+      "tags": [],
+      "hidden": false
+    },
+    "config_field": {
+      "default": null,
+      "bound_commands": []
+    },
+    "check": {
+      "scope": null
+    },
+    "infra": {
+      "roots": [],
+      "handshakes": [],
+      "connections": []
+    }
+  },
+  "project_id": "github.com/smm-h/safegit",
+  "name": "safegit",
+  "version": "dev",
+  "help": "concurrency-safe git wrapper providing 31 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
+  "global_flags": [
+    {
+      "name": "config-file",
+      "help": "path to a custom safegit config file instead of the default location; when omitted the default location is used",
+      "value_schema": {
+        "type": "string"
+      },
+      "presence": "optional"
+    }
+  ],
   "commands": {
-    "bisect": {
-      "effect": "mutating",
-      "help": "binary search through commits to find a bug, with safety guards",
-      "name": "bisect",
-      "passthrough": true
-    },
-    "checkout": {
-      "effect": "mutating",
-      "help": "checkout a branch or ref with working-tree safety guards",
-      "name": "checkout",
-      "passthrough": true
-    },
-    "cherry-pick": {
-      "effect": "mutating",
-      "help": "cherry-pick one or more commits onto HEAD with safety guards",
-      "name": "cherry-pick",
-      "passthrough": true
-    },
     "commit": {
+      "name": "commit",
+      "help": "stage and commit specified files in a single atomic operation",
+      "effect": "mutating",
+      "flags": [
+        {
+          "name": "m",
+          "help": "commit message line; can be repeated to build multi-line messages",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "short": "m",
+          "presence": "optional"
+        },
+        {
+          "name": "F",
+          "help": "read the full commit message body from a file instead of --m flags",
+          "value_schema": {
+            "type": "string"
+          },
+          "short": "F",
+          "presence": "optional"
+        },
+        {
+          "name": "branch",
+          "help": "commit the staged files onto a different branch without switching to it",
+          "value_schema": {
+            "type": "string"
+          },
+          "presence": "optional"
+        },
+        {
+          "name": "amend",
+          "help": "amend the current HEAD commit by replacing it with updated content; omitted means a new commit",
+          "value_schema": {
+            "type": "boolean"
+          },
+          "presence": "optional",
+          "negatable": true
+        },
+        {
+          "name": "allow-empty",
+          "help": "allow creating a commit even when no files have been changed; omitted means an empty commit is refused",
+          "value_schema": {
+            "type": "boolean"
+          },
+          "presence": "optional",
+          "negatable": true
+        },
+        {
+          "name": "trailer",
+          "help": "add a key-value trailer line to the commit message (repeatable)",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "optional"
+        }
+      ],
       "args": [
         {
-          "help": "files to commit (supports hunk specs: file.go:1,3)",
           "name": "files",
-          "required": false,
+          "help": "files to commit (supports hunk specs: file.go:1,3)",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "optional",
           "variadic": true
         }
       ],
-      "effect": "mutating",
-      "flags": [
-        {
-          "default": [],
-          "help": "commit message line; can be repeated to build multi-line messages",
-          "name": "m",
-          "repeatable": true,
-          "short": "m",
-          "type": "str"
-        },
-        {
-          "help": "read the full commit message body from a file instead of --m flags",
-          "name": "F",
-          "short": "F",
-          "type": "str"
-        },
-        {
-          "help": "commit the staged files onto a different branch without switching to it",
-          "name": "branch",
-          "type": "str"
-        },
-        {
-          "default": false,
-          "help": "amend the current HEAD commit by replacing it with updated content",
-          "name": "amend",
-          "negatable": true,
-          "type": "bool"
-        },
-        {
-          "default": false,
-          "help": "allow creating a commit even when no files have been changed",
-          "name": "allow-empty",
-          "negatable": true,
-          "type": "bool"
-        },
-        {
-          "default": [],
-          "help": "add a key-value trailer line to the commit message (repeatable)",
-          "name": "trailer",
-          "repeatable": true,
-          "type": "str"
-        }
-      ],
       "grants": [
         {
-          "kind": "proc_mutate",
           "name": "parent-bump",
-          "reason": "committing in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on"
+          "reason": "committing in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
+          "kind": "proc_mutate"
         }
-      ],
-      "help": "stage and commit specified files in a single atomic operation",
-      "name": "commit"
+      ]
     },
-    "doctor": {
-      "constraints": [
-        {
-          "flags": [
-            "diagnose",
-            "fix",
-            "uninstall"
-          ],
-          "type": "mutex"
-        }
-      ],
+    "checkout": {
+      "name": "checkout",
+      "help": "checkout a branch or ref with working-tree safety guards",
       "effect": "mutating",
-      "flags": [
-        {
-          "default": false,
-          "help": "run all health checks and report results without fixing any issues",
-          "name": "diagnose",
-          "negatable": true,
-          "type": "bool"
-        },
-        {
-          "default": false,
-          "help": "run all health checks and automatically repair any issues found",
-          "name": "fix",
-          "negatable": true,
-          "type": "bool"
-        },
-        {
-          "default": false,
-          "help": "remove all safegit hooks and metadata from this repository entirely",
-          "name": "uninstall",
-          "negatable": true,
-          "type": "bool"
-        }
-      ],
-      "help": "run diagnostic health checks on the repository and optionally repair issues",
-      "name": "doctor"
-    },
-    "merge": {
-      "effect": "mutating",
-      "help": "merge a branch into HEAD with working-tree safety guards",
-      "name": "merge",
       "passthrough": true
     },
-    "pull": {
-      "args": [
-        {
-          "help": "name of the remote repository to pull from (defaults to origin)",
-          "name": "remote",
-          "required": false
-        },
-        {
-          "help": "name of the remote branch to fetch and merge into the current branch",
-          "name": "branch",
-          "required": false
-        }
-      ],
+    "merge": {
+      "name": "merge",
+      "help": "merge a branch into HEAD with working-tree safety guards",
       "effect": "mutating",
-      "flags": [
-        {
-          "choices": [
-            "ff",
-            "ff-only",
-            "no-ff"
-          ],
-          "help": "fast-forward merge strategy: ff, ff-only, or no-ff",
-          "name": "merge-strategy",
-          "type": "str"
-        }
-      ],
-      "help": "fetch from remote and merge, defaulting to fast-forward-only mode",
-      "name": "pull"
-    },
-    "push": {
-      "args": [
-        {
-          "help": "name of the remote repository to push to (defaults to origin)",
-          "name": "remote",
-          "required": false
-        }
-      ],
-      "constraints": [
-        {
-          "flags": [
-            "only-head",
-            "only-branches",
-            "only-tags",
-            "both-branches-and-tags"
-          ],
-          "type": "mutex"
-        }
-      ],
-      "effect": "mutating",
-      "flags": [
-        {
-          "default": true,
-          "help": "run pre-pre-push hook scripts before pushing to remote",
-          "name": "pre-push-hook",
-          "negatable": true,
-          "type": "bool"
-        },
-        {
-          "default": false,
-          "help": "force push using --force-with-lease to prevent overwriting others' work",
-          "name": "force-with-lease",
-          "negatable": true,
-          "type": "bool"
-        },
-        {
-          "default": false,
-          "help": "push only the current HEAD branch to the remote, ignoring other refs",
-          "name": "only-head",
-          "negatable": true,
-          "type": "bool"
-        },
-        {
-          "default": false,
-          "help": "push all local branches to the remote, ignoring tags and other refs",
-          "name": "only-branches",
-          "negatable": true,
-          "type": "bool"
-        },
-        {
-          "default": false,
-          "help": "push all local tags to the remote without pushing any branches",
-          "name": "only-tags",
-          "negatable": true,
-          "type": "bool"
-        },
-        {
-          "default": false,
-          "help": "push all local branches and all tags to the remote in one operation",
-          "name": "both-branches-and-tags",
-          "negatable": true,
-          "type": "bool"
-        }
-      ],
-      "grants": [
-        {
-          "kind": "proc_mutate",
-          "name": "push",
-          "reason": "publishing local refs to a remote is what this command is for"
-        },
-        {
-          "kind": "proc_mutate",
-          "name": "force-push",
-          "reason": "--force-with-lease overwrites the remote ref, discarding whatever the lease expectation did not cover"
-        }
-      ],
-      "help": "push refs to remote with pre-pre-push hooks and automatic retry",
-      "name": "push"
+      "passthrough": true
     },
     "rebase": {
-      "effect": "mutating",
-      "help": "rebase current branch onto upstream with safety guards",
       "name": "rebase",
+      "help": "rebase current branch onto upstream with safety guards",
+      "effect": "mutating",
       "passthrough": true
     },
     "reset": {
-      "effect": "mutating",
-      "help": "reset HEAD with guards that prevent accidental --hard data loss",
       "name": "reset",
+      "help": "reset HEAD with guards that prevent accidental --hard data loss",
+      "effect": "mutating",
+      "passthrough": true
+    },
+    "bisect": {
+      "name": "bisect",
+      "help": "binary search through commits to find a bug, with safety guards",
+      "effect": "mutating",
+      "passthrough": true
+    },
+    "push": {
+      "name": "push",
+      "help": "push refs to remote with pre-pre-push hooks and automatic retry",
+      "effect": "mutating",
+      "flags": [
+        {
+          "name": "pre-push-hook",
+          "help": "run pre-pre-push hook scripts before pushing to remote; omitted means the hooks run",
+          "value_schema": {
+            "type": "boolean"
+          },
+          "presence": "optional",
+          "negatable": true
+        },
+        {
+          "name": "force-with-lease",
+          "help": "force push using --force-with-lease to prevent overwriting others' work; omitted means an ordinary push",
+          "value_schema": {
+            "type": "boolean"
+          },
+          "presence": "optional",
+          "negatable": true
+        },
+        {
+          "name": "refs",
+          "help": "which refs to push",
+          "value_schema": {
+            "type": "string",
+            "enum": [
+              "head",
+              "branches",
+              "tags",
+              "both"
+            ]
+          },
+          "presence": "required",
+          "choices": [
+            {
+              "value": "head",
+              "help": "push only the current HEAD branch to the remote, ignoring other refs"
+            },
+            {
+              "value": "branches",
+              "help": "push all local branches to the remote, ignoring tags and other refs"
+            },
+            {
+              "value": "tags",
+              "help": "push all local tags to the remote without pushing any branches"
+            },
+            {
+              "value": "both",
+              "help": "push all local branches and all tags to the remote in one operation"
+            }
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "remote",
+          "help": "name of the remote repository to push to (defaults to origin)",
+          "value_schema": {
+            "type": "string"
+          },
+          "presence": "optional"
+        }
+      ],
+      "grants": [
+        {
+          "name": "push",
+          "reason": "publishing local refs to a remote is what this command is for",
+          "kind": "proc_mutate"
+        },
+        {
+          "name": "force-push",
+          "reason": "--force-with-lease overwrites the remote ref, discarding whatever the lease expectation did not cover",
+          "kind": "proc_mutate"
+        }
+      ]
+    },
+    "pull": {
+      "name": "pull",
+      "help": "fetch from remote and merge, defaulting to fast-forward-only mode",
+      "effect": "mutating",
+      "flags": [
+        {
+          "name": "merge-strategy",
+          "help": "how the fetched commits are merged into the current branch",
+          "value_schema": {
+            "type": "string",
+            "enum": [
+              "ff",
+              "ff-only",
+              "no-ff"
+            ]
+          },
+          "presence": "required",
+          "choices": [
+            {
+              "value": "ff",
+              "help": "fast-forward when possible, otherwise create a merge commit"
+            },
+            {
+              "value": "ff-only",
+              "help": "fast-forward only, refusing the pull when the branches have diverged"
+            },
+            {
+              "value": "no-ff",
+              "help": "always create a merge commit, even when a fast-forward is possible"
+            }
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "remote",
+          "help": "name of the remote repository to pull from (defaults to origin)",
+          "value_schema": {
+            "type": "string"
+          },
+          "presence": "optional"
+        },
+        {
+          "name": "branch",
+          "help": "name of the remote branch to fetch and merge into the current branch",
+          "value_schema": {
+            "type": "string"
+          },
+          "presence": "optional"
+        }
+      ]
+    },
+    "doctor": {
+      "name": "doctor",
+      "help": "run diagnostic health checks on the repository and optionally repair issues",
+      "effect": "mutating",
+      "flags": [
+        {
+          "name": "action",
+          "help": "what doctor does with the health checks it runs",
+          "value_schema": {
+            "type": "string",
+            "enum": [
+              "diagnose",
+              "fix",
+              "uninstall"
+            ]
+          },
+          "presence": "required",
+          "choices": [
+            {
+              "value": "diagnose",
+              "help": "run all health checks and report results without fixing any issues"
+            },
+            {
+              "value": "fix",
+              "help": "run all health checks and automatically repair any issues found"
+            },
+            {
+              "value": "uninstall",
+              "help": "remove all safegit hooks and metadata from this repository entirely"
+            }
+          ]
+        }
+      ]
+    },
+    "cherry-pick": {
+      "name": "cherry-pick",
+      "help": "cherry-pick one or more commits onto HEAD with safety guards",
+      "effect": "mutating",
       "passthrough": true
     },
     "revert": {
-      "effect": "mutating",
-      "help": "revert one or more commits creating inverse patches, with safety guards",
       "name": "revert",
+      "help": "revert one or more commits creating inverse patches, with safety guards",
+      "effect": "mutating",
       "passthrough": true
     },
-    "scan": {
-      "effect": "read_only",
+    "undo": {
+      "name": "undo",
+      "help": "reverse the last commit, amend, or reword operation using the oplog",
+      "effect": "mutating",
       "flags": [
         {
-          "help": "regular expression pattern to search for across all objects in history",
-          "name": "pattern",
-          "type": "str"
+          "name": "bypass-session",
+          "help": "undo across all sessions by ignoring the session ID ownership check; omitted means only this session's operations are undone",
+          "value_schema": {
+            "type": "boolean"
+          },
+          "presence": "optional",
+          "negatable": true
         },
         {
-          "help": "glob pattern limiting which blob file paths are included (e.g. '*.env', 'config/**')",
-          "name": "scope",
-          "type": "str"
-        },
-        {
-          "help": "first commit hash to include when scanning history (mutually exclusive with --entire-history)",
-          "name": "from",
-          "type": "str"
-        },
-        {
-          "default": false,
-          "help": "scan all commits from the root of the repository to HEAD (mutually exclusive with --from)",
-          "name": "entire-history",
-          "negatable": true,
-          "type": "bool"
-        },
-        {
-          "help": "comma-separated list of match types to include: blobs,commits,tags,trailers,files (default: all)",
-          "name": "target",
-          "type": "str"
+          "name": "count",
+          "help": "number of oplog operations to undo in a single invocation; omitted means one",
+          "value_schema": {
+            "type": "integer"
+          },
+          "presence": "optional"
         }
       ],
-      "help": "search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection",
+      "grants": [
+        {
+          "name": "parent-bump",
+          "reason": "undoing a submodule commit moves the parent's gitlink back, so safegit commits the parent too when commit.autoBumpParent is on",
+          "kind": "proc_mutate"
+        }
+      ]
+    },
+    "unlock": {
+      "name": "unlock",
+      "help": "release a stale .lock file left behind by a crashed git process",
+      "effect": "mutating",
+      "args": [
+        {
+          "name": "ref",
+          "help": "the ref name (e.g. refs/heads/main) whose stale .lock file to remove",
+          "value_schema": {
+            "type": "string"
+          },
+          "presence": "required"
+        }
+      ]
+    },
+    "scan": {
       "name": "scan",
+      "help": "search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection",
+      "effect": "read_only",
       "payload_schema": {
         "additionalProperties": false,
         "properties": {
@@ -502,52 +657,58 @@
         ],
         "type": "object"
       },
+      "flags": [
+        {
+          "name": "pattern",
+          "help": "regular expression pattern to search for across all objects in history",
+          "value_schema": {
+            "type": "string"
+          },
+          "presence": "required"
+        },
+        {
+          "name": "scope",
+          "help": "glob pattern limiting which blob file paths are included (e.g. '*.env', 'config/**')",
+          "value_schema": {
+            "type": "string"
+          },
+          "presence": "optional"
+        },
+        {
+          "name": "from",
+          "help": "first commit hash to include when scanning history (mutually exclusive with --entire-history)",
+          "value_schema": {
+            "type": "string"
+          },
+          "presence": "optional"
+        },
+        {
+          "name": "entire-history",
+          "help": "scan all commits from the root of the repository to HEAD (mutually exclusive with --from)",
+          "value_schema": {
+            "type": "boolean"
+          },
+          "presence": "default",
+          "default": false,
+          "negatable": true
+        },
+        {
+          "name": "target",
+          "help": "comma-separated list of match types to include: blobs,commits,tags,trailers,files (default: all)",
+          "value_schema": {
+            "type": "string"
+          },
+          "presence": "optional"
+        }
+      ],
       "tags": [
         "json"
       ]
     },
-    "undo": {
-      "effect": "mutating",
-      "flags": [
-        {
-          "default": false,
-          "help": "undo across all sessions by ignoring the session ID ownership check",
-          "name": "bypass-session",
-          "negatable": true,
-          "type": "bool"
-        },
-        {
-          "default": 1,
-          "help": "number of oplog operations to undo in a single invocation",
-          "name": "count",
-          "type": "int"
-        }
-      ],
-      "grants": [
-        {
-          "kind": "proc_mutate",
-          "name": "parent-bump",
-          "reason": "undoing a submodule commit moves the parent's gitlink back, so safegit commits the parent too when commit.autoBumpParent is on"
-        }
-      ],
-      "help": "reverse the last commit, amend, or reword operation using the oplog",
-      "name": "undo"
-    },
-    "unlock": {
-      "args": [
-        {
-          "help": "the ref name (e.g. refs/heads/main) whose stale .lock file to remove",
-          "name": "ref"
-        }
-      ],
-      "effect": "mutating",
-      "help": "release a stale .lock file left behind by a crashed git process",
-      "name": "unlock"
-    },
     "version": {
-      "effect": "read_only",
-      "help": "print safegit version, Go runtime version, and git version",
       "name": "version",
+      "help": "print safegit version, Go runtime version, and git version",
+      "effect": "read_only",
       "payload_schema": {
         "additionalProperties": false,
         "properties": {
@@ -578,82 +739,229 @@
       }
     }
   },
-  "defaults": {
-    "app": {
-      "commands": {},
-      "config": false,
-      "deprecated": {},
-      "env_prefix": null,
-      "global_flags": [],
-      "groups": {},
-      "tag_contracts": {}
-    },
-    "arg": {
-      "choices": null,
-      "default": null,
-      "required": true,
-      "type": "str",
-      "variadic": false
-    },
-    "command": {
-      "args": [],
-      "constraints": [],
-      "flags": [],
-      "hidden": false,
-      "interactive": false,
-      "passthrough": false,
-      "tags": []
-    },
-    "flag": {
-      "choices": null,
-      "default": null,
-      "env": null,
-      "env_separator": null,
-      "hidden": false,
-      "negatable": null,
-      "repeatable": false,
-      "short": null,
-      "unique": false
-    },
-    "group": {
-      "commands": {},
-      "deprecated": {},
-      "groups": {},
-      "hidden": false,
-      "tags": []
-    },
-    "schema_version": 1
-  },
-  "deprecated": {
-    "rewrite-author": "use 'safegit author rewrite' instead"
-  },
-  "global_flags": [
-    {
-      "default": "",
-      "help": "path to a custom safegit config file instead of the default location",
-      "name": "config-file",
-      "type": "str"
-    }
-  ],
   "groups": {
-    "author": {
+    "backup": {
+      "name": "backup",
+      "help": "push, list, and restore per-branch history backups held in the tool-owned refs/backups namespace on a remote, so uncommitted-to-the-world work survives a lost machine without ever touching refs/heads",
       "commands": {
-        "check": {
-          "effect": "read_only",
+        "backup": {
+          "name": "backup",
+          "help": "push the current branch to its backup slot refs/backups/<branch> on the remote, after fetching that slot and refusing when it holds commits your history does not contain; the push is pinned with --force-with-lease to the exact SHA that was just observed (or to \"this ref must not exist\" for a first backup), so a concurrent backup from another machine is rejected rather than clobbered; plain git equivalent: git push --force-with-lease=refs/backups/<branch>:<observed-sha> <remote> HEAD:refs/backups/<branch>",
+          "effect": "mutating",
           "flags": [
             {
-              "help": "expected author and committer display name that all commits should use",
-              "name": "name",
-              "type": "str"
+              "name": "overwrite-remote-backup",
+              "help": "replace a backup slot whose commits are missing from your current history, leasing on the SHA observed during this run; omitted, and with --no-overwrite-remote-backup, such a slot is a hard error because overwriting it would drop work backed up from elsewhere",
+              "value_schema": {
+                "type": "boolean"
+              },
+              "presence": "optional",
+              "negatable": true
             },
             {
-              "help": "expected author and committer email address that all commits should use",
-              "name": "email",
-              "type": "str"
+              "name": "allow-public-remote",
+              "help": "consent to backing up to a remote that is public, or whose visibility safegit cannot determine; omitted, and with --no-allow-public-remote, such a target is a question, asked at the terminal and refused outright when there is none, because a backup pushes the whole branch and --approve-consequential says nothing about where",
+              "value_schema": {
+                "type": "boolean"
+              },
+              "presence": "optional",
+              "negatable": true
             }
           ],
-          "help": "check that all commits use the expected author and committer identity by scanning every commit in the repository history, reporting any deviations with the exact commit hashes and mismatched fields, and suggesting the corresponding safegit author rewrite command to fix each deviation found",
+          "args": [
+            {
+              "name": "remote",
+              "help": "name of the remote repository holding the backup slots (defaults to origin)",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "optional"
+            }
+          ],
+          "grants": [
+            {
+              "name": "push",
+              "reason": "a backup slot is only useful once it is on the remote",
+              "kind": "proc_mutate"
+            },
+            {
+              "name": "force-push",
+              "reason": "a backup slot is a single overwritten slot, pinned by a lease to the SHA observed a moment earlier",
+              "kind": "proc_mutate"
+            }
+          ]
+        },
+        "list": {
+          "name": "list",
+          "help": "list every backup slot present on the remote with the branch name and the commit each slot points at, so you can see which branches are backed up from which machine before restoring one; plain git equivalent: git ls-remote <remote> 'refs/backups/*'",
+          "effect": "read_only",
+          "args": [
+            {
+              "name": "remote",
+              "help": "name of the remote repository holding the backup slots (defaults to origin)",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "optional"
+            }
+          ]
+        },
+        "restore": {
+          "name": "restore",
+          "help": "fetch the current branch's backup slot from the remote and fast-forward the branch onto it, refusing when the local branch carries commits the backup does not contain so no local work is ever discarded; plain git equivalent: git fetch <remote> refs/backups/<branch> && git merge --ff-only FETCH_HEAD",
+          "effect": "mutating",
+          "args": [
+            {
+              "name": "remote",
+              "help": "name of the remote repository holding the backup slots (defaults to origin)",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "optional"
+            }
+          ]
+        }
+      }
+    },
+    "config": {
+      "name": "config",
+      "help": "show, get, or set safegit configuration key-value pairs",
+      "commands": {
+        "show": {
+          "name": "show",
+          "help": "show all configuration values currently in effect for this repository, including built-in defaults and any user overrides from the .git/safegit/config.json file, printed as key-value pairs to stdout for inspection and debugging purposes",
+          "effect": "read_only"
+        },
+        "get": {
+          "name": "get",
+          "help": "get the current value of a single configuration key from the .git/safegit/config.json file, printing the raw value to stdout so it can be captured by scripts or used in automation pipelines",
+          "effect": "read_only",
+          "args": [
+            {
+              "name": "key",
+              "help": "the configuration key whose current value should be retrieved",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            }
+          ]
+        },
+        "set": {
+          "name": "set",
+          "help": "set a configuration key to a new value in the .git/safegit/config.json file, creating the file if it does not exist yet, and persisting the change for all future safegit invocations in this repository",
+          "effect": "mutating",
+          "args": [
+            {
+              "name": "key",
+              "help": "the configuration key to set to the specified value in config.json",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            },
+            {
+              "name": "value",
+              "help": "the new value to assign to the specified configuration key",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            }
+          ]
+        }
+      }
+    },
+    "hook": {
+      "name": "hook",
+      "help": "manage pre-pre-push hook scripts that run before every push",
+      "commands": {
+        "list": {
+          "name": "list",
+          "help": "list all pre-pre-push hooks currently installed in the .git/safegit/hooks directory, showing each hook name, file path, and whether it is executable, so you can audit which checks run before every push",
+          "effect": "read_only"
+        },
+        "run": {
+          "name": "run",
+          "help": "run all installed pre-pre-push hooks (or a single named hook) immediately without performing an actual push, so you can verify that all configured hooks pass before committing to a real push operation",
+          "effect": "mutating",
+          "dry_run_supported": false,
+          "dry_run_unsupported_reason": "running a hook executes an operator-supplied script whose effects safegit cannot know in advance, so there is nothing honest to preview; run 'safegit hook list' to see which scripts would run",
+          "args": [
+            {
+              "name": "name",
+              "help": "name of a specific hook to run; omit to run all installed hooks",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "optional"
+            }
+          ]
+        },
+        "install": {
+          "name": "install",
+          "help": "install a pre-pre-push hook by copying a script file into the .git/safegit/hooks directory, making it executable, and registering it so that safegit push will run it before any network I/O occurs",
+          "effect": "mutating",
+          "args": [
+            {
+              "name": "path",
+              "help": "filesystem path to the hook script file to install into safegit",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            }
+          ]
+        }
+      }
+    },
+    "author": {
+      "name": "author",
+      "help": "audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history",
+      "commands": {
+        "list": {
+          "name": "list",
+          "help": "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite",
+          "effect": "read_only",
+          "payload_schema": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "count": {
+                  "type": "integer"
+                },
+                "email": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "role": {
+                  "enum": [
+                    "author",
+                    "committer",
+                    "both"
+                  ]
+                }
+              },
+              "required": [
+                "name",
+                "email",
+                "role",
+                "count"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "tags": [
+            "json"
+          ]
+        },
+        "check": {
           "name": "check",
+          "help": "check that all commits use the expected author and committer identity by scanning every commit in the repository history, reporting any deviations with the exact commit hashes and mismatched fields, and suggesting the corresponding safegit author rewrite command to fix each deviation found",
+          "effect": "read_only",
           "payload_schema": {
             "additionalProperties": false,
             "properties": {
@@ -707,92 +1015,33 @@
             ],
             "type": "object"
           },
-          "tags": [
-            "json"
-          ]
-        },
-        "list": {
-          "effect": "read_only",
-          "help": "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity \u2014 useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite",
-          "name": "list",
-          "payload_schema": {
-            "items": {
-              "additionalProperties": false,
-              "properties": {
-                "count": {
-                  "type": "integer"
-                },
-                "email": {
-                  "type": "string"
-                },
-                "name": {
-                  "type": "string"
-                },
-                "role": {
-                  "enum": [
-                    "author",
-                    "committer",
-                    "both"
-                  ]
-                }
+          "flags": [
+            {
+              "name": "name",
+              "help": "expected author and committer display name that all commits should use",
+              "value_schema": {
+                "type": "string"
               },
-              "required": [
-                "name",
-                "email",
-                "role",
-                "count"
-              ],
-              "type": "object"
+              "presence": "optional"
             },
-            "type": "array"
-          },
+            {
+              "name": "email",
+              "help": "expected author and committer email address that all commits should use",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "optional"
+            }
+          ],
           "tags": [
             "json"
           ]
         },
         "rewrite": {
-          "consequential": true,
-          "constraints": [
-            {
-              "flags": [
-                "old-name",
-                "new-name"
-              ],
-              "type": "co_required"
-            },
-            {
-              "flags": [
-                "old-email",
-                "new-email"
-              ],
-              "type": "co_required"
-            }
-          ],
-          "effect": "mutating",
-          "flags": [
-            {
-              "help": "current author or committer display name to search for and replace",
-              "name": "old-name",
-              "type": "str"
-            },
-            {
-              "help": "new display name to substitute wherever the old name is found in history",
-              "name": "new-name",
-              "type": "str"
-            },
-            {
-              "help": "current author or committer email address to search for and replace",
-              "name": "old-email",
-              "type": "str"
-            },
-            {
-              "help": "new email address to substitute wherever the old email is found in history",
-              "name": "new-email",
-              "type": "str"
-            }
-          ],
-          "help": "rewrite author and committer name or email across all commit history using git filter-branch style rewriting, replacing every occurrence of the old identity with the new one in both author and committer fields while preserving timestamps, commit messages, tree contents, and parent relationships so the rewritten history is otherwise identical to the original",
           "name": "rewrite",
+          "help": "rewrite author and committer name or email across all commit history using git filter-branch style rewriting, replacing every occurrence of the old identity with the new one in both author and committer fields while preserving timestamps, commit messages, tree contents, and parent relationships so the rewritten history is otherwise identical to the original",
+          "effect": "mutating",
+          "consequential": true,
           "payload_schema": {
             "additionalProperties": false,
             "properties": {
@@ -875,190 +1124,103 @@
             ],
             "type": "object"
           },
+          "flags": [
+            {
+              "name": "old-name",
+              "help": "current author or committer display name to search for and replace",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "optional"
+            },
+            {
+              "name": "new-name",
+              "help": "new display name to substitute wherever the old name is found in history",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "optional"
+            },
+            {
+              "name": "old-email",
+              "help": "current author or committer email address to search for and replace",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "optional"
+            },
+            {
+              "name": "new-email",
+              "help": "new email address to substitute wherever the old email is found in history",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "optional"
+            }
+          ],
           "tags": [
             "json"
+          ],
+          "constraints": [
+            {
+              "type": "all_or_none",
+              "name": "author-name",
+              "members": [
+                {
+                  "kind": "flag",
+                  "name": "old-name",
+                  "when": "present"
+                },
+                {
+                  "kind": "flag",
+                  "name": "new-name",
+                  "when": "present"
+                }
+              ]
+            },
+            {
+              "type": "all_or_none",
+              "name": "author-email",
+              "members": [
+                {
+                  "kind": "flag",
+                  "name": "old-email",
+                  "when": "present"
+                },
+                {
+                  "kind": "flag",
+                  "name": "new-email",
+                  "when": "present"
+                }
+              ]
+            },
+            {
+              "type": "at_least_one",
+              "name": "author-change",
+              "members": [
+                {
+                  "kind": "constraint",
+                  "name": "author-name"
+                },
+                {
+                  "kind": "constraint",
+                  "name": "author-email"
+                }
+              ]
+            }
           ]
         }
-      },
-      "help": "audit and rewrite commit author/committer identity \u2014 list all identities, check against expected values, and rewrite name or email across history",
-      "name": "author"
-    },
-    "backup": {
-      "commands": {
-        "backup": {
-          "args": [
-            {
-              "help": "name of the remote repository holding the backup slots (defaults to origin)",
-              "name": "remote",
-              "required": false
-            }
-          ],
-          "effect": "mutating",
-          "flags": [
-            {
-              "default": false,
-              "help": "replace a backup slot whose commits are missing from your current history, leasing on the SHA observed during this run; without this flag such a slot is a hard error because overwriting it would drop work backed up from elsewhere",
-              "name": "overwrite-remote-backup",
-              "negatable": true,
-              "type": "bool"
-            },
-            {
-              "default": false,
-              "help": "consent to backing up to a remote that is public, or whose visibility safegit cannot determine; without this flag such a target is a question, asked at the terminal and refused outright when there is none, because a backup pushes the whole branch and --approve-consequential says nothing about where",
-              "name": "allow-public-remote",
-              "negatable": true,
-              "type": "bool"
-            }
-          ],
-          "grants": [
-            {
-              "kind": "proc_mutate",
-              "name": "push",
-              "reason": "a backup slot is only useful once it is on the remote"
-            },
-            {
-              "kind": "proc_mutate",
-              "name": "force-push",
-              "reason": "a backup slot is a single overwritten slot, pinned by a lease to the SHA observed a moment earlier"
-            }
-          ],
-          "help": "push the current branch to its backup slot refs/backups/<branch> on the remote, after fetching that slot and refusing when it holds commits your history does not contain; the push is pinned with --force-with-lease to the exact SHA that was just observed (or to \"this ref must not exist\" for a first backup), so a concurrent backup from another machine is rejected rather than clobbered; plain git equivalent: git push --force-with-lease=refs/backups/<branch>:<observed-sha> <remote> HEAD:refs/backups/<branch>",
-          "name": "backup"
-        },
-        "list": {
-          "args": [
-            {
-              "help": "name of the remote repository holding the backup slots (defaults to origin)",
-              "name": "remote",
-              "required": false
-            }
-          ],
-          "effect": "read_only",
-          "help": "list every backup slot present on the remote with the branch name and the commit each slot points at, so you can see which branches are backed up from which machine before restoring one; plain git equivalent: git ls-remote <remote> 'refs/backups/*'",
-          "name": "list"
-        },
-        "restore": {
-          "args": [
-            {
-              "help": "name of the remote repository holding the backup slots (defaults to origin)",
-              "name": "remote",
-              "required": false
-            }
-          ],
-          "effect": "mutating",
-          "help": "fetch the current branch's backup slot from the remote and fast-forward the branch onto it, refusing when the local branch carries commits the backup does not contain so no local work is ever discarded; plain git equivalent: git fetch <remote> refs/backups/<branch> && git merge --ff-only FETCH_HEAD",
-          "name": "restore"
-        }
-      },
-      "help": "push, list, and restore per-branch history backups held in the tool-owned refs/backups namespace on a remote, so uncommitted-to-the-world work survives a lost machine without ever touching refs/heads",
-      "name": "backup"
-    },
-    "config": {
-      "commands": {
-        "get": {
-          "args": [
-            {
-              "help": "the configuration key whose current value should be retrieved",
-              "name": "key"
-            }
-          ],
-          "effect": "read_only",
-          "help": "get the current value of a single configuration key from the .git/safegit/config.json file, printing the raw value to stdout so it can be captured by scripts or used in automation pipelines",
-          "name": "get"
-        },
-        "set": {
-          "args": [
-            {
-              "help": "the configuration key to set to the specified value in config.json",
-              "name": "key"
-            },
-            {
-              "help": "the new value to assign to the specified configuration key",
-              "name": "value"
-            }
-          ],
-          "effect": "mutating",
-          "help": "set a configuration key to a new value in the .git/safegit/config.json file, creating the file if it does not exist yet, and persisting the change for all future safegit invocations in this repository",
-          "name": "set"
-        },
-        "show": {
-          "effect": "read_only",
-          "help": "show all configuration values currently in effect for this repository, including built-in defaults and any user overrides from the .git/safegit/config.json file, printed as key-value pairs to stdout for inspection and debugging purposes",
-          "name": "show"
-        }
-      },
-      "help": "show, get, or set safegit configuration key-value pairs",
-      "name": "config"
-    },
-    "hook": {
-      "commands": {
-        "install": {
-          "args": [
-            {
-              "help": "filesystem path to the hook script file to install into safegit",
-              "name": "path"
-            }
-          ],
-          "effect": "mutating",
-          "help": "install a pre-pre-push hook by copying a script file into the .git/safegit/hooks directory, making it executable, and registering it so that safegit push will run it before any network I/O occurs",
-          "name": "install"
-        },
-        "list": {
-          "effect": "read_only",
-          "help": "list all pre-pre-push hooks currently installed in the .git/safegit/hooks directory, showing each hook name, file path, and whether it is executable, so you can audit which checks run before every push",
-          "name": "list"
-        },
-        "run": {
-          "args": [
-            {
-              "help": "name of a specific hook to run; omit to run all installed hooks",
-              "name": "name",
-              "required": false
-            }
-          ],
-          "dry_run_supported": false,
-          "dry_run_unsupported_reason": "running a hook executes an operator-supplied script whose effects safegit cannot know in advance, so there is nothing honest to preview; run 'safegit hook list' to see which scripts would run",
-          "effect": "mutating",
-          "help": "run all installed pre-pre-push hooks (or a single named hook) immediately without performing an actual push, so you can verify that all configured hooks pass before committing to a real push operation",
-          "name": "run"
-        }
-      },
-      "help": "manage pre-pre-push hook scripts that run before every push",
-      "name": "hook"
+      }
     },
     "scrub": {
+      "name": "scrub",
+      "help": "surgically rewrite git history to remove or replace sensitive content using 4 subcommands (file, match, run, verify) that operate on all commits, trees, and blobs in the repository",
       "commands": {
         "file": {
-          "args": [
-            {
-              "help": "repository-relative path to the file that should be scrubbed from history",
-              "name": "file"
-            }
-          ],
-          "consequential": true,
-          "effect": "mutating",
-          "flags": [
-            {
-              "help": "first commit hash to include when rewriting history (default: root commit)",
-              "name": "from",
-              "type": "str"
-            },
-            {
-              "help": "mandatory audit trail message explaining why this scrub operation is needed",
-              "name": "reason",
-              "type": "str"
-            },
-            {
-              "default": [],
-              "help": "glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories)",
-              "name": "remap-shas-in",
-              "repeatable": true,
-              "type": "str",
-              "unique": true
-            }
-          ],
-          "help": "replace or remove a specific file across all commits in the repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized version or delete the file entirely from every historical snapshot",
           "name": "file",
+          "help": "replace or remove a specific file across all commits in the repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized version or delete the file entirely from every historical snapshot",
+          "effect": "mutating",
+          "consequential": true,
           "payload_schema": {
             "additionalProperties": false,
             "properties": {
@@ -1155,80 +1317,55 @@
             ],
             "type": "object"
           },
+          "flags": [
+            {
+              "name": "from",
+              "help": "first commit hash to include when rewriting history",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            },
+            {
+              "name": "reason",
+              "help": "mandatory audit trail message explaining why this scrub operation is needed",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            },
+            {
+              "name": "remap-shas-in",
+              "help": "glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories)",
+              "value_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "presence": "optional",
+              "unique": true
+            }
+          ],
+          "args": [
+            {
+              "name": "file",
+              "help": "repository-relative path to the file that should be scrubbed from history",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            }
+          ],
           "tags": [
             "json"
           ]
         },
         "match": {
-          "consequential": true,
-          "constraints": [
-            {
-              "flags": [
-                "replace",
-                "mangle"
-              ],
-              "type": "mutex"
-            },
-            {
-              "flags": [
-                "from",
-                "entire-history"
-              ],
-              "type": "mutex"
-            }
-          ],
-          "effect": "mutating",
-          "flags": [
-            {
-              "help": "regular expression pattern to search for across all blobs in history",
-              "name": "pattern",
-              "type": "str"
-            },
-            {
-              "help": "mandatory audit trail message explaining why this scrub operation is needed",
-              "name": "reason",
-              "type": "str"
-            },
-            {
-              "help": "glob pattern limiting which file paths are searched (e.g. '*.env', 'config/**')",
-              "name": "scope",
-              "type": "str"
-            },
-            {
-              "default": [],
-              "help": "glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories)",
-              "name": "remap-shas-in",
-              "repeatable": true,
-              "type": "str",
-              "unique": true
-            },
-            {
-              "help": "literal string to substitute for each regex match found in history",
-              "name": "replace",
-              "type": "str"
-            },
-            {
-              "default": false,
-              "help": "replace matches with random printable ASCII of same length",
-              "name": "mangle",
-              "negatable": true,
-              "type": "bool"
-            },
-            {
-              "help": "first commit hash to include when rewriting history (default: root commit)",
-              "name": "from",
-              "type": "str"
-            },
-            {
-              "default": false,
-              "help": "rewrite all commits from the root of the repository to HEAD",
-              "name": "entire-history",
-              "negatable": true,
-              "type": "bool"
-            }
-          ],
-          "help": "replace all occurrences of a regex pattern across every blob in the repository history, rewriting commit trees to substitute matched text with a replacement string so that sensitive values like secrets and credentials are permanently removed from all historical snapshots",
           "name": "match",
+          "help": "replace all occurrences of a regex pattern across every blob in the repository history, rewriting commit trees to substitute matched text with a replacement string so that sensitive values like secrets and credentials are permanently removed from all historical snapshots",
+          "effect": "mutating",
+          "consequential": true,
           "payload_schema": {
             "additionalProperties": false,
             "properties": {
@@ -1351,70 +1488,105 @@
             ],
             "type": "object"
           },
+          "flags": [
+            {
+              "name": "pattern",
+              "help": "regular expression pattern to search for across all blobs in history",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            },
+            {
+              "name": "reason",
+              "help": "mandatory audit trail message explaining why this scrub operation is needed",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            },
+            {
+              "name": "scope",
+              "help": "glob pattern limiting which file paths are searched (e.g. '*.env', 'config/**')",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "optional"
+            },
+            {
+              "name": "remap-shas-in",
+              "help": "glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories)",
+              "value_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "presence": "optional",
+              "unique": true
+            },
+            {
+              "name": "substitution",
+              "help": "what replaces each match",
+              "presence": "required",
+              "choices": [
+                {
+                  "name": "replace",
+                  "help": "substitute a literal string for every match",
+                  "flags": [
+                    {
+                      "name": "value",
+                      "help": "literal string to substitute for each regex match found in history",
+                      "value_schema": {
+                        "type": "string"
+                      },
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "mangle",
+                  "help": "substitute random printable ASCII of the same length for every match"
+                }
+              ],
+              "elect_by": "member-flags"
+            },
+            {
+              "name": "range",
+              "help": "how much of the history is rewritten",
+              "presence": "required",
+              "choices": [
+                {
+                  "name": "from",
+                  "help": "rewrite the commits from a given commit forward",
+                  "flags": [
+                    {
+                      "name": "value",
+                      "help": "first commit hash to include when rewriting history",
+                      "value_schema": {
+                        "type": "string"
+                      },
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "entire-history",
+                  "help": "rewrite every commit from the root of the repository to HEAD"
+                }
+              ],
+              "elect_by": "member-flags"
+            }
+          ],
           "tags": [
             "json"
           ]
         },
         "run": {
-          "args": [
-            {
-              "help": "path to the TOML recipe file containing scrub operations",
-              "name": "recipe"
-            }
-          ],
-          "consequential": true,
-          "constraints": [
-            {
-              "flags": [
-                "from",
-                "entire-history"
-              ],
-              "type": "mutex"
-            }
-          ],
-          "effect": "mutating",
-          "flags": [
-            {
-              "help": "mandatory audit trail message explaining why this scrub operation is needed",
-              "name": "reason",
-              "type": "str"
-            },
-            {
-              "default": false,
-              "help": "preview what would change without modifying any objects, showing unified diffs",
-              "name": "diff",
-              "negatable": true,
-              "type": "bool"
-            },
-            {
-              "default": 50,
-              "help": "maximum number of blob diffs to show in --diff mode (default: 50)",
-              "name": "limit",
-              "type": "int"
-            },
-            {
-              "default": [],
-              "help": "glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories)",
-              "name": "remap-shas-in",
-              "repeatable": true,
-              "type": "str",
-              "unique": true
-            },
-            {
-              "help": "first commit hash to include when rewriting history",
-              "name": "from",
-              "type": "str"
-            },
-            {
-              "default": false,
-              "help": "rewrite all commits from the root of the repository to HEAD",
-              "name": "entire-history",
-              "negatable": true,
-              "type": "bool"
-            }
-          ],
-          "help": "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store \u2014 use --diff to preview all changes as unified diffs before committing to the rewrite",
           "name": "run",
+          "help": "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite",
+          "effect": "mutating",
+          "consequential": true,
           "payload_schema": {
             "additionalProperties": false,
             "properties": {
@@ -1624,14 +1796,89 @@
             ],
             "type": "object"
           },
+          "flags": [
+            {
+              "name": "reason",
+              "help": "mandatory audit trail message explaining why this scrub operation is needed",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            },
+            {
+              "name": "diff",
+              "help": "preview what would change without modifying any objects, showing unified diffs; omitted means the rewrite is performed",
+              "value_schema": {
+                "type": "boolean"
+              },
+              "presence": "optional",
+              "negatable": true
+            },
+            {
+              "name": "limit",
+              "help": "maximum number of blob diffs to show in --diff mode; omitted means 50",
+              "value_schema": {
+                "type": "integer"
+              },
+              "presence": "optional"
+            },
+            {
+              "name": "remap-shas-in",
+              "help": "glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories)",
+              "value_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "presence": "optional",
+              "unique": true
+            },
+            {
+              "name": "range",
+              "help": "how much of the history is rewritten",
+              "presence": "required",
+              "choices": [
+                {
+                  "name": "from",
+                  "help": "rewrite the commits from a given commit forward",
+                  "flags": [
+                    {
+                      "name": "value",
+                      "help": "first commit hash to include when rewriting history",
+                      "value_schema": {
+                        "type": "string"
+                      },
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "entire-history",
+                  "help": "rewrite every commit from the root of the repository to HEAD"
+                }
+              ],
+              "elect_by": "member-flags"
+            }
+          ],
+          "args": [
+            {
+              "name": "recipe",
+              "help": "path to the TOML recipe file containing scrub operations",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            }
+          ],
           "tags": [
             "json"
           ]
         },
         "verify": {
-          "effect": "read_only",
-          "help": "check all scrub policies defined in the repository configuration to confirm that previously scrubbed secrets and sensitive patterns remain completely absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-policy pass or fail results with match locations for any violations found",
           "name": "verify",
+          "help": "check all scrub policies defined in the repository configuration to confirm that previously scrubbed secrets and sensitive patterns remain completely absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-policy pass or fail results with match locations for any violations found",
+          "effect": "read_only",
           "payload_schema": {
             "additionalProperties": false,
             "properties": {
@@ -1693,12 +1940,12 @@
             "json"
           ]
         }
-      },
-      "help": "surgically rewrite git history to remove or replace sensitive content using 4 subcommands (file, match, run, verify) that operate on all commits, trees, and blobs in the repository",
-      "name": "scrub"
+      }
     }
   },
-  "help": "concurrency-safe git wrapper providing 31 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
+  "deprecated": {
+    "rewrite-author": "use 'safegit author rewrite' instead"
+  },
   "infra": {
     "handshakes": [
       {
@@ -1706,9 +1953,5 @@
         "help": "Claude Code session identifier set by the invoking agent session; scopes 'safegit undo' to operations this session performed and is recorded as a commit trailer"
       }
     ]
-  },
-  "name": "safegit",
-  "project_id": "github.com/smm-h/safegit",
-  "schema_version": 1,
-  "version": "0.27.0"
+  }
 }
