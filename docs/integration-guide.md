@@ -212,7 +212,7 @@ When safegit detects it is running inside a git submodule, two additional behavi
 
 ```json
 {
-  "interface_version": 1,
+  "interface_version": 2,
   "app": "safegit",
   "app_version": "0.27.0",
   "command": "scrub.file",

@@ -18,7 +18,7 @@ Every safegit command accepts these global flags, which control output verbosity
 | `--dry-run` | `false` | Preview what would happen without writing any changes to disk |
 | `--approve-consequential` | `false` | Approve a consequential command up front instead of being asked |
 | `--json` | `false` | Select machine mode: stdout carries the framework's envelope and nothing else |
-| `--config-file` | `""` | Path to a custom safegit config file instead of the default location |
+| `--config-file` | optional | Path to a custom safegit config file; omitted means the default location |
 
 The first five are owned by the CLI framework, not by safegit. Three consequences follow:
 
@@ -47,14 +47,14 @@ Use `safegit commit` instead of `git add` + `git commit` whenever multiple sessi
 
 ### Flags
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `-m` | `-m` | | Commit message line; repeatable for multi-line messages |
-| `-F` | `-F` | `nil` | Read the full commit message body from a file (mutually exclusive with `-m`) |
-| `--branch` | | `nil` | Commit onto a different branch without switching to it |
-| `--amend` | | `false` | Amend the current HEAD commit by replacing it with updated content |
-| `--allow-empty` | | `false` | Allow creating a commit even when no files have been changed |
-| `--trailer` | | | Add a key-value trailer line to the commit message (repeatable) |
+| Flag | Short | Presence | Description |
+|------|-------|----------|-------------|
+| `-m` | `-m` | optional | Commit message line; repeatable for multi-line messages |
+| `-F` | `-F` | optional | Read the full commit message body from a file (mutually exclusive with `-m`) |
+| `--branch` | | optional | Commit onto a different branch without switching to it |
+| `--amend` | | optional; omitted means a new commit | Amend the current HEAD commit by replacing it with updated content |
+| `--allow-empty` | | optional; omitted means an empty commit is refused | Allow creating a commit even when no files have been changed |
+| `--trailer` | | optional | Add a key-value trailer line to the commit message (repeatable) |
 
 ### Arguments
 
@@ -114,10 +114,10 @@ Use `safegit undo` when you need to revert a recent commit, amend, or reword. It
 
 ### Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--bypass-session` | `false` | Undo across all sessions by ignoring the session ID ownership check |
-| `--count` | `1` | Number of operations to undo |
+| Flag | Presence | Description |
+|------|----------|-------------|
+| `--bypass-session` | optional; omitted means only this session's operations are undone | Undo across all sessions by ignoring the session ID ownership check |
+| `--count` | optional; omitted means one | Number of operations to undo |
 
 ### Examples
 
@@ -153,19 +153,21 @@ Use `safegit push` instead of `git push` to benefit from pre-pre-push hooks (cus
 
 ### Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--pre-push-hook` / `--no-pre-push-hook` | `true` | Run pre-pre-push hook scripts before pushing |
-| `--force-with-lease` / `--no-force-with-lease` | `false` | Force push using `--force-with-lease` to prevent overwriting others' work |
+| Flag | Presence | Description |
+|------|----------|-------------|
+| `--pre-push-hook` / `--no-pre-push-hook` | optional; omitted means the hooks run | Run pre-pre-push hook scripts before pushing |
+| `--force-with-lease` / `--no-force-with-lease` | optional; omitted means an ordinary push | Force push using `--force-with-lease` to prevent overwriting others' work |
 
-### Mutex Group (pick at most one)
+### Required Choice: `--refs`
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--only-head` | `false` | Push only the current HEAD branch |
-| `--only-branches` | `false` | Push all local branches |
-| `--only-tags` | `false` | Push all local tags without pushing branches |
-| `--both-branches-and-tags` | `false` | Push all local branches and all tags |
+Exactly one value, and there is no default: a push that does not say which refs it publishes is refused.
+
+| Value | Description |
+|-------|-------------|
+| `head` | Push only the current HEAD branch |
+| `branches` | Push all local branches |
+| `tags` | Push all local tags without pushing branches |
+| `both` | Push all local branches and all tags |
 
 ### Arguments
 
@@ -176,23 +178,23 @@ Use `safegit push` instead of `git push` to benefit from pre-pre-push hooks (cus
 ### Examples
 
 ```bash
-# Push current branch to origin (default)
-safegit push
+# Push current branch to origin
+safegit push --refs head
 
 # Push to a specific remote
-safegit push upstream
+safegit push --refs head upstream
 
 # Push all tags
-safegit push --only-tags
+safegit push --refs tags
 
 # Force push with lease (safe force push)
-safegit push --force-with-lease
+safegit push --refs head --force-with-lease
 
 # Push without running pre-pre-push hooks
-safegit push --no-pre-push-hook
+safegit push --refs head --no-pre-push-hook
 
 # Push all branches and tags
-safegit push --both-branches-and-tags
+safegit push --refs both
 ```
 
 ### Safety Guarantees
@@ -268,10 +270,10 @@ Use it when work exists only on one machine and losing that machine would lose t
 
 ### Flags
 
-| Flag | Command | Default | Description |
-|------|---------|---------|-------------|
-| `--overwrite-remote-backup` | `backup backup` | `false` | Replace a slot whose commits are missing from the local history |
-| `--allow-public-remote` | `backup backup` | `false` | Consent to backing up to a remote that is public, or whose visibility safegit cannot determine |
+| Flag | Command | Presence | Description |
+|------|---------|----------|-------------|
+| `--overwrite-remote-backup` | `backup backup` | optional; omitted means such a slot is a hard error | Replace a slot whose commits are missing from the local history |
+| `--allow-public-remote` | `backup backup` | optional; omitted means such a target is a question | Consent to backing up to a remote that is public, or whose visibility safegit cannot determine |
 
 ### Examples
 
@@ -348,13 +350,13 @@ Use `safegit scan` to find secrets, credentials, or any pattern across blobs, co
 
 ### Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--pattern` | (required) | Regular expression pattern to search for |
-| `--scope` | `nil` | Glob pattern limiting which blob paths are included (e.g., `*.env`, `config/**`) |
-| `--from` | `nil` | First commit hash to include (mutually exclusive with `--entire-history`) |
-| `--entire-history` | `false` | Scan all commits from root to HEAD (mutually exclusive with `--from`) |
-| `--target` | `nil` | Comma-separated list of match types: `blobs`, `commits`, `tags`, `trailers`, `files` (default: all) |
+| Flag | Presence | Description |
+|------|----------|-------------|
+| `--pattern` | required | Regular expression pattern to search for |
+| `--scope` | optional | Glob pattern limiting which blob paths are included (e.g., `*.env`, `config/**`) |
+| `--from` | optional | First commit hash to include (mutually exclusive with `--entire-history`) |
+| `--entire-history` | default `false` | Scan all commits from root to HEAD (mutually exclusive with `--from`) |
+| `--target` | optional; omitted means all match types | Comma-separated list of match types: `blobs`, `commits`, `tags`, `trailers`, `files` |
 
 ### Examples
 
@@ -392,11 +394,11 @@ Use `safegit scrub file` when you need to remove a leaked secret file (like `.en
 
 ### Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--from` | (required) | First commit hash to include when rewriting history |
-| `--reason` | (required) | Mandatory audit trail message explaining why this scrub is needed |
-| `--remap-shas-in` | | Glob selecting files whose 40-character commit hashes are remapped during rewrite (repeatable) |
+| Flag | Presence | Description |
+|------|----------|-------------|
+| `--from` | required | First commit hash to include when rewriting history |
+| `--reason` | required | Mandatory audit trail message explaining why this scrub is needed |
+| `--remap-shas-in` | optional | Glob selecting files whose 40-character commit hashes are remapped during rewrite (repeatable) |
 
 ### Arguments
 
@@ -441,26 +443,28 @@ Use `safegit scrub match` when a secret or sensitive value appears across multip
 
 ### Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--pattern` | (required) | Regular expression pattern to search for |
-| `--reason` | (required) | Mandatory audit trail message |
-| `--scope` | `nil` | Glob pattern limiting which file paths are searched |
-| `--remap-shas-in` | | Glob for SHA remapping in affected files (repeatable) |
+| Flag | Presence | Description |
+|------|----------|-------------|
+| `--pattern` | required | Regular expression pattern to search for |
+| `--reason` | required | Mandatory audit trail message |
+| `--scope` | optional | Glob pattern limiting which file paths are searched |
+| `--remap-shas-in` | optional | Glob for SHA remapping in affected files (repeatable) |
 
-### Mutex Group: Replacement Mode (pick one)
+### `substitution` — required, exactly one
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--replace` | `nil` | Literal string to substitute for each regex match |
-| `--mangle` | `false` | Replace matches with random printable ASCII of the same length |
+Each alternative is its own flag; supplying neither, or both, is refused by the parser.
 
-### Mutex Group: Range (pick one)
+| Flag | Description |
+|------|-------------|
+| `--replace <str>` | Literal string to substitute for each regex match |
+| `--mangle` | Replace matches with random printable ASCII of the same length |
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--from` | `nil` | First commit hash to include (rewrite from this point to HEAD) |
-| `--entire-history` | `false` | Rewrite all commits from root to HEAD |
+### `range` — required, exactly one
+
+| Flag | Description |
+|------|-------------|
+| `--from <sha>` | First commit hash to include (rewrite from this point to HEAD) |
+| `--entire-history` | Rewrite all commits from root to HEAD |
 
 ### Examples
 
@@ -506,19 +510,19 @@ Use `safegit scrub run` when multiple patterns need to be scrubbed simultaneousl
 
 ### Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--reason` | (required) | Mandatory audit trail message |
-| `--diff` | `false` | Preview changes as unified diffs without modifying objects (mutually exclusive with `--dry-run`) |
-| `--limit` | `50` | Maximum number of blob diffs to show in `--diff` mode |
-| `--remap-shas-in` | | Glob for SHA remapping (repeatable) |
+| Flag | Presence | Description |
+|------|----------|-------------|
+| `--reason` | required | Mandatory audit trail message |
+| `--diff` | optional; omitted means the rewrite is performed | Preview changes as unified diffs without modifying objects (mutually exclusive with `--dry-run`) |
+| `--limit` | optional; omitted means 50 | Maximum number of blob diffs to show in `--diff` mode |
+| `--remap-shas-in` | optional | Glob for SHA remapping (repeatable) |
 
-### Mutex Group: Range (pick one)
+### `range` — required, exactly one
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--from` | `nil` | First commit hash to include |
-| `--entire-history` | `false` | Rewrite all commits from root to HEAD |
+| Flag | Description |
+|------|-------------|
+| `--from <sha>` | First commit hash to include |
+| `--entire-history` | Rewrite all commits from root to HEAD |
 
 ### Arguments
 
@@ -612,13 +616,15 @@ Run diagnostic health checks on the repository and optionally repair issues such
 
 Use `safegit doctor` to diagnose and optionally repair repository health problems including stale lock files left by crashed processes, orphan temporary index directories, configuration file corruption, hook permission errors, and raw git commit bypass detection via oplog comparison.
 
-### Flags (Mutex Group -- pick at most one)
+### Required Choice: `--action`
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--diagnose` | `false` | Run all health checks and report results without fixing |
-| `--fix` | `false` | Run all health checks and automatically repair issues found |
-| `--uninstall` | `false` | Remove all safegit hooks and metadata from this repository |
+Exactly one value, and there is no default: a doctor invocation that does not say what it does with its findings is refused.
+
+| Value | Description |
+|-------|-------------|
+| `diagnose` | Run all health checks and report results without fixing |
+| `fix` | Run all health checks and automatically repair issues found |
+| `uninstall` | Remove all safegit hooks and metadata from this repository |
 
 ### Health Checks
 
@@ -634,19 +640,19 @@ Use `safegit doctor` to diagnose and optionally repair repository health problem
 
 ```bash
 # Run diagnostics only
-safegit doctor --diagnose
+safegit doctor --action diagnose
 
 # Run diagnostics and fix issues
-safegit doctor --fix
+safegit doctor --action fix
 
 # Dry-run fix (see what would be cleaned without doing it)
-safegit --dry-run doctor --fix
+safegit --dry-run doctor --action fix
 
 # Uninstall safegit from this repo
-safegit doctor --uninstall
+safegit doctor --action uninstall
 ```
 
-### What `--fix` Repairs
+### What `--action fix` Repairs
 
 - Removes orphan temporary index directories
 - Removes the legacy queue directory (from safegit v0.1)
@@ -718,10 +724,10 @@ Use `safegit author check` to find commits that deviate from the expected identi
 
 ### Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--name` | `nil` | Expected author/committer display name |
-| `--email` | `nil` | Expected author/committer email address |
+| Flag | Presence | Description |
+|------|----------|-------------|
+| `--name` | optional | Expected author/committer display name |
+| `--email` | optional | Expected author/committer email address |
 
 At least one of `--name` or `--email` is required.
 
@@ -751,14 +757,24 @@ Use `safegit author rewrite` to correct identity mistakes such as wrong names, o
 
 ### Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--old-name` | `nil` | Current name to search for and replace |
-| `--new-name` | `nil` | New name to substitute (required if `--old-name` is set) |
-| `--old-email` | `nil` | Current email to search for and replace |
-| `--new-email` | `nil` | New email to substitute (required if `--old-email` is set) |
+| Flag | Presence | Description |
+|------|----------|-------------|
+| `--old-name` | optional | Current name to search for and replace |
+| `--new-name` | optional | New name to substitute |
+| `--old-email` | optional | Current email to search for and replace |
+| `--new-email` | optional | New email to substitute |
 
-At least one pair (`--old-name`/`--new-name` or `--old-email`/`--new-email`) is required. Both pairs can be specified simultaneously.
+### Constraints
+
+The two pairs and the requirement that at least one of them be supplied are declared, and the parser enforces them before the command runs:
+
+```
+author-name      all or none of --old-name, --new-name
+author-email     all or none of --old-email, --new-email
+author-change    at least one of (--old-name with --new-name), (--old-email with --new-email)
+```
+
+Both pairs can be specified simultaneously. A command line naming half a pair is refused by `author-name` or `author-email`; one naming neither pair is refused by `author-change`. Both refusals exit **1** (the framework's parse-error code). Before 0.28.0 the missing-pair case was a hand-written check in the handler that exited 2.
 
 ### Examples
 
