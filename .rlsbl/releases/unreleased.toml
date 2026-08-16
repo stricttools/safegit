@@ -2,11 +2,29 @@
 format_version = 1
 # Version bump type: patch, minor, major, infra, or prerelease
 #   prerelease: advance an existing pre-release (0.6.0-beta.0 -> -beta.1)
-bump = ""
+bump = "minor"
 # Short description of this release (required)
-description = ""
+description = "Migrate onto go-strictcli v0.33.0: presence declared on every flag and argument, push and doctor take a required choice, scrub match and scrub run take member-spelled selectors, and author rewrite declares its constraints."
 # Optional context explaining why these changes were made
-context = ""
+context = """
+The declaration-regime campaign's Phase F for safegit. strictcli v0.33.0 refuses a
+declaration whose presence is unstated, and refuses a value default on any flag or
+positional arg of a mutating command -- on a mutating command a value the framework
+picked is a value the framework writes. Together with the deletion of MutexGroup and
+CoRequired, that turns four hand-rolled selections and one hand-written guard into
+declarations the parser enforces and --help renders.
+
+Two CLI spellings change and one does not, and the split is deliberate. push's four
+mode bools and doctor's three collapse into one required choices flag each, because a
+bool member could be negated into a state that elected nothing -- which is exactly how
+--no-only-tags used to push HEAD. scrub match's --replace/--mangle and scrub
+match/run's --from/--entire-history become member-spelled selectors, which keeps every
+flag an operator types unchanged and reproduces the old refusal sentences byte for
+byte; the tools that drive those commands need no change.
+
+Exit codes move at every converted site: a hand guard returned safegit's own usage
+code (2, or 70 for the unreachable-state refusals) and a framework parse error exits 1.
+"""
 # Pre-release channel: alpha, beta, rc, or stable (ordered;
 # demotion is an error). With patch/minor/major it ENTERS the
 # channel (0.5.2 + minor + alpha -> 0.6.0-alpha.0); with
