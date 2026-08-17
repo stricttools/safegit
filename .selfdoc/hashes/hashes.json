@@ -5,15 +5,15 @@
     "description": "4302e1fbd9dc3df27ac8753aee78d1c4300524fde901016abd3bf864fc8387c0"
   },
   "en/cli-author.md": {
-    "content": "29cf6bd74490edb311436ea9a43fe4fdf07c0d985b6b2d5b1d139774a304fd70",
+    "content": "6fe66e1ff22018c1de6df3cf0c1a074eb5b660bee8fe18c4f478dcd1ecc0b38f",
     "description": "3344bf6f68c4fc222dc8ceedca63e737f8a9ed867e4fca58d5a257e793ed73b9",
-    "schema_hash": "8c8c94c2693b731cd40f6ba2144b8f61714a28d567f4e181ecf615af1b9896c1",
+    "schema_hash": "f31f4c85097f439136001912df77f88558b8e13d68295a84eec97107b03a1577",
     "seed_hash": "3344bf6f68c4fc222dc8ceedca63e737f8a9ed867e4fca58d5a257e793ed73b9"
   },
   "en/cli-backup.md": {
-    "content": "c4bdb81d72895a30a09beb50a0c0d4656de17ed8ef1dba0ebc9dd7b7c699240c",
+    "content": "972eb5db2d624887db09294bc2a2ec57c9126ef21ed6bbf45f354a332660eb70",
     "description": "84787bea55b61c31f742f18feee81bb8c2e38ba9fd74055df6c976cc93a1670d",
-    "schema_hash": "726d0bf349050c3b27aeadbf71159a628419d193fa5b90f8c684081628c00a83",
+    "schema_hash": "a25d909eeff9f486162ff4e8046c0f12514cbf7299ad375ebd4ccc07f1703038",
     "seed_hash": "84787bea55b61c31f742f18feee81bb8c2e38ba9fd74055df6c976cc93a1670d"
   },
   "en/cli-bisect.md": {
@@ -86,9 +86,9 @@
     "schema_hash": "5f7771f589391a150dad22a48e646e09a931c559e443625ef978af8d3ea3bea1"
   },
   "en/cli-scan.md": {
-    "content": "0e6fa14c9c605d6b554efecb3dd07f1f6a2f6c2b9ca116d23074ec2e0d64b59a",
+    "content": "134011f2c613319a62547b9b4778362a1a61322b57e662f437fb7cc83d012675",
     "description": "eb16f7ad4853491fa2af195d14f5513d85762cc142a605a4407daa559ed30a81",
-    "schema_hash": "2fbaa933393636f6edb8ff9be92a031c8c3e5236b456ca909de8e28564b1be78",
+    "schema_hash": "f2ef90d36277255902cbfa9d3fd992091d96dd7f65b6da3603c7c124fa8d28cb",
     "seed_hash": "eb16f7ad4853491fa2af195d14f5513d85762cc142a605a4407daa559ed30a81"
   },
   "en/cli-scrub.md": {
