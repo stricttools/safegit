@@ -386,6 +386,71 @@ func TestReadRejectsAMalformedStateFile(t *testing.T) {
 	}
 }
 
+// A state file that exists but names no commit is refused, and refused the same
+// way whichever way it is empty. git writes these files with their object names
+// or does not write them at all, so a zero-byte file and a file holding only a
+// newline are both content git could not have produced -- a crash truncated it,
+// or something else wrote it. Reading either as "no operation in progress" would
+// hand a caller the answer that lets it commit over an operation git still
+// considers in flight.
+func TestReadRejectsAStateFileThatNamesNoCommit(t *testing.T) {
+	for _, file := range []string{
+		sequencer.FileMergeHead,
+		sequencer.FileCherryPickHead,
+		sequencer.FileRevertHead,
+	} {
+		for spelling, content := range map[string]string{
+			"zero bytes":      "",
+			"a bare newline":  "\n",
+			"only whitespace": "  \n\t\n",
+		} {
+			t.Run(file+", "+spelling, func(t *testing.T) {
+				dir := newRepo(t)
+				path := filepath.Join(gitDir(dir), file)
+				testutil.WriteFileAt(t, path, content)
+
+				_, err := sequencer.Read(gitDir(dir))
+				if err == nil {
+					t.Fatalf("Read accepted a %s holding %q", file, content)
+				}
+				if !strings.Contains(err.Error(), path) {
+					t.Fatalf("error = %v, want it to name the file %s", err, path)
+				}
+				if !strings.Contains(err.Error(), "holds no object name") {
+					t.Fatalf("error = %v, want it to state the file's condition", err)
+				}
+			})
+		}
+	}
+}
+
+// The single-commit state files hold exactly one object name. Several is
+// content git could not have written there, and a reader that took the first
+// would apply the wrong commit's identity to a conclusion.
+func TestReadRejectsASingleCommitStateFileHoldingSeveral(t *testing.T) {
+	const a = "0123456789abcdef0123456789abcdef01234567"
+	const b = "89abcdef0123456789abcdef0123456789abcdef"
+
+	for _, file := range []string{sequencer.FileCherryPickHead, sequencer.FileRevertHead} {
+		t.Run(file, func(t *testing.T) {
+			dir := newRepo(t)
+			path := filepath.Join(gitDir(dir), file)
+			testutil.WriteFileAt(t, path, a+"\n"+b+"\n")
+
+			_, err := sequencer.Read(gitDir(dir))
+			if err == nil {
+				t.Fatalf("Read accepted a %s holding two object names", file)
+			}
+			if !strings.Contains(err.Error(), path) {
+				t.Fatalf("error = %v, want it to name the file %s", err, path)
+			}
+			if !strings.Contains(err.Error(), "holds 2 object names") {
+				t.Fatalf("error = %v, want it to state how many it found", err)
+			}
+		})
+	}
+}
+
 func TestReadRejectsAnUnrecognizedSequencerCommand(t *testing.T) {
 	dir := newRepo(t)
 	testutil.WriteFileAt(t, filepath.Join(gitDir(dir), sequencer.DirSequencer, "todo"), "wobble deadbeef\n")
