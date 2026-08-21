@@ -16,22 +16,41 @@ import (
 )
 
 // runGitMutation runs a tree- or ref-mutating git command through the effects
-// handle, streaming git's own output straight to the terminal. Routing it here
-// is what makes --dry-run honest for these commands: the invocation is recorded
-// in the would-do log and git is never started.
+// handle, streaming git's own output straight to the terminal, and returns
+// git's own exit code. Routing it here is what makes --dry-run honest for these
+// commands: the invocation is recorded in the would-do log and git is never
+// started.
 // The argv is built by internal/gitexec, safegit's single git-execution
 // boundary, so it carries the same --no-optional-locks prefix every other git
 // invocation does and its subcommand is checked against the one classification
 // table. The invocation is exempt from the repository-root pin: these are the
 // operator's own arguments, and git must read any pathspec in them in the
 // directory the operator typed it in.
-func runGitMutation(flags globalFlags, args ...string) error {
+//
+// Check(false) is what makes the propagation possible: the framework's checked
+// form turns a nonzero child into an error string and hands back an unsettled
+// Completed, so git's own code is unreachable there. Unchecked, the code rides
+// the Completed and safegit passes it on unchanged. A nonzero return is
+// therefore git's verdict, not safegit's; exitcode.General is reserved for the
+// two failures that happen before git runs (argv construction, effects-handle
+// refusal), and those print their reason because no child ever spoke.
+func runGitMutation(flags globalFlags, args ...string) int {
 	argv, err := gitexec.ArgvAny(gitexec.ExemptGitMutation, args...)
 	if err != nil {
-		return err
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return exitcode.General
 	}
-	_, err = flags.effects().Run(argv, strictcli.Stream(true))
-	return err
+	done, err := flags.effects().Run(argv, strictcli.Stream(true), strictcli.Check(false))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return exitcode.General
+	}
+	if flags.dryRun {
+		// The invocation was recorded instead of performed: no child process
+		// ran, so the Completed is unsettled and carries no exit code.
+		return 0
+	}
+	return done.ExitCode()
 }
 
 // coordGuard runs coord.Check and prints a refusal if dirty.
@@ -48,16 +67,6 @@ func coordGuard(flags globalFlags, sgDir, operation string) int {
 		return exitcode.CoordinationBusy
 	}
 	return 0
-}
-
-// syncMainIndex runs git read-tree HEAD to keep the main index in sync after tree mutations.
-func syncMainIndex(flags globalFlags, op string) {
-	ctx := flags.ctx()
-	if err := git.SyncMainIndex(ctx, "HEAD"); err != nil {
-		if !flags.silent() {
-			fmt.Fprintf(os.Stderr, "warning: failed to sync main index after %s: %v\n", op, err)
-		}
-	}
 }
 
 func runCheckout(flags globalFlags, args []string) int {
@@ -85,14 +94,12 @@ func runCheckout(flags globalFlags, args []string) int {
 	ctx := flags.ctx()
 	oldHead, _ := git.RevParse(ctx, "HEAD")
 
-	if err := runGitMutation(flags, append([]string{"checkout"}, args...)...); err != nil {
-		return exitcode.General
+	if code := runGitMutation(flags, append([]string{"checkout"}, args...)...); code != 0 {
+		return code
 	}
 	if flags.dryRun {
 		return 0
 	}
-
-	syncMainIndex(flags, "checkout")
 
 	newHead, _ := git.RevParse(ctx, "HEAD")
 	_ = oplog.Append(sgDir, oplog.Entry{
@@ -132,8 +139,8 @@ func runPull(flags globalFlags, mode pullMode, remote string, branch string) int
 	if branch != "" {
 		fetchArgs = append(fetchArgs, branch)
 	}
-	if err := runGitMutation(flags, fetchArgs...); err != nil {
-		return exitcode.General
+	if code := runGitMutation(flags, fetchArgs...); code != 0 {
+		return code
 	}
 
 	// Step 2: merge
@@ -148,14 +155,12 @@ func runPull(flags globalFlags, mode pullMode, remote string, branch string) int
 	}
 	mergeTarget := "FETCH_HEAD"
 	mergeArgs = append(mergeArgs, mergeTarget)
-	if err := runGitMutation(flags, mergeArgs...); err != nil {
-		return exitcode.General
+	if code := runGitMutation(flags, mergeArgs...); code != 0 {
+		return code
 	}
 	if flags.dryRun {
 		return 0
 	}
-
-	syncMainIndex(flags, "pull")
 
 	_ = oplog.Append(sgDir, oplog.Entry{
 		Op: "pull",
@@ -189,14 +194,12 @@ func runMerge(flags globalFlags, args []string) int {
 	}
 
 	ctx := flags.ctx()
-	if err := runGitMutation(flags, append([]string{"merge"}, args...)...); err != nil {
-		return exitcode.General
+	if code := runGitMutation(flags, append([]string{"merge"}, args...)...); code != 0 {
+		return code
 	}
 	if flags.dryRun {
 		return 0
 	}
-
-	syncMainIndex(flags, "merge")
 
 	resultSHA, _ := git.RevParse(ctx, "HEAD")
 	_ = oplog.Append(sgDir, oplog.Entry{
@@ -230,14 +233,12 @@ func runRebase(flags globalFlags, args []string) int {
 		return exitcode.Usage
 	}
 
-	if err := runGitMutation(flags, append([]string{"rebase"}, args...)...); err != nil {
-		return exitcode.General
+	if code := runGitMutation(flags, append([]string{"rebase"}, args...)...); code != 0 {
+		return code
 	}
 	if flags.dryRun {
 		return 0
 	}
-
-	syncMainIndex(flags, "rebase")
 
 	_ = oplog.Append(sgDir, oplog.Entry{
 		Op: "rebase",
@@ -275,15 +276,11 @@ func runReset(flags globalFlags, args []string) int {
 		}
 	}
 
-	if err := runGitMutation(flags, append([]string{"reset"}, args...)...); err != nil {
-		return exitcode.General
+	if code := runGitMutation(flags, append([]string{"reset"}, args...)...); code != 0 {
+		return code
 	}
 	if flags.dryRun {
 		return 0
-	}
-
-	if isHard {
-		syncMainIndex(flags, "reset")
 	}
 
 	_ = oplog.Append(sgDir, oplog.Entry{
@@ -322,14 +319,12 @@ func runBisect(flags globalFlags, args []string) int {
 		}
 	}
 
-	if err := runGitMutation(flags, append([]string{"bisect"}, args...)...); err != nil {
-		return exitcode.General
+	if code := runGitMutation(flags, append([]string{"bisect"}, args...)...); code != 0 {
+		return code
 	}
 	if flags.dryRun {
 		return 0
 	}
-
-	syncMainIndex(flags, "bisect")
 
 	_ = oplog.Append(sgDir, oplog.Entry{
 		Op: "bisect",
@@ -368,15 +363,15 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 	}
 
 	if flags.dryRun {
-		if err := runGitMutation(flags, append([]string{gitCmd}, args...)...); err != nil {
-			return exitcode.General
+		// No git ran: the invocation was recorded, so there is no foreign exit
+		// code to propagate and only a framework failure can be nonzero.
+		if code := runGitMutation(flags, append([]string{gitCmd}, args...)...); code != 0 {
+			return code
 		}
 		return 0
 	}
 
 	code := runPassthrough(flags, gitCmd, args)
-
-	syncMainIndex(flags, gitCmd)
 
 	_ = oplog.Append(sgDir, oplog.Entry{
 		Op: gitCmd,
