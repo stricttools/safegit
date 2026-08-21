@@ -295,7 +295,7 @@ func executeScrubRecipe(
 	}
 
 	// Verification closure: re-scan for each operation's pattern.
-	exitCode := 0
+	exitCode := exitcode.OK
 	parentVerifyFunc := func(ctx context.Context) error {
 		infof(flags, "Verifying secret removal...\n")
 		for i, op := range recipe.Operations {
@@ -303,7 +303,7 @@ func executeScrubRecipe(
 			verifyErr := verifySecretRemovedScoped(ctx, pat, opScope(&op))
 			if verifyErr != nil {
 				fmt.Fprintf(os.Stderr, "CRITICAL (operation %d, pattern %q): %v\n", i, op.Pattern, verifyErr)
-				exitCode = 1
+				exitCode = exitcode.General
 			}
 		}
 		if exitCode == 0 {
