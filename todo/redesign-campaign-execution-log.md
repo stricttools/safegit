@@ -86,6 +86,18 @@ existing entries are never rewritten.
   `internal/index` tmp-dir garbage collection (the audit proved its
   PID-reuse exposure can only retain an orphan directory, never delete a
   live process's directory).
+- **0.8 atomic lock publication (second steal path).** The reclamation
+  contention test exposed a second pre-existing way a LIVE holder's lock
+  could be destroyed: `tryCreate` created the lock file with O_CREAT|O_EXCL
+  and wrote its content afterwards, so the file was observably zero-length
+  for an instant, and the staleness rule "corrupt or zero-length means
+  stale" condemned a freshly-created live lock. The flock+inode reclamation
+  fix cannot catch it (same inode, just not yet written). Fixed by atomic
+  publication: content is written to a temporary sibling and published via
+  os.Link (atomic, EEXIST exactly like O_EXCL; pinned by tests, including
+  that doctor's `.lock`-suffix walk cannot mistake the temp name for a
+  lock). Same bug class as the reclamation TOCTOU; both are marked
+  extensions, reversible on request.
 - **0.7 `git.Version` helper** (single place that asks the git binary for
   its version, feeding the `internal/gitversion` floors and the doctor
   check) — not named by the plan; added to avoid duplicating the query at
@@ -149,6 +161,59 @@ existing entries are never rewritten.
 - **Phase 10.2:** audit against the plan PLUS this log; per-phase auditors,
   one per phase, each briefed with its phase text, the relevant Appendix A
   rows, and this log.
+
+## Open rulings (need the user's decision; as-built stands meanwhile)
+
+- **macOS in per-push CI.** `todo/.done/ci-macos-cost-reduction.md` records a
+  completed, deliberate decision to remove `macos-latest` from per-push CI
+  (it was ~92% of this repo's CI cost). The plan's 0.7 text reinstates the
+  full linux+macos matrix on every push — and with `-short` dropped, macOS
+  now runs the full integration suite per push. The implementor followed
+  the plan; the plan silently reverses the earlier decision. As built the
+  plan's form stands. Nothing is pushed until the release, so no cost is
+  incurred yet — but this MUST be resolved before Phase 11. Options: keep
+  the matrix (plan), restore ubuntu-only pushes (prior decision), or a
+  middle form (macOS on release branches / manual dispatch only).
+
+## Queued Phase 0 closeout items (from the 0.6/0.7 audit)
+
+- `internal/repo` SetConfigValue parses the value as an int BEFORE the
+  unknown-key check, so `config set log.maxSizeMB abc` reports an integer
+  error instead of "unknown config key". Reorder: key validation first.
+- `doctor.go` checkBypassDetect still returns a silent findingNone when
+  `git.RevParse` fails on the ref the oplog names — the same
+  silently-disabled-check shape 0.6 removed one branch earlier. Make it a
+  reported failing finding. (The HeadRef early-out is a genuine
+  precondition-absent case and stays findingNone.)
+- `oplog.LastRefUpdateForSession` appears to have no production caller
+  (tests only). Investigate: if session-scoped undo reads entries some
+  other way, either wire the helper in or delete it per the fleet dead-API
+  rule — decide from what undo actually needs, not from the helper's
+  existence.
+- `writeFileAtomic` does not fsync the file before rename (crash can leave
+  a zero-length config.json on some filesystems). One-line durability fix,
+  low priority.
+- Informational, no action: the CI consolidation incidentally CLOSED a
+  publish-workflow hole — previously two push-triggered workflows had
+  same-named jobs and the CI-check aggregation's group-by-name kept only
+  the newest of a pair, so one could be silently ignored; the three job
+  names are now distinct and all must be green.
+
+## Phase 9 checklist additions (false claims found OUTSIDE Appendix A rows)
+
+Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
+
+- `docs/architecture.md:78` — "Lines longer than 4096 bytes are rejected"
+  (false since 0.6; row 19 names only concurrency-guide.md:119).
+- `docs/integration-guide.md:190` — prose "and oplog rotation" (rotation
+  is deleted; row 24 names only the table rows).
+- `docs/commands-guide.md:1112` — prose "oplog rotation size limits".
+- `docs/commands-guide.md:660` — "Rotates the oplog if it exceeds the
+  configured max size" (doctor no longer rotates anything).
+- Also stale but harmless: `.rlsbl/config.json` `hooks.pre_release` still
+  passes `-short` with the pre-0.7 rationale; `-short` now only skips the
+  internal/hooks timeout test. Reassess the flag when Phase 9/10 touches
+  the release path.
 
 ## Known flakes and environment facts
 
