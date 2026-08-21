@@ -358,6 +358,17 @@ func TestCoordSubdirScrubFromSubdirPreservesHistoryPaths(t *testing.T) {
 		}
 	}
 
+	// The path set of every commit, oldest first, BEFORE the rewrite. A scrub
+	// only changes blob CONTENT, so the rewritten history must present exactly
+	// the same paths at exactly the same positions. Each commit is compared
+	// against its own before-state rather than against HEAD's path set: the
+	// fixture grows over three commits, so demanding every commit hold every
+	// path would demand paths that were not yet added.
+	beforeTrees := make([][]string, 0, 3)
+	for _, sha := range revListReverse(t, dir) {
+		beforeTrees = append(beforeTrees, testutil.TreePaths(t, dir, sha))
+	}
+
 	stdout, stderr, code := runSafegitEnv(t, sub, scrubEnv,
 		"--approve-consequential", "scrub", "match",
 		"--pattern", "production_key",
@@ -370,11 +381,20 @@ func TestCoordSubdirScrubFromSubdirPreservesHistoryPaths(t *testing.T) {
 	}
 
 	// Every commit in the rewritten history must keep its paths.
-	for _, sha := range revListReverse(t, dir) {
+	afterSHAs := revListReverse(t, dir)
+	if len(afterSHAs) != len(beforeTrees) {
+		t.Fatalf("history length changed: %d commits before the scrub, %d after", len(beforeTrees), len(afterSHAs))
+	}
+	for i, sha := range afterSHAs {
 		paths := testutil.TreePaths(t, dir, sha)
-		for _, want := range []string{".gitignore", "config.env", "sub/secret.txt"} {
+		for _, want := range beforeTrees[i] {
 			if !testutil.Contains(paths, want) {
-				t.Errorf("commit %s: %s vanished from the tree after a scrub issued from a subdirectory; tree now: %v", sha[:8], want, paths)
+				t.Errorf("commit %d (%s): %s vanished from the tree after a scrub issued from a subdirectory; tree now: %v, was: %v", i, sha[:8], want, paths, beforeTrees[i])
+			}
+		}
+		for _, got := range paths {
+			if !testutil.Contains(beforeTrees[i], got) {
+				t.Errorf("commit %d (%s): %s appeared in the tree after a scrub issued from a subdirectory; tree now: %v, was: %v", i, sha[:8], got, paths, beforeTrees[i])
 			}
 		}
 	}
