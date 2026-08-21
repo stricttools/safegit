@@ -120,8 +120,10 @@ Configuration is stored in `.git/safegit/config.json`. Remove the entire
   checks and hostname comparison. On network filesystems (NFS, CIFS), `safegit
   doctor` warns about reduced lock atomicity guarantees. Cross-machine lock
   reclaim is refused when the hostname doesn't match.
-- **PID reuse.** On Linux, safegit compares process start time against lock
-  creation time via `/proc` to detect PID reuse. On other platforms, a reused
+- **PID reuse.** On Linux, safegit records the holder's process start time from
+  `/proc` in the lock file and compares it against the current start time of
+  whatever holds that PID, so a recycled PID is detected and a live holder is
+  never mistaken for one. On other platforms, a reused
   PID keeps an orphan lock looking alive, and `safegit unlock <ref>` refuses to
   clear a lock whose holder is alive, so such a lock has to be removed by hand
   from `.git/safegit/locks/`. Where the holder really is gone, `safegit unlock

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "name": "safegit",
   "slug": "safegit",
-  "version": "0.27.0",
+  "version": "0.28.0",
   "description": "",
   "language": "go",
   "base_url": "https://safegit.smmh.dev",
@@ -1690,8 +1690,18 @@
         },
         {
           "level": 3,
+          "text": "`ZeroSHA`",
+          "anchor": "zerosha"
+        },
+        {
+          "level": 3,
           "text": "`ErrDetachedHead`",
           "anchor": "errdetachedhead"
+        },
+        {
+          "level": 3,
+          "text": "`ErrNoExpectedValue`",
+          "anchor": "errnoexpectedvalue"
         },
         {
           "level": 3,
@@ -1725,6 +1735,11 @@
         },
         {
           "level": 3,
+          "text": "`WithRoot`",
+          "anchor": "withroot"
+        },
+        {
+          "level": 3,
           "text": "`Run`",
           "anchor": "run"
         },
@@ -1737,6 +1752,16 @@
           "level": 3,
           "text": "`RunWithEnvStdin`",
           "anchor": "runwithenvstdin"
+        },
+        {
+          "level": 3,
+          "text": "`AnchorRoot`",
+          "anchor": "anchorroot"
+        },
+        {
+          "level": 3,
+          "text": "`Anchor`",
+          "anchor": "anchor"
         },
         {
           "level": 3,
@@ -1960,6 +1985,11 @@
         },
         {
           "level": 3,
+          "text": "`Path`",
+          "anchor": "path"
+        },
+        {
+          "level": 3,
           "text": "`Append`",
           "anchor": "append"
         },
@@ -1967,16 +1997,6 @@
           "level": 3,
           "text": "`Read`",
           "anchor": "read"
-        },
-        {
-          "level": 3,
-          "text": "`LogSize`",
-          "anchor": "logsize"
-        },
-        {
-          "level": 3,
-          "text": "`Rotate`",
-          "anchor": "rotate"
         },
         {
           "level": 3,
@@ -2092,11 +2112,6 @@
           "level": 3,
           "text": "`PushConfig`",
           "anchor": "pushconfig"
-        },
-        {
-          "level": 3,
-          "text": "`LogConfig`",
-          "anchor": "logconfig"
         },
         {
           "level": 3,
@@ -2759,8 +2774,18 @@
         },
         {
           "level": 3,
+          "text": "`ZeroSHA`",
+          "anchor": "zerosha"
+        },
+        {
+          "level": 3,
           "text": "`ErrDetachedHead`",
           "anchor": "errdetachedhead"
+        },
+        {
+          "level": 3,
+          "text": "`ErrNoExpectedValue`",
+          "anchor": "errnoexpectedvalue"
         },
         {
           "level": 3,
@@ -2794,6 +2819,11 @@
         },
         {
           "level": 3,
+          "text": "`WithRoot`",
+          "anchor": "withroot"
+        },
+        {
+          "level": 3,
           "text": "`Run`",
           "anchor": "run"
         },
@@ -2806,6 +2836,16 @@
           "level": 3,
           "text": "`RunWithEnvStdin`",
           "anchor": "runwithenvstdin"
+        },
+        {
+          "level": 3,
+          "text": "`AnchorRoot`",
+          "anchor": "anchorroot"
+        },
+        {
+          "level": 3,
+          "text": "`Anchor`",
+          "anchor": "anchor"
         },
         {
           "level": 3,
@@ -3015,6 +3055,345 @@
       ]
     },
     {
+      "path": "internal-gitexec.md",
+      "title": "internal/gitexec",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/gitexec",
+          "anchor": "internalgitexec"
+        },
+        {
+          "level": 2,
+          "text": "`internal/gitexec`",
+          "anchor": "internalgitexec"
+        },
+        {
+          "level": 3,
+          "text": "`MutatesObjects`",
+          "anchor": "mutatesobjects"
+        },
+        {
+          "level": 3,
+          "text": "`MutatesRefs`",
+          "anchor": "mutatesrefs"
+        },
+        {
+          "level": 3,
+          "text": "`MutatesIndex`",
+          "anchor": "mutatesindex"
+        },
+        {
+          "level": 3,
+          "text": "`MutatesWorktree`",
+          "anchor": "mutatesworktree"
+        },
+        {
+          "level": 3,
+          "text": "`MutatesConfig`",
+          "anchor": "mutatesconfig"
+        },
+        {
+          "level": 3,
+          "text": "`Network`",
+          "anchor": "network"
+        },
+        {
+          "level": 3,
+          "text": "`ObserveOnly`",
+          "anchor": "observeonly"
+        },
+        {
+          "level": 3,
+          "text": "`KindExplicitDir`",
+          "anchor": "kindexplicitdir"
+        },
+        {
+          "level": 3,
+          "text": "`KindOperatorCwd`",
+          "anchor": "kindoperatorcwd"
+        },
+        {
+          "level": 3,
+          "text": "`KindEffectsHandle`",
+          "anchor": "kindeffectshandle"
+        },
+        {
+          "level": 3,
+          "text": "`ExemptRunWithGitDir`",
+          "anchor": "exemptrunwithgitdir"
+        },
+        {
+          "level": 3,
+          "text": "`ExemptCatFileBatchAllWithDir`",
+          "anchor": "exemptcatfilebatchallwithdir"
+        },
+        {
+          "level": 3,
+          "text": "`ExemptCatFileBatchSHAsWithDir`",
+          "anchor": "exemptcatfilebatchshaswithdir"
+        },
+        {
+          "level": 3,
+          "text": "`ExemptSubmoduleRunGit`",
+          "anchor": "exemptsubmodulerungit"
+        },
+        {
+          "level": 3,
+          "text": "`ExemptAutoBumpParentPointer`",
+          "anchor": "exemptautobumpparentpointer"
+        },
+        {
+          "level": 3,
+          "text": "`ExemptGuardedPassthrough`",
+          "anchor": "exemptguardedpassthrough"
+        },
+        {
+          "level": 3,
+          "text": "`ExemptGitMutation`",
+          "anchor": "exemptgitmutation"
+        },
+        {
+          "level": 3,
+          "text": "`ExemptGitPush`",
+          "anchor": "exemptgitpush"
+        },
+        {
+          "level": 3,
+          "text": "`ExemptCommitRefUpdateRecord`",
+          "anchor": "exemptcommitrefupdaterecord"
+        },
+        {
+          "level": 3,
+          "text": "`ExemptHistoryRewriteRecord`",
+          "anchor": "exempthistoryrewriterecord"
+        },
+        {
+          "level": 3,
+          "text": "`Binary`",
+          "anchor": "binary"
+        },
+        {
+          "level": 3,
+          "text": "`Effect`",
+          "anchor": "effect"
+        },
+        {
+          "level": 3,
+          "text": "`ConditionalEffect`",
+          "anchor": "conditionaleffect"
+        },
+        {
+          "level": 3,
+          "text": "`Verb`",
+          "anchor": "verb"
+        },
+        {
+          "level": 3,
+          "text": "`ExemptionKind`",
+          "anchor": "exemptionkind"
+        },
+        {
+          "level": 3,
+          "text": "`ExemptionID`",
+          "anchor": "exemptionid"
+        },
+        {
+          "level": 3,
+          "text": "`DirPinExemption`",
+          "anchor": "dirpinexemption"
+        },
+        {
+          "level": 3,
+          "text": "`Spec`",
+          "anchor": "spec"
+        },
+        {
+          "level": 3,
+          "text": "`Error`",
+          "anchor": "error"
+        },
+        {
+          "level": 3,
+          "text": "`Verbs`",
+          "anchor": "verbs"
+        },
+        {
+          "level": 3,
+          "text": "`Lookup`",
+          "anchor": "lookup"
+        },
+        {
+          "level": 3,
+          "text": "`Subcommand`",
+          "anchor": "subcommand"
+        },
+        {
+          "level": 3,
+          "text": "`Validate`",
+          "anchor": "validate"
+        },
+        {
+          "level": 3,
+          "text": "`EffectsOf`",
+          "anchor": "effectsof"
+        },
+        {
+          "level": 3,
+          "text": "`WritesObjects`",
+          "anchor": "writesobjects"
+        },
+        {
+          "level": 3,
+          "text": "`IsObserveOnly`",
+          "anchor": "isobserveonly"
+        },
+        {
+          "level": 3,
+          "text": "`DirPinExemptions`",
+          "anchor": "dirpinexemptions"
+        },
+        {
+          "level": 3,
+          "text": "`MustBeExempt`",
+          "anchor": "mustbeexempt"
+        },
+        {
+          "level": 3,
+          "text": "`GlobalPrefix`",
+          "anchor": "globalprefix"
+        },
+        {
+          "level": 3,
+          "text": "`WithDir`",
+          "anchor": "withdir"
+        },
+        {
+          "level": 3,
+          "text": "`DirOverride`",
+          "anchor": "diroverride"
+        },
+        {
+          "level": 3,
+          "text": "`WithRoot`",
+          "anchor": "withroot"
+        },
+        {
+          "level": 3,
+          "text": "`Root`",
+          "anchor": "root"
+        },
+        {
+          "level": 3,
+          "text": "`WithoutRootPin`",
+          "anchor": "withoutrootpin"
+        },
+        {
+          "level": 3,
+          "text": "`Command`",
+          "anchor": "command"
+        },
+        {
+          "level": 3,
+          "text": "`ArgvAny`",
+          "anchor": "argvany"
+        },
+        {
+          "level": 3,
+          "text": "`Effect.Has`",
+          "anchor": "effecthas"
+        },
+        {
+          "level": 3,
+          "text": "`Effect.String`",
+          "anchor": "effectstring"
+        },
+        {
+          "level": 3,
+          "text": "`Error.Error`",
+          "anchor": "errorerror"
+        }
+      ]
+    },
+    {
+      "path": "internal-gitversion.md",
+      "title": "internal/gitversion",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/gitversion",
+          "anchor": "internalgitversion"
+        },
+        {
+          "level": 2,
+          "text": "`internal/gitversion`",
+          "anchor": "internalgitversion"
+        },
+        {
+          "level": 3,
+          "text": "`MergeTreeWriteTree`",
+          "anchor": "mergetreewritetree"
+        },
+        {
+          "level": 3,
+          "text": "`AttrSource`",
+          "anchor": "attrsource"
+        },
+        {
+          "level": 3,
+          "text": "`Version`",
+          "anchor": "version"
+        },
+        {
+          "level": 3,
+          "text": "`Feature`",
+          "anchor": "feature"
+        },
+        {
+          "level": 3,
+          "text": "`Parse`",
+          "anchor": "parse"
+        },
+        {
+          "level": 3,
+          "text": "`Features`",
+          "anchor": "features"
+        },
+        {
+          "level": 3,
+          "text": "`HighestFloor`",
+          "anchor": "highestfloor"
+        },
+        {
+          "level": 3,
+          "text": "`Require`",
+          "anchor": "require"
+        },
+        {
+          "level": 3,
+          "text": "`Version.String`",
+          "anchor": "versionstring"
+        },
+        {
+          "level": 3,
+          "text": "`Version.Compare`",
+          "anchor": "versioncompare"
+        },
+        {
+          "level": 3,
+          "text": "`Version.AtLeast`",
+          "anchor": "versionatleast"
+        },
+        {
+          "level": 3,
+          "text": "`Version.Before`",
+          "anchor": "versionbefore"
+        }
+      ]
+    },
+    {
       "path": "internal-hooks.md",
       "title": "internal/hooks",
       "type": "doc",
@@ -3197,6 +3576,11 @@
         },
         {
           "level": 3,
+          "text": "`Path`",
+          "anchor": "path"
+        },
+        {
+          "level": 3,
           "text": "`Append`",
           "anchor": "append"
         },
@@ -3204,16 +3588,6 @@
           "level": 3,
           "text": "`Read`",
           "anchor": "read"
-        },
-        {
-          "level": 3,
-          "text": "`LogSize`",
-          "anchor": "logsize"
-        },
-        {
-          "level": 3,
-          "text": "`Rotate`",
-          "anchor": "rotate"
         },
         {
           "level": 3,
@@ -3249,13 +3623,28 @@
         },
         {
           "level": 3,
+          "text": "`ErrNoStartTime`",
+          "anchor": "errnostarttime"
+        },
+        {
+          "level": 3,
+          "text": "`Start`",
+          "anchor": "start"
+        },
+        {
+          "level": 3,
           "text": "`ProcessAlive`",
           "anchor": "processalive"
         },
         {
           "level": 3,
-          "text": "`ProcessAlive`",
-          "anchor": "processalive-1"
+          "text": "`StartTime`",
+          "anchor": "starttime"
+        },
+        {
+          "level": 3,
+          "text": "`StartTime`",
+          "anchor": "starttime-1"
         }
       ]
     },
@@ -3303,11 +3692,6 @@
           "level": 3,
           "text": "`PushConfig`",
           "anchor": "pushconfig"
-        },
-        {
-          "level": 3,
-          "text": "`LogConfig`",
-          "anchor": "logconfig"
         },
         {
           "level": 3,
@@ -3559,6 +3943,11 @@
         },
         {
           "level": 3,
+          "text": "`PathologicalCommName`",
+          "anchor": "pathologicalcommname"
+        },
+        {
+          "level": 3,
           "text": "`IdentityName`",
           "anchor": "identityname"
         },
@@ -3569,8 +3958,123 @@
         },
         {
           "level": 3,
+          "text": "`Process`",
+          "anchor": "process"
+        },
+        {
+          "level": 3,
           "text": "`SubmoduleRepo`",
           "anchor": "submodulerepo"
+        },
+        {
+          "level": 3,
+          "text": "`Git`",
+          "anchor": "git"
+        },
+        {
+          "level": 3,
+          "text": "`GitRaw`",
+          "anchor": "gitraw"
+        },
+        {
+          "level": 3,
+          "text": "`GitOut`",
+          "anchor": "gitout"
+        },
+        {
+          "level": 3,
+          "text": "`GitTry`",
+          "anchor": "gittry"
+        },
+        {
+          "level": 3,
+          "text": "`GitTryEnv`",
+          "anchor": "gittryenv"
+        },
+        {
+          "level": 3,
+          "text": "`GitStdin`",
+          "anchor": "gitstdin"
+        },
+        {
+          "level": 3,
+          "text": "`GitTryOut`",
+          "anchor": "gittryout"
+        },
+        {
+          "level": 3,
+          "text": "`WriteFile`",
+          "anchor": "writefile"
+        },
+        {
+          "level": 3,
+          "text": "`WriteFileAt`",
+          "anchor": "writefileat"
+        },
+        {
+          "level": 3,
+          "text": "`TreePaths`",
+          "anchor": "treepaths"
+        },
+        {
+          "level": 3,
+          "text": "`SplitLines`",
+          "anchor": "splitlines"
+        },
+        {
+          "level": 3,
+          "text": "`Contains`",
+          "anchor": "contains"
+        },
+        {
+          "level": 3,
+          "text": "`Rev`",
+          "anchor": "rev"
+        },
+        {
+          "level": 3,
+          "text": "`RevTry`",
+          "anchor": "revtry"
+        },
+        {
+          "level": 3,
+          "text": "`Parents`",
+          "anchor": "parents"
+        },
+        {
+          "level": 3,
+          "text": "`Show`",
+          "anchor": "show"
+        },
+        {
+          "level": 3,
+          "text": "`MustShow`",
+          "anchor": "mustshow"
+        },
+        {
+          "level": 3,
+          "text": "`MergeStateGone`",
+          "anchor": "mergestategone"
+        },
+        {
+          "level": 3,
+          "text": "`AssertMergeHead`",
+          "anchor": "assertmergehead"
+        },
+        {
+          "level": 3,
+          "text": "`FileExists`",
+          "anchor": "fileexists"
+        },
+        {
+          "level": 3,
+          "text": "`SpawnSleeper`",
+          "anchor": "spawnsleeper"
+        },
+        {
+          "level": 3,
+          "text": "`SpawnPathologicalNameSleeper`",
+          "anchor": "spawnpathologicalnamesleeper"
         },
         {
           "level": 3,
@@ -3596,6 +4100,11 @@
           "level": 3,
           "text": "`Chdir`",
           "anchor": "chdir"
+        },
+        {
+          "level": 3,
+          "text": "`Process.Kill`",
+          "anchor": "processkill"
         }
       ]
     },
@@ -4104,6 +4613,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-16T13:31:35.994717+00:00",
+  "last_gen": "2026-08-21T21:46:33.210586+00:00",
   "theme": "minimal"
 }

@@ -1,6 +1,6 @@
 ---
 title: API Reference
-description: "API reference index for safegit covering 16 modules"
+description: "API reference index for safegit covering 18 modules"
 generated: true
 seeded: true
 nav_group: "API Reference"
@@ -15,6 +15,8 @@ order: 90
 - [internal/coord](../internal-coord/)
 - [internal/filelock](../internal-filelock/)
 - [internal/git](../internal-git/)
+- [internal/gitexec](../internal-gitexec/)
+- [internal/gitversion](../internal-gitversion/)
 - [internal/hooks](../internal-hooks/)
 - [internal/index](../internal-index/)
 - [internal/lock](../internal-lock/)
