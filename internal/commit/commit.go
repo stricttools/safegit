@@ -362,16 +362,12 @@ func (p *Pipeline) tryCommit(
 		return nil, false, fmt.Errorf("update-ref failed: %w", err)
 	}
 
-	// Step 8: Sync main index to match HEAD so git status/diff work correctly.
-	// Only when committing to the current branch -- cross-branch commits must
-	// not clobber the main index.
-	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
-		if err := git.SyncMainIndex(ctx, "HEAD"); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to sync main index: %v\n", err)
-		}
-	}
-
-	// Step 9: Append op log (lock released by defer)
+	// Step 8: Append op log (lock released by defer).
+	//
+	// Recorded BEFORE the index is reconciled, so that a reconciliation failure
+	// -- which is fatal, below -- still leaves a commit `safegit undo` can
+	// reverse. The two steps are independent; only the crash-in-between case
+	// can tell them apart.
 	_ = oplog.Append(p.SafegitDir, oplog.Entry{
 		Op: "commit",
 		Extra: map[string]interface{}{
@@ -382,6 +378,16 @@ func (p *Pipeline) tryCommit(
 			"attempts": attempt,
 		},
 	})
+
+	// Step 9: Reconcile the shared index with the commit, preserving whatever
+	// staged work the parent tip does not account for. Only when committing to
+	// the current branch -- a cross-branch commit must not touch this working
+	// tree's index at all.
+	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
+		if err := git.ReconcileMainIndex(ctx, parentSHA, "HEAD"); err != nil {
+			return nil, false, fmt.Errorf("commit %s was created, but reconciling the shared index failed: %w", commitSHA[:8], err)
+		}
+	}
 
 	return &CommitResult{
 		SHA:                 commitSHA,

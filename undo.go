@@ -207,14 +207,15 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		}
 	}
 
-	// Sync main index so git status/diff reflect the change
-	// For root undo, pass "" to trigger read-tree --empty
+	// Reconcile the shared index so git status/diff reflect the rollback while
+	// every staged change the undone commit does not account for survives it.
+	// For a root undo the target is the empty tree, spelled "".
 	syncTreeish := targetSHA
 	if isRootUndo {
 		syncTreeish = ""
 	}
-	if err := git.SyncMainIndex(ctx, syncTreeish); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to sync main index: %v\n", err)
+	if err := git.ReconcileMainIndex(ctx, currentSHA, syncTreeish); err != nil {
+		die(exitcode.General, fmt.Sprintf("%s was undone, but reconciling the shared index failed: %v", currentSHA[:8], err))
 	}
 
 	// If the commit being undone triggered a parent bump, inform the user.

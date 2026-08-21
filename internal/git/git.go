@@ -267,17 +267,22 @@ func IsTracked(ctx context.Context, filePath string) (bool, error) {
 }
 
 // ListSkipWorktreeFiles returns the paths of all files with the skip-worktree
-// flag set in the main index. It parses `git ls-files -v` output, selecting
-// lines that start with "S " (the skip-worktree indicator).
+// flag set in the main index. It parses `git ls-files -v -z` output, selecting
+// records that start with "S " (the skip-worktree indicator).
+//
+// The NUL-delimited form is what makes the answer usable: without -z git
+// C-quotes any path that is not plain ASCII, and the quoted spelling names no
+// index entry, so restoring the flag afterwards would fail on exactly the paths
+// that most need it.
 func ListSkipWorktreeFiles(ctx context.Context) ([]string, error) {
-	out, _, err := Run(ctx, "ls-files", "-v")
+	out, _, err := Run(ctx, "ls-files", "-v", "-z")
 	if err != nil {
 		return nil, err
 	}
 	var files []string
-	for _, line := range strings.Split(out, "\n") {
-		if strings.HasPrefix(line, "S ") {
-			files = append(files, line[2:])
+	for _, record := range strings.Split(out, "\x00") {
+		if strings.HasPrefix(record, "S ") {
+			files = append(files, record[2:])
 		}
 	}
 	return files, nil
@@ -299,54 +304,6 @@ func ListTrackedIgnoredFiles(ctx context.Context) ([]string, error) {
 		}
 	}
 	return files, nil
-}
-
-// syncMainIndexInner updates the main .git/index to match the given treeish.
-// When updateWorktree is true, it also checks out files into the working tree
-// (using --reset -u), which is needed after history rewrites like scrub.
-// Skip-worktree flags are preserved across the read-tree rebuild.
-func syncMainIndexInner(ctx context.Context, treeish string, updateWorktree bool) error {
-	// Collect skip-worktree files before read-tree clears the index.
-	skipFiles, err := ListSkipWorktreeFiles(ctx)
-	if err != nil {
-		// Non-fatal: proceed without preservation.
-		skipFiles = nil
-	}
-
-	// Empty treeish means root commit undo: clear the index entirely.
-	if treeish == "" {
-		_, _, err = Run(ctx, "read-tree", "--empty")
-		if err != nil {
-			return err
-		}
-	} else {
-		args := []string{"read-tree"}
-		if updateWorktree {
-			args = append(args, "--reset", "-u")
-		}
-		args = append(args, treeish)
-
-		_, _, err = Run(ctx, args...)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Restore skip-worktree flags.
-	for _, f := range skipFiles {
-		if _, _, rerr := Run(ctx, "update-index", "--skip-worktree", f); rerr != nil {
-			// Non-fatal: log and continue with remaining files.
-			fmt.Fprintf(os.Stderr, "safegit: warning: failed to restore skip-worktree on %s: %v\n", f, rerr)
-		}
-	}
-	return nil
-}
-
-// SyncMainIndex updates the main .git/index to match the given treeish.
-// This makes git status/diff reflect the committed state after safegit commits.
-// Skip-worktree flags are preserved across the read-tree rebuild.
-func SyncMainIndex(ctx context.Context, treeish string) error {
-	return syncMainIndexInner(ctx, treeish, false)
 }
 
 // SyncMainIndexWithWorktree updates the main .git/index AND the working tree

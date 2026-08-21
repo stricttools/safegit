@@ -4,7 +4,6 @@ package commit
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -228,14 +227,8 @@ func (p *Pipeline) tryAmend(
 		return nil, false, fmt.Errorf("update-ref CAS failed: %w", err)
 	}
 
-	// Sync main index only when amending the current branch
-	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
-		if err := git.SyncMainIndex(ctx, "HEAD"); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to sync main index: %v\n", err)
-		}
-	}
-
-	// Oplog
+	// Oplog, recorded before the index is reconciled: a reconciliation failure
+	// is fatal, and the amend it followed must still be undoable.
 	_ = oplog.Append(p.SafegitDir, oplog.Entry{
 		Op: "amend",
 		Extra: map[string]interface{}{
@@ -247,6 +240,15 @@ func (p *Pipeline) tryAmend(
 			"attempts": attempt,
 		},
 	})
+
+	// Reconcile the shared index with the amended commit, preserving whatever
+	// staged work the pre-amend tip does not account for. Only when amending
+	// the current branch: a cross-branch amend must not touch this index.
+	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
+		if err := git.ReconcileMainIndex(ctx, headSHA, "HEAD"); err != nil {
+			return nil, false, fmt.Errorf("amended commit %s was created, but reconciling the shared index failed: %w", commitSHA[:8], err)
+		}
+	}
 
 	return &AmendResult{
 		SHA:                 commitSHA,
@@ -387,12 +389,8 @@ func (p *Pipeline) tryReword(
 		return nil, false, fmt.Errorf("update-ref CAS failed: %w", err)
 	}
 
-	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
-		if err := git.SyncMainIndex(ctx, "HEAD"); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to sync main index: %v\n", err)
-		}
-	}
-
+	// Oplog before reconciliation, for the same reason as amend: a fatal
+	// reconciliation must leave an undoable reword behind it.
 	_ = oplog.Append(p.SafegitDir, oplog.Entry{
 		Op: "reword",
 		Extra: map[string]interface{}{
@@ -402,6 +400,12 @@ func (p *Pipeline) tryReword(
 		},
 	})
 
+	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
+		if err := git.ReconcileMainIndex(ctx, headSHA, "HEAD"); err != nil {
+			return nil, false, fmt.Errorf("reworded commit %s was created, but reconciling the shared index failed: %w", commitSHA[:8], err)
+		}
+	}
+
 	return &RewordResult{
 		SHA:    commitSHA,
 		Ref:    ref,
@@ -410,4 +414,3 @@ func (p *Pipeline) tryReword(
 		OldSHA: headSHA,
 	}, false, nil
 }
-
