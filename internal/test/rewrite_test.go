@@ -774,7 +774,7 @@ func TestRewriteAuthorUnconsentedRewritesNothing(t *testing.T) {
 	dir := newRepo(t)
 	makeCommits(t, dir, "oldname", "old@test.com", 3, "abort")
 
-	_, stderr, exitCode := runSafegitNoConsent(t, dir, nil,
+	_, stderr, exitCode := runSafegitEnv(t, dir, nil,
 		"author", "rewrite", "--old-name=oldname", "--new-name=newname")
 	if exitCode == 0 {
 		t.Errorf("an unconsented author rewrite must not succeed; stderr: %s", stderr)
@@ -792,7 +792,7 @@ func TestRewriteAuthorConsentedProceeds(t *testing.T) {
 	dir := newRepo(t)
 	makeCommits(t, dir, "oldname", "old@test.com", 3, "proceed")
 
-	_, stderr, exitCode := runSafegitNoConsent(t, dir, nil,
+	_, stderr, exitCode := runSafegitEnv(t, dir, nil,
 		"--approve-consequential", "author", "rewrite", "--old-name=oldname", "--new-name=newname")
 	if exitCode != 0 {
 		t.Fatalf("expected exit code 0, got %d: stderr=%s", exitCode, stderr)

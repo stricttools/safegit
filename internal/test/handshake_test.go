@@ -30,7 +30,7 @@ func TestUndoStillReadsDeclaredSessionID(t *testing.T) {
 	dir := newRepo(t)
 
 	// Without a session ID, undo refuses and names the handshake variable.
-	_, stderr, code := runSafegitCleanEnv(t, dir, "undo")
+	_, stderr, code := runSafegit(t, dir, "undo")
 	if code == 0 {
 		t.Fatal("undo without a session ID should fail")
 	}

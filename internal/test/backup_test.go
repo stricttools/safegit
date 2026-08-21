@@ -27,14 +27,8 @@ func remoteRefSHA(t *testing.T, remoteDir, ref string) string {
 // commitFileIn writes a file and commits it with safegit.
 func commitFileIn(t *testing.T, dir, name, content, msg string) string {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
-	_, stderr, code := runSafegit(t, dir, "commit", "-m", msg, "--", name)
-	if code != 0 {
-		t.Fatalf("commit %q failed (code %d): %s", msg, code, stderr)
-	}
-	return testutil.Rev(t, dir, "HEAD")
+	testutil.WriteFile(t, dir, name, content)
+	return safegitCommit(t, dir, msg, name)
 }
 
 // oplogEntries returns every oplog entry of the given op in a repo.
@@ -259,7 +253,7 @@ func TestBackupUnconsentedContactsNoRemote(t *testing.T) {
 	dir := newRepo(t)
 	testutil.Git(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
 
-	stdout, stderr, code := runSafegitNoConsent(t, dir, nil, "backup", "backup", "cloudy")
+	stdout, stderr, code := runSafegitEnv(t, dir, nil, "backup", "backup", "cloudy")
 	if code == 0 {
 		t.Fatalf("an unconsented backup must not succeed: stdout=%s stderr=%s", stdout, stderr)
 	}
@@ -276,7 +270,7 @@ func TestBackupJSONIsNotConsent(t *testing.T) {
 	dir := newRepo(t)
 	testutil.Git(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
 
-	stdout, stderr, code := runSafegitNoConsent(t, dir, nil, "--json", "backup", "backup", "cloudy")
+	stdout, stderr, code := runSafegitEnv(t, dir, nil, "--json", "backup", "backup", "cloudy")
 	if code == 0 {
 		t.Fatalf("--json must not answer the confirmation (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
@@ -483,7 +477,7 @@ func TestApproveConsequentialDoesNotConsentToAnUnprovenRemote(t *testing.T) {
 
 	t.Run("blanket consent refuses", func(t *testing.T) {
 		dir := newUnprovenRemoteRepo(t)
-		_, stderr, code := runSafegitNoConsent(t, dir, confirmEnv,
+		_, stderr, code := runSafegitEnv(t, dir, confirmEnv,
 			"--json", "--approve-consequential", "backup", "backup", "cloudy")
 		if code == 0 {
 			t.Errorf("--approve-consequential must not consent to an unproven remote; stderr: %s", stderr)
@@ -498,7 +492,7 @@ func TestApproveConsequentialDoesNotConsentToAnUnprovenRemote(t *testing.T) {
 
 	t.Run("the per-condition flag consents", func(t *testing.T) {
 		dir := newUnprovenRemoteRepo(t)
-		_, stderr, _ := runSafegitNoConsent(t, dir, confirmEnv,
+		_, stderr, _ := runSafegitEnv(t, dir, confirmEnv,
 			"--json", "backup", "backup", "--allow-public-remote", "cloudy")
 		if strings.Contains(stderr, "--allow-public-remote") {
 			t.Errorf("--allow-public-remote must answer the exposure question, got: %s", stderr)

@@ -8,16 +8,6 @@ import (
 	"testing"
 )
 
-// runSafegitEnv executes the safegit binary with extra environment variables
-// layered on the controlled test environment (nothing is inherited from the
-// parent process beyond the allowlist in controlledEnv).
-// It passes argv through untouched; runSafegitNoConsent is the identical
-// helper that tests about consent name explicitly.
-func runSafegitEnv(t *testing.T, repoDir string, env []string, args ...string) (stdout, stderr string, exitCode int) {
-	t.Helper()
-	return runSafegitNoConsent(t, repoDir, env, args...)
-}
-
 // commitMessage returns the full commit message of the given ref.
 func commitMessage(t *testing.T, dir, ref string) string {
 	t.Helper()
