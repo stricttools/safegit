@@ -36,18 +36,6 @@ import (
 // Every helper here is prefixed amendPar so this file stays self-contained and
 // cannot collide with the other investigations' files in this package.
 
-// amendParCommit commits paths through safegit and fails the test if it does
-// not succeed. Used only for fixture setup.
-func amendParCommit(t *testing.T, dir, message string, paths ...string) string {
-	t.Helper()
-	args := append([]string{"commit", "-m", message, "--"}, paths...)
-	_, stderr, code := runSafegit(t, dir, args...)
-	if code != 0 {
-		t.Fatalf("fixture commit %q failed (code %d): %s", message, code, stderr)
-	}
-	return testutil.Rev(t, dir, "HEAD")
-}
-
 // amendParStatus returns `git status --porcelain`, trimmed.
 func amendParStatus(t *testing.T, dir string) string {
 	t.Helper()
@@ -74,10 +62,10 @@ func TestAmendSymlink_LinkToCommittedFile(t *testing.T) {
 	dir := newRepo(t)
 
 	testutil.WriteFile(t, dir, "file.txt", "target content\n")
-	amendParCommit(t, dir, "add file.txt", "file.txt")
+	safegitCommit(t, dir, "add file.txt", "file.txt")
 
 	testutil.WriteFile(t, dir, "tip.txt", "tip\n")
-	tip := amendParCommit(t, dir, "tip", "tip.txt")
+	tip := safegitCommit(t, dir, "tip", "tip.txt")
 	tipParent := testutil.Parents(t, dir, tip)
 
 	if err := os.Symlink("file.txt", filepath.Join(dir, "link")); err != nil {
@@ -140,10 +128,10 @@ func TestAmendStagedDeletions_DirectoryPathWithMovedFile(t *testing.T) {
 
 	testutil.WriteFile(t, dir, "dir/a.txt", "alpha\n")
 	testutil.WriteFile(t, dir, "dir/b.txt", "beta\n")
-	base := amendParCommit(t, dir, "add dir", "dir/a.txt", "dir/b.txt")
+	base := safegitCommit(t, dir, "add dir", "dir/a.txt", "dir/b.txt")
 
 	testutil.WriteFile(t, dir, "tip.txt", "tip\n")
-	amendParCommit(t, dir, "tip", "tip.txt")
+	safegitCommit(t, dir, "tip", "tip.txt")
 
 	// The external deletion tool: removes the files and stages the deletions.
 	testutil.GitRaw(t, dir, "rm", "-r", "dir")
@@ -187,10 +175,10 @@ func TestAmendStagedDeletions_DirectoryPathWithUnrelatedEmptyFile(t *testing.T) 
 
 	testutil.WriteFile(t, dir, "dir/empty.txt", "")
 	testutil.WriteFile(t, dir, "dir/b.txt", "beta\n")
-	amendParCommit(t, dir, "add dir", "dir/empty.txt", "dir/b.txt")
+	safegitCommit(t, dir, "add dir", "dir/empty.txt", "dir/b.txt")
 
 	testutil.WriteFile(t, dir, "tip.txt", "tip\n")
-	amendParCommit(t, dir, "tip", "tip.txt")
+	safegitCommit(t, dir, "tip", "tip.txt")
 
 	testutil.GitRaw(t, dir, "rm", "-r", "dir")
 	testutil.WriteFile(t, dir, "notes.md", "")
@@ -219,10 +207,10 @@ func TestAmendStagedDeletions_FilePathsWithMovedFile(t *testing.T) {
 
 	testutil.WriteFile(t, dir, "dir/a.txt", "alpha\n")
 	testutil.WriteFile(t, dir, "dir/b.txt", "beta\n")
-	amendParCommit(t, dir, "add dir", "dir/a.txt", "dir/b.txt")
+	safegitCommit(t, dir, "add dir", "dir/a.txt", "dir/b.txt")
 
 	testutil.WriteFile(t, dir, "tip.txt", "tip\n")
-	amendParCommit(t, dir, "tip", "tip.txt")
+	safegitCommit(t, dir, "tip", "tip.txt")
 
 	testutil.GitRaw(t, dir, "rm", "-r", "dir")
 	testutil.WriteFile(t, dir, "new.txt", "alpha\n")
@@ -259,10 +247,10 @@ func TestAmendFromSubdirRelativePathNoPendingChange(t *testing.T) {
 
 	testutil.WriteFile(t, dir, "sub/unchanged.txt", "unchanged\n")
 	testutil.WriteFile(t, dir, "sub/edited.txt", "before\n")
-	amendParCommit(t, dir, "add sub files", "sub/unchanged.txt", "sub/edited.txt")
+	safegitCommit(t, dir, "add sub files", "sub/unchanged.txt", "sub/edited.txt")
 
 	testutil.WriteFile(t, dir, "tip.txt", "tip\n")
-	tip := amendParCommit(t, dir, "tip", "tip.txt")
+	tip := safegitCommit(t, dir, "tip", "tip.txt")
 	tipParents := testutil.Parents(t, dir, tip)
 
 	testutil.WriteFile(t, dir, "sub/edited.txt", "after\n")
@@ -296,10 +284,10 @@ func TestAmendFromRepoRootUnchangedPath(t *testing.T) {
 
 	testutil.WriteFile(t, dir, "unchanged.txt", "unchanged\n")
 	testutil.WriteFile(t, dir, "edited.txt", "before\n")
-	amendParCommit(t, dir, "add root files", "unchanged.txt", "edited.txt")
+	safegitCommit(t, dir, "add root files", "unchanged.txt", "edited.txt")
 
 	testutil.WriteFile(t, dir, "tip.txt", "tip\n")
-	amendParCommit(t, dir, "tip", "tip.txt")
+	safegitCommit(t, dir, "tip", "tip.txt")
 
 	testutil.WriteFile(t, dir, "edited.txt", "after\n")
 
@@ -330,10 +318,10 @@ func TestAmendUntrackGitignoredPath(t *testing.T) {
 	dir := newRepo(t)
 
 	testutil.WriteFile(t, dir, "dir/junk.txt", "build artifact\n")
-	amendParCommit(t, dir, "add junk", "dir/junk.txt")
+	safegitCommit(t, dir, "add junk", "dir/junk.txt")
 
 	testutil.WriteFile(t, dir, "tip.txt", "tip\n")
-	amendParCommit(t, dir, "tip", "tip.txt")
+	safegitCommit(t, dir, "tip", "tip.txt")
 
 	// The pattern that makes the tracked file ignored from now on.
 	testutil.WriteFile(t, dir, ".gitignore", "dir/\n")
@@ -377,7 +365,7 @@ func TestAmendCrossBranchDeletionOfPathTrackedOnlyOnTarget(t *testing.T) {
 	testutil.GitRaw(t, dir, "branch", "other")
 	testutil.GitRaw(t, dir, "switch", "other")
 	testutil.WriteFile(t, dir, "only-on-other.txt", "other content\n")
-	otherTip := amendParCommit(t, dir, "add only-on-other", "only-on-other.txt")
+	otherTip := safegitCommit(t, dir, "add only-on-other", "only-on-other.txt")
 	otherParents := testutil.Parents(t, dir, otherTip)
 
 	testutil.GitRaw(t, dir, "switch", "main")
@@ -423,16 +411,16 @@ func amendParNewMergedRepo(t *testing.T) amendParMergeFixture {
 	dir := newRepo(t)
 
 	testutil.WriteFile(t, dir, "base.txt", "base\n")
-	amendParCommit(t, dir, "base", "base.txt")
+	safegitCommit(t, dir, "base", "base.txt")
 
 	testutil.GitRaw(t, dir, "branch", "feature")
 	testutil.GitRaw(t, dir, "switch", "feature")
 	testutil.WriteFile(t, dir, "f.txt", "feature\n")
-	featureSHA := amendParCommit(t, dir, "feature edit", "f.txt")
+	featureSHA := safegitCommit(t, dir, "feature edit", "f.txt")
 
 	testutil.GitRaw(t, dir, "switch", "main")
 	testutil.WriteFile(t, dir, "m.txt", "main\n")
-	mainSHA := amendParCommit(t, dir, "main edit", "m.txt")
+	mainSHA := safegitCommit(t, dir, "main edit", "m.txt")
 
 	stdout, stderr, code := runSafegit(t, dir, "merge", "feature")
 	if code != 0 {
@@ -625,16 +613,16 @@ func TestAmendRefusedWhileCherryPicking(t *testing.T) {
 	dir := newRepo(t)
 
 	testutil.WriteFile(t, dir, "c.txt", "base\n")
-	amendParCommit(t, dir, "base", "c.txt")
+	safegitCommit(t, dir, "base", "c.txt")
 
 	testutil.GitRaw(t, dir, "branch", "feature")
 	testutil.GitRaw(t, dir, "switch", "feature")
 	testutil.WriteFile(t, dir, "c.txt", "feature\n")
-	amendParCommit(t, dir, "feature edit", "c.txt")
+	safegitCommit(t, dir, "feature edit", "c.txt")
 
 	testutil.GitRaw(t, dir, "switch", "main")
 	testutil.WriteFile(t, dir, "c.txt", "main\n")
-	mainSHA := amendParCommit(t, dir, "main edit", "c.txt")
+	mainSHA := safegitCommit(t, dir, "main edit", "c.txt")
 
 	stdout, stderr, code := runSafegit(t, dir, "cherry-pick", "feature")
 	if code == 0 {

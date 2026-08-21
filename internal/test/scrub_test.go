@@ -39,18 +39,8 @@ func countLooseObjects(t *testing.T, dir string) int {
 // the given session env. Returns the new HEAD SHA.
 func commitFileEnv(t *testing.T, dir string, env []string, path, content, msg string) string {
 	t.Helper()
-	fullPath := filepath.Join(dir, path)
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
-	_, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", msg, "--", path)
-	if code != 0 {
-		t.Fatalf("commit failed (code %d): %s", code, stderr)
-	}
-	return testutil.Rev(t, dir, "HEAD")
+	testutil.WriteFile(t, dir, path, content)
+	return safegitCommitEnv(t, dir, env, msg, path)
 }
 
 // revListReverse returns commit SHAs in chronological order (oldest first).
@@ -497,7 +487,7 @@ func TestScrubUnconsentedRewritesNothing(t *testing.T) {
 	// `scrub file` declares itself `consequential`: without approval strictcli
 	// refuses before the handler runs. Piping "n" is not consent, and history
 	// is left alone.
-	_, stderr, exitCode := runSafegitNoConsent(t, dir, scrubEnv,
+	_, stderr, exitCode := runSafegitEnv(t, dir, scrubEnv,
 		"scrub", "file", "--from", initialSHA, "--reason", "should abort", "secret.txt")
 	if exitCode == 0 {
 		t.Errorf("an unconsented scrub must not succeed; stderr: %s", stderr)

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/smm-h/safegit/internal/testutil"
 	"github.com/smm-h/stricttest/go/hygiene"
 )
 
@@ -193,11 +194,16 @@ func controlledEnv(t *testing.T, extra ...string) []string {
 	return append(env, extra...)
 }
 
-// runSafegitNoConsent executes the safegit binary in repoDir with exactly the
-// given args and nothing added. Use it when the test is ABOUT consent -- when
-// it must observe what safegit does when nobody has approved a mutating
-// command. Every other helper here consents on the caller's behalf.
-func runSafegitNoConsent(t *testing.T, repoDir string, env []string, args ...string) (stdout, stderr string, exitCode int) {
+// runSafegitEnv executes the safegit binary in repoDir with exactly the given
+// args and nothing added, in the controlled test environment plus the given
+// extra "KEY=value" entries (a session handshake, a scrub marker). It is the
+// one place the suite spawns safegit.
+//
+// Nothing is ever appended to argv, so a test that is ABOUT consent observes
+// exactly what safegit does when nobody has approved a mutating command, and a
+// test that exercises a consequential command passes --approve-consequential
+// itself, at the call site instead of hidden in a helper.
+func runSafegitEnv(t *testing.T, repoDir string, env []string, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
 	cmd := exec.Command(safegitBin, args...)
 	cmd.Dir = repoDir
@@ -221,18 +227,30 @@ func runSafegitNoConsent(t *testing.T, repoDir string, env []string, args ...str
 	return
 }
 
-// runSafegit executes the safegit binary in repoDir with the given args.
-// Returns stdout, stderr, and exit code.
-//
-// It adds nothing to argv. strictcli's confirm protocol prompts only for
-// commands that declare themselves `consequential` (safegit: the three scrub
-// rewrites and `author rewrite`), so an ordinary command runs untouched in a
-// spawned test process. A test that exercises a consequential command passes
-// --approve-consequential itself, which keeps the approval visible at the call
-// site instead of hidden in a helper.
+// runSafegit is runSafegitEnv with no extra environment: the controlled test
+// environment alone, which never carries a session handshake unless the caller
+// passes one.
 func runSafegit(t *testing.T, repoDir string, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
-	return runSafegitNoConsent(t, repoDir, nil, args...)
+	return runSafegitEnv(t, repoDir, nil, args...)
+}
+
+// safegitCommitEnv commits paths through safegit and fails the test when the
+// commit does not succeed. It is for fixture setup: a test that is ABOUT commit
+// behavior calls runSafegit directly and asserts on the result itself.
+func safegitCommitEnv(t *testing.T, dir string, env []string, message string, paths ...string) string {
+	t.Helper()
+	args := append([]string{"commit", "-m", message, "--"}, paths...)
+	if _, stderr, code := runSafegitEnv(t, dir, env, args...); code != 0 {
+		t.Fatalf("fixture commit %q failed (code %d): %s", message, code, stderr)
+	}
+	return testutil.Rev(t, dir, "HEAD")
+}
+
+// safegitCommit is safegitCommitEnv with no extra environment.
+func safegitCommit(t *testing.T, dir, message string, paths ...string) string {
+	t.Helper()
+	return safegitCommitEnv(t, dir, nil, message, paths...)
 }
 
 // gitLog returns the number of commits on the given ref.

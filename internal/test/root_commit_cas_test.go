@@ -159,7 +159,7 @@ func TestRootCommitDoesNotClobberRefCreatedInWindow(t *testing.T) {
 	shimDir, markerPath, argvPath := rootCasInstallGitShim(t, dir, rival)
 
 	pathEnv := "PATH=" + shimDir + string(os.PathListSeparator) + os.Getenv("PATH")
-	stdout, stderr, code := runSafegitNoConsent(t, dir, []string{pathEnv},
+	stdout, stderr, code := runSafegitEnv(t, dir, []string{pathEnv},
 		"commit", "-m", "root commit", "--", "mine.txt")
 
 	if _, err := os.Stat(markerPath); err != nil {

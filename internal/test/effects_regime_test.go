@@ -83,7 +83,7 @@ func TestPlainMutatingCommandNeedsNoConsent(t *testing.T) {
 	testutil.WriteFile(t, dir, "a.txt", "one\n")
 	before := gitLog(t, dir, "HEAD")
 
-	_, stderr, code := runSafegitNoConsent(t, dir, nil, "commit", "-m", "bare commit", "--", "a.txt")
+	_, stderr, code := runSafegitEnv(t, dir, nil, "commit", "-m", "bare commit", "--", "a.txt")
 	if code != 0 {
 		t.Fatalf("bare `safegit commit` must succeed with no approval flag; code=%d stderr=%s", code, stderr)
 	}
@@ -102,12 +102,12 @@ func TestPlainMutatingCommandNeedsNoConsent(t *testing.T) {
 func TestConsequentialCommandRefusesWithoutConsent(t *testing.T) {
 	dir := newRepo(t)
 	testutil.WriteFile(t, dir, "a.txt", "one\n")
-	if _, stderr, code := runSafegitNoConsent(t, dir, nil, "commit", "-m", "seed", "--", "a.txt"); code != 0 {
+	if _, stderr, code := runSafegitEnv(t, dir, nil, "commit", "-m", "seed", "--", "a.txt"); code != 0 {
 		t.Fatalf("seeding commit failed: %s", stderr)
 	}
 	before := testutil.Rev(t, dir, "HEAD")
 
-	_, stderr, code := runSafegitNoConsent(t, dir, nil,
+	_, stderr, code := runSafegitEnv(t, dir, nil,
 		"author", "rewrite", "--old-name=Test", "--new-name=Renamed")
 	if code == 0 {
 		t.Fatalf("an unapproved consequential command must not succeed; stderr=%s", stderr)
@@ -127,11 +127,11 @@ func TestConsequentialCommandRefusesWithoutConsent(t *testing.T) {
 func TestConsequentialNonInteractiveMessageIsPinned(t *testing.T) {
 	dir := newRepo(t)
 	testutil.WriteFile(t, dir, "a.txt", "one\n")
-	if _, stderr, code := runSafegitNoConsent(t, dir, nil, "commit", "-m", "seed", "--", "a.txt"); code != 0 {
+	if _, stderr, code := runSafegitEnv(t, dir, nil, "commit", "-m", "seed", "--", "a.txt"); code != 0 {
 		t.Fatalf("seeding commit failed: %s", stderr)
 	}
 
-	_, stderr, code := runSafegitNoConsent(t, dir, nil,
+	_, stderr, code := runSafegitEnv(t, dir, nil,
 		"author", "rewrite", "--old-name=Test", "--new-name=Renamed")
 	const want = "error: stdin is not interactive; a consequential command must be confirmed at a terminal"
 	if code == 0 || !strings.Contains(stderr, want) {
@@ -142,7 +142,7 @@ func TestConsequentialNonInteractiveMessageIsPinned(t *testing.T) {
 // TestReadOnlyCommandNeedsNoConsent: a `read_only` command never prompts.
 func TestReadOnlyCommandNeedsNoConsent(t *testing.T) {
 	dir := newRepo(t)
-	_, stderr, code := runSafegitNoConsent(t, dir, nil, "version")
+	_, stderr, code := runSafegitEnv(t, dir, nil, "version")
 	if code != 0 {
 		t.Fatalf("a read-only command must run without consent, got %d: %s", code, stderr)
 	}

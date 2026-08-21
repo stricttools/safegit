@@ -10,14 +10,6 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// runSafegitCleanEnv runs safegit with the controlled test environment, which
-// never carries CLAUDE_CODE_SESSION_ID unless a caller passes it explicitly.
-// It passes argv through untouched; nothing it dispatches is consequential.
-func runSafegitCleanEnv(t *testing.T, repoDir string, args ...string) (stdout, stderr string, exitCode int) {
-	t.Helper()
-	return runSafegitNoConsent(t, repoDir, nil, args...)
-}
-
 // TestUndoSessionScoped verifies that session A's undo finds session A's commit,
 // not session B's, even when B committed more recently.
 func TestUndoSessionScoped(t *testing.T) {
@@ -167,13 +159,13 @@ func TestUndoNoSessionIDErrors(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "nosid.txt"), []byte("no session\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	_, stderr, code := runSafegitCleanEnv(t, dir, "commit", "-m", "commit without session", "--", "nosid.txt")
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "commit without session", "--", "nosid.txt")
 	if code != 0 {
 		t.Fatalf("commit failed (code %d): %s", code, stderr)
 	}
 
 	// Undo without session ID and without --bypass-session should fail
-	_, stderr, code = runSafegitCleanEnv(t, dir, "undo")
+	_, stderr, code = runSafegit(t, dir, "undo")
 	if code == 0 {
 		t.Fatal("undo without session ID should have failed, but exited 0")
 	}
@@ -196,7 +188,7 @@ func TestUndoNoSessionIDWithBypass(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "bypass.txt"), []byte("bypass\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	_, stderr, code := runSafegitCleanEnv(t, dir, "commit", "-m", "commit for bypass", "--", "bypass.txt")
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "commit for bypass", "--", "bypass.txt")
 	if code != 0 {
 		t.Fatalf("commit failed (code %d): %s", code, stderr)
 	}
@@ -207,7 +199,7 @@ func TestUndoNoSessionIDWithBypass(t *testing.T) {
 	}
 
 	// Undo with --bypass-session should work even without session ID
-	_, stderr, code = runSafegitCleanEnv(t, dir, "undo", "--bypass-session")
+	_, stderr, code = runSafegit(t, dir, "undo", "--bypass-session")
 	if code != 0 {
 		t.Fatalf("undo with --bypass-session failed (code %d): %s", code, stderr)
 	}

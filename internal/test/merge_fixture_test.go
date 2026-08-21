@@ -50,11 +50,7 @@ func newConflictedMergeRepo(t *testing.T, opts conflictedMergeOpts) conflictedMe
 
 	commit := func(msg string, paths ...string) string {
 		t.Helper()
-		args := append([]string{"commit", "-m", msg, "--"}, paths...)
-		if _, stderr, code := runSafegitEnv(t, dir, opts.env, args...); code != 0 {
-			t.Fatalf("fixture commit %q failed (code %d): %s", msg, code, stderr)
-		}
-		return testutil.Rev(t, dir, "HEAD")
+		return safegitCommitEnv(t, dir, opts.env, msg, paths...)
 	}
 
 	// Base revision of the conflicted file, on main.
