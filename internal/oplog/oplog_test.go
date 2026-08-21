@@ -36,9 +36,12 @@ func TestAppendAndRead(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	entries, err := Read(sgDir)
+	entries, skipped, err := Read(sgDir)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if skipped != 0 {
+		t.Fatalf("skipped = %d, want 0", skipped)
 	}
 	if len(entries) != 1 {
 		t.Fatalf("got %d entries, want 1", len(entries))
@@ -64,9 +67,12 @@ func TestAppendAutoFillsTimestampAndPID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	entries, err := Read(sgDir)
+	entries, skipped, err := Read(sgDir)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if skipped != 0 {
+		t.Fatalf("skipped = %d, want 0", skipped)
 	}
 	if len(entries) != 1 {
 		t.Fatalf("got %d entries, want 1", len(entries))
@@ -81,31 +87,137 @@ func TestAppendAutoFillsTimestampAndPID(t *testing.T) {
 	}
 }
 
-func TestAppendRejectsOversizedLine(t *testing.T) {
+// TestAppendAcceptsOversizedLine pins the removal of the 4096-byte line cap:
+// the flock held across the write is the atomicity mechanism, so an entry far
+// larger than the POSIX atomic-append size is written and read back intact.
+func TestAppendAcceptsOversizedLine(t *testing.T) {
 	sgDir := setupSafegitDir(t)
 
-	// Create an entry with a huge Extra field
-	bigValue := strings.Repeat("x", maxLineBytes)
+	// Well over the old 4096-byte cap, and over bufio's 4096-byte default
+	// reader buffer, so a naive line reader would fail on it too.
+	bigValue := strings.Repeat("x", 100_000)
 	entry := Entry{
 		Op:    "test",
 		Extra: map[string]interface{}{"big": bigValue},
 	}
 
-	err := Append(sgDir, entry)
-	if err == nil {
-		t.Fatal("expected error for oversized entry")
+	if err := Append(sgDir, entry); err != nil {
+		t.Fatalf("append of a %d-byte value should succeed: %v", len(bigValue), err)
 	}
-	if !strings.Contains(err.Error(), "exceeds") {
-		t.Errorf("error should mention exceeds, got: %v", err)
+
+	entries, skipped, err := Read(sgDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skipped != 0 {
+		t.Fatalf("skipped = %d, want 0", skipped)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1", len(entries))
+	}
+	got, _ := entries[0].Extra["big"].(string)
+	if got != bigValue {
+		t.Errorf("read back %d bytes, want %d", len(got), len(bigValue))
+	}
+}
+
+// TestReadCountsUnparseableLines pins the skip count Read reports: parseable
+// entries still come back, and the corrupted lines are counted rather than
+// silently dropped.
+func TestReadCountsUnparseableLines(t *testing.T) {
+	sgDir := setupSafegitDir(t)
+
+	if err := Append(sgDir, Entry{Op: "commit", Extra: map[string]interface{}{"ref": "refs/heads/main", "sha": "aaa"}}); err != nil {
+		t.Fatal(err)
+	}
+	// Two corrupted lines: a truncated JSON object (a crash mid-append) and a
+	// line of garbage.
+	logFile := filepath.Join(sgDir, "log")
+	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("{\"op\":\"comm\n" + strings.Repeat("garbage ", 1000) + "\n"); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	entries, skipped, err := Read(sgDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skipped != 2 {
+		t.Errorf("skipped = %d, want 2", skipped)
+	}
+	if len(entries) != 1 {
+		t.Errorf("got %d entries, want 1", len(entries))
+	}
+}
+
+// TestReadParsesFinalLineWithoutNewline covers a log whose last append was
+// interrupted before its newline: the line is still parsed if it is valid JSON.
+func TestReadParsesFinalLineWithoutNewline(t *testing.T) {
+	sgDir := setupSafegitDir(t)
+
+	logFile := filepath.Join(sgDir, "log")
+	line := `{"ts":"2026-04-26T12:00:00Z","pid":42,"op":"commit"}`
+	if err := os.WriteFile(logFile, []byte(line), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, skipped, err := Read(sgDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skipped != 0 {
+		t.Fatalf("skipped = %d, want 0", skipped)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want 1", len(entries))
+	}
+}
+
+// TestLastRefUpdateFailsClosedOnSkippedLines pins the fail-closed contract:
+// bypass detection and undo arithmetic need a complete log, so a corrupted one
+// is an error, never a shorter answer.
+func TestLastRefUpdateFailsClosedOnSkippedLines(t *testing.T) {
+	sgDir := setupSafegitDir(t)
+
+	if err := Append(sgDir, Entry{Op: "commit", SessionID: "sess-A", Extra: map[string]interface{}{"ref": "refs/heads/main", "sha": "aaa"}}); err != nil {
+		t.Fatal(err)
+	}
+	logFile := filepath.Join(sgDir, "log")
+	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString("not json at all\n"); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+
+	if _, err := LastRefUpdate(sgDir, "refs/heads/main"); err == nil {
+		t.Error("LastRefUpdate should fail closed on an incomplete log")
+	} else if !strings.Contains(err.Error(), "unparseable") {
+		t.Errorf("error should name the unparseable lines, got: %v", err)
+	}
+
+	if _, err := LastRefUpdateForSession(sgDir, "refs/heads/main", "sess-A"); err == nil {
+		t.Error("LastRefUpdateForSession should fail closed on an incomplete log")
+	} else if !strings.Contains(err.Error(), "unparseable") {
+		t.Errorf("error should name the unparseable lines, got: %v", err)
 	}
 }
 
 func TestReadEmptyLog(t *testing.T) {
 	sgDir := setupSafegitDir(t)
 
-	entries, err := Read(sgDir)
+	entries, skipped, err := Read(sgDir)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if skipped != 0 {
+		t.Fatalf("skipped = %d, want 0", skipped)
 	}
 	if len(entries) != 0 {
 		t.Errorf("got %d entries, want 0", len(entries))
@@ -118,9 +230,12 @@ func TestReadNonExistentLog(t *testing.T) {
 	os.MkdirAll(sgDir, 0755)
 	// Don't create the log file
 
-	entries, err := Read(sgDir)
+	entries, skipped, err := Read(sgDir)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if skipped != 0 {
+		t.Fatalf("skipped = %d, want 0", skipped)
 	}
 	if entries != nil {
 		t.Errorf("expected nil entries for non-existent log, got %v", entries)
@@ -191,9 +306,12 @@ func TestAppendAutoFillsSessionID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	entries, err := Read(sgDir)
+	entries, skipped, err := Read(sgDir)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if skipped != 0 {
+		t.Fatalf("skipped = %d, want 0", skipped)
 	}
 	if len(entries) != 1 {
 		t.Fatalf("got %d entries, want 1", len(entries))
@@ -213,9 +331,12 @@ func TestAppendSessionIDEmptyWithoutEnv(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	entries, err := Read(sgDir)
+	entries, skipped, err := Read(sgDir)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if skipped != 0 {
+		t.Fatalf("skipped = %d, want 0", skipped)
 	}
 	if len(entries) != 1 {
 		t.Fatalf("got %d entries, want 1", len(entries))
@@ -235,9 +356,12 @@ func TestSessionIDJSONRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	entries, err := Read(sgDir)
+	entries, skipped, err := Read(sgDir)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if skipped != 0 {
+		t.Fatalf("skipped = %d, want 0", skipped)
 	}
 	if len(entries) != 1 {
 		t.Fatalf("got %d entries, want 1", len(entries))
@@ -347,9 +471,12 @@ func TestConcurrentAppend(t *testing.T) {
 
 	wg.Wait()
 
-	entries, err := Read(sgDir)
+	entries, skipped, err := Read(sgDir)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if skipped != 0 {
+		t.Fatalf("skipped = %d, want 0", skipped)
 	}
 	if len(entries) != goroutines {
 		t.Errorf("got %d entries, want %d", len(entries), goroutines)

@@ -659,7 +659,7 @@ func TestConfigOverride(t *testing.T) {
 
 	// Write a custom config with different casMaxAttempts
 	customCfg := filepath.Join(dir, "custom-config.json")
-	if err := os.WriteFile(customCfg, []byte(`{"schemaVersion":1,"commit":{"casMaxAttempts":99},"lock":{"acquireTimeoutSeconds":30},"hooks":{"preprepush":{"timeoutSeconds":1800}},"push":{"retryAttempts":3},"log":{"maxSizeMB":100}}`+"\n"), 0644); err != nil {
+	if err := os.WriteFile(customCfg, []byte(`{"schemaVersion":1,"commit":{"casMaxAttempts":99},"lock":{"acquireTimeoutSeconds":30},"hooks":{"preprepush":{"timeoutSeconds":1800}},"push":{"retryAttempts":3}}`+"\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 

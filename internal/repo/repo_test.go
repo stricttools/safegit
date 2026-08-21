@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -234,8 +235,46 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Push.RetryAttempts != 3 {
 		t.Errorf("RetryAttempts = %d, want 3", cfg.Push.RetryAttempts)
 	}
-	if cfg.Log.MaxSizeMB != 100 {
-		t.Errorf("MaxSizeMB = %d, want 100", cfg.Log.MaxSizeMB)
+}
+
+// TestRetiredLogKeyStillParses pins the removal of log.maxSizeMB: a
+// config.json written by an older safegit keeps loading (unknown members are
+// ignored), while setting or reading the key is a hard error.
+func TestRetiredLogKeyStillParses(t *testing.T) {
+	jsonData := `{
+		"schemaVersion": 1,
+		"commit": {"casMaxAttempts": 5},
+		"lock": {"acquireTimeoutSeconds": 30},
+		"hooks": {"preprepush": {"timeoutSeconds": 1800}},
+		"push": {"retryAttempts": 3},
+		"log": {"maxSizeMB": 100}
+	}`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(path, []byte(jsonData), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfigFrom(path)
+	if err != nil {
+		t.Fatalf("a config carrying the retired log key must still load: %v", err)
+	}
+	if cfg.Push.RetryAttempts != 3 {
+		t.Errorf("RetryAttempts = %d, want 3", cfg.Push.RetryAttempts)
+	}
+
+	if err := SetConfigValue(cfg, "log.maxSizeMB", "50"); err == nil {
+		t.Error("setting log.maxSizeMB should be an unknown-key error")
+	} else if !strings.Contains(err.Error(), "unknown config key") {
+		t.Errorf("error should say unknown config key, got: %v", err)
+	}
+	if _, err := GetConfigValue(cfg, "log.maxSizeMB"); err == nil {
+		t.Error("getting log.maxSizeMB should be an unknown-key error")
+	}
+	for _, k := range ValidConfigKeys() {
+		if k == "log.maxSizeMB" {
+			t.Error("log.maxSizeMB must not be a valid config key")
+		}
 	}
 }
 
