@@ -5,6 +5,7 @@ package commit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	mrand "math/rand"
 	"os"
@@ -24,13 +25,39 @@ import (
 )
 
 // CommitError carries a structured exit code alongside the error message.
+//
+// It reaches the caller wrapped as often as not -- a staging failure is
+// annotated with the path it happened on before it leaves the pipeline -- so
+// callers must find it with errors.As, never with a bare type assertion.
 type CommitError struct {
 	Code    int
 	Message string
+	// Err is the underlying cause, when there is one, so a caller can still
+	// ask errors.Is about sentinels like stage.ErrBinaryFile after the code
+	// has been attached.
+	Err error
 }
 
 // Error returns the error message.
 func (e *CommitError) Error() string { return e.Message }
+
+// Unwrap exposes the underlying cause to errors.Is/errors.As.
+func (e *CommitError) Unwrap() error { return e.Err }
+
+// stagingHunksError annotates a hunk-staging failure with the file it happened
+// on and, for failures that have their own exit code, attaches that code.
+//
+// A binary file is the one such failure today: a hunk spec against it is not a
+// general error but a specific refusal ("this file can only be staged whole"),
+// and it exits exitcode.BinaryHunkSpec so a caller can act on it. The returned
+// error WRAPS the CommitError rather than being one, which is why every reader
+// of these errors uses errors.As.
+func stagingHunksError(absPath string, err error) error {
+	if errors.Is(err, stage.ErrBinaryFile) {
+		err = &CommitError{Code: exitcode.BinaryHunkSpec, Message: err.Error(), Err: err}
+	}
+	return fmt.Errorf("staging hunks of %s: %w", absPath, err)
+}
 
 // Pipeline orchestrates the full commit flow.
 type Pipeline struct {
@@ -214,7 +241,7 @@ func (p *Pipeline) tryCommit(
 		if hunks != nil {
 			// Hunk-level staging
 			if err := stage.StageHunks(ctx, tmpIdx.IndexPath, absPath, hunks); err != nil {
-				return nil, false, fmt.Errorf("staging hunks of %s: %w", absPath, err)
+				return nil, false, stagingHunksError(absPath, err)
 			}
 		} else {
 			// Whole-file staging

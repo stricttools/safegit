@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -85,8 +86,12 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		DryRun:     flags.dryRun,
 	})
 	if err != nil {
-		code := 1
-		if ce, ok := err.(*commit.CommitError); ok {
+		code := exitcode.General
+		// errors.As, not a type assertion: the pipeline annotates some
+		// failures with the path they happened on, so the CommitError that
+		// carries the exit code arrives wrapped.
+		var ce *commit.CommitError
+		if errors.As(err, &ce) {
 			code = ce.Code
 		}
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -186,8 +191,12 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			DryRun:    flags.dryRun,
 		})
 		if err != nil {
-			code := 1
-			if ce, ok := err.(*commit.CommitError); ok {
+			code := exitcode.General
+			// errors.As, not a type assertion: the pipeline annotates some
+			// failures with the path they happened on, so the CommitError that
+			// carries the exit code arrives wrapped.
+			var ce *commit.CommitError
+			if errors.As(err, &ce) {
 				code = ce.Code
 			}
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -250,8 +259,12 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			DryRun:   flags.dryRun,
 		})
 		if err != nil {
-			code := 1
-			if ce, ok := err.(*commit.CommitError); ok {
+			code := exitcode.General
+			// errors.As, not a type assertion: the pipeline annotates some
+			// failures with the path they happened on, so the CommitError that
+			// carries the exit code arrives wrapped.
+			var ce *commit.CommitError
+			if errors.As(err, &ce) {
 				code = ce.Code
 			}
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
