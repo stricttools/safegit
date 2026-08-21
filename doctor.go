@@ -135,7 +135,7 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 			infof(flags, "Aborted.\n")
 			return 1
 		}
-		if err := repo.Uninstall(gitDir); err != nil {
+		if err := repo.Uninstall(flags.ctx(), gitDir); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}

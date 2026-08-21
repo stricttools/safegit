@@ -1,6 +1,7 @@
 package repo
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -26,7 +27,7 @@ func TestInitAndIsInitialized(t *testing.T) {
 		t.Fatal("should not be initialized before Init")
 	}
 
-	if err := Init(gitDir); err != nil {
+	if err := Init(context.Background(), gitDir); err != nil {
 		t.Fatal(err)
 	}
 
@@ -103,7 +104,7 @@ func TestIsInitializedRequiresConfig(t *testing.T) {
 func TestInitCompletesHalfInitializedDir(t *testing.T) {
 	gitDir := halfInitializedGitDir(t)
 
-	if err := Init(gitDir); err != nil {
+	if err := Init(context.Background(), gitDir); err != nil {
 		t.Fatalf("Init over a half-initialized dir: %v", err)
 	}
 	if !IsInitialized(gitDir) {
@@ -132,7 +133,7 @@ func TestInitCompletesHalfInitializedDir(t *testing.T) {
 	if err := SaveConfig(gitDir, cfg); err != nil {
 		t.Fatalf("saving the edited config: %v", err)
 	}
-	if err := Init(gitDir); err != nil {
+	if err := Init(context.Background(), gitDir); err != nil {
 		t.Fatalf("second Init: %v", err)
 	}
 	reloaded, err := LoadConfig(gitDir)
@@ -150,7 +151,7 @@ func TestInitCompletesHalfInitializedDir(t *testing.T) {
 func TestEnsureInitializedCompletesHalfInitializedDir(t *testing.T) {
 	gitDir := halfInitializedGitDir(t)
 
-	if err := EnsureInitialized(gitDir); err != nil {
+	if err := EnsureInitialized(context.Background(), gitDir); err != nil {
 		t.Fatalf("EnsureInitialized over a half-initialized dir: %v", err)
 	}
 	if _, err := os.Stat(ConfigPath(gitDir)); err != nil {
@@ -161,7 +162,7 @@ func TestEnsureInitializedCompletesHalfInitializedDir(t *testing.T) {
 	}
 
 	// Idempotent: calling it again on the repaired repo changes nothing.
-	if err := EnsureInitialized(gitDir); err != nil {
+	if err := EnsureInitialized(context.Background(), gitDir); err != nil {
 		t.Fatalf("second EnsureInitialized: %v", err)
 	}
 	if !IsInitialized(gitDir) {
@@ -173,10 +174,10 @@ func TestInitIdempotent(t *testing.T) {
 	gitDir := filepath.Join(t.TempDir(), ".git")
 	os.MkdirAll(gitDir, 0755)
 
-	Init(gitDir)
+	Init(context.Background(), gitDir)
 
 	// Second init should succeed (idempotent)
-	err := Init(gitDir)
+	err := Init(context.Background(), gitDir)
 	if err != nil {
 		t.Fatalf("expected nil on double init, got: %v", err)
 	}
@@ -187,7 +188,7 @@ func TestEnsureInitialized(t *testing.T) {
 	os.MkdirAll(gitDir, 0755)
 
 	// EnsureInitialized should auto-init when not initialized
-	err := EnsureInitialized(gitDir)
+	err := EnsureInitialized(context.Background(), gitDir)
 	if err != nil {
 		t.Fatalf("unexpected error from auto-init: %v", err)
 	}
@@ -196,7 +197,7 @@ func TestEnsureInitialized(t *testing.T) {
 	}
 
 	// Calling again on an already-initialized repo should succeed
-	err = EnsureInitialized(gitDir)
+	err = EnsureInitialized(context.Background(), gitDir)
 	if err != nil {
 		t.Fatalf("unexpected error after init: %v", err)
 	}
@@ -207,13 +208,13 @@ func TestUninstall(t *testing.T) {
 	os.MkdirAll(gitDir, 0755)
 
 	// Uninstall when not initialized
-	err := Uninstall(gitDir)
+	err := Uninstall(context.Background(), gitDir)
 	if err == nil {
 		t.Fatal("expected error uninstalling when not initialized")
 	}
 
-	Init(gitDir)
-	err = Uninstall(gitDir)
+	Init(context.Background(), gitDir)
+	err = Uninstall(context.Background(), gitDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -465,7 +466,7 @@ func TestConcurrentFirstInitNeverPublishesPartialConfig(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				if err := Init(gitDir); err != nil {
+				if err := Init(context.Background(), gitDir); err != nil {
 					errs <- fmt.Errorf("Init: %w", err)
 				}
 			}()

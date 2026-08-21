@@ -749,7 +749,7 @@ func runVersion(flags globalFlags) {
 		Go:      runtime.Version(),
 		OS:      runtime.GOOS,
 		Arch:    runtime.GOARCH,
-		Git:     gitVersion(),
+		Git:     gitVersion(flags.ctx()),
 	}
 	flags.payload(v)
 	outf(flags, "safegit %s\n", v.Safegit)
@@ -757,8 +757,13 @@ func runVersion(flags globalFlags) {
 	outf(flags, "git     %s\n", v.Git)
 }
 
-func gitVersion() string {
-	out, _, err := git.Run(context.Background(), "--version")
+// gitVersion reports the git binary's own version banner verbatim, which is
+// what `safegit version` prints and puts in its payload. It does NOT go through
+// git.Version: that one parses the banner down to major/minor/patch for the
+// feature floors, dropping the vendor suffix ("(Apple Git-154)") an operator
+// reporting a bug needs to see.
+func gitVersion(ctx context.Context) string {
+	out, _, err := git.Run(ctx, "--version")
 	if err != nil {
 		return "unknown"
 	}
@@ -792,10 +797,16 @@ func ensureInitialized(flags globalFlags, gitDir string) error {
 	if flags.dryRun {
 		return nil
 	}
-	return repo.EnsureInitialized(gitDir)
+	return repo.EnsureInitialized(flags.ctx(), gitDir)
 }
 
 // mustGitDir resolves the .git directory or exits with an error.
+//
+// It asks git from the OPERATOR'S own directory, on a bare context -- discovery
+// is the one thing the repository-root pin cannot itself be applied to, because
+// there is no root to pin to until this call has found one. (repoRootOrEmpty is
+// the same case for the work-tree top.) The answer is made absolute here, so
+// every later use of it is independent of the working directory.
 func mustGitDir() string {
 	ctx := context.Background()
 	gitDir, err := git.GitDir(ctx)

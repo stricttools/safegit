@@ -6,6 +6,7 @@
 package testutil
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -55,7 +56,7 @@ const (
 // Callers pass repo.Init as safegitInit:
 //
 //	dir, gitDir, sgDir := testutil.InitRepo(t, repo.Init)
-func InitRepo(t *testing.T, safegitInit func(gitDir string) error) (repoDir, gitDir, safegitDir string) {
+func InitRepo(t *testing.T, safegitInit func(ctx context.Context, gitDir string) error) (repoDir, gitDir, safegitDir string) {
 	t.Helper()
 	isolate(t)
 	dir := evalTempDir(t)
@@ -90,7 +91,7 @@ func InitRepo(t *testing.T, safegitInit func(gitDir string) error) (repoDir, git
 	}
 
 	gd := filepath.Join(dir, ".git")
-	if err := safegitInit(gd); err != nil {
+	if err := safegitInit(context.Background(), gd); err != nil {
 		t.Fatalf("safegit init: %v", err)
 	}
 	sgDir := filepath.Join(gd, "safegit")

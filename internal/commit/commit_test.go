@@ -806,7 +806,7 @@ func TestInitialCommit(t *testing.T) {
 
 	// Initialize safegit
 	gitDir := filepath.Join(dir, ".git")
-	if err := repo.Init(gitDir); err != nil {
+	if err := repo.Init(context.Background(), gitDir); err != nil {
 		t.Fatalf("safegit init: %v", err)
 	}
 	sgDir := filepath.Join(gitDir, "safegit")
