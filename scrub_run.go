@@ -275,7 +275,14 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
 	lk, err := lock.Acquire(sharedDir, sgDir, "safegit/rewrite", "scrub-run", timeout)
 	if err != nil {
-		die(exitcode.General, "another rewrite operation is in progress")
+		// The real error, not a fixed sentence: it names the ref and the
+		// process still holding it, which is the only thing that tells the
+		// operator what to look at. A timeout gets its own exit code so a
+		// caller can tell contention apart from every other lock failure.
+		if lock.IsTimeout(err) {
+			die(exitcode.LockTimeout, err.Error())
+		}
+		die(exitcode.General, fmt.Sprintf("acquiring rewrite lock: %v", err))
 	}
 	defer lk.Release()
 

@@ -189,6 +189,9 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
 	lk, err := lock.Acquire(sharedDir, sgDir, ref, "undo", timeout)
 	if err != nil {
+		if lock.IsTimeout(err) {
+			die(exitcode.LockTimeout, fmt.Sprintf("acquiring lock: %v", err))
+		}
 		die(exitcode.General, fmt.Sprintf("acquiring lock: %v", err))
 	}
 	defer lk.Release()

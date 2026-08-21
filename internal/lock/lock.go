@@ -23,6 +23,35 @@ type RefLock struct {
 	LockPath string
 }
 
+// TimeoutError is what Acquire returns when the timeout expired with a live
+// holder still owning the lock. It is a distinct type because the exit code
+// safegit reports for that outcome (exitcode.LockTimeout) is distinct: a
+// caller decides between "someone else is working here, wait or investigate"
+// and every other reason a lock could not be taken by asking errors.As for
+// this type, never by matching the message text.
+//
+// The message names the ref and the holder record, so a caller that surfaces
+// the error verbatim tells the operator which process to look at.
+type TimeoutError struct {
+	// Ref is the ref (or the tool-owned pseudo-ref, e.g. safegit/rewrite)
+	// whose lock could not be taken.
+	Ref string
+	// Holder is the lock file's owner record as describeHolder renders it.
+	Holder string
+	// Timeout is how long Acquire waited before giving up.
+	Timeout time.Duration
+}
+
+func (e *TimeoutError) Error() string {
+	return fmt.Sprintf("timeout acquiring lock on %s (held by %s)", e.Ref, e.Holder)
+}
+
+// IsTimeout reports whether err is, or wraps, a lock acquisition timeout.
+func IsTimeout(err error) bool {
+	var te *TimeoutError
+	return errors.As(err, &te)
+}
+
 // backoff steps for polling: 10ms, 20ms, 50ms, 100ms, 200ms, 500ms, capped at 1s.
 var backoffSteps = []time.Duration{
 	10 * time.Millisecond,
@@ -118,8 +147,7 @@ func Acquire(locksBaseDir, safegitDir, ref, op string, timeout time.Duration) (*
 
 		// Not stale -- wait with backoff
 		if time.Now().After(deadline) {
-			holder := describeHolder(lp)
-			return nil, fmt.Errorf("timeout acquiring lock on %s (held by %s)", ref, holder)
+			return nil, &TimeoutError{Ref: ref, Holder: describeHolder(lp), Timeout: timeout}
 		}
 
 		delay := backoffSteps[step]
