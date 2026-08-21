@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
@@ -119,7 +120,7 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 		scope = &s
 		// Validate the glob pattern at parse time.
 		if _, err := path.Match(s, ""); err != nil {
-			die(2, fmt.Sprintf("invalid --scope glob: %v", err))
+			die(exitcode.Usage, fmt.Sprintf("invalid --scope glob: %v", err))
 		}
 	}
 
@@ -131,7 +132,7 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 	// Validation
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(4, err.Error())
+		die(exitcode.NotInitialized, err.Error())
 	}
 
 	ctx := flags.ctx()
@@ -146,14 +147,14 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 		var err error
 		fromSHA, err = git.RevParse(ctx, *from)
 		if err != nil {
-			die(1, fmt.Sprintf("resolving --from %q: %v", *from, err))
+			die(exitcode.General, fmt.Sprintf("resolving --from %q: %v", *from, err))
 		}
 		isAnc, err := git.IsAncestorOf(ctx, fromSHA, "HEAD")
 		if err != nil {
-			die(1, fmt.Sprintf("checking ancestry of --from: %v", err))
+			die(exitcode.General, fmt.Sprintf("checking ancestry of --from: %v", err))
 		}
 		if !isAnc {
-			die(1, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
+			die(exitcode.General, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
 		}
 	}
 
@@ -164,7 +165,7 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 	// Compile regex
 	compiledPattern, err := regexp.Compile(pattern)
 	if err != nil {
-		die(2, fmt.Sprintf("invalid regex pattern: %v", err))
+		die(exitcode.Usage, fmt.Sprintf("invalid regex pattern: %v", err))
 	}
 
 	// Dry-run mode: purely read-only, no lock needed.
@@ -180,13 +181,13 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 	// Acquire rewrite lock to prevent concurrent scrub operations
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(1, fmt.Sprintf("loading config: %v", err))
+		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
 	}
 	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
 	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
 	lk, err := lock.Acquire(sharedDir, sgDir, "safegit/rewrite", "scrub-match", timeout)
 	if err != nil {
-		die(1, "another rewrite operation is in progress")
+		die(exitcode.General, "another rewrite operation is in progress")
 	}
 	defer lk.Release()
 
@@ -202,16 +203,16 @@ func scrubMatchDryRun(ctx context.Context, flags globalFlags, cmd string, compil
 	scanOpts := scan.ScanOpts{FromSHA: fromSHA, EntireHistory: entireHistory}
 	results, err := scan.ScanObjects(ctx, compiledPattern, scanOpts)
 	if err != nil {
-		die(1, fmt.Sprintf("scanning objects: %v", err))
+		die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
 	}
 
 	if err := scan.AddAttribution(ctx, results, scanOpts); err != nil {
-		die(1, fmt.Sprintf("adding attribution: %v", err))
+		die(exitcode.General, fmt.Sprintf("adding attribution: %v", err))
 	}
 
 	nonObjectMatches, err := scan.ScanNonObjects(ctx, compiledPattern, gitDir)
 	if err != nil {
-		die(1, fmt.Sprintf("scanning non-object files: %v", err))
+		die(exitcode.General, fmt.Sprintf("scanning non-object files: %v", err))
 	}
 
 	// Scan submodules for matches.
@@ -512,7 +513,7 @@ func scrubMatchExecute(
 	parentOpts := scan.ScanOpts{EntireHistory: true}
 	results, err := scan.ScanObjects(ctx, compiledPattern, parentOpts)
 	if err != nil {
-		die(1, fmt.Sprintf("scanning objects: %v", err))
+		die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
 	}
 
 	// Enumerate submodules (4.4)
@@ -559,7 +560,7 @@ func scrubMatchExecute(
 	if scope != nil {
 		scopedBlobSHAs, err = buildScopedBlobSet(ctx, *scope)
 		if err != nil {
-			die(1, fmt.Sprintf("building scoped blob set: %v", err))
+			die(exitcode.General, fmt.Sprintf("building scoped blob set: %v", err))
 		}
 	}
 
@@ -602,7 +603,7 @@ func scrubMatchExecute(
 		subScanOpts := scan.ScanOpts{GitDir: sub.GitDir, WorkTree: sub.WorkTreePath, SubmodulePath: sub.RelativePath, EntireHistory: true}
 		subResults, err := scan.ScanObjects(ctx, compiledPattern, subScanOpts)
 		if err != nil {
-			die(1, fmt.Sprintf("scanning submodule %s: %v", sub.RelativePath, err))
+			die(exitcode.General, fmt.Sprintf("scanning submodule %s: %v", sub.RelativePath, err))
 		}
 		if len(subResults.Matches) == 0 {
 			continue
@@ -615,7 +616,7 @@ func scrubMatchExecute(
 			if subScope != "" {
 				subScopedBlobs, err = buildScopedBlobSetWithDir(ctx, subScope, sub.GitDir, sub.WorkTreePath)
 				if err != nil {
-					die(1, fmt.Sprintf("building scoped blob set for submodule %s: %v", sub.RelativePath, err))
+					die(exitcode.General, fmt.Sprintf("building scoped blob set for submodule %s: %v", sub.RelativePath, err))
 				}
 			}
 		}
@@ -685,7 +686,7 @@ func scrubMatchExecute(
 		for blobSHA := range si.uniqueBlobs {
 			content, err := git.CatFileBlob(subCtx, blobSHA)
 			if err != nil {
-				die(1, fmt.Sprintf("submodule %s: reading blob %s: %v", si.sub.RelativePath, blobSHA, err))
+				die(exitcode.General, fmt.Sprintf("submodule %s: reading blob %s: %v", si.sub.RelativePath, blobSHA, err))
 			}
 			if isBinaryContent(content) {
 				continue
@@ -701,7 +702,7 @@ func scrubMatchExecute(
 			}
 			newSHA, err := git.HashObjectWriteBytes(subCtx, modified)
 			if err != nil {
-				die(1, fmt.Sprintf("submodule %s: writing replaced blob: %v", si.sub.RelativePath, err))
+				die(exitcode.General, fmt.Sprintf("submodule %s: writing replaced blob: %v", si.sub.RelativePath, err))
 			}
 			subBlobMap[blobSHA] = newSHA
 			if flags.verbose {
@@ -714,7 +715,7 @@ func scrubMatchExecute(
 		if entireHistory {
 			out, _, err := git.Run(subCtx, "rev-list", "--topo-order", "--reverse", "HEAD")
 			if err != nil {
-				die(1, fmt.Sprintf("submodule %s: listing commits: %v", si.sub.RelativePath, err))
+				die(exitcode.General, fmt.Sprintf("submodule %s: listing commits: %v", si.sub.RelativePath, err))
 			}
 			subSHAs = git.SplitNonEmpty(out)
 		} else {
@@ -722,7 +723,7 @@ func scrubMatchExecute(
 			// the corresponding commit boundary in the submodule.
 			out, _, err := git.Run(subCtx, "rev-list", "--topo-order", "--reverse", "HEAD")
 			if err != nil {
-				die(1, fmt.Sprintf("submodule %s: listing commits: %v", si.sub.RelativePath, err))
+				die(exitcode.General, fmt.Sprintf("submodule %s: listing commits: %v", si.sub.RelativePath, err))
 			}
 			subSHAs = git.SplitNonEmpty(out)
 		}
@@ -760,7 +761,7 @@ func scrubMatchExecute(
 			return xform, nil
 		}, flags.verbose)
 		if err != nil {
-			die(1, fmt.Sprintf("submodule %s: walk and rewrite: %v", si.sub.RelativePath, err))
+			die(exitcode.General, fmt.Sprintf("submodule %s: walk and rewrite: %v", si.sub.RelativePath, err))
 		}
 
 		subScrubResults = append(subScrubResults, submoduleScrubResult{
@@ -834,7 +835,7 @@ func scrubMatchExecute(
 			PolicyData:     &subPolicy,
 		}
 		if err := subResult.Finalize(subCtx, flags, cmd, subAnnotFunc, nil); err != nil {
-			die(1, fmt.Sprintf("submodule %s: %v", sr.sub.RelativePath, err))
+			die(exitcode.General, fmt.Sprintf("submodule %s: %v", sr.sub.RelativePath, err))
 		}
 	}
 
@@ -1105,7 +1106,7 @@ func rewriteTagAnnotations(ctx context.Context, flags globalFlags, cmd string, c
 		return newBody, nil
 	})
 	if err != nil {
-		die(1, fmt.Sprintf("rewriting tag annotations: %v", err))
+		die(exitcode.General, fmt.Sprintf("rewriting tag annotations: %v", err))
 	}
 	if tagsRewritten > 0 && flags.verbose {
 		for _, tr := range tagRewrites {

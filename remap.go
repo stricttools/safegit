@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 )
 
@@ -97,7 +98,7 @@ func matchAnyScope(globs []string, filePath string) bool {
 func validateRemapGlobs(globs []string) {
 	for _, g := range globs {
 		if _, err := path.Match(g, ""); err != nil {
-			die(2, fmt.Sprintf("invalid --remap-shas-in glob %q: %v", g, err))
+			die(exitcode.Usage, fmt.Sprintf("invalid --remap-shas-in glob %q: %v", g, err))
 		}
 	}
 }

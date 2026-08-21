@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/hooks"
 	"github.com/smm-h/strictcli/go/strictcli"
@@ -18,7 +19,7 @@ func hookList(flags globalFlags) int {
 	discovered, err := hooks.Discover(gitDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 
 	if len(discovered) == 0 {
@@ -38,13 +39,13 @@ func hookRun(flags globalFlags, name string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: loading config: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 
 	// Synthesize stdin from current branch state
@@ -52,7 +53,7 @@ func hookRun(flags globalFlags, name string) int {
 	hookStdin, err := synthesizeHookStdin(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 
 	timeoutSec := cfg.Hooks.PrePrePush.TimeoutSeconds
@@ -72,7 +73,7 @@ func hookRun(flags globalFlags, name string) int {
 		discovered, dErr := hooks.Discover(gitDir)
 		if dErr != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", dErr)
-			return 1
+			return exitcode.General
 		}
 
 		var hookPath string
@@ -84,18 +85,18 @@ func hookRun(flags globalFlags, name string) int {
 		}
 		if hookPath == "" {
 			fmt.Fprintf(os.Stderr, "hook %q not found\n", name)
-			return 1
+			return exitcode.General
 		}
 
 		outf(flags, "running hook: %s\n", name)
 		r := hooks.RunSingle(ctx, hookPath, hookStdin, timeoutSec, hookEnv)
 		if r.TimedOut {
 			fmt.Fprintf(os.Stderr, "hook %s timed out\n", name)
-			return 21
+			return exitcode.PushHookTimeout
 		}
 		if r.ExitCode != 0 {
 			fmt.Fprintf(os.Stderr, "hook %s failed (exit %d)\n", name, r.ExitCode)
-			return 20
+			return exitcode.PushHookFailed
 		}
 		outf(flags, "hook %s passed (%v)\n", name, r.Duration)
 		return 0
@@ -105,7 +106,7 @@ func hookRun(flags globalFlags, name string) int {
 	results, rErr := hooks.Run(ctx, gitDir, hookStdin, timeoutSec, hookEnv)
 	if rErr != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", rErr)
-		return 1
+		return exitcode.General
 	}
 
 	if len(results) == 0 {
@@ -127,7 +128,7 @@ func hookRun(flags globalFlags, name string) int {
 	}
 
 	if failed {
-		return 20
+		return exitcode.PushHookFailed
 	}
 	return 0
 }
@@ -141,20 +142,20 @@ func hookInstall(flags globalFlags, srcPath string) int {
 	data, dest, err := hooks.PlanInstall(gitDir, srcPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 	fx := flags.effects()
 	if _, err := fx.Mkdir(filepath.Dir(dest)); err != nil {
 		fmt.Fprintf(os.Stderr, "error: creating hooks dir: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 	if _, err := fx.Write(dest, data, strictcli.Resource("safegit-hook:"+dest)); err != nil {
 		fmt.Fprintf(os.Stderr, "error: writing hook file: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 	if _, err := fx.Chmod(dest, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "error: making hook executable: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 
 	name := filepath.Base(srcPath)

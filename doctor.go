@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/gitversion"
 	"github.com/smm-h/safegit/internal/index"
@@ -133,11 +134,11 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 		uninstallConsent := consent{granted: flags.approved, flag: "--approve-consequential"}
 		if !confirmDeliberate(flags, uninstallConsent, "Remove safegit from this repository?") {
 			infof(flags, "Aborted.\n")
-			return 1
+			return exitcode.General
 		}
 		if err := repo.Uninstall(flags.ctx(), gitDir); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
+			os.Exit(exitcode.General)
 		}
 		if !flags.silent() {
 			fmt.Println("safegit uninstalled")
@@ -359,7 +360,7 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 		orphanDirs, err := index.GarbageCollectDryRun(sgDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
+			os.Exit(exitcode.General)
 		}
 
 		// Check for legacy queue directory.
@@ -387,7 +388,7 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 		removed, err := index.GarbageCollect(sgDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
+			os.Exit(exitcode.General)
 		}
 
 		// Clean up legacy queue directory (removed in v0.2).

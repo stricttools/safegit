@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/smm-h/safegit/internal/commit"
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/repo"
@@ -207,7 +208,7 @@ func newApp() *strictcli.App {
 		case "revert":
 			return runGuardedPassthrough(gf, "revert", args)
 		}
-		return 1
+		return exitcode.General
 	}
 
 	app.Command("commit", "stage and commit specified files in a single atomic operation", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
@@ -275,7 +276,7 @@ func newApp() *strictcli.App {
 			// loudly keeps the zero value (pushModeHead) from silently becoming
 			// the answer for any future non-CLI caller: that silent
 			// fall-through is exactly how `--no-only-tags` used to push HEAD.
-			die(70, "unreachable: --refs is required and closed over head, branches, tags, both")
+			die(exitcode.Internal, "unreachable: --refs is required and closed over head, branches, tags, both")
 		}
 		return strictcli.Exit(runPush(gf, !prePushHook, forceWithLease, remote, mode))
 	},
@@ -811,7 +812,7 @@ func mustGitDir() string {
 	ctx := context.Background()
 	gitDir, err := git.GitDir(ctx)
 	if err != nil {
-		die(3, "not a git repository (or git is not installed)")
+		die(exitcode.NoRepository, "not a git repository (or git is not installed)")
 	}
 	// Resolve to absolute path
 	abs, err := filepath.Abs(gitDir)
@@ -884,17 +885,17 @@ func outf(flags globalFlags, format string, args ...interface{}) {
 func requireCleanTree(ctx context.Context) {
 	statusOut, _, err := git.Run(ctx, "status", "--porcelain")
 	if err != nil {
-		die(1, fmt.Sprintf("checking working tree: %v", err))
+		die(exitcode.General, fmt.Sprintf("checking working tree: %v", err))
 	}
 	if strings.TrimSpace(statusOut) != "" {
-		die(1, "working tree is dirty; commit changes before proceeding")
+		die(exitcode.General, "working tree is dirty; commit changes before proceeding")
 	}
 }
 
 // commandHelp prints per-command help and exits.
 func commandHelp(cmd, usage string) {
 	fmt.Fprintf(os.Stderr, "Usage: safegit %s\n\n%s\n", cmd, usage)
-	os.Exit(0)
+	os.Exit(exitcode.OK)
 }
 
 // die prints an error and exits with code.
@@ -938,7 +939,7 @@ func parseFileSpecs(files []string) []commit.FileSpec {
 		if colonIdx > 0 && isHunkSpec(f[colonIdx+1:]) && !fileExists(f) {
 			hunks, err := stage.ParseHunkSpec(f[colonIdx+1:])
 			if err != nil {
-				die(2, fmt.Sprintf("invalid hunk spec in %q: %v", f, err))
+				die(exitcode.Usage, fmt.Sprintf("invalid hunk spec in %q: %v", f, err))
 			}
 			spec.Path = f[:colonIdx]
 			spec.Hunks = hunks
