@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // newRepoWithRemote creates a repo with a bare remote added as "origin".
@@ -66,16 +68,6 @@ func remoteTags(t *testing.T, remoteDir string) []string {
 	return tags
 }
 
-// sliceContains returns true if the slice contains the given string.
-func sliceContains(haystack []string, needle string) bool {
-	for _, s := range haystack {
-		if s == needle {
-			return true
-		}
-	}
-	return false
-}
-
 func TestPushOnlyHead(t *testing.T) {
 	dir, remoteDir := newRepoWithRemote(t)
 
@@ -96,7 +88,7 @@ func TestPushOnlyHead(t *testing.T) {
 
 	// Verify main branch exists on remote
 	branches := remoteBranches(t, remoteDir)
-	if !sliceContains(branches, "main") {
+	if !testutil.Contains(branches, "main") {
 		t.Errorf("remote missing branch 'main'; got branches: %v", branches)
 	}
 
@@ -152,7 +144,7 @@ func TestPushOnlyBranches(t *testing.T) {
 	// Verify all branches exist on remote
 	branches := remoteBranches(t, remoteDir)
 	for _, expected := range []string{"main", "feature-a", "feature-b"} {
-		if !sliceContains(branches, expected) {
+		if !testutil.Contains(branches, expected) {
 			t.Errorf("remote missing branch %q; got branches: %v", expected, branches)
 		}
 	}
@@ -179,7 +171,7 @@ func TestPushOnlyTags(t *testing.T) {
 	// Verify tags exist on remote
 	tags := remoteTags(t, remoteDir)
 	for _, expected := range []string{"v1.0.0", "v1.1.0"} {
-		if !sliceContains(tags, expected) {
+		if !testutil.Contains(tags, expected) {
 			t.Errorf("remote missing tag %q; got tags: %v", expected, tags)
 		}
 	}
@@ -219,7 +211,7 @@ func TestPushBothBranchesAndTags(t *testing.T) {
 	// Verify branches
 	branches := remoteBranches(t, remoteDir)
 	for _, expected := range []string{"main", "feature-x"} {
-		if !sliceContains(branches, expected) {
+		if !testutil.Contains(branches, expected) {
 			t.Errorf("remote missing branch %q; got branches: %v", expected, branches)
 		}
 	}
@@ -227,7 +219,7 @@ func TestPushBothBranchesAndTags(t *testing.T) {
 	// Verify tags
 	tags := remoteTags(t, remoteDir)
 	for _, expected := range []string{"v0.1.0", "v0.2.0"} {
-		if !sliceContains(tags, expected) {
+		if !testutil.Contains(tags, expected) {
 			t.Errorf("remote missing tag %q; got tags: %v", expected, tags)
 		}
 	}

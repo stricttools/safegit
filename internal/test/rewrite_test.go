@@ -94,16 +94,6 @@ func getTreeHashes(t *testing.T, repoDir string) []string {
 	return strings.Split(raw, "\n")
 }
 
-// containsName checks if a name appears in the list.
-func containsName(names []string, target string) bool {
-	for _, n := range names {
-		if n == target {
-			return true
-		}
-	}
-	return false
-}
-
 // slicesEqual checks if two string slices are identical.
 func slicesEqual(a, b []string) bool {
 	if len(a) != len(b) {
@@ -132,13 +122,13 @@ func TestRewriteAuthorBasic(t *testing.T) {
 
 	names := getAuthorNames(t, dir)
 
-	if containsName(names, "oldname") {
+	if testutil.Contains(names, "oldname") {
 		t.Errorf("author name 'oldname' still present after rewrite: %v", names)
 	}
-	if !containsName(names, "newname") {
+	if !testutil.Contains(names, "newname") {
 		t.Errorf("author name 'newname' not present after rewrite: %v", names)
 	}
-	if !containsName(names, "Test") {
+	if !testutil.Contains(names, "Test") {
 		t.Errorf("initial commit author 'Test' should be preserved: %v", names)
 	}
 
@@ -168,16 +158,16 @@ func TestRewriteAuthorMixedAuthors(t *testing.T) {
 
 	names := getAuthorNames(t, dir)
 
-	if containsName(names, "alice") {
+	if testutil.Contains(names, "alice") {
 		t.Errorf("author name 'alice' still present after rewrite: %v", names)
 	}
-	if !containsName(names, "alice-new") {
+	if !testutil.Contains(names, "alice-new") {
 		t.Errorf("author name 'alice-new' not present after rewrite: %v", names)
 	}
-	if !containsName(names, "bob") {
+	if !testutil.Contains(names, "bob") {
 		t.Errorf("author name 'bob' should be preserved: %v", names)
 	}
-	if !containsName(names, "Test") {
+	if !testutil.Contains(names, "Test") {
 		t.Errorf("initial commit author 'Test' should be preserved: %v", names)
 	}
 
@@ -266,7 +256,7 @@ func TestRewriteAuthorWithTags(t *testing.T) {
 
 	// Author names rewritten
 	names := getAuthorNames(t, dir)
-	if containsName(names, "oldname") {
+	if testutil.Contains(names, "oldname") {
 		t.Errorf("author name 'oldname' still present after rewrite: %v", names)
 	}
 
@@ -345,7 +335,7 @@ func TestRewriteAuthorMerge(t *testing.T) {
 
 	// No "oldname" in author names
 	names := getAuthorNames(t, dir)
-	if containsName(names, "oldname") {
+	if testutil.Contains(names, "oldname") {
 		t.Errorf("author name 'oldname' still present after rewrite: %v", names)
 	}
 }
@@ -403,7 +393,7 @@ func TestRewriteAuthorMultipleBranches(t *testing.T) {
 
 	// No "oldname" in any branch's log
 	names := getAuthorNames(t, dir)
-	if containsName(names, "oldname") {
+	if testutil.Contains(names, "oldname") {
 		t.Errorf("author name 'oldname' still present after rewrite: %v", names)
 	}
 }
@@ -467,7 +457,7 @@ func TestRewriteAuthorIdempotent(t *testing.T) {
 	}
 
 	names := getAuthorNames(t, dir)
-	if containsName(names, "oldname") {
+	if testutil.Contains(names, "oldname") {
 		t.Errorf("author name 'oldname' still present after two rewrites: %v", names)
 	}
 }
@@ -523,7 +513,7 @@ func TestRewriteAuthorRootCommit(t *testing.T) {
 	}
 
 	names := getAuthorNames(t, dir)
-	if containsName(names, "oldname") {
+	if testutil.Contains(names, "oldname") {
 		t.Errorf("author name 'oldname' still present after rewrite: %v", names)
 	}
 
@@ -633,7 +623,7 @@ func TestRewriteAuthorAnnotatedTags(t *testing.T) {
 
 	// No oldname in commit authors
 	names := getAuthorNames(t, dir)
-	if containsName(names, "oldname") {
+	if testutil.Contains(names, "oldname") {
 		t.Error("oldname still present in author names")
 	}
 }
@@ -683,10 +673,10 @@ func TestRewriteAuthorFlagEquals(t *testing.T) {
 	}
 
 	names := getAuthorNames(t, dir)
-	if containsName(names, "oldname") {
+	if testutil.Contains(names, "oldname") {
 		t.Errorf("author name 'oldname' still present after rewrite: %v", names)
 	}
-	if !containsName(names, "newname") {
+	if !testutil.Contains(names, "newname") {
 		t.Errorf("author name 'newname' not present after rewrite: %v", names)
 	}
 }
@@ -703,7 +693,7 @@ func TestRewriteAuthorEmailOnly(t *testing.T) {
 
 	// Name unchanged
 	names := getAuthorNames(t, dir)
-	if !containsName(names, "alice") {
+	if !testutil.Contains(names, "alice") {
 		t.Errorf("author name 'alice' should still be present: %v", names)
 	}
 
@@ -715,7 +705,7 @@ func TestRewriteAuthorEmailOnly(t *testing.T) {
 			break
 		}
 	}
-	if !containsName(emails, "new@test.com") {
+	if !testutil.Contains(emails, "new@test.com") {
 		t.Errorf("new email 'new@test.com' not present after rewrite: %v", emails)
 	}
 }
@@ -734,18 +724,18 @@ func TestRewriteAuthorANDMatching(t *testing.T) {
 
 	// AND matching: only commits with BOTH alice + alice@work.com should be rewritten
 	names := getAuthorNames(t, dir)
-	if !containsName(names, "alice-new") {
+	if !testutil.Contains(names, "alice-new") {
 		t.Errorf("author name 'alice-new' not present (work-email commits should have been rewritten): %v", names)
 	}
-	if !containsName(names, "alice") {
+	if !testutil.Contains(names, "alice") {
 		t.Errorf("author name 'alice' should still be present (home-email commits should NOT be rewritten): %v", names)
 	}
 
 	emails := getAuthorEmails(t, dir)
-	if !containsName(emails, "new@work.com") {
+	if !testutil.Contains(emails, "new@work.com") {
 		t.Errorf("email 'new@work.com' not present after rewrite: %v", emails)
 	}
-	if !containsName(emails, "alice@home.com") {
+	if !testutil.Contains(emails, "alice@home.com") {
 		t.Errorf("email 'alice@home.com' should still be present (home-email commits should NOT be rewritten): %v", emails)
 	}
 	for _, e := range emails {
@@ -791,7 +781,7 @@ func TestRewriteAuthorUnconsentedRewritesNothing(t *testing.T) {
 	}
 
 	names := getAuthorNames(t, dir)
-	if !containsName(names, "oldname") {
+	if !testutil.Contains(names, "oldname") {
 		t.Errorf("author name 'oldname' should still be present after the refusal: %v", names)
 	}
 }
@@ -809,7 +799,7 @@ func TestRewriteAuthorConsentedProceeds(t *testing.T) {
 	}
 
 	names := getAuthorNames(t, dir)
-	if containsName(names, "oldname") {
+	if testutil.Contains(names, "oldname") {
 		t.Errorf("author name 'oldname' still present after consented rewrite: %v", names)
 	}
 }
@@ -841,7 +831,7 @@ func TestRewriteAuthorYesSkipsPrompt(t *testing.T) {
 	}
 
 	names := getAuthorNames(t, dir)
-	if containsName(names, "oldname") {
+	if testutil.Contains(names, "oldname") {
 		t.Errorf("author name 'oldname' still present after --approve-consequential rewrite: %v", names)
 	}
 }
@@ -925,7 +915,7 @@ func TestRewriteAuthorJSON(t *testing.T) {
 
 	// Verify no oldname in author names (rewrite actually happened)
 	names := getAuthorNames(t, dir)
-	if containsName(names, "oldname") {
+	if testutil.Contains(names, "oldname") {
 		t.Errorf("author name 'oldname' still present after rewrite: %v", names)
 	}
 }
@@ -945,10 +935,10 @@ func TestRewriteAuthorQuiet(t *testing.T) {
 
 	// Verify the rewrite actually happened by checking git log author names.
 	names := getAuthorNames(t, dir)
-	if containsName(names, "oldname") {
+	if testutil.Contains(names, "oldname") {
 		t.Errorf("author name 'oldname' still present after quiet rewrite: %v", names)
 	}
-	if !containsName(names, "newname") {
+	if !testutil.Contains(names, "newname") {
 		t.Errorf("author name 'newname' not present after quiet rewrite: %v", names)
 	}
 }
