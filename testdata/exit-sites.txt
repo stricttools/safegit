@@ -1,0 +1,317 @@
+== exit non-literal (73 sites)
+   backup.go:254  die in runBackupCreate  code=exitBackupDiverged  | die(exitBackupDiverged, fmt.Sprintf(
+   backup.go:272  return in runBackupCreate  code=exitPushGitFailed  | return exitPushGitFailed
+   backup.go:348  return in runBackupRestore  code=code  | return code
+   backup.go:366  die in runBackupRestore  code=exitBackupNoSlot  | die(exitBackupNoSlot, fmt.Sprintf(
+   cleanup.go:296  return in verifyOldObjectsGone  code=surviving  | return surviving
+   commit.go:92  os.Exit in runCommit  code=code  | os.Exit(code)
+   commit.go:193  os.Exit in runCommitAmend  code=code  | os.Exit(code)
+   commit.go:257  os.Exit in runCommitAmend  code=code  | os.Exit(code)
+   coord_cmd.go:75  return in runCheckout  code=code  | return code
+   coord_cmd.go:126  return in runPull  code=code  | return code
+   coord_cmd.go:182  return in runMerge  code=code  | return code
+   coord_cmd.go:224  return in runRebase  code=code  | return code
+   coord_cmd.go:273  return in runReset  code=code  | return code
+   coord_cmd.go:320  return in runBisect  code=code  | return code
+   coord_cmd.go:366  return in runGuardedPassthrough  code=code  | return code
+   coord_cmd.go:386  return in runGuardedPassthrough  code=code  | return code
+   coord_cmd.go:399  return in runPassthrough  code=exitErr.ExitCode()  | return exitErr.ExitCode()
+   doctor.go:482  return in countStaleLocks  code=count  | return count
+   doctor.go:504  return in removeStaleLocks  code=removed  | return removed
+   internal/commit/amend.go:103  err.Code in Amend  code=ExitCASExhausted  | Code:    ExitCASExhausted,
+   internal/commit/amend.go:179  err.Code in tryAmend  code=ExitWriteTree  | return nil, false, &CommitError{Code: ExitWriteTree, Message: fmt.Sprintf("write-tree failed: %v", err)}
+   internal/commit/amend.go:187  err.Code in tryAmend  code=ExitCommitTree  | return nil, false, &CommitError{Code: ExitCommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
+   internal/commit/amend.go:321  err.Code in Reword  code=ExitCASExhausted  | Code:    ExitCASExhausted,
+   internal/commit/amend.go:351  err.Code in tryReword  code=ExitCommitTree  | return nil, false, &CommitError{Code: ExitCommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
+   internal/commit/commit.go:148  err.Code in Execute  code=ExitCASExhausted  | Code:    ExitCASExhausted,
+   internal/commit/commit.go:255  err.Code in tryCommit  code=ExitWriteTree  | return nil, false, &CommitError{Code: ExitWriteTree, Message: fmt.Sprintf("write-tree failed: %v", err)}
+   internal/commit/commit.go:273  err.Code in tryCommit  code=ExitCommitTree  | return nil, false, &CommitError{Code: ExitCommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
+   main.go:196  return in newApp.func  code=runCheckout(gf, args)  | return runCheckout(gf, args)
+   main.go:198  return in newApp.func  code=runMerge(gf, args)  | return runMerge(gf, args)
+   main.go:200  return in newApp.func  code=runRebase(gf, args)  | return runRebase(gf, args)
+   main.go:202  return in newApp.func  code=runReset(gf, args)  | return runReset(gf, args)
+   main.go:204  return in newApp.func  code=runBisect(gf, args)  | return runBisect(gf, args)
+   main.go:206  return in newApp.func  code=runGuardedPassthrough(gf, "cherry-pick", args)  | return runGuardedPassthrough(gf, "cherry-pick", args)
+   main.go:208  return in newApp.func  code=runGuardedPassthrough(gf, "revert", args)  | return runGuardedPassthrough(gf, "revert", args)
+   main.go:280  strictcli.Exit in newApp.func  code=runPush(gf, !prePushHook, forceWithLease, remote, mode)  | return strictcli.Exit(runPush(gf, !prePushHook, forceWithLease, remote, mode))
+   main.go:333  strictcli.Exit in newApp.func  code=runPull(gf, mode, remote, branch)  | return strictcli.Exit(runPull(gf, mode, remote, branch))
+   main.go:356  strictcli.Exit in newApp.func  code=runBackupCreate(globalsToFlags(ctx, kwargs), remote, overwrite, allowPublicRemote)  | return strictcli.Exit(runBackupCreate(globalsToFlags(ctx, kwargs), remote, overwrite, allowPublicRemote))
+   main.go:384  strictcli.Exit in newApp.func  code=runBackupList(globalsToFlags(ctx, kwargs), remote)  | return strictcli.Exit(runBackupList(globalsToFlags(ctx, kwargs), remote))
+   main.go:396  strictcli.Exit in newApp.func  code=runBackupRestore(globalsToFlags(ctx, kwargs), remote)  | return strictcli.Exit(runBackupRestore(globalsToFlags(ctx, kwargs), remote))
+   main.go:405  strictcli.Exit in newApp.func  code=runConfigShow(globalsToFlags(ctx, kwargs))  | return strictcli.Exit(runConfigShow(globalsToFlags(ctx, kwargs)))
+   main.go:409  strictcli.Exit in newApp.func  code=runConfigGet(globalsToFlags(ctx, kwargs), key)  | return strictcli.Exit(runConfigGet(globalsToFlags(ctx, kwargs), key))
+   main.go:417  strictcli.Exit in newApp.func  code=runConfigSet(globalsToFlags(ctx, kwargs), key, value)  | return strictcli.Exit(runConfigSet(globalsToFlags(ctx, kwargs), key, value))
+   main.go:425  strictcli.Exit in newApp.func  code=hookList(globalsToFlags(ctx, kwargs))  | return strictcli.Exit(hookList(globalsToFlags(ctx, kwargs)))
+   main.go:432  strictcli.Exit in newApp.func  code=hookRun(globalsToFlags(ctx, kwargs), name)  | return strictcli.Exit(hookRun(globalsToFlags(ctx, kwargs), name))
+   main.go:444  strictcli.Exit in newApp.func  code=hookInstall(globalsToFlags(ctx, kwargs), path)  | return strictcli.Exit(hookInstall(globalsToFlags(ctx, kwargs), path))
+   main.go:450  strictcli.Exit in newApp.func  code=runDoctor(globalsToFlags(ctx, kwargs), kwargs)  | return strictcli.Exit(runDoctor(globalsToFlags(ctx, kwargs), kwargs))
+   main.go:466  strictcli.Exit in newApp.func  code=runAuthorList(globalsToFlags(ctx, kwargs))  | return strictcli.Exit(runAuthorList(globalsToFlags(ctx, kwargs)))
+   main.go:473  strictcli.Exit in newApp.func  code=runAuthorCheck(globalsToFlags(ctx, kwargs), kwargs)  | return strictcli.Exit(runAuthorCheck(globalsToFlags(ctx, kwargs), kwargs))
+   main.go:484  strictcli.Exit in newApp.func  code=runRewriteAuthor(globalsToFlags(ctx, kwargs), kwargs)  | return strictcli.Exit(runRewriteAuthor(globalsToFlags(ctx, kwargs), kwargs))
+   main.go:512  strictcli.Exit in newApp.func  code=runScrubFile(globalsToFlags(ctx, kwargs), kwargs)  | return strictcli.Exit(runScrubFile(globalsToFlags(ctx, kwargs), kwargs))
+   main.go:531  strictcli.Exit in newApp.func  code=runScrubMatch(globalsToFlags(ctx, kwargs), kwargs)  | return strictcli.Exit(runScrubMatch(globalsToFlags(ctx, kwargs), kwargs))
+   main.go:551  strictcli.Exit in newApp.func  code=runScrubRun(globalsToFlags(ctx, kwargs), kwargs)  | return strictcli.Exit(runScrubRun(globalsToFlags(ctx, kwargs), kwargs))
+   main.go:573  strictcli.Exit in newApp.func  code=runScrubVerify(globalsToFlags(ctx, kwargs))  | return strictcli.Exit(runScrubVerify(globalsToFlags(ctx, kwargs)))
+   main.go:603  strictcli.Exit in newApp.func  code=runUnlock(globalsToFlags(ctx, kwargs), ref)  | return strictcli.Exit(runUnlock(globalsToFlags(ctx, kwargs), ref))
+   main.go:609  strictcli.Exit in newApp.func  code=runScan(globalsToFlags(ctx, kwargs), kwargs)  | return strictcli.Exit(runScan(globalsToFlags(ctx, kwargs), kwargs))
+   main.go:657  return in optInt  code=fallback  | return fallback
+   main.go:659  return in optInt  code=v.(int)  | return v.(int)
+   main.go:911  os.Exit in die  code=code  | os.Exit(code)
+   push.go:148  return in runPush  code=exitPushHookTimeout  | return exitPushHookTimeout
+   push.go:152  return in runPush  code=exitPushHookFailed  | return exitPushHookFailed
+   push.go:193  return in runPush  code=exitPushGitFailed  | return exitPushGitFailed
+   scrub.go:117  return in runScrubFile  code=runScrubFileInSubmodule(ctx, flags, cmd, filePath, subFilePath, targetSub, from, reason, remapGlobs, gitDir, sgDir)  | return runScrubFileInSubmodule(ctx, flags, cmd, filePath, subFilePath, targetSub, from, reason, remapGlobs, gitDir, sgDir)
+   scrub.go:361  return in runScrubFile  code=exitCode  | return exitCode
+   scrub.go:681  return in runScrubFileInSubmodule  code=exitCode  | return exitCode
+   scrub_exec.go:364  return in estimateCommitCount  code=n  | return n
+   scrub_exec.go:371  return in estimateCommitCount  code=n + 1  | return n + 1 // inclusive of fromSHA
+   scrub_match.go:172  return in runScrubMatch  code=scrubMatchDryRun(ctx, flags, cmd, compiledPattern, scope, gitDir, pattern, fromSHA, entireHistory)  | return scrubMatchDryRun(ctx, flags, cmd, compiledPattern, scope, gitDir, pattern, fromSHA, entireHistory)
+   scrub_match.go:194  return in runScrubMatch  code=scrubMatchExecute(ctx, flags, cmd, compiledPattern, replace, mangleMode, reason, fromSHA, entireHistory, scope, remapGlobs, gitDir, sgDir)  | return scrubMatchExecute(ctx, flags, cmd, compiledPattern, replace, mangleMode, reason, fromSHA, entireHistory, scope, remapGlobs, gitDir, sgDir)
+   scrub_match.go:950  return in scrubMatchExecute  code=exitCode  | return exitCode
+   scrub_match.go:1002  return in scrubMatchExecute  code=exitCode  | return exitCode
+   scrub_run.go:214  return in runScrubRun  code=scrubRunDryRun(ctx, flags, cmd, recipe, fromSHA, entireHistory)  | return scrubRunDryRun(ctx, flags, cmd, recipe, fromSHA, entireHistory)
+   scrub_run.go:263  return in runScrubRun  code=scrubRunDiff(ctx, flags, cmd, recipe, contentMap, fromSHA, entireHistory, limit)  | return scrubRunDiff(ctx, flags, cmd, recipe, contentMap, fromSHA, entireHistory, limit)
+   scrub_run.go:344  return in runScrubRun  code=exitCode  | return exitCode
+== exit 0 (1 sites)
+   main.go:897  os.Exit in commandHelp  | os.Exit(0)
+== exit 1 (180 sites)
+   author_check.go:84  die in runAuthorCheck  | die(1, fmt.Sprintf("reading git log: %v", err))
+   author_check.go:141  return in runAuthorCheck  | return 1
+   author_check.go:193  return in runAuthorCheck  | return 1
+   author_list.go:48  die in runAuthorList  | die(1, fmt.Sprintf("reading git log: %v", err))
+   backup.go:38  die in currentBranch  | die(1, "HEAD is detached; backup slots are per branch, so check out a branch first")
+   backup.go:49  die in remoteSlotSHA  | die(1, fmt.Sprintf("listing %s on %s: %v", ref, remote, err))
+   backup.go:62  die in fetchSlotObjects  | die(1, fmt.Sprintf("fetching %s from %s: %v\n%s", ref, remote, err, strings.TrimSpace(stderr)))
+   backup.go:66  die in fetchSlotObjects  | die(1, fmt.Sprintf("resolving fetched backup: %v", err))
+   backup.go:214  die in runBackupCreate  | die(1, fmt.Sprintf("resolving HEAD: %v", err))
+   backup.go:219  die in runBackupCreate  | die(1, fmt.Sprintf("resolving remote URL: %v", err))
+   backup.go:238  return in runBackupCreate  | return 1
+   backup.go:250  die in runBackupCreate  | die(1, fmt.Sprintf("comparing backup slot with HEAD: %v", err))
+   backup.go:303  die in runBackupList  | die(1, fmt.Sprintf("resolving remote URL: %v", err))
+   backup.go:308  die in runBackupList  | die(1, fmt.Sprintf("listing backups on %s: %v", remote, err))
+   backup.go:357  die in runBackupRestore  | die(1, fmt.Sprintf("resolving HEAD: %v", err))
+   backup.go:361  die in runBackupRestore  | die(1, fmt.Sprintf("resolving remote URL: %v", err))
+   backup.go:387  die in runBackupRestore  | die(1, fmt.Sprintf(
+   cmd_scrub_verify.go:72  die in runScrubVerify  | die(1, fmt.Sprintf("reading scrub policies: %v", err))
+   cmd_scrub_verify.go:131  die in runScrubVerify  | die(1, fmt.Sprintf("scanning objects: %v", err))
+   cmd_scrub_verify.go:164  die in runScrubVerify  | die(1, fmt.Sprintf("adding attribution: %v", err))
+   cmd_scrub_verify.go:224  die in runScrubVerify  | die(1, fmt.Sprintf("building scoped blob set for %q: %v", vp.policy.Scope, err))
+   cmd_scrub_verify.go:285  return in runScrubVerify  | return 1
+   commit.go:44  die in runCommit  | die(1, fmt.Sprintf("reading message file: %v", err))
+   commit.go:63  die in runCommit  | die(1, fmt.Sprintf("loading config: %v", err))
+   commit.go:104  os.Exit in runCommit  | os.Exit(1)
+   commit.go:156  die in runCommitAmend  | die(1, fmt.Sprintf("loading config: %v", err))
+   commit.go:206  os.Exit in runCommitAmend  | os.Exit(1)
+   commit.go:268  os.Exit in runCommitAmend  | os.Exit(1)
+   config_cmd.go:41  return in runConfigShow  | return 1
+   config_cmd.go:61  return in runConfigGet  | return 1
+   config_cmd.go:67  return in runConfigGet  | return 1
+   config_cmd.go:83  return in runConfigSet  | return 1
+   config_cmd.go:88  return in runConfigSet  | return 1
+   config_cmd.go:94  return in runConfigSet  | return 1
+   config_cmd.go:104  return in runConfigSet  | return 1
+   coord_cmd.go:43  return in coordGuard  | return 1
+   coord_cmd.go:88  return in runCheckout  | return 1
+   coord_cmd.go:135  return in runPull  | return 1
+   coord_cmd.go:151  return in runPull  | return 1
+   coord_cmd.go:192  return in runMerge  | return 1
+   coord_cmd.go:233  return in runRebase  | return 1
+   coord_cmd.go:278  return in runReset  | return 1
+   coord_cmd.go:325  return in runBisect  | return 1
+   coord_cmd.go:371  return in runGuardedPassthrough  | return 1
+   coord_cmd.go:401  return in runPassthrough  | return 1
+   doctor.go:136  return in runDoctor  | return 1
+   doctor.go:140  os.Exit in runDoctor  | os.Exit(1)
+   doctor.go:362  os.Exit in doctorFix  | os.Exit(1)
+   doctor.go:390  os.Exit in doctorFix  | os.Exit(1)
+   hook.go:21  return in hookList  | return 1
+   hook.go:41  return in hookRun  | return 1
+   hook.go:47  return in hookRun  | return 1
+   hook.go:55  return in hookRun  | return 1
+   hook.go:75  return in hookRun  | return 1
+   hook.go:87  return in hookRun  | return 1
+   hook.go:108  return in hookRun  | return 1
+   hook.go:144  return in hookInstall  | return 1
+   hook.go:149  return in hookInstall  | return 1
+   hook.go:153  return in hookInstall  | return 1
+   hook.go:157  return in hookInstall  | return 1
+   internal/lock/cleanup.go:30  os.Exit in registerCleanup.func.func  | os.Exit(1)
+   main.go:210  return in newApp.func  | return 1
+   main.go:887  die in requireCleanTree  | die(1, fmt.Sprintf("checking working tree: %v", err))
+   main.go:890  die in requireCleanTree  | die(1, "working tree is dirty; commit changes before proceeding")
+   push.go:52  die in runPush  | die(1, err.Error())
+   push.go:53  return in runPush  | return 1
+   push.go:58  die in runPush  | die(1, fmt.Sprintf("loading config: %v", err))
+   push.go:59  return in runPush  | return 1
+   push.go:68  die in runPush  | die(1, fmt.Sprintf("resolving remote URL: %v", err))
+   push.go:69  return in runPush  | return 1
+   push.go:75  die in runPush  | die(1, fmt.Sprintf("resolving refs: %v", err))
+   push.go:76  return in runPush  | return 1
+   push.go:80  die in runPush  | die(1, "nothing to push (no matching refs)")
+   push.go:81  return in runPush  | return 1
+   push.go:131  die in runPush  | die(1, fmt.Sprintf("discovering hooks: %v", err))
+   push.go:132  return in runPush  | return 1
+   push.go:137  die in runPush  | die(1, fmt.Sprintf("running hooks: %v", err))
+   push.go:138  return in runPush  | return 1
+   rewrite_author.go:59  die in runRewriteAuthor  | die(1, fmt.Sprintf("listing commits: %v", err))
+   rewrite_author.go:67  die in runRewriteAuthor  | die(1, fmt.Sprintf("parsing commit %s: %v", sha, err))
+   rewrite_author.go:140  die in runRewriteAuthor  | die(1, fmt.Sprintf("loading config: %v", err))
+   rewrite_author.go:146  die in runRewriteAuthor  | die(1, "another rewrite operation is in progress")
+   rewrite_author.go:158  die in runRewriteAuthor  | die(1, fmt.Sprintf("listing commits: %v", err))
+   rewrite_author.go:167  die in runRewriteAuthor  | die(1, fmt.Sprintf("resolving HEAD: %v", err))
+   rewrite_author.go:174  die in runRewriteAuthor  | die(1, fmt.Sprintf("capturing pre-rewrite snapshot: %v", err))
+   rewrite_author.go:180  die in runRewriteAuthor  | die(1, fmt.Sprintf("rewriting commits: %v", err))
+   rewrite_author.go:247  die in runRewriteAuthor  | die(1, err.Error())
+   scan_cmd.go:236  die in runScan  | die(1, fmt.Sprintf("resolving --from %q: %v", *from, err))
+   scan_cmd.go:240  die in runScan  | die(1, fmt.Sprintf("checking ancestry of --from: %v", err))
+   scan_cmd.go:243  die in runScan  | die(1, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
+   scan_cmd.go:262  die in runScan  | die(1, fmt.Sprintf("scanning objects: %v", err))
+   scan_cmd.go:267  die in runScan  | die(1, fmt.Sprintf("adding attribution: %v", err))
+   scan_cmd.go:273  die in runScan  | die(1, fmt.Sprintf("scanning non-object files: %v", err))
+   scrub.go:123  die in runScrubFile  | die(1, fmt.Sprintf("resolving --from %q: %v", from, err))
+   scrub.go:129  die in runScrubFile  | die(1, fmt.Sprintf("checking ancestry of --from: %v", err))
+   scrub.go:132  die in runScrubFile  | die(1, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", from))
+   scrub.go:138  die in runScrubFile  | die(1, fmt.Sprintf("resolving HEAD: %v", err))
+   scrub.go:149  die in runScrubFile  | die(1, fmt.Sprintf("hashing file %q: %v", filePath, err))
+   scrub.go:159  die in runScrubFile  | die(1, fmt.Sprintf("counting commits: %v", err))
+   scrub.go:163  die in runScrubFile  | die(1, fmt.Sprintf("parsing commit count: %v", err))
+   scrub.go:212  die in runScrubFile  | die(1, fmt.Sprintf("loading config: %v", err))
+   scrub.go:218  die in runScrubFile  | die(1, "another rewrite operation is in progress")
+   scrub.go:226  die in runScrubFile  | die(1, fmt.Sprintf("writing blob for %q: %v", filePath, err))
+   scrub.go:233  die in runScrubFile  | die(1, fmt.Sprintf("listing commits: %v", err))
+   scrub.go:276  die in runScrubFile  | die(1, err.Error())
+   scrub.go:331  die in runScrubFile  | die(1, err.Error())
+   scrub.go:386  die in runScrubFileInSubmodule  | die(1, fmt.Sprintf("initializing safegit for submodule %s: %v", sub.RelativePath, err))
+   scrub.go:417  die in runScrubFileInSubmodule  | die(1, fmt.Sprintf("hashing file %q in submodule: %v", subFilePath, err))
+   scrub.go:429  die in runScrubFileInSubmodule  | die(1, fmt.Sprintf("submodule: listing commits: %v", err))
+   scrub.go:435  die in runScrubFileInSubmodule  | die(1, fmt.Sprintf("submodule: listing commits: %v", err))
+   scrub.go:488  die in runScrubFileInSubmodule  | die(1, fmt.Sprintf("writing blob for %q in submodule: %v", subFilePath, writeErr))
+   scrub.go:495  die in runScrubFileInSubmodule  | die(1, fmt.Sprintf("resolving submodule HEAD: %v", err))
+   scrub.go:518  die in runScrubFileInSubmodule  | die(1, fmt.Sprintf("submodule walk and rewrite: %v", err))
+   scrub.go:537  die in runScrubFileInSubmodule  | die(1, fmt.Sprintf("submodule finalize: %v", err))
+   scrub.go:559  die in runScrubFileInSubmodule  | die(1, fmt.Sprintf("resolving parent HEAD: %v", err))
+   scrub.go:566  die in runScrubFileInSubmodule  | die(1, fmt.Sprintf("listing parent commits: %v", err))
+   scrub.go:599  die in runScrubFileInSubmodule  | die(1, fmt.Sprintf("parent walk and rewrite: %v", err))
+   scrub.go:649  die in runScrubFileInSubmodule  | die(1, fmt.Sprintf("parent finalize: %v", err))
+   scrub_exec.go:91  die in executeScrubRecipe  | die(1, fmt.Sprintf("scanning objects: %v", err))
+   scrub_exec.go:104  die in executeScrubRecipe  | die(1, fmt.Sprintf("building scoped blob set: %v", err))
+   scrub_exec.go:157  die in executeScrubRecipe  | die(1, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
+   scrub_exec.go:172  die in executeScrubRecipe  | die(1, fmt.Sprintf("building blob map: %v", err))
+   scrub_exec.go:191  die in executeScrubRecipe  | die(1, fmt.Sprintf("resolving HEAD: %v", err))
+   scrub_exec.go:199  die in executeScrubRecipe  | die(1, fmt.Sprintf("listing commits: %v", err))
+   scrub_exec.go:205  die in executeScrubRecipe  | die(1, fmt.Sprintf("listing commits: %v", err))
+   scrub_exec.go:272  die in executeScrubRecipe  | die(1, err.Error())
+   scrub_exec.go:343  die in executeScrubRecipe  | die(1, err.Error())
+   scrub_match.go:149  die in runScrubMatch  | die(1, fmt.Sprintf("resolving --from %q: %v", *from, err))
+   scrub_match.go:153  die in runScrubMatch  | die(1, fmt.Sprintf("checking ancestry of --from: %v", err))
+   scrub_match.go:156  die in runScrubMatch  | die(1, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
+   scrub_match.go:183  die in runScrubMatch  | die(1, fmt.Sprintf("loading config: %v", err))
+   scrub_match.go:189  die in runScrubMatch  | die(1, "another rewrite operation is in progress")
+   scrub_match.go:205  die in scrubMatchDryRun  | die(1, fmt.Sprintf("scanning objects: %v", err))
+   scrub_match.go:209  die in scrubMatchDryRun  | die(1, fmt.Sprintf("adding attribution: %v", err))
+   scrub_match.go:214  die in scrubMatchDryRun  | die(1, fmt.Sprintf("scanning non-object files: %v", err))
+   scrub_match.go:515  die in scrubMatchExecute  | die(1, fmt.Sprintf("scanning objects: %v", err))
+   scrub_match.go:562  die in scrubMatchExecute  | die(1, fmt.Sprintf("building scoped blob set: %v", err))
+   scrub_match.go:605  die in scrubMatchExecute  | die(1, fmt.Sprintf("scanning submodule %s: %v", sub.RelativePath, err))
+   scrub_match.go:618  die in scrubMatchExecute  | die(1, fmt.Sprintf("building scoped blob set for submodule %s: %v", sub.RelativePath, err))
+   scrub_match.go:688  die in scrubMatchExecute  | die(1, fmt.Sprintf("submodule %s: reading blob %s: %v", si.sub.RelativePath, blobSHA, err))
+   scrub_match.go:704  die in scrubMatchExecute  | die(1, fmt.Sprintf("submodule %s: writing replaced blob: %v", si.sub.RelativePath, err))
+   scrub_match.go:717  die in scrubMatchExecute  | die(1, fmt.Sprintf("submodule %s: listing commits: %v", si.sub.RelativePath, err))
+   scrub_match.go:725  die in scrubMatchExecute  | die(1, fmt.Sprintf("submodule %s: listing commits: %v", si.sub.RelativePath, err))
+   scrub_match.go:763  die in scrubMatchExecute  | die(1, fmt.Sprintf("submodule %s: walk and rewrite: %v", si.sub.RelativePath, err))
+   scrub_match.go:837  die in scrubMatchExecute  | die(1, fmt.Sprintf("submodule %s: %v", sr.sub.RelativePath, err))
+   scrub_match.go:1108  die in rewriteTagAnnotations  | die(1, fmt.Sprintf("rewriting tag annotations: %v", err))
+   scrub_run.go:196  die in runScrubRun  | die(1, fmt.Sprintf("resolving --from %q: %v", *from, err))
+   scrub_run.go:200  die in runScrubRun  | die(1, fmt.Sprintf("checking ancestry of --from: %v", err))
+   scrub_run.go:203  die in runScrubRun  | die(1, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
+   scrub_run.go:239  die in runScrubRun  | die(1, fmt.Sprintf("scanning objects: %v", err))
+   scrub_run.go:260  die in runScrubRun  | die(1, fmt.Sprintf("building blob content map: %v", err))
+   scrub_run.go:271  die in runScrubRun  | die(1, fmt.Sprintf("loading config: %v", err))
+   scrub_run.go:277  die in runScrubRun  | die(1, "another rewrite operation is in progress")
+   scrub_run.go:379  die in rewriteTagAnnotationsRecipe  | die(1, fmt.Sprintf("rewriting tag annotations: %v", err))
+   scrub_run.go:396  die in scrubRunDiff  | die(1, fmt.Sprintf("building blob path map: %v", err))
+   scrub_run.go:448  die in scrubRunDiff  | die(1, fmt.Sprintf("listing commits for diff: %v", err))
+   scrub_run.go:454  die in scrubRunDiff  | die(1, fmt.Sprintf("listing commits for diff: %v", err))
+   scrub_run.go:546  die in scrubRunDryRun  | die(1, fmt.Sprintf("scanning objects: %v", err))
+   scrub_run.go:553  die in scrubRunDryRun  | die(1, fmt.Sprintf("scanning objects for operation %d: %v", i, err))
+   scrub_run.go:562  die in scrubRunDryRun  | die(1, fmt.Sprintf("adding attribution for operation %d: %v", i, err))
+   scrub_run.go:572  die in scrubRunDryRun  | die(1, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
+   undo.go:34  die in runUndo  | die(1, fmt.Sprintf("--count must be positive, got %d", count))
+   undo.go:46  die in runUndo  | die(1, fmt.Sprintf("loading config: %v", err))
+   undo.go:54  die in runUndo  | die(1, "HEAD is detached; undo requires a branch")
+   undo.go:63  die in runUndo  | die(1, fmt.Sprintf("reading oplog: %v", err))
+   undo.go:66  die in runUndo  | die(1, fmt.Sprintf("operation log has %d unparseable line(s); undo needs a complete log and refuses to guess (inspect %s)", skipped, oplog.Path(sgDir)))
+   undo.go:71  die in runUndo  | die(1, "no session ID found ("+sessionIDEnvVar+" not set); pass --bypass-session to undo across all sessions")
+   undo.go:111  die in runUndo  | die(1, fmt.Sprintf("cannot undo %s — history rewrite invalidated prior oplog entries", e.Op))
+   undo.go:138  die in runUndo  | die(1, fmt.Sprintf("no undoable operations found for %s in the oplog", refShortName(ref)))
+   undo.go:140  die in runUndo  | die(1, fmt.Sprintf("only %d undoable operations available, requested %d", liveSteps, count))
+   undo.go:147  die in runUndo  | die(1, fmt.Sprintf("oplog entry for %q is missing %q field", targetEntry.Op, targetKey))
+   undo.go:160  die in runUndo  | die(1, fmt.Sprintf("oplog entry for %q has empty %q field", targetEntry.Op, targetKey))
+   undo.go:172  die in runUndo  | die(1, fmt.Sprintf("resolving HEAD: %v", err))
+   undo.go:191  die in runUndo  | die(1, fmt.Sprintf("acquiring lock: %v", err))
+   undo.go:198  die in runUndo  | die(1, fmt.Sprintf("delete-ref failed (ref may have moved): %v", err))
+   undo.go:202  die in runUndo  | die(1, fmt.Sprintf("update-ref failed (ref may have moved): %v", err))
+   undo.go:223  os.Exit in runUndo  | os.Exit(1)
+   unlock.go:29  return in runUnlock  | return 1
+   unlock.go:36  return in runUnlock  | return 1
+   unlock.go:49  return in runUnlock  | return 1
+== exit 2 (23 sites)
+   author_check.go:75  return in runAuthorCheck  | return 2
+   commit.go:24  die in runCommit  | die(2, "-m and -F are mutually exclusive")
+   commit.go:30  die in runCommit  | die(2, "--allow-empty cannot be used with --amend")
+   commit.go:33  die in runCommit  | die(2, "-F cannot be used with --amend")
+   commit.go:50  die in runCommit  | die(2, "commit message required (-m or -F)")
+   commit.go:53  die in runCommit  | die(2, "no files specified (use -- file1 file2 ...)")
+   commit.go:233  die in runCommitAmend  | die(2, "commit message required (-m) when using --amend without files")
+   coord_cmd.go:80  return in runCheckout  | return 2
+   coord_cmd.go:187  return in runMerge  | return 2
+   coord_cmd.go:229  return in runRebase  | return 2
+   main.go:941  die in parseFileSpecs  | die(2, fmt.Sprintf("invalid hunk spec in %q: %v", f, err))
+   remap.go:100  die in validateRemapGlobs  | die(2, fmt.Sprintf("invalid --remap-shas-in glob %q: %v", g, err))
+   scan_cmd.go:109  die in parseTargets  | die(2, fmt.Sprintf("invalid --target value %q; valid values: blobs, commits, tags, trailers, files", p))
+   scan_cmd.go:114  die in parseTargets  | die(2, "--target requires at least one value; valid values: blobs, commits, tags, trailers, files")
+   scan_cmd.go:203  die in runScan  | die(2, fmt.Sprintf("invalid --scope glob: %v", err))
+   scan_cmd.go:228  die in runScan  | die(2, fmt.Sprintf("invalid regex pattern: %v", err))
+   scan_cmd.go:249  die in runScan  | die(2, "--from and --entire-history are mutually exclusive")
+   scrub_exec.go:75  die in executeScrubRecipe  | die(2, fmt.Sprintf("compiling combined pattern: %v", err))
+   scrub_match.go:122  die in runScrubMatch  | die(2, fmt.Sprintf("invalid --scope glob: %v", err))
+   scrub_match.go:167  die in runScrubMatch  | die(2, fmt.Sprintf("invalid regex pattern: %v", err))
+   scrub_run.go:161  die in runScrubRun  | die(2, "--dry-run and --diff are mutually exclusive")
+   scrub_run.go:186  die in runScrubRun  | die(2, fmt.Sprintf("parsing recipe: %v", err))
+   scrub_run.go:230  die in runScrubRun  | die(2, fmt.Sprintf("compiling combined pattern: %v", err))
+== exit 3 (1 sites)
+   main.go:814  die in mustGitDir  | die(3, "not a git repository (or git is not installed)")
+== exit 4 (22 sites)
+   backup.go:204  die in runBackupCreate  | die(4, err.Error())
+   backup.go:298  die in runBackupList  | die(4, err.Error())
+   backup.go:343  die in runBackupRestore  | die(4, err.Error())
+   cmd_scrub_verify.go:63  die in runScrubVerify  | die(4, err.Error())
+   commit.go:19  os.Exit in runCommit  | os.Exit(4)
+   config_cmd.go:35  return in runConfigShow  | return 4
+   config_cmd.go:55  return in runConfigGet  | return 4
+   config_cmd.go:77  return in runConfigSet  | return 4
+   coord_cmd.go:70  return in runCheckout  | return 4
+   coord_cmd.go:121  return in runPull  | return 4
+   coord_cmd.go:177  return in runMerge  | return 4
+   coord_cmd.go:219  return in runRebase  | return 4
+   coord_cmd.go:258  return in runReset  | return 4
+   coord_cmd.go:305  return in runBisect  | return 4
+   coord_cmd.go:361  return in runGuardedPassthrough  | return 4
+   rewrite_author.go:43  die in runRewriteAuthor  | die(4, err.Error())
+   scan_cmd.go:220  die in runScan  | die(4, err.Error())
+   scrub.go:82  die in runScrubFile  | die(4, err.Error())
+   scrub_match.go:134  die in runScrubMatch  | die(4, err.Error())
+   scrub_run.go:174  die in runScrubRun  | die(4, err.Error())
+   undo.go:39  die in runUndo  | die(4, err.Error())
+   unlock.go:17  return in runUnlock  | return 4
+== exit 5 (1 sites)
+   coord_cmd.go:47  return in coordGuard  | return 5
+== exit 20 (2 sites)
+   hook.go:98  return in hookRun  | return 20
+   hook.go:130  return in hookRun  | return 20
+== exit 21 (1 sites)
+   hook.go:94  return in hookRun  | return 21
+== exit 70 (1 sites)
+   main.go:278  die in newApp.func  | die(70, "unreachable: --refs is required and closed over head, branches, tags, both")
+
+total exit sites: 305 across 10 distinct codes

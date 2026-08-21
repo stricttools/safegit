@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Enumerate every process-exit site in safegit's production Go sources.
+#
+#   scripts/exit-inventory              grouped table, one section per code
+#   scripts/exit-inventory --tsv        one tab-separated row per site
+#
+# The inventory is derived from the AST, so it stays correct as the code moves.
+# See scripts/exit-inventory.go for the recognized site shapes.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+exec go run scripts/exit-inventory.go "$@"
