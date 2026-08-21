@@ -179,6 +179,9 @@ func TestAmendHunkSpecOnBinaryFileIsTyped(t *testing.T) {
 		t.Errorf("an --amend hunk spec on a binary file exited %d, want %d (BinaryHunkSpec); stderr: %s",
 			code, exitcode.BinaryHunkSpec, stderr)
 	}
+	if !strings.Contains(stderr, "binary file") {
+		t.Errorf("the refusal must say the file is binary; stderr: %s", stderr)
+	}
 }
 
 // TestFrameworkRefusalsExitOne records what the CLI framework does with a
