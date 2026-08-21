@@ -152,23 +152,53 @@ func TestReadReportsNoneAfterCleanup(t *testing.T) {
 }
 
 // git does not write every file of a set every time -- an octopus merge leaves
-// no AUTO_MERGE -- and a concluded operation is concluded either way.
+// no AUTO_MERGE on the git versions that do not write one -- and a concluded
+// operation is concluded either way.
+//
+// This is the one genuinely git-version-conditional assertion in the file, so
+// it is the only thing here that skips. Idempotence, which needs no absent
+// member to hold, is a test of its own below and always runs.
 func TestCleanupToleratesAbsentMembersOfTheSet(t *testing.T) {
 	dir, _ := octopusMerge(t)
 	gd := gitDir(dir)
 
 	if present(t, gd, sequencer.FileAutoMerge) {
-		t.Skip("this git writes AUTO_MERGE for an octopus merge; the tolerance is exercised by the second half only")
+		t.Skip("this git writes AUTO_MERGE for an octopus merge, so no member of the set is absent to tolerate")
 	}
 
 	if err := sequencer.Cleanup(gd, sequencer.KindMerge); err != nil {
 		t.Fatalf("Cleanup with AUTO_MERGE absent: %v", err)
 	}
 	mustBeAbsent(t, gd, declaredSets[sequencer.KindMerge]...)
+}
+
+// Cleanup on a repository whose set is already gone removes nothing and reports
+// no error. A conclusion that is retried, or a second caller arriving after the
+// first finished, must not fail on the absence of what it came to remove.
+func TestCleanupIsIdempotent(t *testing.T) {
+	dir, _ := conflictedMerge(t)
+	gd := gitDir(dir)
+
+	mustBePresent(t, gd, declaredSets[sequencer.KindMerge]...)
+
+	if err := sequencer.Cleanup(gd, sequencer.KindMerge); err != nil {
+		t.Fatalf("Cleanup: %v", err)
+	}
+	mustBeAbsent(t, gd, declaredSets[sequencer.KindMerge]...)
 
 	// And again, with the whole set already gone.
 	if err := sequencer.Cleanup(gd, sequencer.KindMerge); err != nil {
 		t.Fatalf("Cleanup on an already-clean repository: %v", err)
+	}
+	mustBeAbsent(t, gd, declaredSets[sequencer.KindMerge]...)
+
+	// The reader still agrees, which is what a retried conclusion depends on.
+	state, err := sequencer.Read(gd)
+	if err != nil {
+		t.Fatalf("Read after a repeated Cleanup: %v", err)
+	}
+	if state.Kind != sequencer.KindNone {
+		t.Fatalf("Read after a repeated Cleanup reports %v, want none", state.Kind)
 	}
 }
 
