@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Capture the campaign test baseline as a deterministic artifact.
+#
+# The redesign campaign keeps the suite deliberately red: a large set of
+# investigation tests fail on purpose and later phases turn them green.
+# Refactors that are supposed to be behavior-preserving are checked by
+# regenerating this artifact and diffing it against the committed one.
+#
+# Usage:
+#   scripts/test-baseline [output-path]      # write the artifact (default: stdout)
+#   scripts/test-baseline --check <path>     # regenerate and diff against <path>
+#
+# Output format: a few '#' header lines (commands used, git HEAD at capture
+# time), then one line per test, sorted, "<RESULT> <package> <testname>" with
+# RESULT in {PASS,FAIL,SKIP}. Subtests appear exactly as go test reports them.
+#
+# -short is always passed: bare runs of ./internal/test/ include multi-minute
+# stress scenarios that are neither deterministic nor useful as a baseline.
+set -euo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+cd "$root"
+
+check_mode=0
+out=""
+case "${1:-}" in
+	--check)
+		check_mode=1
+		out="${2:?--check requires a path to diff against}"
+		;;
+	"") out="" ;;
+	*) out="$1" ;;
+esac
+
+integration_pkg="./internal/test/"
+mapfile -t unit_pkgs < <(go list ./... | grep -v '/internal/test$')
+
+integration_cmd="go test $integration_pkg -short -count=1 -json"
+unit_cmd="go test -short -count=1 -json <all packages except ./internal/test>"
+
+# Distill go test -json into "<RESULT> <package> <test>" lines.
+distill() {
+	jq -r '
+		select(.Test != null)
+		| select(.Action == "pass" or .Action == "fail" or .Action == "skip")
+		| "\(.Action | ascii_upcase) \(.Package) \(.Test)"
+	'
+}
+
+# Build failures produce package-level events with no per-test events at all,
+# which would silently shrink the artifact. Refuse instead.
+guard_build_failures() {
+	if printf '%s\n' "$1" | grep -q '\[build failed\]'; then
+		echo "test-baseline: build failure in test output; refusing to write a baseline" >&2
+		exit 1
+	fi
+}
+
+# The suite is red on purpose, so a nonzero exit is expected and not an error.
+integration_json="$(go test "$integration_pkg" -short -count=1 -json || true)"
+unit_json="$(go test "${unit_pkgs[@]}" -short -count=1 -json || true)"
+
+guard_build_failures "$integration_json"
+guard_build_failures "$unit_json"
+
+baseline="$(
+	echo "# safegit campaign test baseline"
+	echo "# integration: $integration_cmd"
+	echo "# unit: $unit_cmd"
+	echo "# git HEAD: $(git rev-parse HEAD)"
+	printf '%s\n%s\n' "$integration_json" "$unit_json" | distill | LC_ALL=C sort
+)"
+
+if [ "$check_mode" = 1 ]; then
+	# Compare test lines only: the header records capture-time state (HEAD),
+	# which legitimately differs on every later run.
+	diff <(grep -v '^#' "$out") <(printf '%s\n' "$baseline" | grep -v '^#')
+	echo "test-baseline: pass/fail set identical to $out"
+elif [ -n "$out" ]; then
+	printf '%s\n' "$baseline" >"$out"
+	echo "test-baseline: wrote $out" >&2
+else
+	printf '%s\n' "$baseline"
+fi
