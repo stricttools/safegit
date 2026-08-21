@@ -58,7 +58,8 @@ func rootCasMakeRivalCommit(t *testing.T, dir string) string {
 	t.Helper()
 	blob := testutil.GitStdin(t, dir, "rival session work\n", "hash-object", "-w", "--stdin")
 	tree := testutil.GitStdin(t, dir, fmt.Sprintf("100644 blob %s\trival.txt\n", blob), "mktree")
-	return testutil.Git(t, dir, "commit-tree", tree, "-m", "rival root commit")
+	// Stdout only: callers pass this SHA to update-ref and to safegit itself.
+	return strings.TrimSpace(testutil.GitOut(t, dir, "commit-tree", tree, "-m", "rival root commit"))
 }
 
 // rootCasInstallGitShim writes a `git` wrapper into its own directory and returns
@@ -212,7 +213,9 @@ func TestRootCommitZeroOldValueRefusesExistingRef(t *testing.T) {
 	const zeroSHA = "0000000000000000000000000000000000000000"
 
 	first := rootCasMakeRivalCommit(t, dir)
-	second := testutil.Git(t, dir, "commit-tree", first+"^{tree}", "-p", first, "-m", "second")
+	// Stdout only: this SHA is fed straight back into update-ref below, so a
+	// stray stderr line mixed into it would corrupt the argument.
+	second := strings.TrimSpace(testutil.GitOut(t, dir, "commit-tree", first+"^{tree}", "-p", first, "-m", "second"))
 
 	// Ref absent: the create-only update must succeed.
 	if out, code := testutil.GitTry(t, dir, "update-ref", "refs/heads/target", first, zeroSHA); code != 0 {
