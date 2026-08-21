@@ -195,6 +195,30 @@ existing entries are never rewritten.
   own check at its entry. (g) SourceAuthor is a separate ctx-taking call,
   not a State field (the only fact needing a subprocess; refusal paths
   stay filesystem-only).
+- **Phase 1.4:** the sequencer reader models merge/pick/revert/rebase/am
+  only — NO bisect state (BISECT_START/BISECT_LOG) and no REBASE_HEAD;
+  1.4's refusals must not assume bisect is covered by the reader (bisect
+  already has its own coordination guard).
+- **Phase 1.5 / 6:** the strictcli effects handle never assigns stdin to
+  its children, so every runGitMutation passthrough (checkout, pull,
+  merge, rebase, reset, bisect) runs with NO stdin, while
+  runPassthrough (cherry-pick, revert) inherits it. Editors that open
+  /dev/tty directly may still work; anything reading stdin does not.
+  Pre-existing, surfaced by the wave-A audit. 1.5's "the lock is held
+  through rebase -i's editor" note must be verified against this, and
+  the effects-shapes todo for the framework should mention stdin.
+- **Phase 3.3:** when declaring the proc-observe allowlist, ensure no
+  allowlisted prefix can match a runGitMutation argv: strictcli's
+  observe branch EXECUTES even in dry mode, and coord_cmd.go's dry-run
+  guard keys off flags.dryRun (it would return 0 after a real
+  execution). Add a regression assertion binding the allowlist to
+  read-only prefixes; a carrier-based guard in runGitMutation is the
+  structural alternative if strictcli exposes settled-ness.
+- **Phase 6, additional from the wave-A audit:** the merge cleanup set
+  omits MERGE_AUTOSTASH and MERGE_RR — a native conclusion of a
+  `merge --autostash` would strand the autostash; 6.2 must either add
+  them to the owned set (autostash needs APPLYING, not just deleting)
+  or refuse autostash merges explicitly.
 - **Phase 9:** internal/sequencer (and internal/exitcode, internal/gitexec,
   internal/gitversion, internal/procutil, internal/filelock) need rows in
   the architecture/package tables in the doc templates; the tables
