@@ -273,10 +273,15 @@ refuses on a corrupted log line; doctor reports the count.
   named `CI`. Note `ci-docker.yml` is ALSO scaffold-managed
   (`.rlsbl/managed-files.json`), so its rename goes into the scaffold
   base, not the generated file, or a future three-way merge reverts it.
-  Stress-test skips are re-keyed from `-short` to the explicit opt-in
-  environment variable `SAFEGIT_STRESS=1` (set by the stress script) so
-  CI can drop `-short` and run the full integration suite within its
-  timeout; `scripts/stress` and `docs/_CLAUDE.md:34-37` updated.
+  Stress-test skips are re-keyed from `-short` to a dedicated `--stress`
+  opt-in flag on the TEST BINARY (registered in TestMain via the standard
+  flag package -- this is a go-test flag, not a safegit CLI flag; Go
+  treats `-stress` and `--stress` identically). This flips the inverted
+  default (today bare `go test` runs the 15-minute stress scenarios and
+  CI must pass the generic `-short` to dodge them): bare runs become
+  fast, the stress script passes `--stress`, and CI drops `-short` and
+  runs the full ordinary integration suite within its timeout;
+  `scripts/stress` and `docs/_CLAUDE.md:34-37` updated.
 - Fix the non-atomic `config.json` write: `repo.Init`
   (`internal/repo/repo.go:146`) plain-writes while `IsInitialized`
   (`repo.go:104-107`) stats the same file (observed flake: "unexpected end
@@ -476,10 +481,12 @@ pass; `TestIntakeEdgeDanglingSymlinkNoColon` goes green as a side effect.
 - Directory expansion at intake `[%%]`: union of on-disk contents and the
   commit's parent tree under the prefix (deletions included), never
   descending into gitlink/submodule boundaries. Gitignored files under an
-  expanded directory are SKIPPED silently (matching git's own directory
-  semantics -- expansion produces names the caller never typed, so the
-  per-path ignore refusal applies only to EXPLICITLY NAMED paths; tracked
-  ignored files still expand, since they are already in the parent tree).
+  expanded directory are SKIPPED silently on stderr (matching git's own
+  directory semantics -- expansion produces names the caller never typed,
+  so the per-path ignore refusal applies only to EXPLICITLY NAMED paths;
+  tracked ignored files still expand, since they are already in the
+  parent tree); the skipped set is CARRIED IN THE JSON PAYLOAD so machine
+  consumers and post-hoc inspection see it without stderr noise.
 - A named path or directory contributing nothing is a HARD error naming
   the path -- covering all three current inconsistencies: vanished dirs
   (early error stays), existing-but-empty dirs (late misleading error
@@ -498,8 +505,8 @@ pass; `TestIntakeEdgeDanglingSymlinkNoColon` goes green as a side effect.
 keep passing. NEW: no-match hard error for a file, an empty directory, AND
 a named-but-unchanged file; expansion stops at a submodule boundary; a
 directory containing untracked gitignored files commits its other contents
-with the ignored files skipped, while explicitly naming an ignored file
-still refuses.
+with the ignored files skipped and the skipped set present in the JSON
+payload, while explicitly naming an ignored file still refuses.
 
 ### 2.3 Symlink policy
 
@@ -805,12 +812,15 @@ is the oplog: `scrub match` records the pattern in `extra.pattern`
   never un-leaks a pushed secret, tell the operator to rotate the
   credential, and print the on-demand re-check command (this line is new;
   nothing in scrub mentions rotation today).
-- The scrub oplog entries STOP recording the pattern (drop
-  `extra.pattern`; `extra.reason` and scope suffice for audit)
-  `[adopted-from-instinct]` -- otherwise the store deletion removes one
-  verbatim copy and leaves the other. The `extra.replace` string
-  (`scrub_match.go:809, :886`) is deliberately RETAINED: the replacement
-  is the redaction, not the secret -- stated so this is not re-litigated.
+- The scrub oplog entries STOP recording content entirely: drop
+  `extra.pattern` AND `extra.replace` (`scrub_match.go:800-809, :875-886`)
+  -- the retention story becomes one clean sentence (the oplog keeps
+  metadata only: op, reason, scope, counts). The replacement text is
+  redundant with the rewritten history itself (it sits at every scrubbed
+  location in the new commits), nothing reads the field, mangle-mode
+  entries never had it, and operator-supplied replacements CAN be
+  sensitive (the fix-history-with-the-rotated-value misuse). Deliberate
+  ruling; do not re-litigate.
 - `doctor` diagnose reports a leftover `.git/safegit/scrub-policies.jsonl`
   (written by older published safegit versions in consumer repos) as an
   error naming its content class; `--action fix` deletes it.
@@ -821,9 +831,9 @@ is the oplog: `scrub match` records the pattern in `extra.pattern`
 
 **Verify:** verify-with-no-input errors; `--pattern` and recipe forms both
 detect a planted resurrection and exit nonzero; a clean store passes;
-scrub match's oplog entry contains no pattern text; doctor
-reports-and-fixes a planted legacy policy file; rotation line present in
-scrub output.
+scrub match's oplog entry contains neither pattern nor replacement text;
+doctor reports-and-fixes a planted legacy policy file; rotation line
+present in scrub output.
 
 ### 4.4 Submodule scrubs: objects-before-refs across both repos
 
@@ -1004,8 +1014,12 @@ cannot validate values -- file that upstream bug during this subphase).
 Keyword semantics are DEFINED BY STAGE, not by operation folklore: `ours`
 = the stage-2 blob (the current branch's side), `theirs` = the stage-3
 blob (the operation's incoming side -- which for a REVERT is the
-inverse-patch side, the classic confusion; each command's help states its
-concrete meaning). `--resolve-file <toml>` carries an array of tables,
+inverse-patch side, the classic confusion). The mitigation sits AT THE
+DECISION POINT, not in skimmable help: revert-continue's conflict listing
+states per path what each keyword concretely resolves to ("ours = your
+branch's current content; theirs = the result of undoing <sha>"), and the
+other two commands' listings do the same with their own wording; help
+text repeats it. `--resolve-file <toml>` carries an array of tables,
 each with `path` and `choice` keys (same TOML conventions as the
 scrub-run recipe); flag and file forms may be combined, duplicate paths
 across them are hard errors. A
