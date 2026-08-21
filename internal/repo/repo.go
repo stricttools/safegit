@@ -301,9 +301,14 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// MarshalConfig renders the config exactly as SaveConfig would write it. It is
-// split out so callers can mint the write as an effect instead of performing it
-// here, which is what lets --dry-run record a config change without making one.
+// MarshalConfig renders config.json's exact bytes. Rendering is split from
+// writing so callers mint the write as an effect instead of performing it here,
+// which is what lets --dry-run record a config change without making one.
+//
+// This package therefore writes config.json in exactly one place -- Init, whose
+// write goes through writeFileAtomic. `config set` renders here and hands the
+// bytes to the effects handle. A save helper that plain-writes the file would
+// be a third, non-atomic writer of the path every command reads.
 func MarshalConfig(cfg *Config) ([]byte, error) {
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
@@ -312,31 +317,9 @@ func MarshalConfig(cfg *Config) ([]byte, error) {
 	return append(data, '\n'), nil
 }
 
-// ConfigPath is the path SaveConfig writes to for the given git dir.
+// ConfigPath is where config.json lives for the given git dir.
 func ConfigPath(gitDir string) string {
 	return filepath.Join(SafegitDir(gitDir), "config.json")
-}
-
-// SaveConfigTo writes config to an arbitrary path.
-func SaveConfigTo(path string, cfg *Config) error {
-	data, err := MarshalConfig(cfg)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0644)
-}
-
-// SaveConfig writes config back to config.json.
-func SaveConfig(gitDir string, cfg *Config) error {
-	configPath := filepath.Join(SafegitDir(gitDir), "config.json")
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshaling config: %w", err)
-	}
-	if err := os.WriteFile(configPath, append(data, '\n'), 0644); err != nil {
-		return fmt.Errorf("writing config.json: %w", err)
-	}
-	return nil
 }
 
 // GetConfigValue returns the value for a dot-separated config key.

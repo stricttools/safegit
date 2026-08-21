@@ -78,6 +78,22 @@ func halfInitializedGitDir(t *testing.T) string {
 	return gitDir
 }
 
+// writeConfigFixture publishes a config.json a test needs to already exist.
+// Production has exactly two writers of that file -- Init, through
+// writeFileAtomic, and `config set`, through the effects handle -- so a test
+// that needs one in place renders the bytes with MarshalConfig and writes them
+// itself rather than through a save helper no command calls.
+func writeConfigFixture(t *testing.T, path string, cfg *Config) {
+	t.Helper()
+	data, err := MarshalConfig(cfg)
+	if err != nil {
+		t.Fatalf("rendering the config fixture: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatalf("writing the config fixture %s: %v", path, err)
+	}
+}
+
 // TestIsInitializedRequiresConfig pins the predicate itself: the safegit
 // directory existing is not the question, config.json being present is. Reading
 // the bare directory as proof of initialization is what made EnsureInitialized a
@@ -90,9 +106,7 @@ func TestIsInitializedRequiresConfig(t *testing.T) {
 	}
 
 	cfg := DefaultConfig()
-	if err := SaveConfigTo(ConfigPath(gitDir), &cfg); err != nil {
-		t.Fatalf("writing config.json: %v", err)
-	}
+	writeConfigFixture(t, ConfigPath(gitDir), &cfg)
 	if !IsInitialized(gitDir) {
 		t.Error("a safegit dir with config.json must read as initialized")
 	}
@@ -130,9 +144,7 @@ func TestInitCompletesHalfInitializedDir(t *testing.T) {
 		t.Fatalf("loading the repaired config: %v", err)
 	}
 	cfg.Push.RetryAttempts = 42
-	if err := SaveConfig(gitDir, cfg); err != nil {
-		t.Fatalf("saving the edited config: %v", err)
-	}
+	writeConfigFixture(t, ConfigPath(gitDir), cfg)
 	if err := Init(context.Background(), gitDir); err != nil {
 		t.Fatalf("second Init: %v", err)
 	}
@@ -370,17 +382,16 @@ func TestAutoBumpParent_SetInvalid(t *testing.T) {
 	}
 }
 
-func TestAutoBumpParent_SaveReload(t *testing.T) {
+// TestAutoBumpParent_MarshalReload: a set autoBumpParent survives the round
+// trip through the rendered bytes and back, in both of its values.
+func TestAutoBumpParent_MarshalReload(t *testing.T) {
 	cfg := DefaultConfig()
 	v := true
 	cfg.Commit.AutoBumpParent = &v
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
-	err := SaveConfigTo(path, &cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	writeConfigFixture(t, path, &cfg)
 
 	loaded, err := LoadConfigFrom(path)
 	if err != nil {
@@ -396,10 +407,7 @@ func TestAutoBumpParent_SaveReload(t *testing.T) {
 	// Also test with false
 	f := false
 	cfg.Commit.AutoBumpParent = &f
-	err = SaveConfigTo(path, &cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	writeConfigFixture(t, path, &cfg)
 	loaded, err = LoadConfigFrom(path)
 	if err != nil {
 		t.Fatal(err)
