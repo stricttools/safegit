@@ -683,6 +683,29 @@ func TestConfigOverride(t *testing.T) {
 	}
 }
 
+// TestConfigSetRefusesRetiredLogKey pins the user-visible half of removing
+// oplog rotation: log.maxSizeMB is gone from the key set, so setting it is an
+// unknown-key error rather than a silently accepted no-op.
+func TestConfigSetRefusesRetiredLogKey(t *testing.T) {
+	dir := newRepo(t)
+
+	_, stderr, code := runSafegit(t, dir, "config", "set", "log.maxSizeMB", "50")
+	if code == 0 {
+		t.Fatal("setting the retired log.maxSizeMB key must fail")
+	}
+	if !strings.Contains(stderr, "unknown config key") {
+		t.Errorf("error should say unknown config key, got: %s", stderr)
+	}
+
+	stdout, _, code := runSafegit(t, dir, "config", "show")
+	if code != 0 {
+		t.Fatalf("config show failed (code %d)", code)
+	}
+	if strings.Contains(stdout, "log.maxSizeMB") {
+		t.Errorf("config show still lists the retired key:\n%s", stdout)
+	}
+}
+
 func TestCoordinationGuardRejectsDirtyTree(t *testing.T) {
 	dir := newRepo(t)
 
