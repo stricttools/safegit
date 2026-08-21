@@ -53,8 +53,10 @@ func runGitMutation(flags globalFlags, args ...string) int {
 	return done.ExitCode()
 }
 
-// coordGuard runs coord.Check and prints a refusal if dirty.
-// Returns exit code 5 if dirty, 0 if clean, or 1 on error.
+// coordGuard runs coord.Check and prints a refusal if dirty. It returns
+// exitcode.CoordinationBusy when another operation owns the working tree,
+// exitcode.OK when it is clean, and exitcode.General when the check itself
+// could not be made.
 func coordGuard(flags globalFlags, sgDir, operation string) int {
 	ctx := flags.ctx()
 	dirty, err := coord.Check(ctx, sgDir)
