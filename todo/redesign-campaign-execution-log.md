@@ -162,6 +162,59 @@ existing entries are never rewritten.
   one per phase, each briefed with its phase text, the relevant Appendix A
   rows, and this log.
 
+## Corrections to earlier entries
+
+- The 0.8 atomic-lock-publication entry above says the temp-name safety
+  against doctor's `.lock`-suffix walk is "pinned by tests". Overstated:
+  the behavior is correct by construction (temp names end in random
+  digits, never `.lock`) and a test pins that no temp survives tryCreate,
+  but no test asserts the doctor-walk property itself. Queued below.
+
+## Brief additions for Phase 1.5 (from the remediation-wave audit)
+
+- Route doctor's `removeStaleLocks` (and assess `unlock`'s ForceRelease)
+  through the reclamation authority (`openForReclaim` + `reclaimLocked`)
+  instead of bare judge-then-remove — the same TOCTOU class the Acquire
+  fix closed; doctor can currently delete a live lock that was published
+  in the window after its staleness judgment. `unlock` is an explicit
+  operator-forced removal so a weaker stance may be acceptable there —
+  decide and document.
+- doctor's lock scan should also report (and `--action fix` clean)
+  orphaned lock-publication temp files (`.<name>.lock.tmp-*`), which a
+  SIGKILL between temp creation and publication can leave behind; they
+  are invisible to the `.lock`-suffix walk today.
+
+## Queued small items (dispatch at the next natural gap)
+
+- `repo.SaveConfig` / `SaveConfigTo` still plain-write `config.json`
+  (the race writeFileAtomic closed on Init). First check whether they
+  have any production caller (config set mints through the effects
+  handle); if dead, delete per the fleet dead-API rule; if alive, route
+  through writeFileAtomic.
+- `SharedSafegitDir`'s relative-answer join (against the git dir asked
+  about, not the cwd) has zero test coverage; add a unit test, ideally
+  covering a linked worktree.
+- A test pinning that doctor's lock walk never treats a publication temp
+  name as a lock (see the correction above).
+- Boundary guard self-test lacks a `[]any{"git", ...}` spelling case
+  (code handles it; unexercised).
+- `internal/repo` parseInt uses fmt.Sscanf, which accepts trailing
+  garbage ("5abc" sets 5) — tighten to strconv.Atoi semantics.
+
+## Phase 9 additions (locking rework falsified these claims)
+
+The atomic publication and flock-based reclamation invalidated every
+`O_CREAT|O_EXCL` claim: `docs/architecture.md` (~:82, :133, :138, :355,
+:360 — creation story AND the "kill(pid,0) then remove and retry" stale
+story), `docs/concurrency-guide.md` (~:45), `docs/_CLAUDE.md` lock
+convention line (and its generated CLAUDE.md copy), and the
+selfdoc-generated `docs/internal-lock.md` (heals on the next selfdoc
+gen; the in-code package doc is already correct). Phase 9 must also
+DOCUMENT two new environment constraints: lock acquisition now requires
+hard-link support on the filesystem holding .git, and stale-lock
+reclamation requires working flock(2) (without it, contenders time out
+instead of reclaiming, and doctor is the recovery path).
+
 ## Open rulings (need the user's decision; as-built stands meanwhile)
 
 - **macOS in per-push CI.** `todo/.done/ci-macos-cost-reduction.md` records a
