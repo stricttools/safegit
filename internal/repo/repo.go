@@ -174,9 +174,10 @@ func Init(ctx context.Context, gitDir string) error {
 	return nil
 }
 
-// writeFileAtomic writes data to path via a temp file in the same directory
-// followed by a rename, so a reader ever sees the old content or the new one,
-// never a partial write. A failed write leaves no temp file behind.
+// writeFileAtomic writes data to path via a temp file in the same directory,
+// fsynced and then renamed, so a reader ever sees the old content or the new
+// one, never a partial write, and a crash cannot publish an empty file. A
+// failed write leaves no temp file behind.
 func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	f, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
@@ -199,6 +200,15 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	if err := f.Chmod(perm); err != nil {
 		cleanup()
 		return fmt.Errorf("setting mode on %s: %w", tmpPath, err)
+	}
+	// The rename handles the race (a reader sees old content or new, never a
+	// partial write); the fsync handles the crash. Without it the rename can
+	// reach the disk before the data does, and a crash in that window publishes
+	// config.json at zero length -- which reads back as "unexpected end of JSON
+	// input" forever, not as a missing file that would be re-initialized.
+	if err := f.Sync(); err != nil {
+		cleanup()
+		return fmt.Errorf("syncing %s: %w", tmpPath, err)
 	}
 	if err := f.Close(); err != nil {
 		os.Remove(tmpPath)
