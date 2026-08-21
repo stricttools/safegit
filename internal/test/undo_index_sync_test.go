@@ -165,35 +165,14 @@ func TestUndoPreservesForeignStagedState(t *testing.T) {
 //
 // RED today: undo exits 0, HEAD moves, and the stages are gone.
 func TestUndoRefusedMidMerge(t *testing.T) {
-	dir := newRepo(t)
 	env := undoSyncSession()
+	// The conflict is deliberately left unresolved: the stages git wrote are
+	// exactly what undo's read-tree erases, so they must still be in the index.
+	// "main edit" -- the commit the fixture leaves at HEAD -- is the one undo
+	// would roll back.
+	fx := newConflictedMergeRepo(t, conflictedMergeOpts{env: env, cleanSideFile: true})
+	dir, mainSHA := fx.dir, fx.mainSHA
 
-	// Base revision of the conflicted file.
-	testutil.WriteFile(t, dir, "conflicted.txt", "line1\nbase\nline3\n")
-	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "base", "--", "conflicted.txt"); code != 0 {
-		t.Fatalf("base commit failed (code %d): %s", code, stderr)
-	}
-
-	// feature: a conflicting edit plus one clean addition.
-	testutil.Git(t, dir, "branch", "feature")
-	testutil.Git(t, dir, "switch", "feature")
-	testutil.WriteFile(t, dir, "conflicted.txt", "line1\nfeature\nline3\n")
-	testutil.WriteFile(t, dir, "feature-only.txt", "only on feature\n")
-	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "feature edit", "--", "conflicted.txt", "feature-only.txt"); code != 0 {
-		t.Fatalf("feature commit failed (code %d): %s", code, stderr)
-	}
-
-	// main: the conflicting edit. This is the commit undo would roll back.
-	testutil.Git(t, dir, "switch", "main")
-	testutil.WriteFile(t, dir, "conflicted.txt", "line1\nmain\nline3\n")
-	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "main edit", "--", "conflicted.txt"); code != 0 {
-		t.Fatalf("main commit failed (code %d): %s", code, stderr)
-	}
-	mainSHA := testutil.Rev(t, dir, "HEAD")
-
-	if _, _, code := runSafegitEnv(t, dir, env, "merge", "feature"); code == 0 {
-		t.Fatalf("fixture: safegit merge feature succeeded; a conflict is required")
-	}
 	mergeHeadPath := filepath.Join(dir, ".git", "MERGE_HEAD")
 	mergeHead, err := os.ReadFile(mergeHeadPath)
 	if err != nil {
@@ -215,7 +194,7 @@ func TestUndoRefusedMidMerge(t *testing.T) {
 			"  git status: %s\n"+
 			"  stdout: %s",
 			mainSHA, testutil.Rev(t, dir, "HEAD"),
-			!undoSyncMergeStateGone(t, dir),
+			!testutil.MergeStateGone(t, dir),
 			undoSyncUnmergedStages(t, dir), len(strings.Split(stagesBefore, "\n")),
 			oneLine(testutil.Git(t, dir, "status", "--porcelain")),
 			oneLine(stdout))
@@ -235,13 +214,6 @@ func TestUndoRefusedMidMerge(t *testing.T) {
 	if !strings.Contains(strings.ToLower(stderr), "merge") {
 		t.Errorf("refusal does not name the merge, so the operator cannot act on it: %s", oneLine(stderr))
 	}
-}
-
-// undoSyncMergeStateGone reports whether .git/MERGE_HEAD is absent.
-func undoSyncMergeStateGone(t *testing.T, dir string) bool {
-	t.Helper()
-	_, err := os.Stat(filepath.Join(dir, ".git", "MERGE_HEAD"))
-	return os.IsNotExist(err)
 }
 
 // GREEN pin: `safegit undo` must not touch the working tree.

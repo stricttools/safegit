@@ -42,114 +42,6 @@ func mergeConclusionRoutes() []mergeConclusionRoute {
 	}
 }
 
-// mergeFixture is a repository parked in a conflicted merge whose conflict has
-// been resolved in the working tree but not concluded.
-type mergeFixture struct {
-	dir string
-	// mainSHA is the pre-merge tip of main: the first parent a correct merge
-	// commit must carry.
-	mainSHA string
-	// featureSHA is what MERGE_HEAD names: the second parent a correct merge
-	// commit must carry, and the one safegit silently drops today.
-	featureSHA string
-}
-
-// newConflictedMergeRepo builds a repo whose main and feature branches both
-// edited conflicted.txt, merges feature into main (conflict), and resolves the
-// conflict in the working tree without staging it.
-//
-// feature also adds feature-only.txt, which the merge staged cleanly. It is the
-// canary for whole-index conclusion: any conclusion route that rebuilds the tree
-// from HEAD instead of from the merge's index drops that file on the floor.
-func newConflictedMergeRepo(t *testing.T) mergeFixture {
-	t.Helper()
-	dir := newRepo(t)
-
-	write := func(name, content string) {
-		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	// Base revision of the conflicted file, on main.
-	write("conflicted.txt", "line1\nbase\nline3\n")
-	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "base", "--", "conflicted.txt"); code != 0 {
-		t.Fatalf("base commit failed (code %d): %s", code, stderr)
-	}
-	baseSHA := testutil.Git(t, dir, "rev-parse", "HEAD")
-
-	// feature: conflicting edit plus one clean addition.
-	testutil.Git(t, dir, "branch", "feature")
-	testutil.Git(t, dir, "switch", "feature")
-	write("conflicted.txt", "line1\nfeature\nline3\n")
-	write("feature-only.txt", "only on feature\n")
-	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "feature edit", "--", "conflicted.txt", "feature-only.txt"); code != 0 {
-		t.Fatalf("feature commit failed (code %d): %s", code, stderr)
-	}
-	featureSHA := testutil.Git(t, dir, "rev-parse", "HEAD")
-
-	// main: the conflicting edit.
-	testutil.Git(t, dir, "switch", "main")
-	if head := testutil.Git(t, dir, "rev-parse", "HEAD"); head != baseSHA {
-		t.Fatalf("main tip = %s, want %s after switching back", head, baseSHA)
-	}
-	write("conflicted.txt", "line1\nmain\nline3\n")
-	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "main edit", "--", "conflicted.txt"); code != 0 {
-		t.Fatalf("main commit failed (code %d): %s", code, stderr)
-	}
-	mainSHA := testutil.Git(t, dir, "rev-parse", "HEAD")
-
-	// The merge itself, through safegit. It exits 1 and relays git's own
-	// "fix conflicts and then commit the result" -- advice no safegit command
-	// can act on, which is what this suite is about.
-	stdout, stderr, code := runSafegit(t, dir, "merge", "feature")
-	if code == 0 {
-		t.Fatalf("safegit merge feature succeeded; the fixture needs a conflict.\nstdout=%s stderr=%s", stdout, stderr)
-	}
-	if !strings.Contains(stdout+stderr, "CONFLICT") {
-		t.Fatalf("safegit merge feature did not report a conflict (code %d)\nstdout=%s stderr=%s", code, stdout, stderr)
-	}
-
-	assertMerging(t, dir, featureSHA)
-
-	// Resolve the conflict in the working tree, leaving the index unmerged --
-	// exactly the state an agent reaches after editing every conflicted file.
-	write("conflicted.txt", "line1\nresolved\nline3\n")
-
-	return mergeFixture{dir: dir, mainSHA: mainSHA, featureSHA: featureSHA}
-}
-
-// assertMerging fails unless the repo is mid-merge with MERGE_HEAD naming want.
-func assertMerging(t *testing.T, dir, want string) {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join(dir, ".git", "MERGE_HEAD"))
-	if err != nil {
-		t.Fatalf("reading .git/MERGE_HEAD: %v", err)
-	}
-	if got := strings.TrimSpace(string(data)); got != want {
-		t.Fatalf("MERGE_HEAD = %s, want %s", got, want)
-	}
-}
-
-// mergeStateGone reports whether git considers the merge concluded.
-func mergeStateGone(t *testing.T, dir string) bool {
-	t.Helper()
-	_, err := os.Stat(filepath.Join(dir, ".git", "MERGE_HEAD"))
-	return os.IsNotExist(err)
-}
-
-// parentsOf returns the parent SHAs of a commit, in order.
-func parentsOf(t *testing.T, dir, ref string) []string {
-	t.Helper()
-	out := testutil.Git(t, dir, "rev-list", "--parents", "-n", "1", ref)
-	fields := strings.Fields(out)
-	if len(fields) == 0 {
-		t.Fatalf("rev-list --parents produced nothing for %s", ref)
-	}
-	return fields[1:]
-}
-
 // A conflicted merge with its conflicts resolved must be concludable by some
 // safegit command, producing a genuine two-parent merge commit that carries the
 // merge's whole staged result.
@@ -164,7 +56,7 @@ func TestMergeCanBeConcludedThroughSafegit(t *testing.T) {
 	var failures []string
 
 	for _, route := range mergeConclusionRoutes() {
-		fx := newConflictedMergeRepo(t)
+		fx := newConflictedMergeRepo(t, conflictedMergeOpts{cleanSideFile: true, resolveInTree: true})
 
 		stdout, stderr, code := runSafegit(t, fx.dir, route.args...)
 		if code != 0 {
@@ -175,7 +67,7 @@ func TestMergeCanBeConcludedThroughSafegit(t *testing.T) {
 
 		var problems []string
 		head := testutil.Git(t, fx.dir, "rev-parse", "HEAD")
-		parents := parentsOf(t, fx.dir, head)
+		parents := testutil.Parents(t, fx.dir, head)
 		if len(parents) != 2 {
 			problems = append(problems, "commit has "+itoa(len(parents))+" parent(s), want 2 ("+strings.Join(parents, ", ")+")")
 		} else {
@@ -194,7 +86,7 @@ func TestMergeCanBeConcludedThroughSafegit(t *testing.T) {
 		if blob := testutil.Git(t, fx.dir, "show", head+":conflicted.txt"); !strings.Contains(blob, "resolved") {
 			problems = append(problems, "conflicted.txt does not carry the resolution: "+oneLine(blob))
 		}
-		if !mergeStateGone(t, fx.dir) {
+		if !testutil.MergeStateGone(t, fx.dir) {
 			problems = append(problems, ".git/MERGE_HEAD survives; git still considers the repo mid-merge")
 		}
 
@@ -222,7 +114,7 @@ func TestMergeCanBeConcludedThroughSafegit(t *testing.T) {
 //
 // RED today: the command succeeds and the assertions below fire.
 func TestCommitWithPathspecRefusedDuringMerge(t *testing.T) {
-	fx := newConflictedMergeRepo(t)
+	fx := newConflictedMergeRepo(t, conflictedMergeOpts{cleanSideFile: true, resolveInTree: true})
 
 	// git's own refusal, recorded so the test documents the contract safegit
 	// is expected to match rather than merely asserting a message.
@@ -240,7 +132,7 @@ func TestCommitWithPathspecRefusedDuringMerge(t *testing.T) {
 
 	if code == 0 {
 		head := testutil.Git(t, fx.dir, "rev-parse", "HEAD")
-		parents := parentsOf(t, fx.dir, head)
+		parents := testutil.Parents(t, fx.dir, head)
 		paths := testutil.TreePaths(t, fx.dir, head)
 		t.Fatalf("safegit commit with a pathspec succeeded mid-merge (git refuses the same command).\n"+
 			"  new commit: %s\n"+
@@ -250,13 +142,13 @@ func TestCommitWithPathspecRefusedDuringMerge(t *testing.T) {
 			"  stdout: %s",
 			head, parents, fx.mainSHA, fx.featureSHA,
 			paths, testutil.Contains(paths, "feature-only.txt"),
-			!mergeStateGone(t, fx.dir), oneLine(stdout))
+			!testutil.MergeStateGone(t, fx.dir), oneLine(stdout))
 	}
 
 	if head := testutil.Git(t, fx.dir, "rev-parse", "HEAD"); head != before {
 		t.Errorf("HEAD moved to %s despite the refusal (was %s)", head, before)
 	}
-	assertMerging(t, fx.dir, fx.featureSHA)
+	testutil.AssertMergeHead(t, fx.dir, fx.featureSHA, "the repository must still be mid-merge")
 
 	// The refusal has to be actionable. Mid-merge is the one context where
 	// commit.go:52's advice ("use -- file1 file2 ...") is impossible to follow,
@@ -274,7 +166,7 @@ func TestCommitWithPathspecRefusedDuringMerge(t *testing.T) {
 //
 // RED today: the command succeeds.
 func TestCommitAllowEmptyRefusedDuringMerge(t *testing.T) {
-	fx := newConflictedMergeRepo(t)
+	fx := newConflictedMergeRepo(t, conflictedMergeOpts{cleanSideFile: true, resolveInTree: true})
 	before := testutil.Git(t, fx.dir, "rev-parse", "HEAD")
 
 	stdout, stderr, code := runSafegit(t, fx.dir, "commit", "-m", "merge", "--allow-empty")
@@ -288,15 +180,15 @@ func TestCommitAllowEmptyRefusedDuringMerge(t *testing.T) {
 			"  conflicted.txt content: %s\n"+
 			"  MERGE_HEAD still present: %t\n"+
 			"  stdout: %s",
-			head, parentsOf(t, fx.dir, head), testutil.TreePaths(t, fx.dir, head),
+			head, testutil.Parents(t, fx.dir, head), testutil.TreePaths(t, fx.dir, head),
 			oneLine(testutil.Git(t, fx.dir, "show", head+":conflicted.txt")),
-			!mergeStateGone(t, fx.dir), oneLine(stdout))
+			!testutil.MergeStateGone(t, fx.dir), oneLine(stdout))
 	}
 
 	if head := testutil.Git(t, fx.dir, "rev-parse", "HEAD"); head != before {
 		t.Errorf("HEAD moved to %s despite the refusal (was %s)", head, before)
 	}
-	assertMerging(t, fx.dir, fx.featureSHA)
+	testutil.AssertMergeHead(t, fx.dir, fx.featureSHA, "the repository must still be mid-merge")
 	if !strings.Contains(strings.ToLower(stderr), "merge") {
 		t.Errorf("refusal does not mention the merge: %s", oneLine(stderr))
 	}
@@ -309,8 +201,8 @@ func TestCommitAllowEmptyRefusedDuringMerge(t *testing.T) {
 // RED today: safegit adds nothing to git's streamed output (coord_cmd.go:186
 // returns 1 the moment git fails, before any safegit-authored message).
 func TestMergeConflictTellsOperatorHowToConclude(t *testing.T) {
-	fx := newConflictedMergeRepo(t)
-	assertMerging(t, fx.dir, fx.featureSHA)
+	fx := newConflictedMergeRepo(t, conflictedMergeOpts{cleanSideFile: true, resolveInTree: true})
+	testutil.AssertMergeHead(t, fx.dir, fx.featureSHA, "the repository must still be mid-merge")
 
 	// Re-run the merge path in a fresh repo to capture the conflict output
 	// without the fixture's own assertions consuming it.
