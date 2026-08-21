@@ -219,6 +219,15 @@ existing entries are never rewritten.
   `merge --autostash` would strand the autostash; 6.2 must either add
   them to the owned set (autostash needs APPLYING, not just deleting)
   or refuse autostash merges explicitly.
+- **Phase 6 upstream filing:** when filing the framework's dict-flag
+  ValidateFn bug (planned in 6.2), the same todo or a sibling should
+  also report: (a) the effects handle assigns no stdin to children
+  (breaks interactive passthroughs); (b) Completed exposes no public
+  settled-ness/executed-vs-recorded probe (all accessors panic when
+  unsettled), and (c) the observe branch under dry-run is non-uniform
+  (executes and returns settled normally, but returns an unsettled
+  stale-brand carrier after a recorded mutation). Evidence pinned by
+  TestSafegitDeclaresNoProcObserveAllowlist and the wave-A audit.
 - **Phase 9:** internal/sequencer (and internal/exitcode, internal/gitexec,
   internal/gitversion, internal/procutil, internal/filelock) need rows in
   the architecture/package tables in the doc templates; the tables
