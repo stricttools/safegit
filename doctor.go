@@ -258,9 +258,14 @@ func checkOplog(env doctorEnv) doctorFinding {
 // checkBypassDetect compares the oplog's last ref-update against the actual
 // tip: a divergence means something other than safegit moved the ref.
 //
-// A corrupted oplog makes the comparison impossible, and that is exactly when
-// the answer is most wanted -- so it is reported as a failing finding of this
-// check rather than silently disabling it.
+// A corrupted oplog, or a ref the oplog names that no longer resolves, makes
+// the comparison impossible, and that is exactly when the answer is most
+// wanted -- so both are reported as failing findings of this check rather than
+// silently disabling it. The one silent case is a HEAD that names no ref at
+// all -- a detached HEAD -- where there is no precondition to check rather
+// than a failure to report. (An UNBORN branch does name a ref, so it reaches
+// the resolve below; it only reports when the oplog also holds a tip for that
+// ref, which is the branch-deleted-outside-safegit case.)
 func checkBypassDetect(env doctorEnv) doctorFinding {
 	ref, refErr := git.HeadRef(env.ctx)
 	if refErr != nil || ref == "" {
@@ -279,7 +284,12 @@ func checkBypassDetect(env doctorEnv) doctorFinding {
 	}
 	tipSHA, tipErr := git.RevParse(env.ctx, ref)
 	if tipErr != nil {
-		return findingNone()
+		// The oplog says safegit put a tip on this ref, so the ref refusing to
+		// resolve is itself the bypass signal -- a branch deleted or reset
+		// outside safegit is exactly what this check exists to notice. Staying
+		// silent here would disable the check precisely when it has something
+		// to say.
+		return findingAt("error", "cannot resolve %s, which the oplog records a tip for: %v", refShortName(ref), tipErr)
 	}
 	if tipSHA != sha {
 		return findingFail("tip of %s (%s) diverged from last oplog entry (%s); raw git may have been used", refShortName(ref), tipSHA[:8], sha[:8])
