@@ -62,33 +62,7 @@ func revListReverse(t *testing.T, dir string) []string {
 	if err != nil {
 		t.Fatalf("git rev-list --reverse HEAD: %v", err)
 	}
-	return splitLines(strings.TrimSpace(string(out)))
-}
-
-// gitLsTree returns the list of files in a commit's tree.
-func gitLsTree(t *testing.T, dir, sha string) []string {
-	t.Helper()
-	cmd := exec.Command("git", "ls-tree", "-r", "--name-only", sha)
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("git ls-tree %s: %v", sha, err)
-	}
-	return splitLines(strings.TrimSpace(string(out)))
-}
-
-// splitLines splits a string by newlines, filtering out empty strings.
-func splitLines(s string) []string {
-	if s == "" {
-		return nil
-	}
-	var lines []string
-	for _, line := range strings.Split(s, "\n") {
-		if line != "" {
-			lines = append(lines, line)
-		}
-	}
-	return lines
+	return testutil.SplitLines(strings.TrimSpace(string(out)))
 }
 
 // gitParents returns the parent SHAs of a commit.
@@ -101,7 +75,7 @@ func gitParents(t *testing.T, dir, sha string) []string {
 		// No parents (root commit) returns error
 		return nil
 	}
-	return splitLines(strings.TrimSpace(string(out)))
+	return testutil.SplitLines(strings.TrimSpace(string(out)))
 }
 
 var scrubEnv = []string{"CLAUDE_CODE_SESSION_ID=scrub-test"}

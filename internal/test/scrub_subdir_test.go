@@ -97,28 +97,17 @@ func scrubSubdirSecretInHistory(t *testing.T, root string) bool {
 	return err == nil
 }
 
-// scrubSubdirHeadPaths returns every repo-relative path in HEAD's tree, read
-// from the repository root.
-func scrubSubdirHeadPaths(t *testing.T, root string) []string {
-	t.Helper()
-	out := testutil.Git(t, root, "ls-tree", "-r", "--name-only", "HEAD")
-	if out == "" {
-		return nil
-	}
-	return strings.Split(out, "\n")
-}
-
 // scrubSubdirRequirePaths fails when any of the given repo-relative paths is
 // missing from HEAD's tree.
 func scrubSubdirRequirePaths(t *testing.T, root string, want ...string) {
 	t.Helper()
 	have := make(map[string]bool)
-	for _, p := range scrubSubdirHeadPaths(t, root) {
+	for _, p := range testutil.TreePaths(t, root, "HEAD") {
 		have[p] = true
 	}
 	for _, w := range want {
 		if !have[w] {
-			t.Errorf("path %q was destroyed by the scrub; HEAD tree is now: %v", w, scrubSubdirHeadPaths(t, root))
+			t.Errorf("path %q was destroyed by the scrub; HEAD tree is now: %v", w, testutil.TreePaths(t, root, "HEAD"))
 		}
 	}
 }
