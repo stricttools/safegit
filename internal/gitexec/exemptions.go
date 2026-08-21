@@ -101,7 +101,7 @@ var dirPinExemptions = []DirPinExemption{
 	{
 		ID:     ExemptGitMutation,
 		Kind:   KindOperatorCwd,
-		Reason: "checkout, merge, rebase, reset, bisect and pull forward the operator's argv (including any pathspec) to git unchanged",
+		Reason: "checkout, merge, rebase, reset, bisect and pull forward the operator's argv (including any pathspec) to git unchanged, as do the DRY RUNS of cherry-pick and revert, which record through this same site rather than through the guarded passthrough that executes them",
 	},
 	{
 		ID:     ExemptGitPush,
