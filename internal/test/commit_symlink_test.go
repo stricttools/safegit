@@ -2,7 +2,6 @@ package test
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -136,7 +135,7 @@ func TestCommitSymlink_MixedWithRegularFile(t *testing.T) {
 
 	// Both entries must have been introduced by THIS commit, not merely be
 	// present from an earlier one.
-	introduced := diffTreeAgainstParent(t, dir)
+	introduced := testutil.GitRaw(t, dir, "diff-tree", "--no-commit-id", "-r", "--name-only", "HEAD")
 	for _, want := range []string{"regular.txt", "link"} {
 		if !strings.Contains(introduced, want) {
 			t.Errorf("expected %q to be changed by HEAD, got diff-tree:\n%s", want, introduced)
@@ -153,16 +152,4 @@ func TestCommitSymlink_MixedWithRegularFile(t *testing.T) {
 		t.Errorf("reported count and reality disagree: HEAD changed %d path(s) (%v) but safegit printed:\n%s",
 			changed, strings.Fields(introduced), stdout)
 	}
-}
-
-// diffTreeAgainstParent lists the paths HEAD changed relative to its parent.
-func diffTreeAgainstParent(t *testing.T, repoDir string) string {
-	t.Helper()
-	cmd := exec.Command("git", "diff-tree", "--no-commit-id", "-r", "--name-only", "HEAD")
-	cmd.Dir = repoDir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git diff-tree failed: %v\n%s", err, out)
-	}
-	return string(out)
 }
