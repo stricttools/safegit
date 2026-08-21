@@ -247,6 +247,11 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		}
 		<-ioDone
 
+		// ExitCode is the HOOK's status, not safegit's, so it is deliberately
+		// not an internal/exitcode constant. A killed hook has no status of its
+		// own; 21 is a synthetic marker chosen to read the same as safegit's
+		// own hook-timeout code in the "exit=%d" line callers print. Nothing
+		// branches on it -- TimedOut is what decides the caller's exit code.
 		return HookResult{Name: name, ExitCode: 21, Duration: time.Since(start), TimedOut: true}
 
 	case <-ctx.Done():

@@ -286,7 +286,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	remap.reportStale(flags)
 
 	// Populate RewriteResult for the shared post-rewrite pipeline.
-	exitCode := 0
+	exitCode := exitcode.OK
 	rewriteResult := RewriteResult{
 		ShaMap:         shaMap,
 		RewrittenCount: rewrittenCount,
@@ -327,7 +327,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 				fmt.Fprintf(os.Stderr, "CRITICAL: %v\n", err)
 				fmt.Fprintln(os.Stderr, "Old file content may still be present in the local object store.")
 				fmt.Fprintln(os.Stderr, "Run 'git reflog expire --expire=now --all && git gc --prune=now' to force cleanup.")
-				exitCode = 1
+				exitCode = exitcode.General
 			} else {
 				infof(flags, "Verification passed: all old blobs removed from object store.\n")
 			}
@@ -610,7 +610,7 @@ func runScrubFileInSubmodule(
 
 	// Finalize parent rewrite via shared pipeline. The VerifyFunc checks
 	// that old submodule blobs are no longer reachable.
-	exitCode := 0
+	exitCode := exitcode.OK
 	parentResult := RewriteResult{
 		ShaMap:         parentShaMap,
 		RewrittenCount: parentRewrittenCount,
@@ -644,7 +644,7 @@ func runScrubFileInSubmodule(
 		for _, sha := range oldBlobList {
 			if reachableBlobs[sha] {
 				fmt.Fprintf(os.Stderr, "CRITICAL: old blob %s still reachable in submodule\n", shortSHA(sha))
-				exitCode = 1
+				exitCode = exitcode.General
 			}
 		}
 		if exitCode == 0 {

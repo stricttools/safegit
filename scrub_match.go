@@ -916,7 +916,7 @@ func scrubMatchExecute(
 			subResults, scanErr := scan.ScanObjects(ctx, compiledPattern, subVerifyOpts)
 			if scanErr != nil {
 				fmt.Fprintf(os.Stderr, "CRITICAL: re-scan submodule %s failed: %v\n", sr.sub.RelativePath, scanErr)
-				exitCode = 1
+				exitCode = exitcode.General
 				continue
 			}
 			if len(subResults.Matches) > 0 {
@@ -942,7 +942,7 @@ func scrubMatchExecute(
 				if len(remaining) > 0 {
 					fmt.Fprintf(os.Stderr, "CRITICAL: secret still present in submodule %s (%d matches)\n",
 						sr.sub.RelativePath, len(remaining))
-					exitCode = 1
+					exitCode = exitcode.General
 				}
 			}
 		}
