@@ -3,6 +3,7 @@ package test
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -61,7 +62,7 @@ func TestMergeCanBeConcludedThroughSafegit(t *testing.T) {
 		stdout, stderr, code := runSafegit(t, fx.dir, route.args...)
 		if code != 0 {
 			failures = append(failures, route.name+": refused with exit "+
-				strings.TrimSpace(itoa(code))+": "+oneLine(stderr))
+				strconv.Itoa(code)+": "+oneLine(stderr))
 			continue
 		}
 
@@ -69,7 +70,7 @@ func TestMergeCanBeConcludedThroughSafegit(t *testing.T) {
 		head := testutil.Git(t, fx.dir, "rev-parse", "HEAD")
 		parents := testutil.Parents(t, fx.dir, head)
 		if len(parents) != 2 {
-			problems = append(problems, "commit has "+itoa(len(parents))+" parent(s), want 2 ("+strings.Join(parents, ", ")+")")
+			problems = append(problems, "commit has "+strconv.Itoa(len(parents))+" parent(s), want 2 ("+strings.Join(parents, ", ")+")")
 		} else {
 			if parents[0] != fx.mainSHA {
 				problems = append(problems, "first parent = "+parents[0]+", want "+fx.mainSHA)
@@ -238,26 +239,6 @@ func TestMergeConflictTellsOperatorHowToConclude(t *testing.T) {
 		t.Errorf("merge conflict output carries no safegit-authored next step, only git's "+
 			"\"commit the result\" advice that no safegit command can follow:\n%s", combined)
 	}
-}
-
-// itoa avoids pulling strconv in for two call sites' worth of formatting.
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var buf []byte
-	for n > 0 {
-		buf = append([]byte{byte('0' + n%10)}, buf...)
-		n /= 10
-	}
-	if neg {
-		buf = append([]byte{'-'}, buf...)
-	}
-	return string(buf)
 }
 
 // oneLine collapses multi-line command output into a single readable line so
