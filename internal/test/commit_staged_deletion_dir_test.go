@@ -34,7 +34,7 @@ func seedDeletedDir(t *testing.T, files map[string]string) string {
 	}
 	var paths []string
 	for name, content := range files {
-		writeFile(t, dir, "dir/"+name, content)
+		testutil.WriteFile(t, dir, "dir/"+name, content)
 		paths = append(paths, "dir/"+name)
 	}
 
@@ -106,7 +106,7 @@ func TestCommitStagedDeletions_DirectoryPathWithMovedFile(t *testing.T) {
 	dir := seedDeletedDir(t, map[string]string{"a.txt": "alpha\n", "b.txt": "beta\n"})
 
 	// The deleted dir/a.txt reappears at the repo root with the same content.
-	writeFile(t, dir, "new.txt", "alpha\n")
+	testutil.WriteFile(t, dir, "new.txt", "alpha\n")
 
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "move a out of dir", "--", "dir/", "new.txt")
 	if code != 0 {
@@ -128,7 +128,7 @@ func TestCommitStagedDeletions_DirectoryPathWithMovedFile(t *testing.T) {
 func TestCommitStagedDeletions_DirectoryPathWithUnrelatedEmptyFile(t *testing.T) {
 	dir := seedDeletedDir(t, map[string]string{"empty.txt": "", "b.txt": "beta\n"})
 
-	writeFile(t, dir, "notes.md", "")
+	testutil.WriteFile(t, dir, "notes.md", "")
 
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "remove dir, add notes", "--", "dir/", "notes.md")
 	if code != 0 {
@@ -147,7 +147,7 @@ func TestCommitStagedDeletions_DirectoryPathWithUnrelatedEmptyFile(t *testing.T)
 func TestCommitStagedDeletions_FilePathsWithMovedFile(t *testing.T) {
 	dir := seedDeletedDir(t, map[string]string{"a.txt": "alpha\n", "b.txt": "beta\n"})
 
-	writeFile(t, dir, "new.txt", "alpha\n")
+	testutil.WriteFile(t, dir, "new.txt", "alpha\n")
 
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "move a out of dir", "--",
 		"dir/a.txt", "dir/b.txt", "new.txt")

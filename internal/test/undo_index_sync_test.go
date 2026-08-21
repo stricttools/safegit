@@ -26,14 +26,6 @@ import (
 // must do, and fail against today's binary. The third is a GREEN pin recording
 // behavior that is correct and must not regress.
 
-// undoSyncWrite writes a file in the repo, failing the test on error.
-func undoSyncWrite(t *testing.T, dir, name, content string) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
-		t.Fatalf("writing %s: %v", name, err)
-	}
-}
-
 // undoSyncRead returns a working-tree file's content, or "" plus a fail if it
 // is missing.
 func undoSyncRead(t *testing.T, dir, name string) string {
@@ -107,21 +99,21 @@ func TestUndoPreservesForeignStagedState(t *testing.T) {
 
 	// A tracked file for the foreign session to modify, plus the seed file it
 	// will stage a deletion of.
-	undoSyncWrite(t, dir, "foreign.txt", "base\n")
+	testutil.WriteFile(t, dir, "foreign.txt", "base\n")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "add foreign.txt", "--", "foreign.txt"); code != 0 {
 		t.Fatalf("setup commit failed (code %d): %s", code, stderr)
 	}
 
 	// The commit this session will undo.
-	undoSyncWrite(t, dir, "owned.txt", "owned\n")
+	testutil.WriteFile(t, dir, "owned.txt", "owned\n")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "owned commit", "--", "owned.txt"); code != 0 {
 		t.Fatalf("owned commit failed (code %d): %s", code, stderr)
 	}
 	beforeUndo := undoSyncHead(t, dir)
 
 	// The other session stages three kinds of work in the shared index.
-	undoSyncWrite(t, dir, "foreign.txt", "staged edit\n")
-	undoSyncWrite(t, dir, "brand-new.txt", "staged addition\n")
+	testutil.WriteFile(t, dir, "foreign.txt", "staged edit\n")
+	testutil.WriteFile(t, dir, "brand-new.txt", "staged addition\n")
 	testutil.Git(t, dir, "add", "foreign.txt", "brand-new.txt")
 	testutil.Git(t, dir, "rm", "--cached", "seed.txt")
 
@@ -183,7 +175,7 @@ func TestUndoRefusedMidMerge(t *testing.T) {
 	env := undoSyncSession()
 
 	// Base revision of the conflicted file.
-	undoSyncWrite(t, dir, "conflicted.txt", "line1\nbase\nline3\n")
+	testutil.WriteFile(t, dir, "conflicted.txt", "line1\nbase\nline3\n")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "base", "--", "conflicted.txt"); code != 0 {
 		t.Fatalf("base commit failed (code %d): %s", code, stderr)
 	}
@@ -191,15 +183,15 @@ func TestUndoRefusedMidMerge(t *testing.T) {
 	// feature: a conflicting edit plus one clean addition.
 	testutil.Git(t, dir, "branch", "feature")
 	testutil.Git(t, dir, "switch", "feature")
-	undoSyncWrite(t, dir, "conflicted.txt", "line1\nfeature\nline3\n")
-	undoSyncWrite(t, dir, "feature-only.txt", "only on feature\n")
+	testutil.WriteFile(t, dir, "conflicted.txt", "line1\nfeature\nline3\n")
+	testutil.WriteFile(t, dir, "feature-only.txt", "only on feature\n")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "feature edit", "--", "conflicted.txt", "feature-only.txt"); code != 0 {
 		t.Fatalf("feature commit failed (code %d): %s", code, stderr)
 	}
 
 	// main: the conflicting edit. This is the commit undo would roll back.
 	testutil.Git(t, dir, "switch", "main")
-	undoSyncWrite(t, dir, "conflicted.txt", "line1\nmain\nline3\n")
+	testutil.WriteFile(t, dir, "conflicted.txt", "line1\nmain\nline3\n")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "main edit", "--", "conflicted.txt"); code != 0 {
 		t.Fatalf("main commit failed (code %d): %s", code, stderr)
 	}
@@ -272,15 +264,15 @@ func TestUndoLeavesWorkingTreeIntact(t *testing.T) {
 	dir := newRepo(t)
 	env := undoSyncSession()
 
-	undoSyncWrite(t, dir, "tracked.txt", "v1\n")
+	testutil.WriteFile(t, dir, "tracked.txt", "v1\n")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "add tracked.txt", "--", "tracked.txt"); code != 0 {
 		t.Fatalf("setup commit failed (code %d): %s", code, stderr)
 	}
 	beforeCommit := undoSyncHead(t, dir)
 
 	// One commit that both modifies a tracked file and adds a new one.
-	undoSyncWrite(t, dir, "tracked.txt", "v2\n")
-	undoSyncWrite(t, dir, "added.txt", "added by the undone commit\n")
+	testutil.WriteFile(t, dir, "tracked.txt", "v2\n")
+	testutil.WriteFile(t, dir, "added.txt", "added by the undone commit\n")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "the commit to undo", "--", "tracked.txt", "added.txt"); code != 0 {
 		t.Fatalf("commit failed (code %d): %s", code, stderr)
 	}
@@ -327,20 +319,20 @@ func TestGuardedPassthroughKeepsCherryPickConflictStages(t *testing.T) {
 	dir := newRepo(t)
 	env := undoSyncSession()
 
-	undoSyncWrite(t, dir, "c.txt", "base\n")
+	testutil.WriteFile(t, dir, "c.txt", "base\n")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "base", "--", "c.txt"); code != 0 {
 		t.Fatalf("base commit failed (code %d): %s", code, stderr)
 	}
 	testutil.Git(t, dir, "branch", "side")
 	testutil.Git(t, dir, "switch", "side")
-	undoSyncWrite(t, dir, "c.txt", "side\n")
+	testutil.WriteFile(t, dir, "c.txt", "side\n")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "side edit", "--", "c.txt"); code != 0 {
 		t.Fatalf("side commit failed (code %d): %s", code, stderr)
 	}
 	sideSHA := undoSyncHead(t, dir)
 
 	testutil.Git(t, dir, "switch", "main")
-	undoSyncWrite(t, dir, "c.txt", "trunk\n")
+	testutil.WriteFile(t, dir, "c.txt", "trunk\n")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "trunk edit", "--", "c.txt"); code != 0 {
 		t.Fatalf("trunk commit failed (code %d): %s", code, stderr)
 	}

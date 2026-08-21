@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // Machine mode is the framework's, not safegit's. safegit used to declare its
@@ -17,7 +19,7 @@ import (
 // json.Unmarshal fail, which is the point.
 func TestMachineModeStdoutIsExactlyTheEnvelope(t *testing.T) {
 	dir := newRepo(t)
-	writeFile(t, dir, "a.txt", "one\n")
+	testutil.WriteFile(t, dir, "a.txt", "one\n")
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "seed", "--", "a.txt"); code != 0 {
 		t.Fatalf("seeding commit failed: %s", stderr)
 	}
@@ -53,7 +55,7 @@ func TestMachineModeStdoutIsExactlyTheEnvelope(t *testing.T) {
 // document on that stream.
 func TestMachineModeSuppressesTheHumanRendering(t *testing.T) {
 	dir := newRepo(t)
-	writeFile(t, dir, "a.txt", "one\n")
+	testutil.WriteFile(t, dir, "a.txt", "one\n")
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "seed", "--", "a.txt"); code != 0 {
 		t.Fatalf("seeding commit failed: %s", stderr)
 	}
@@ -80,7 +82,7 @@ func TestMachineModeSuppressesTheHumanRendering(t *testing.T) {
 // the combination in full -- payload included.
 func TestMachineModeIsExemptFromQuiet(t *testing.T) {
 	dir := newRepo(t)
-	writeFile(t, dir, "a.txt", "one\n")
+	testutil.WriteFile(t, dir, "a.txt", "one\n")
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "seed", "--", "a.txt"); code != 0 {
 		t.Fatalf("seeding commit failed: %s", stderr)
 	}

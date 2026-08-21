@@ -45,28 +45,16 @@ func scrubSubdirCommit(t *testing.T, root, msg string, paths ...string) {
 	testutil.Git(t, root, "commit", "-m", msg)
 }
 
-// scrubSubdirWrite writes content to a repo-relative path, creating parents.
-func scrubSubdirWrite(t *testing.T, root, rel, content string) {
-	t.Helper()
-	full := filepath.Join(root, rel)
-	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // scrubSubdirRepoRootSecret builds a repo whose secret lives at the ROOT level
 // (secret.txt) and which also has a subdirectory (sub/other.txt) to run scrub
 // from. Returns the repo root and the subdirectory path.
 func scrubSubdirRepoRootSecret(t *testing.T) (root, sub string) {
 	t.Helper()
 	root = newRepo(t)
-	scrubSubdirWrite(t, root, "secret.txt", scrubSubdirSecret+"\n")
-	scrubSubdirWrite(t, root, "sub/other.txt", "hello\n")
+	testutil.WriteFile(t, root, "secret.txt", scrubSubdirSecret+"\n")
+	testutil.WriteFile(t, root, "sub/other.txt", "hello\n")
 	scrubSubdirCommit(t, root, "add secret at root", "secret.txt", "sub/other.txt")
-	scrubSubdirWrite(t, root, "sub/other.txt", "hello\nmore\n")
+	testutil.WriteFile(t, root, "sub/other.txt", "hello\nmore\n")
 	scrubSubdirCommit(t, root, "second", "sub/other.txt")
 	return root, filepath.Join(root, "sub")
 }
@@ -78,9 +66,9 @@ func scrubSubdirRepoRootSecret(t *testing.T) (root, sub string) {
 func scrubSubdirRepoNestedSecret(t *testing.T) (root, sub string) {
 	t.Helper()
 	root = newRepo(t)
-	scrubSubdirWrite(t, root, "sub/secret.txt", scrubSubdirSecret+"\n")
-	scrubSubdirWrite(t, root, "sub/other.txt", "hello\n")
-	scrubSubdirWrite(t, root, "rootfile.txt", "root file\n")
+	testutil.WriteFile(t, root, "sub/secret.txt", scrubSubdirSecret+"\n")
+	testutil.WriteFile(t, root, "sub/other.txt", "hello\n")
+	testutil.WriteFile(t, root, "rootfile.txt", "root file\n")
 	scrubSubdirCommit(t, root, "add secret under sub/", "sub/secret.txt", "sub/other.txt", "rootfile.txt")
 	return root, filepath.Join(root, "sub")
 }

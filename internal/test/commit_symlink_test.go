@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // lsTreeHEAD returns `git ls-tree -r HEAD` output, which carries the mode of
@@ -70,7 +72,7 @@ func TestCommitSymlink_LinkToCommittedFile(t *testing.T) {
 
 	// Commit the symlink's future target first, so its content is already in
 	// the tree and resolving the link away produces no tree change at all.
-	writeFile(t, dir, "file.txt", "target content\n")
+	testutil.WriteFile(t, dir, "file.txt", "target content\n")
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "add file.txt", "--", "file.txt"); code != 0 {
 		t.Fatalf("committing file.txt failed (code %d): %s", code, stderr)
 	}
@@ -118,7 +120,7 @@ func TestCommitSymlink_MixedWithRegularFile(t *testing.T) {
 
 	// seed.txt is created and committed by newRepo, so a link to it collapses
 	// to an already-committed, unchanged path.
-	writeFile(t, dir, "regular.txt", "regular content\n")
+	testutil.WriteFile(t, dir, "regular.txt", "regular content\n")
 	if err := os.Symlink("seed.txt", filepath.Join(dir, "link")); err != nil {
 		t.Fatalf("creating symlink: %v", err)
 	}

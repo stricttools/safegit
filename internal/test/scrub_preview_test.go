@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // The history rewrites' previews used to be hand-rolled: a human branch and a
@@ -257,7 +259,7 @@ func TestScrubMatchScopedToNothingPreviewPromisesNothing(t *testing.T) {
 func TestScrubRunPreviewFiguresAgree(t *testing.T) {
 	dir, _ := newSecretRepo(t)
 	recipe := "recipe.toml"
-	writeFile(t, dir, recipe, fmt.Sprintf(`
+	testutil.WriteFile(t, dir, recipe, fmt.Sprintf(`
 [[operations]]
 pattern = %q
 replace = "GONE"
@@ -291,7 +293,7 @@ replace = "GONE"
 // preview counted commits in one branch and reported them in another.
 func TestAuthorRewritePreviewFiguresAgree(t *testing.T) {
 	dir := newRepo(t)
-	writeFile(t, dir, "a.txt", "one\n")
+	testutil.WriteFile(t, dir, "a.txt", "one\n")
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "seed", "--", "a.txt"); code != 0 {
 		t.Fatalf("seeding commit failed: %s", stderr)
 	}

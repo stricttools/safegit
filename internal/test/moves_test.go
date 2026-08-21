@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // gitDiffTreeRename runs git diff-tree with rename detection on HEAD and
@@ -33,19 +35,11 @@ func gitStatusPorcelain(t *testing.T, repoDir string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// writeFile is a test helper that writes content to a file in the repo.
-func writeFile(t *testing.T, repoDir, name, content string) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(repoDir, name), []byte(content), 0644); err != nil {
-		t.Fatalf("writing %s: %v", name, err)
-	}
-}
-
 func TestMoveDetection_BasicRename(t *testing.T) {
 	dir := newRepo(t)
 
 	// Write foo.txt and commit it
-	writeFile(t, dir, "foo.txt", "hello world")
+	testutil.WriteFile(t, dir, "foo.txt", "hello world")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add foo", "--", "foo.txt")
 	if code != 0 {
 		t.Fatalf("initial commit failed (code %d): %s", code, stderr)
@@ -87,7 +81,7 @@ func TestMoveDetection_MoveAndEdit(t *testing.T) {
 	dir := newRepo(t)
 
 	// Write foo.txt and commit
-	writeFile(t, dir, "foo.txt", "hello world")
+	testutil.WriteFile(t, dir, "foo.txt", "hello world")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add foo", "--", "foo.txt")
 	if code != 0 {
 		t.Fatalf("initial commit failed (code %d): %s", code, stderr)
@@ -97,7 +91,7 @@ func TestMoveDetection_MoveAndEdit(t *testing.T) {
 	if err := os.Rename(filepath.Join(dir, "foo.txt"), filepath.Join(dir, "bar.txt")); err != nil {
 		t.Fatalf("rename failed: %v", err)
 	}
-	writeFile(t, dir, "bar.txt", "goodbye world")
+	testutil.WriteFile(t, dir, "bar.txt", "goodbye world")
 
 	// Commit only the new path
 	_, stderr, code = runSafegit(t, dir, "commit", "-m", "move and edit", "--", "bar.txt")
@@ -121,7 +115,7 @@ func TestMoveDetection_ExplicitBothPaths(t *testing.T) {
 	dir := newRepo(t)
 
 	// Write foo.txt and commit
-	writeFile(t, dir, "foo.txt", "hello world")
+	testutil.WriteFile(t, dir, "foo.txt", "hello world")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add foo", "--", "foo.txt")
 	if code != 0 {
 		t.Fatalf("initial commit failed (code %d): %s", code, stderr)
@@ -154,8 +148,8 @@ func TestMoveDetection_UnrelatedDeletion(t *testing.T) {
 	dir := newRepo(t)
 
 	// Write a.txt and b.txt, commit both
-	writeFile(t, dir, "a.txt", "content A")
-	writeFile(t, dir, "b.txt", "content B")
+	testutil.WriteFile(t, dir, "a.txt", "content A")
+	testutil.WriteFile(t, dir, "b.txt", "content B")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add a and b", "--", "a.txt", "b.txt")
 	if code != 0 {
 		t.Fatalf("initial commit failed (code %d): %s", code, stderr)
@@ -196,7 +190,7 @@ func TestMoveDetection_Amend(t *testing.T) {
 	dir := newRepo(t)
 
 	// Write foo.txt and commit
-	writeFile(t, dir, "foo.txt", "hello world")
+	testutil.WriteFile(t, dir, "foo.txt", "hello world")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add foo", "--", "foo.txt")
 	if code != 0 {
 		t.Fatalf("initial commit failed (code %d): %s", code, stderr)
@@ -229,7 +223,7 @@ func TestMoveDetection_QuietSuppresses(t *testing.T) {
 	dir := newRepo(t)
 
 	// Write foo.txt and commit
-	writeFile(t, dir, "foo.txt", "hello world")
+	testutil.WriteFile(t, dir, "foo.txt", "hello world")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add foo", "--", "foo.txt")
 	if code != 0 {
 		t.Fatalf("initial commit failed (code %d): %s", code, stderr)
@@ -262,7 +256,7 @@ func TestMoveDetection_MoveToSubdirectory(t *testing.T) {
 	dir := newRepo(t)
 
 	// Create and commit foo.txt
-	writeFile(t, dir, "foo.txt", "subdirectory test content")
+	testutil.WriteFile(t, dir, "foo.txt", "subdirectory test content")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add foo", "--", "foo.txt")
 	if code != 0 {
 		t.Fatalf("initial commit failed (code %d): %s", code, stderr)
@@ -307,8 +301,8 @@ func TestMoveDetection_MultipleMoves(t *testing.T) {
 	dir := newRepo(t)
 
 	// Create and commit two files
-	writeFile(t, dir, "a.txt", "alpha")
-	writeFile(t, dir, "b.txt", "beta")
+	testutil.WriteFile(t, dir, "a.txt", "alpha")
+	testutil.WriteFile(t, dir, "b.txt", "beta")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add a and b", "--", "a.txt", "b.txt")
 	if code != 0 {
 		t.Fatalf("initial commit failed (code %d): %s", code, stderr)
@@ -353,8 +347,8 @@ func TestMoveDetection_PathSimilarityTiebreak(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "lib"), 0o755); err != nil {
 		t.Fatalf("mkdir lib failed: %v", err)
 	}
-	writeFile(t, dir, "src/util/helper.txt", "shared helper content")
-	writeFile(t, dir, "lib/helper.txt", "shared helper content")
+	testutil.WriteFile(t, dir, "src/util/helper.txt", "shared helper content")
+	testutil.WriteFile(t, dir, "lib/helper.txt", "shared helper content")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add helpers", "--", "src/util/helper.txt", "lib/helper.txt")
 	if code != 0 {
 		t.Fatalf("initial commit failed (code %d): %s", code, stderr)
@@ -367,7 +361,7 @@ func TestMoveDetection_PathSimilarityTiebreak(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, "lib", "helper.txt")); err != nil {
 		t.Fatalf("remove lib/helper.txt failed: %v", err)
 	}
-	writeFile(t, dir, "src/util/renamed.txt", "shared helper content")
+	testutil.WriteFile(t, dir, "src/util/renamed.txt", "shared helper content")
 
 	// Commit only the new file
 	_, stderr, code = runSafegit(t, dir, "commit", "-m", "rename helper", "--", "src/util/renamed.txt")
@@ -391,7 +385,7 @@ func TestMoveDetection_OriginalPathRecreated(t *testing.T) {
 	dir := newRepo(t)
 
 	// Create and commit config.txt
-	writeFile(t, dir, "config.txt", "original")
+	testutil.WriteFile(t, dir, "config.txt", "original")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add config", "--", "config.txt")
 	if code != 0 {
 		t.Fatalf("initial commit failed (code %d): %s", code, stderr)
@@ -401,7 +395,7 @@ func TestMoveDetection_OriginalPathRecreated(t *testing.T) {
 	if err := os.Rename(filepath.Join(dir, "config.txt"), filepath.Join(dir, "config.bak")); err != nil {
 		t.Fatalf("rename failed: %v", err)
 	}
-	writeFile(t, dir, "config.txt", "updated")
+	testutil.WriteFile(t, dir, "config.txt", "updated")
 
 	// Commit both files explicitly
 	_, stderr, code = runSafegit(t, dir, "commit", "-m", "backup and update config", "--", "config.bak", "config.txt")
@@ -425,7 +419,7 @@ func TestMoveDetection_EmptyFile(t *testing.T) {
 	dir := newRepo(t)
 
 	// Create and commit an empty file
-	writeFile(t, dir, "empty.txt", "")
+	testutil.WriteFile(t, dir, "empty.txt", "")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add empty", "--", "empty.txt")
 	if code != 0 {
 		t.Fatalf("initial commit failed (code %d): %s", code, stderr)

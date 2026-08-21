@@ -24,13 +24,13 @@ func seedTrackedThenIgnoredFile(t *testing.T) string {
 	t.Helper()
 	dir := newRepo(t)
 
-	writeRepoFile(t, dir, "dir/junk.txt", "build artifact\n")
+	testutil.WriteFile(t, dir, "dir/junk.txt", "build artifact\n")
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "add junk", "--", "dir/junk.txt"); code != 0 {
 		t.Fatalf("seed commit failed (code %d): %s", code, stderr)
 	}
 
 	// The pattern that makes the tracked file ignored from now on.
-	writeRepoFile(t, dir, ".gitignore", "dir/\n")
+	testutil.WriteFile(t, dir, ".gitignore", "dir/\n")
 
 	// The operator's own step 2: stage the removal, keep the file on disk.
 	testutil.GitRaw(t, dir, "rm", "-r", "--cached", "dir")

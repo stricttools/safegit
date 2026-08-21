@@ -102,14 +102,6 @@ func seqConflictCapture(t *testing.T, dir string, exitCode int) seqConflictState
 	return st
 }
 
-// seqConflictWrite writes a file inside a repository.
-func seqConflictWrite(t *testing.T, dir, name, content string) {
-	t.Helper()
-	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // seqConflictRepo builds the fixture both twins share:
 //
 //	base       c.txt ("base"), other.txt        -- on main and side
@@ -124,24 +116,24 @@ func seqConflictRepo(t *testing.T) string {
 	t.Helper()
 	dir := newRepo(t)
 
-	seqConflictWrite(t, dir, "c.txt", "line1\nbase\nline3\n")
-	seqConflictWrite(t, dir, "other.txt", "v1\n")
+	testutil.WriteFile(t, dir, "c.txt", "line1\nbase\nline3\n")
+	testutil.WriteFile(t, dir, "other.txt", "v1\n")
 	testutil.Git(t, dir, "add", "c.txt", "other.txt")
 	testutil.Git(t, dir, "commit", "-m", "base")
 
 	testutil.Git(t, dir, "branch", "side")
 
-	seqConflictWrite(t, dir, "c.txt", "line1\nmain\nline3\n")
+	testutil.WriteFile(t, dir, "c.txt", "line1\nmain\nline3\n")
 	testutil.Git(t, dir, "add", "c.txt")
 	testutil.Git(t, dir, "commit", "-m", "main edit")
 
 	testutil.Git(t, dir, "switch", "side")
-	seqConflictWrite(t, dir, "extra.txt", "extra\n")
+	testutil.WriteFile(t, dir, "extra.txt", "extra\n")
 	testutil.Git(t, dir, "add", "extra.txt")
 	testutil.Git(t, dir, "commit", "-m", "add extra")
 
-	seqConflictWrite(t, dir, "c.txt", "line1\nside\nline3\n")
-	seqConflictWrite(t, dir, "newfile.txt", "new\n")
+	testutil.WriteFile(t, dir, "c.txt", "line1\nside\nline3\n")
+	testutil.WriteFile(t, dir, "newfile.txt", "new\n")
 	testutil.Git(t, dir, "add", "c.txt", "newfile.txt")
 	testutil.Git(t, dir, "commit", "-m", "side edit")
 
@@ -230,7 +222,7 @@ func TestSeqConflictCherryPickContinueProducesSameCommit(t *testing.T) {
 	seqConflictAssertMidSequence(t, gitState, "CHERRY_PICK_HEAD")
 
 	resolveAndContinue := func(dir string) (paths []string, out string, code int) {
-		seqConflictWrite(t, dir, "c.txt", "line1\nresolved\nline3\n")
+		testutil.WriteFile(t, dir, "c.txt", "line1\nresolved\nline3\n")
 		testutil.Git(t, dir, "add", "c.txt")
 		out, code = testutil.GitTryEnv(t, dir, []string{"GIT_EDITOR=true"}, "cherry-pick", "--continue")
 		if code != 0 {
