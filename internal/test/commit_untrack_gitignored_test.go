@@ -91,7 +91,7 @@ func TestCommitGitignoreOnlyDropsPreStagedRemoval(t *testing.T) {
 	}
 
 	after := testutil.GitRaw(t, dir, "diff", "--cached", "--name-status")
-	status := gitStatusPorcelain(t, dir)
+	status := testutil.Git(t, dir, "status", "--porcelain")
 	lsFiles, _ := testutil.GitTry(t, dir, "ls-files", "--", "dir/junk.txt")
 	t.Logf("staged after safegit commit: %q", after)
 	t.Logf("git status --porcelain after safegit commit: %q", status)

@@ -92,7 +92,7 @@ func TestCommitStagedDeletions_DirectoryPath(t *testing.T) {
 	}
 
 	assertDeletedInHead(t, dir, "dir/a.txt", "dir/b.txt")
-	if status := gitStatusPorcelain(t, dir); status != "" {
+	if status := testutil.Git(t, dir, "status", "--porcelain"); status != "" {
 		t.Errorf("expected clean working tree after commit, got: %s", status)
 	}
 }
@@ -115,7 +115,7 @@ func TestCommitStagedDeletions_DirectoryPathWithMovedFile(t *testing.T) {
 
 	assertDeletedInHead(t, dir, "dir/a.txt", "dir/b.txt")
 	assertPresentInHead(t, dir, "new.txt")
-	if status := gitStatusPorcelain(t, dir); status != "" {
+	if status := testutil.Git(t, dir, "status", "--porcelain"); status != "" {
 		t.Errorf("expected clean working tree after commit, got: %s", status)
 	}
 }
@@ -157,7 +157,7 @@ func TestCommitStagedDeletions_FilePathsWithMovedFile(t *testing.T) {
 
 	assertDeletedInHead(t, dir, "dir/a.txt", "dir/b.txt")
 	assertPresentInHead(t, dir, "new.txt")
-	if status := gitStatusPorcelain(t, dir); status != "" {
+	if status := testutil.Git(t, dir, "status", "--porcelain"); status != "" {
 		t.Errorf("expected clean working tree after commit, got: %s", status)
 	}
 }
