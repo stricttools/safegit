@@ -2,23 +2,34 @@ package test
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
+
+// commitFormat and commitMessage are the suite's two ways of reading a commit's
+// own message back out of git, and both run the same `git log -1 --format=...`
+// through testutil.GitOut -- stdout only, so nothing git writes to stderr can
+// end up inside a message the test then asserts on.
+//
+// commitFormat strips the trailing newline the format itself emits, because its
+// callers compare a subject or body against an exact string. commitMessage
+// keeps git's output verbatim, because its callers print or search the whole
+// message and the trailing newline is part of it.
 
 // commitFormat returns `git log -1 --format=<format>` for the given ref, with
 // the trailing newline the format itself emits stripped.
 func commitFormat(t *testing.T, dir, format, ref string) string {
 	t.Helper()
-	cmd := exec.Command("git", "log", "-1", "--format="+format, ref)
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("git log -1 --format=%s %s: %v", format, ref, err)
-	}
-	return strings.TrimRight(string(out), "\n")
+	return strings.TrimRight(testutil.GitOut(t, dir, "log", "-1", "--format="+format, ref), "\n")
+}
+
+// commitMessage returns the full commit message of the given ref, verbatim.
+func commitMessage(t *testing.T, dir, ref string) string {
+	t.Helper()
+	return testutil.GitOut(t, dir, "log", "-1", "--format=%B", ref)
 }
 
 // Repeated -m values must be joined with a blank line between them, matching
