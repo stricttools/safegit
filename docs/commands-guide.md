@@ -336,7 +336,8 @@ git merge --ff-only FETCH_HEAD
 
 | Code | Meaning |
 |------|---------|
-| 0 | Success (including a declined confirmation) |
+| 0 | Success |
+| 1 | General error, including a declined public-remote confirmation -- a refusal never reports success |
 | 22 | The remote slot holds work missing from the local history |
 | 23 | The branch has no backup slot on the remote |
 | 40 | Git push failed |
