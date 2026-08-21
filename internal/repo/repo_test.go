@@ -2,9 +2,11 @@ package repo
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -433,5 +435,80 @@ func TestAutoBumpParent_GetValueNil(t *testing.T) {
 	}
 	if boolPtr != nil {
 		t.Errorf("expected nil *bool for unset config, got %v", *boolPtr)
+	}
+}
+
+// TestConcurrentFirstInitNeverPublishesPartialConfig pins the atomic
+// config.json write. Init publishes the file that IsInitialized stats and every
+// command then reads, so a plain write let a concurrent first init observe the
+// empty prefix of a half-written file -- the observed flake was "unexpected end
+// of JSON input" on a repo two sessions touched at once.
+//
+// 50 iterations of 8 concurrent first inits: each iteration races the writers
+// against readers that must see either no file at all or a complete config,
+// never anything in between. (The real statistical check is the stress run;
+// this is the deterministic regression pin.)
+func TestConcurrentFirstInitNeverPublishesPartialConfig(t *testing.T) {
+	const iterations = 50
+	const concurrency = 8
+
+	for i := 0; i < iterations; i++ {
+		gitDir := filepath.Join(t.TempDir(), ".git")
+		if err := os.MkdirAll(gitDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		var wg sync.WaitGroup
+		errs := make(chan error, concurrency*2)
+
+		for w := 0; w < concurrency; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if err := Init(gitDir); err != nil {
+					errs <- fmt.Errorf("Init: %w", err)
+				}
+			}()
+			// A reader racing the writers: the only two legal observations are
+			// "not there yet" and "complete and parseable".
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for attempt := 0; attempt < 50; attempt++ {
+					if !IsInitialized(gitDir) {
+						continue
+					}
+					if _, err := LoadConfig(gitDir); err != nil {
+						errs <- fmt.Errorf("a published config.json did not parse: %w", err)
+						return
+					}
+				}
+			}()
+		}
+
+		wg.Wait()
+		close(errs)
+		for err := range errs {
+			t.Fatalf("iteration %d: %v", i, err)
+		}
+
+		cfg, err := LoadConfig(gitDir)
+		if err != nil {
+			t.Fatalf("iteration %d: config after the race does not load: %v", i, err)
+		}
+		if cfg.SchemaVersion != 1 || cfg.Commit.CASMaxAttempts != 5 {
+			t.Fatalf("iteration %d: config after the race is not the default: %+v", i, cfg)
+		}
+
+		// No temp files left behind by any of the losing writers.
+		entries, err := os.ReadDir(SafegitDir(gitDir))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			if strings.Contains(e.Name(), ".tmp-") {
+				t.Fatalf("iteration %d: leftover temp file %s", i, e.Name())
+			}
+		}
 	}
 }
