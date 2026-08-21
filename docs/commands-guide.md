@@ -253,6 +253,7 @@ safegit pull --merge-strategy ff-only origin main
 - **Coordination guard**: Refuses to pull if another safegit operation is in progress on the worktree.
 - **Explicit merge strategy**: No implicit default merge behavior -- you must choose `ff`, `ff-only`, or `no-ff`.
 - **Two-phase**: Runs `git fetch` then `git merge` as separate steps for clarity and control.
+- **git's own exit code**: When either step fails, safegit exits with the code that git returned, and the index is left exactly as git left it.
 
 ## backup
 
@@ -805,11 +806,11 @@ safegit --dry-run author rewrite --old-name "alice" --new-name "Alice Smith"
 
 ## checkout
 
-Checkout a branch or ref with working-tree safety guards that prevent checking out while another safegit operation is in progress, syncing the main index after checkout and recording the operation in the oplog.
+Checkout a branch or ref with working-tree safety guards that prevent checking out while another safegit operation is in progress, and recording the operation in the oplog.
 
 ### When to Use
 
-Use `safegit checkout` instead of `git checkout` to get coordination guards that prevent checking out while another safegit operation is in progress, protecting uncommitted work from other sessions that may be sharing the same worktree and ensuring the main index stays consistent after the checkout completes.
+Use `safegit checkout` instead of `git checkout` to get coordination guards that prevent checking out while another safegit operation is in progress, protecting uncommitted work from other sessions that may be sharing the same worktree.
 
 ### Arguments
 
@@ -826,12 +827,13 @@ safegit checkout v1.0.0
 ### Safety Guarantees
 
 - **Coordination guard**: Checks for in-progress safegit operations before proceeding.
-- **Index sync**: Runs `git read-tree HEAD` after checkout to keep the main index consistent.
+- **git's own exit code**: When `git checkout` fails, safegit exits with the code git returned.
+- **The index is git's**: safegit does not touch the index after the checkout; whatever git left there is what remains.
 - **Oplog recording**: Logs the checkout with old and new HEAD SHAs.
 
 ## merge
 
-Merge a branch into the current HEAD with working-tree safety guards that check for in-progress safegit operations, sync the main index after completion, and record the merge in the oplog for audit purposes.
+Merge a branch into the current HEAD with working-tree safety guards that check for in-progress safegit operations and record the merge in the oplog for audit purposes.
 
 ### When to Use
 
@@ -851,12 +853,13 @@ safegit merge --no-ff feature-branch
 ### Safety Guarantees
 
 - **Coordination guard**: Refuses to merge if another safegit operation is in progress.
-- **Index sync**: Syncs the main index after the merge.
+- **git's own exit code**: When `git merge` fails -- including a conflicted merge -- safegit exits with the code git returned.
+- **The index is git's**: a conflicted merge keeps its unmerged entries and a `--no-commit` merge keeps its staged result; safegit does not touch the index after the merge.
 - **Oplog recording**: Logs the merge with branch name and result SHA.
 
 ## rebase
 
-Rebase the current branch onto an upstream ref with coordination safety guards that check for in-progress operations, sync the main index after completion, and record the rebase in the oplog for audit trail purposes.
+Rebase the current branch onto an upstream ref with coordination safety guards that check for in-progress operations and record the rebase in the oplog for audit trail purposes.
 
 ### When to Use
 
@@ -876,7 +879,8 @@ safegit rebase --interactive HEAD~5
 ### Safety Guarantees
 
 - **Coordination guard**: Refuses to rebase if another safegit operation is in progress.
-- **Index sync**: Syncs the main index after rebase completes.
+- **git's own exit code**: When `git rebase` stops or fails, safegit exits with the code git returned.
+- **The index is git's**: a rebase stopped at a conflict keeps its unmerged entries; safegit does not touch the index after the rebase.
 - **Oplog recording**: Logs the rebase with the upstream ref.
 
 ## reset
@@ -904,7 +908,8 @@ safegit reset --hard HEAD~3
 ### Safety Guarantees
 
 - **Selective guard**: Only `--hard` resets trigger the coordination check.
-- **Index sync**: Syncs the main index after a hard reset.
+- **git's own exit code**: When `git reset` fails, safegit exits with the code git returned.
+- **The index is git's**: safegit does not touch the index after the reset, so a `--soft` or `--mixed` reset leaves exactly what git staged.
 - **Oplog recording**: Logs the reset with all arguments.
 
 ## bisect
@@ -931,11 +936,12 @@ safegit bisect reset
 ### Safety Guarantees
 
 - **Selective guard**: Only tree-moving subcommands (`good`, `bad`, `old`, `new`, `reset`, `start`) trigger the coordination check.
-- **Index sync**: Syncs the main index after bisect operations.
+- **git's own exit code**: When `git bisect` fails, safegit exits with the code git returned.
+- **The index is git's**: safegit does not touch the index after the bisect step.
 
 ## cherry-pick
 
-Cherry-pick one or more commits onto the current HEAD with coordination safety guards that check for in-progress safegit operations, sync the main index after completion, and record the cherry-pick in the oplog.
+Cherry-pick one or more commits onto the current HEAD with coordination safety guards that check for in-progress safegit operations and record the cherry-pick in the oplog.
 
 ### When to Use
 
@@ -955,12 +961,13 @@ safegit cherry-pick abc1234 def5678
 ### Safety Guarantees
 
 - **Coordination guard**: Checks for in-progress operations before proceeding.
-- **Index sync**: Syncs the main index after cherry-pick.
+- **git's own exit code**: safegit exits with the code `git cherry-pick` returned.
+- **The index is git's**: a conflicted pick keeps its unmerged entries, `.git/sequencer` and `CHERRY_PICK_HEAD`, and a `--no-commit` pick keeps its staged result, so `git cherry-pick --continue` sees exactly what it would after plain git.
 - **Oplog recording**: Logs the operation.
 
 ## revert
 
-Revert one or more commits by creating inverse patches, with coordination safety guards that check for in-progress safegit operations, sync the main index after completion, and record the revert in the oplog for audit purposes.
+Revert one or more commits by creating inverse patches, with coordination safety guards that check for in-progress safegit operations and record the revert in the oplog for audit purposes.
 
 ### When to Use
 
@@ -979,7 +986,7 @@ safegit revert HEAD~3..HEAD
 
 ### Safety Guarantees
 
-Same safety guarantees as the cherry-pick command: the coordination guard checks for in-progress safegit operations before proceeding to prevent data loss in shared worktrees, the main index is synced with HEAD after completion to keep it consistent, and the operation is recorded in the oplog for audit trail and undo purposes.
+Same safety guarantees as the cherry-pick command: the coordination guard checks for in-progress safegit operations before proceeding to prevent data loss in shared worktrees, `git revert`'s own exit code and index are passed through untouched (a conflicted or `--no-commit` revert keeps its unmerged entries, staged inverse patch and `REVERT_HEAD`), and the operation is recorded in the oplog for audit trail and undo purposes.
 
 ## config show
 
@@ -1135,6 +1142,14 @@ those refusals **exit 1**, which the framework owns. Code 2 is safegit's own
 validation, reached only after the parse succeeded: mutually exclusive flags, a
 missing commit message, an unparseable hunk spec. Unifying the two awaits an
 upstream ruling on a framework usage-error code.
+
+The table below covers safegit's own codes. The guarded wrappers around git --
+`checkout`, `pull`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick`,
+`revert` -- exit with **git's** exit code when git itself fails, and git's codes
+are not in this registry: a conflicted merge or cherry-pick exits 1 the way git
+does, and git's fatal errors exit 128 or 129. A code from one of those commands
+is therefore only safegit's when the failure happened before git ran (the
+coordination guard, an uninitialized repository, a rejected argument).
 
 <!-- BEGIN generated exit-code table (scripts/gen-exit-table) -->
 
