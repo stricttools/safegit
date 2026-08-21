@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -73,7 +74,7 @@ func (s seqConflictState) String() string {
 	return "unmerged=" + strings.Join(s.unmerged, " / ") +
 		"; status=" + strings.Join(s.porcelain, " | ") +
 		"; markers=" + strings.Join(s.markers, ",") +
-		"; exit=" + itoa(s.exitCode)
+		"; exit=" + strconv.Itoa(s.exitCode)
 }
 
 // seqConflictCapture reads the continuable state of a repository.
