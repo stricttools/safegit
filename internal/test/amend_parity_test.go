@@ -33,8 +33,10 @@ import (
 //     conflict has been staged. Nothing in the amend pipeline reads MERGE_HEAD
 //     or CHERRY_PICK_HEAD.
 //
-// Every helper here is prefixed amendPar so this file stays self-contained and
-// cannot collide with the other investigations' files in this package.
+// The git, filesystem and rev-reading helpers this file uses are the shared
+// ones in internal/testutil; the conflicted-merge fixture is the shared
+// newConflictedMergeRepo. Only amendParStatus below is local, and it stays
+// prefixed so it cannot collide with the other investigations in this package.
 
 // amendParStatus returns `git status --porcelain`, trimmed.
 func amendParStatus(t *testing.T, dir string) string {
@@ -646,7 +648,7 @@ func TestAmendRefusedWhileCherryPicking(t *testing.T) {
 			"  CHERRY_PICK_HEAD still present: %t\n"+
 			"  stdout: %s",
 			head, mainSHA,
-			amendParFileExists(filepath.Join(dir, ".git", "CHERRY_PICK_HEAD")),
+			testutil.FileExists(filepath.Join(dir, ".git", "CHERRY_PICK_HEAD")),
 			strings.Join(strings.Fields(stdout), " "))
 	}
 	if head := testutil.Rev(t, dir, "HEAD"); head != mainSHA {
@@ -655,10 +657,4 @@ func TestAmendRefusedWhileCherryPicking(t *testing.T) {
 	if !strings.Contains(strings.ToLower(stderr), "cherry") {
 		t.Errorf("the refusal does not mention the cherry-pick: %s", strings.Join(strings.Fields(stderr), " "))
 	}
-}
-
-// amendParFileExists reports whether path exists.
-func amendParFileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
 }
