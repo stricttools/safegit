@@ -28,7 +28,6 @@ type checkResult struct {
 // removed or reordered without touching any other check.
 type doctorEnv struct {
 	ctx    context.Context
-	flags  globalFlags
 	gitDir string
 	sgDir  string
 	inited bool
@@ -150,7 +149,6 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 
 	env := doctorEnv{
 		ctx:    ctx,
-		flags:  flags,
 		gitDir: gitDir,
 		sgDir:  repo.SafegitDir(gitDir),
 		inited: repo.IsInitialized(gitDir),
