@@ -31,7 +31,9 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// --- helpers (all prefixed intakeEdge to avoid collisions in package test) ---
+// --- helpers specific to this investigation (the generic git and filesystem
+// ones live in internal/testutil; these stay prefixed intakeEdge so they cannot
+// collide with the other investigations in package test) ---
 
 // intakeEdgeNumbered builds n lines "line N", with the lines named in
 // replacements substituted, so a file can be given two well-separated hunks.
