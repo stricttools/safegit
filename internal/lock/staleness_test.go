@@ -70,11 +70,7 @@ func TestIsStaleLiveHolderNeverStale(t *testing.T) {
 	for name, age := range ages {
 		t.Run(name, func(t *testing.T) {
 			setMtime(t, lp, time.Now().Add(-age))
-			stale, err := IsStale(lp)
-			if err != nil {
-				t.Fatalf("IsStale: %v", err)
-			}
-			if stale {
+			if IsStale(lp) {
 				t.Errorf("lock held by live pid %d reported stale (mtime %s)", proc.Pid, name)
 			}
 		})
@@ -90,11 +86,7 @@ func TestIsStaleDeadHolderStale(t *testing.T) {
 
 	proc.Kill(t)
 
-	stale, err := IsStale(lp)
-	if err != nil {
-		t.Fatalf("IsStale: %v", err)
-	}
-	if !stale {
+	if !IsStale(lp) {
 		t.Errorf("lock held by dead pid %d should be stale", proc.Pid)
 	}
 }
@@ -115,11 +107,7 @@ func TestIsStalePidReuseStale(t *testing.T) {
 	// same PID, different process.
 	plantLock(t, lp, proc.Pid, strconv.FormatUint(ticks-1, 10))
 
-	stale, err := IsStale(lp)
-	if err != nil {
-		t.Fatalf("IsStale: %v", err)
-	}
-	if !stale {
+	if !IsStale(lp) {
 		t.Errorf("lock whose recorded start does not match live pid %d should be stale (PID reuse)", proc.Pid)
 	}
 }
@@ -133,11 +121,7 @@ func TestIsStaleMissingStartFailsClosed(t *testing.T) {
 	plantLock(t, lp, proc.Pid, "")
 	setMtime(t, lp, time.Now().Add(-24*time.Hour))
 
-	stale, err := IsStale(lp)
-	if err != nil {
-		t.Fatalf("IsStale: %v", err)
-	}
-	if stale {
+	if IsStale(lp) {
 		t.Error("lock without a recorded start identity must not be stale while its PID is alive")
 	}
 }
@@ -147,11 +131,7 @@ func TestIsStaleUnparseableStartFailsClosed(t *testing.T) {
 	lp := filepath.Join(t.TempDir(), "main.lock")
 	plantLock(t, lp, proc.Pid, "not-a-number")
 
-	stale, err := IsStale(lp)
-	if err != nil {
-		t.Fatalf("IsStale: %v", err)
-	}
-	if stale {
+	if IsStale(lp) {
 		t.Error("lock with an unparseable start identity must not be stale while its PID is alive")
 	}
 }

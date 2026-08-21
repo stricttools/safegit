@@ -92,7 +92,7 @@ func Acquire(locksBaseDir, safegitDir, ref, op string, timeout time.Duration) (*
 		// believe they held the ref. The judgement that authorizes removal is
 		// re-made inside reclaimLocked, under the lock file's own flock and
 		// against the descriptor's inode.
-		if stale, staleErr := IsStale(lp); staleErr == nil && stale {
+		if IsStale(lp) {
 			f, outcome := openForReclaim(lp)
 			if f != nil {
 				var stalePid int
@@ -207,9 +207,15 @@ func (l *RefLock) Release() error {
 	return os.Remove(l.LockPath)
 }
 
-// IsStale checks whether the process that holds the lock file is dead.
-// Returns (true, nil) if the lock is stale and can be reclaimed.
-// A corrupt or zero-length lock file (no parseable PID) is treated as stale.
+// IsStale reports whether the process that holds the lock file is dead, which
+// is the only condition under which the lock may be reclaimed. An unreadable,
+// corrupt or zero-length lock file (no parseable PID) is stale: it is what a
+// crash mid-create leaves behind.
+//
+// There is no error return. Every condition this function can meet is already
+// a verdict -- a lock it cannot read is stale, a comparison it cannot make
+// fails closed and the lock is left alone -- so a caller has nothing to decide
+// from an error that the boolean does not already say.
 //
 // Reclaiming a lock whose holder is still running lets two operations mutate
 // the same ref at once, so every check beyond plain PID liveness must have
@@ -223,16 +229,16 @@ func (l *RefLock) Release() error {
 //     is evidence of reuse. When either side of the comparison is missing
 //     (no start= field, or a platform that cannot report start times) the check
 //     fails closed and the lock is left alone.
-func IsStale(path string) (bool, error) {
+func IsStale(path string) bool {
 	f, err := os.Open(path)
 	if err != nil {
 		// Unreadable lock -- treat as stale
-		return true, nil
+		return true
 	}
 	defer f.Close()
 
 	stale, _ := staleFile(f, path)
-	return stale, nil
+	return stale
 }
 
 // staleFile is IsStale's judgement applied to an already-open lock file,

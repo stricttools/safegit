@@ -28,11 +28,7 @@ func TestIsStalePathologicalCommHolder(t *testing.T) {
 	plantLock(t, lp, proc.Pid, trueStart(t, proc.Pid))
 	setMtime(t, lp, time.Now().Add(-time.Hour))
 
-	stale, err := IsStale(lp)
-	if err != nil {
-		t.Fatalf("IsStale: %v", err)
-	}
-	if stale {
+	if IsStale(lp) {
 		t.Errorf("lock held by live pid %d with comm %q reported stale", proc.Pid, proc.Comm)
 	}
 }

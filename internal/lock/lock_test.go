@@ -89,11 +89,7 @@ func TestIsStale(t *testing.T) {
 	deadLock := filepath.Join(dir, "dead.lock")
 	os.WriteFile(deadLock, []byte("pid=999999999\nts=2026-01-01T00:00:00Z\nop=test\nhost="+hostname+"\n"), 0644)
 
-	stale, staleErr := IsStale(deadLock)
-	if staleErr != nil {
-		t.Fatal(staleErr)
-	}
-	if !stale {
+	if !IsStale(deadLock) {
 		t.Error("lock with dead PID should be stale")
 	}
 
@@ -101,11 +97,7 @@ func TestIsStale(t *testing.T) {
 	aliveLock := filepath.Join(dir, "alive.lock")
 	os.WriteFile(aliveLock, []byte("pid=1\nts=2026-01-01T00:00:00Z\nop=test\nhost="+hostname+"\n"), 0644)
 
-	stale, staleErr = IsStale(aliveLock)
-	if staleErr != nil {
-		t.Fatal(staleErr)
-	}
-	if stale {
+	if IsStale(aliveLock) {
 		t.Error("lock with PID 1 should not be stale")
 	}
 }
@@ -155,11 +147,7 @@ func TestIsStale_ForeignHost(t *testing.T) {
 	foreignLock := filepath.Join(dir, "foreign.lock")
 	os.WriteFile(foreignLock, []byte("pid=999999999\nts=2026-01-01T00:00:00Z\nop=test\nhost=some-other-machine-that-does-not-exist\n"), 0644)
 
-	stale, err := IsStale(foreignLock)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if stale {
+	if IsStale(foreignLock) {
 		t.Error("lock from a different host should NOT be considered stale (PID namespace is foreign)")
 	}
 }
@@ -171,11 +159,7 @@ func TestIsStale_EmptyHost(t *testing.T) {
 	oldFormatLock := filepath.Join(dir, "old.lock")
 	os.WriteFile(oldFormatLock, []byte("pid=999999999\nts=2026-01-01T00:00:00Z\nop=test\n"), 0644)
 
-	stale, err := IsStale(oldFormatLock)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !stale {
+	if !IsStale(oldFormatLock) {
 		t.Error("lock with dead PID and no host field should be stale (backward compat)")
 	}
 }
@@ -193,11 +177,7 @@ func TestIsStale_SameHost(t *testing.T) {
 	content := "pid=999999999\nts=2026-01-01T00:00:00Z\nop=test\nhost=" + hostname + "\n"
 	os.WriteFile(sameHostLock, []byte(content), 0644)
 
-	stale, staleErr := IsStale(sameHostLock)
-	if staleErr != nil {
-		t.Fatal(staleErr)
-	}
-	if !stale {
+	if !IsStale(sameHostLock) {
 		t.Error("lock with dead PID on same host should be stale")
 	}
 }
