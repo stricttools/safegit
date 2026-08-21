@@ -34,16 +34,6 @@ import (
 
 // --- helpers (all prefixed intakeEdge to avoid collisions in package test) ---
 
-func intakeEdgeWrite(t *testing.T, path, content string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // intakeEdgeShow returns the blob content of path at rev, and whether it exists.
 func intakeEdgeShow(t *testing.T, dir, rev, path string) (string, bool) {
 	t.Helper()
@@ -86,7 +76,7 @@ func intakeEdgeNumbered(n int, replacements map[int]string) string {
 // which git renders as two separate hunks.
 func intakeEdgeTwoHunks(t *testing.T, path string) {
 	t.Helper()
-	intakeEdgeWrite(t, path, intakeEdgeNumbered(20, map[int]string{2: "FIRST-CHANGE", 18: "SECOND-CHANGE"}))
+	testutil.WriteFileAt(t, path, intakeEdgeNumbered(20, map[int]string{2: "FIRST-CHANGE", 18: "SECOND-CHANGE"}))
 }
 
 // --- A. hunk-spec disambiguation ---
@@ -103,7 +93,7 @@ func TestIntakeEdgeHunkSpecFromSubdir(t *testing.T) {
 	sub := filepath.Join(dir, "sub")
 	path := filepath.Join(sub, "edited.txt")
 
-	intakeEdgeWrite(t, path, intakeEdgeNumbered(20, nil))
+	testutil.WriteFileAt(t, path, intakeEdgeNumbered(20, nil))
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "seed edited", "--", "sub/edited.txt"); code != 0 {
 		t.Fatalf("seed commit failed (%d): %s", code, stderr)
 	}
@@ -131,7 +121,7 @@ func TestIntakeEdgeHunkSpecFromRoot(t *testing.T) {
 	dir := newRepo(t)
 	path := filepath.Join(dir, "sub", "edited.txt")
 
-	intakeEdgeWrite(t, path, intakeEdgeNumbered(20, nil))
+	testutil.WriteFileAt(t, path, intakeEdgeNumbered(20, nil))
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "seed edited", "--", "sub/edited.txt"); code != 0 {
 		t.Fatalf("seed commit failed (%d): %s", code, stderr)
 	}
@@ -153,7 +143,7 @@ func TestIntakeEdgeHunkSpecFromRoot(t *testing.T) {
 func TestIntakeEdgePlainDeletionControl(t *testing.T) {
 	dir := newRepo(t)
 	name := "sprint.txt"
-	intakeEdgeWrite(t, filepath.Join(dir, name), "planning\n")
+	testutil.WriteFileAt(t, filepath.Join(dir, name), "planning\n")
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "add", "--", name); code != 0 {
 		t.Fatalf("seed commit failed (%d): %s", code, stderr)
 	}
@@ -175,7 +165,7 @@ func TestIntakeEdgePlainDeletionControl(t *testing.T) {
 func TestIntakeEdgeColonNameNonNumericSuffixDeletion(t *testing.T) {
 	dir := newRepo(t)
 	name := "sprint:final"
-	intakeEdgeWrite(t, filepath.Join(dir, name), "planning\n")
+	testutil.WriteFileAt(t, filepath.Join(dir, name), "planning\n")
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "add", "--", name); code != 0 {
 		t.Fatalf("seed commit of %q failed (%d): %s", name, code, stderr)
 	}
@@ -202,7 +192,7 @@ func TestIntakeEdgeColonNameNonNumericSuffixDeletion(t *testing.T) {
 func TestIntakeEdgeColonNameDeletion(t *testing.T) {
 	dir := newRepo(t)
 	name := "sprint:1"
-	intakeEdgeWrite(t, filepath.Join(dir, name), "planning\n")
+	testutil.WriteFileAt(t, filepath.Join(dir, name), "planning\n")
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "add colon file", "--", name); code != 0 {
 		t.Fatalf("seed commit of %q failed (%d): %s", name, code, stderr)
 	}
@@ -294,8 +284,8 @@ func TestIntakeEdgeSameArgvDifferentMeaningByCwd(t *testing.T) {
 
 	// A literal file named "notes:1" at the repo root, and a tracked file
 	// named "notes" inside sub/ with two hunks of pending modifications.
-	intakeEdgeWrite(t, filepath.Join(dir, "notes:1"), "literal colon file\n")
-	intakeEdgeWrite(t, filepath.Join(sub, "notes"), intakeEdgeNumbered(20, nil))
+	testutil.WriteFileAt(t, filepath.Join(dir, "notes:1"), "literal colon file\n")
+	testutil.WriteFileAt(t, filepath.Join(sub, "notes"), intakeEdgeNumbered(20, nil))
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "seed notes", "--", "sub/notes"); code != 0 {
 		t.Fatalf("seed commit failed (%d): %s", code, stderr)
 	}
@@ -331,7 +321,7 @@ func TestIntakeEdgeSameArgvDifferentMeaningByCwd(t *testing.T) {
 func intakeEdgeBranchWithFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	testutil.GitRaw(t, dir, "checkout", "-b", "other")
-	intakeEdgeWrite(t, filepath.Join(dir, name), content)
+	testutil.WriteFileAt(t, filepath.Join(dir, name), content)
 	testutil.GitRaw(t, dir, "add", name)
 	testutil.GitRaw(t, dir, "commit", "-m", "add "+name+" on other")
 	testutil.GitRaw(t, dir, "checkout", "main")
@@ -345,7 +335,7 @@ func intakeEdgeBranchWithFile(t *testing.T, dir, name, content string) {
 func TestIntakeEdgeCrossBranchDeleteSharedControl(t *testing.T) {
 	dir := newRepo(t)
 	name := "shared.txt"
-	intakeEdgeWrite(t, filepath.Join(dir, name), "shared\n")
+	testutil.WriteFileAt(t, filepath.Join(dir, name), "shared\n")
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "add shared", "--", name); code != 0 {
 		t.Fatalf("seed commit failed (%d): %s", code, stderr)
 	}
@@ -417,7 +407,7 @@ func TestIntakeEdgeCrossBranchDeleteTrackedOnlyOnHead(t *testing.T) {
 	dir := newRepo(t)
 	name := "only-on-main.txt"
 
-	intakeEdgeWrite(t, filepath.Join(dir, name), "main content\n")
+	testutil.WriteFileAt(t, filepath.Join(dir, name), "main content\n")
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "add "+name, "--", name); code != 0 {
 		t.Fatalf("seed commit failed (%d): %s", code, stderr)
 	}
@@ -474,7 +464,7 @@ func TestIntakeEdgeCrossBranchAmendDeleteTrackedOnlyOnTarget(t *testing.T) {
 func TestIntakeEdgeCrossBranchAddControl(t *testing.T) {
 	dir := newRepo(t)
 	testutil.GitRaw(t, dir, "branch", "other")
-	intakeEdgeWrite(t, filepath.Join(dir, "fresh.txt"), "fresh\n")
+	testutil.WriteFileAt(t, filepath.Join(dir, "fresh.txt"), "fresh\n")
 
 	_, stderr, code := runSafegit(t, dir, "commit", "--branch", "other", "-m", "add fresh on other", "--", "fresh.txt")
 	if code != 0 {

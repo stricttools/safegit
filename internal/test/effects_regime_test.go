@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // These tests pin the two framework-level behaviours the strictcli effects
@@ -78,7 +80,7 @@ func wouldDoLog(stdout string) string {
 // convention that spells it bare was broken.
 func TestPlainMutatingCommandNeedsNoConsent(t *testing.T) {
 	dir := newRepo(t)
-	writeFile(t, dir, "a.txt", "one\n")
+	testutil.WriteFile(t, dir, "a.txt", "one\n")
 	before := gitLog(t, dir, "HEAD")
 
 	_, stderr, code := runSafegitNoConsent(t, dir, nil, "commit", "-m", "bare commit", "--", "a.txt")
@@ -99,7 +101,7 @@ func TestPlainMutatingCommandNeedsNoConsent(t *testing.T) {
 // nothing.
 func TestConsequentialCommandRefusesWithoutConsent(t *testing.T) {
 	dir := newRepo(t)
-	writeFile(t, dir, "a.txt", "one\n")
+	testutil.WriteFile(t, dir, "a.txt", "one\n")
 	if _, stderr, code := runSafegitNoConsent(t, dir, nil, "commit", "-m", "seed", "--", "a.txt"); code != 0 {
 		t.Fatalf("seeding commit failed: %s", stderr)
 	}
@@ -124,7 +126,7 @@ func TestConsequentialCommandRefusesWithoutConsent(t *testing.T) {
 // that trips it can tell this apart from an ordinary failure.
 func TestConsequentialNonInteractiveMessageIsPinned(t *testing.T) {
 	dir := newRepo(t)
-	writeFile(t, dir, "a.txt", "one\n")
+	testutil.WriteFile(t, dir, "a.txt", "one\n")
 	if _, stderr, code := runSafegitNoConsent(t, dir, nil, "commit", "-m", "seed", "--", "a.txt"); code != 0 {
 		t.Fatalf("seeding commit failed: %s", stderr)
 	}
@@ -242,7 +244,7 @@ func TestPushDryRunDoesNotPush(t *testing.T) {
 // nothing" -- and the output must not claim a commit landed.
 func TestCommitDryRunRecordsAndCommitsNothing(t *testing.T) {
 	dir := newRepo(t)
-	writeFile(t, dir, "a.txt", "one\n")
+	testutil.WriteFile(t, dir, "a.txt", "one\n")
 	before := gitLog(t, dir, "HEAD")
 
 	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "commit", "-m", "preview", "--", "a.txt")

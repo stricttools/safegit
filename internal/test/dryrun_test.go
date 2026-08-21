@@ -167,14 +167,14 @@ func newRawSecretRepo(t *testing.T) (dir, initialSHA string) {
 	testutil.Git(t, dir, "config", "user.email", "test@test.com")
 	testutil.Git(t, dir, "config", "user.name", "Test")
 
-	writeRepoFile(t, dir, "secret.txt", "hunter2\n")
+	testutil.WriteFile(t, dir, "secret.txt", "hunter2\n")
 	testutil.Git(t, dir, "add", "secret.txt")
 	testutil.Git(t, dir, "commit", "-m", "add secret")
 	initialSHA = testutil.Git(t, dir, "rev-parse", "HEAD")
 
 	// Replacement content committed on top, so the tree is clean and
 	// `scrub file` has something to substitute.
-	writeRepoFile(t, dir, "secret.txt", "REDACTED\n")
+	testutil.WriteFile(t, dir, "secret.txt", "REDACTED\n")
 	testutil.Git(t, dir, "add", "secret.txt")
 	testutil.Git(t, dir, "commit", "-m", "commit replacement")
 
@@ -182,18 +182,6 @@ func newRawSecretRepo(t *testing.T) (dir, initialSHA string) {
 		t.Fatalf("fixture is wrong: .git/safegit already exists (stat err: %v)", err)
 	}
 	return dir, initialSHA
-}
-
-// writeRepoFile writes content to a path inside the repo.
-func writeRepoFile(t *testing.T, dir, path, content string) {
-	t.Helper()
-	full := filepath.Join(dir, path)
-	if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(full, []byte(content), 0644); err != nil {
-		t.Fatal(err)
-	}
 }
 
 // assertNoSafegitDir fails if the safegit data directory exists.
@@ -276,8 +264,8 @@ func TestScrubDryRunPreviewsDirtyTree(t *testing.T) {
 			dir, initialSHA := newSecretRepo(t)
 
 			// Dirty the tree: one modified tracked file, one untracked file.
-			writeRepoFile(t, dir, "seed.txt", "seed modified\n")
-			writeRepoFile(t, dir, "untracked.txt", "not committed\n")
+			testutil.WriteFile(t, dir, "seed.txt", "seed modified\n")
+			testutil.WriteFile(t, dir, "untracked.txt", "not committed\n")
 
 			stdout, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv, mode.args(initialSHA, recipePath)...)
 			if code != 0 {
@@ -322,7 +310,7 @@ func TestDryRunInUninitializedRepoStillPreviews(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir, _ := newRawSecretRepo(t)
-			writeRepoFile(t, dir, "new.txt", "new content\n")
+			testutil.WriteFile(t, dir, "new.txt", "new content\n")
 			headBefore := revParseHEAD(t, dir)
 
 			stdout, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv, tc.args...)
@@ -347,7 +335,7 @@ func TestDryRunInUninitializedRepoStillPreviews(t *testing.T) {
 // such file or directory". The second pass below is the one that used to fail.
 func TestCommitDryRunLeavesNoSafegitDir(t *testing.T) {
 	dir, _ := newRawSecretRepo(t)
-	writeRepoFile(t, dir, "new.txt", "new content\n")
+	testutil.WriteFile(t, dir, "new.txt", "new content\n")
 	headBefore := revParseHEAD(t, dir)
 
 	for _, pass := range []string{"first", "second"} {
@@ -384,7 +372,7 @@ func TestAmendDryRunLeavesNoSafegitDir(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir, _ := newRawSecretRepo(t)
-			writeRepoFile(t, dir, "new.txt", "new content\n")
+			testutil.WriteFile(t, dir, "new.txt", "new content\n")
 			headBefore := revParseHEAD(t, dir)
 
 			// Two passes: a leftover .git/safegit without config.json is what
@@ -432,7 +420,7 @@ func previewDirLeftovers(t *testing.T, root string) []string {
 // what this test's own invocations created.
 func TestCommitDryRunCleansUpPreviewTempDir(t *testing.T) {
 	dir, _ := newRawSecretRepo(t)
-	writeRepoFile(t, dir, "new.txt", "new content\n")
+	testutil.WriteFile(t, dir, "new.txt", "new content\n")
 
 	tmpRoot := filepath.Join(t.TempDir(), "preview-tmp")
 	if err := os.MkdirAll(tmpRoot, 0755); err != nil {
@@ -480,7 +468,7 @@ func TestHalfInitializedSafegitDirIsRepaired(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, ".git", "safegit", "tmp"), 0755); err != nil {
 		t.Fatalf("manufacturing the half-initialized state: %v", err)
 	}
-	writeRepoFile(t, dir, "new.txt", "new content\n")
+	testutil.WriteFile(t, dir, "new.txt", "new content\n")
 
 	stdout, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv,
 		"commit", "-m", "real commit", "--", "new.txt")
@@ -503,8 +491,8 @@ func TestAuthorRewriteDryRunPreviewsDirtyTree(t *testing.T) {
 	headBefore := revParseHEAD(t, dir)
 
 	// Dirty the tree: one modified tracked file, one untracked file.
-	writeRepoFile(t, dir, "seed.txt", "seed modified\n")
-	writeRepoFile(t, dir, "untracked.txt", "not committed\n")
+	testutil.WriteFile(t, dir, "seed.txt", "seed modified\n")
+	testutil.WriteFile(t, dir, "untracked.txt", "not committed\n")
 
 	stdout, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv,
 		"--dry-run", "author", "rewrite", "--old-name", "Test", "--new-name", "Renamed")
@@ -543,7 +531,7 @@ func TestAuthorRewriteDryRunPreviewsDirtyTree(t *testing.T) {
 func TestAuthorRewriteExecuteStillRequiresCleanTree(t *testing.T) {
 	dir := newRepo(t)
 	headBefore := revParseHEAD(t, dir)
-	writeRepoFile(t, dir, "seed.txt", "seed modified\n")
+	testutil.WriteFile(t, dir, "seed.txt", "seed modified\n")
 
 	_, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv,
 		"--approve-consequential", "author", "rewrite", "--old-name", "Test", "--new-name", "Renamed")
@@ -583,7 +571,7 @@ func TestScrubExecuteStillRequiresCleanTree(t *testing.T) {
 		t.Run(mode.name, func(t *testing.T) {
 			dir, initialSHA := newSecretRepo(t)
 			headBefore := revParseHEAD(t, dir)
-			writeRepoFile(t, dir, "seed.txt", "seed modified\n")
+			testutil.WriteFile(t, dir, "seed.txt", "seed modified\n")
 
 			_, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv, mode.args(initialSHA, recipePath)...)
 			if code == 0 {

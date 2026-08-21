@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // These tests cover the cross-session failure mode of automatic move
@@ -94,7 +96,7 @@ func TestCrossSessionMoveDetection_EmptyFileCollision(t *testing.T) {
 
 	// Session A's file: tracked, empty, in its own directory.
 	crossSessMkdirAll(t, dir, "notes")
-	writeFile(t, dir, "notes/a.txt", "")
+	testutil.WriteFile(t, dir, "notes/a.txt", "")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "session A adds notes/a.txt", "--", "notes/a.txt")
 	if code != 0 {
 		t.Fatalf("seeding commit failed (code %d): %s", code, stderr)
@@ -105,7 +107,7 @@ func TestCrossSessionMoveDetection_EmptyFileCollision(t *testing.T) {
 
 	// Session B, unaware of A, adds a brand-new empty file and commits ONLY it.
 	crossSessMkdirAll(t, dir, "todo")
-	writeFile(t, dir, "todo/b.txt", "")
+	testutil.WriteFile(t, dir, "todo/b.txt", "")
 	_, stderr, code = runSafegit(t, dir, "commit", "-m", "session B adds todo/b.txt", "--", "todo/b.txt")
 	if code != 0 {
 		t.Fatalf("session B commit failed (code %d): %s", code, stderr)
@@ -137,7 +139,7 @@ func TestCrossSessionMoveDetection_IdenticalContentCollision(t *testing.T) {
 	const shared = "# TODO\n\n- [ ] fill this in\n"
 
 	crossSessMkdirAll(t, dir, "notes")
-	writeFile(t, dir, "notes/a.txt", shared)
+	testutil.WriteFile(t, dir, "notes/a.txt", shared)
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "session A adds notes/a.txt", "--", "notes/a.txt")
 	if code != 0 {
 		t.Fatalf("seeding commit failed (code %d): %s", code, stderr)
@@ -146,7 +148,7 @@ func TestCrossSessionMoveDetection_IdenticalContentCollision(t *testing.T) {
 	crossSessRemove(t, dir, "notes/a.txt")
 
 	crossSessMkdirAll(t, dir, "todo")
-	writeFile(t, dir, "todo/b.txt", shared)
+	testutil.WriteFile(t, dir, "todo/b.txt", shared)
 	_, stderr, code = runSafegit(t, dir, "commit", "-m", "session B adds todo/b.txt", "--", "todo/b.txt")
 	if code != 0 {
 		t.Fatalf("session B commit failed (code %d): %s", code, stderr)
@@ -176,7 +178,7 @@ func TestCrossSessionMoveDetection_QuietIsSilentAdoption(t *testing.T) {
 	dir := newRepo(t)
 
 	crossSessMkdirAll(t, dir, "notes")
-	writeFile(t, dir, "notes/a.txt", "")
+	testutil.WriteFile(t, dir, "notes/a.txt", "")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "session A adds notes/a.txt", "--", "notes/a.txt")
 	if code != 0 {
 		t.Fatalf("seeding commit failed (code %d): %s", code, stderr)
@@ -185,7 +187,7 @@ func TestCrossSessionMoveDetection_QuietIsSilentAdoption(t *testing.T) {
 	crossSessRemove(t, dir, "notes/a.txt")
 
 	crossSessMkdirAll(t, dir, "todo")
-	writeFile(t, dir, "todo/b.txt", "")
+	testutil.WriteFile(t, dir, "todo/b.txt", "")
 	stdout, stderr, code := runSafegit(t, dir, "--quiet", "commit", "-m", "session B adds todo/b.txt", "--", "todo/b.txt")
 	if code != 0 {
 		t.Fatalf("session B quiet commit failed (code %d): %s", code, stderr)
@@ -211,7 +213,7 @@ func TestCrossSessionMoveDetection_JSONModeIsSilentAdoption(t *testing.T) {
 	dir := newRepo(t)
 
 	crossSessMkdirAll(t, dir, "notes")
-	writeFile(t, dir, "notes/a.txt", "")
+	testutil.WriteFile(t, dir, "notes/a.txt", "")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "session A adds notes/a.txt", "--", "notes/a.txt")
 	if code != 0 {
 		t.Fatalf("seeding commit failed (code %d): %s", code, stderr)
@@ -220,7 +222,7 @@ func TestCrossSessionMoveDetection_JSONModeIsSilentAdoption(t *testing.T) {
 	crossSessRemove(t, dir, "notes/a.txt")
 
 	crossSessMkdirAll(t, dir, "todo")
-	writeFile(t, dir, "todo/b.txt", "")
+	testutil.WriteFile(t, dir, "todo/b.txt", "")
 	stdout, stderr, code := runSafegit(t, dir, "--json", "commit", "-m", "session B adds todo/b.txt", "--", "todo/b.txt")
 	if code != 0 {
 		t.Fatalf("session B json commit failed (code %d): stdout=%q stderr=%q", code, stdout, stderr)
@@ -247,8 +249,8 @@ func TestCrossSessionMoveDetection_MultipleDeletedShareBlob(t *testing.T) {
 
 	crossSessMkdirAll(t, dir, "notes")
 	crossSessMkdirAll(t, dir, "archive")
-	writeFile(t, dir, "notes/a.txt", "")
-	writeFile(t, dir, "archive/a.txt", "")
+	testutil.WriteFile(t, dir, "notes/a.txt", "")
+	testutil.WriteFile(t, dir, "archive/a.txt", "")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "session A adds two empty files", "--",
 		"notes/a.txt", "archive/a.txt")
 	if code != 0 {
@@ -259,7 +261,7 @@ func TestCrossSessionMoveDetection_MultipleDeletedShareBlob(t *testing.T) {
 	crossSessRemove(t, dir, "archive/a.txt")
 
 	crossSessMkdirAll(t, dir, "todo")
-	writeFile(t, dir, "todo/b.txt", "")
+	testutil.WriteFile(t, dir, "todo/b.txt", "")
 	_, stderr, code = runSafegit(t, dir, "commit", "-m", "session B adds todo/b.txt", "--", "todo/b.txt")
 	if code != 0 {
 		t.Fatalf("session B commit failed (code %d): %s", code, stderr)
@@ -285,7 +287,7 @@ func TestCrossSessionMoveDetection_VictimCommitBecomesEmpty(t *testing.T) {
 	dir := newRepo(t)
 
 	crossSessMkdirAll(t, dir, "notes")
-	writeFile(t, dir, "notes/a.txt", "")
+	testutil.WriteFile(t, dir, "notes/a.txt", "")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "session A adds notes/a.txt", "--", "notes/a.txt")
 	if code != 0 {
 		t.Fatalf("seeding commit failed (code %d): %s", code, stderr)
@@ -294,7 +296,7 @@ func TestCrossSessionMoveDetection_VictimCommitBecomesEmpty(t *testing.T) {
 	crossSessRemove(t, dir, "notes/a.txt")
 
 	crossSessMkdirAll(t, dir, "todo")
-	writeFile(t, dir, "todo/b.txt", "")
+	testutil.WriteFile(t, dir, "todo/b.txt", "")
 	_, bStderr, code := runSafegit(t, dir, "commit", "-m", "session B adds todo/b.txt", "--", "todo/b.txt")
 	if code != 0 {
 		t.Fatalf("session B commit failed (code %d): %s", code, stderr)
