@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // Root-commit ref creation is the one place in the commit pipeline where the
@@ -34,48 +36,6 @@ import (
 // git's convention for "create only" is the all-zeros old value, pinned by
 // TestRootCommitZeroOldValueRefusesExistingRef below.
 
-// rootCasGit runs git in dir and returns trimmed stdout, failing the test on error.
-func rootCasGit(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-	}
-	return strings.TrimSpace(string(out))
-}
-
-// rootCasGitTry runs git in dir and returns combined output and the exit code.
-func rootCasGitTry(t *testing.T, dir string, args ...string) (string, int) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	code := 0
-	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			code = exitErr.ExitCode()
-		} else {
-			code = 1
-		}
-	}
-	return strings.TrimSpace(string(out)), code
-}
-
-// rootCasGitStdin runs git in dir with stdin data and returns trimmed stdout.
-func rootCasGitStdin(t *testing.T, dir, stdin string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Stdin = strings.NewReader(stdin)
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("git %s: %v", strings.Join(args, " "), err)
-	}
-	return strings.TrimSpace(string(out))
-}
-
 // rootCasNewUnbornRepo creates a temp git repo with NO commits, so refs/heads/main
 // is unborn and the next safegit commit takes the root-commit path.
 func rootCasNewUnbornRepo(t *testing.T) string {
@@ -86,7 +46,7 @@ func rootCasNewUnbornRepo(t *testing.T) string {
 		{"config", "user.email", "test@test.com"},
 		{"config", "user.name", "Test"},
 	} {
-		rootCasGit(t, dir, args...)
+		testutil.Git(t, dir, args...)
 	}
 	return dir
 }
@@ -96,9 +56,9 @@ func rootCasNewUnbornRepo(t *testing.T) string {
 // created before the ref exists and pointed at later.
 func rootCasMakeRivalCommit(t *testing.T, dir string) string {
 	t.Helper()
-	blob := rootCasGitStdin(t, dir, "rival session work\n", "hash-object", "-w", "--stdin")
-	tree := rootCasGitStdin(t, dir, fmt.Sprintf("100644 blob %s\trival.txt\n", blob), "mktree")
-	return rootCasGit(t, dir, "commit-tree", tree, "-m", "rival root commit")
+	blob := testutil.GitStdin(t, dir, "rival session work\n", "hash-object", "-w", "--stdin")
+	tree := testutil.GitStdin(t, dir, fmt.Sprintf("100644 blob %s\trival.txt\n", blob), "mktree")
+	return testutil.Git(t, dir, "commit-tree", tree, "-m", "rival root commit")
 }
 
 // rootCasInstallGitShim writes a `git` wrapper into its own directory and returns
@@ -223,12 +183,15 @@ func TestRootCommitDoesNotClobberRefCreatedInWindow(t *testing.T) {
 
 	// Behavioural pin: whatever the outcome, the commit created inside the
 	// window must still be reachable.
-	head, headCode := rootCasGitTry(t, dir, "rev-parse", "refs/heads/main")
+	head, headCode := testutil.GitTry(t, dir, "rev-parse", "refs/heads/main")
 	if headCode != 0 {
 		t.Fatalf("refs/heads/main does not resolve after the run: %s", head)
 	}
-	if _, ancCode := rootCasGitTry(t, dir, "merge-base", "--is-ancestor", rival, head); ancCode != 0 {
-		reflog, _ := rootCasGitTry(t, dir, "reflog", "show", "main")
+	// GitTry returns git's output verbatim; the SHA is passed on as an argv
+	// argument below, where a trailing newline would make git reject it.
+	head = strings.TrimSpace(head)
+	if _, ancCode := testutil.GitTry(t, dir, "merge-base", "--is-ancestor", rival, head); ancCode != 0 {
+		reflog, _ := testutil.GitTry(t, dir, "reflog", "show", "main")
 		t.Errorf("silent overwrite: the commit created inside the pre-check/update-ref window (%s) is no longer "+
 			"reachable from refs/heads/main (%s); safegit exited %d claiming success.\n"+
 			"stdout=%q\nstderr=%q\nreflog:\n%s",
@@ -249,18 +212,18 @@ func TestRootCommitZeroOldValueRefusesExistingRef(t *testing.T) {
 	const zeroSHA = "0000000000000000000000000000000000000000"
 
 	first := rootCasMakeRivalCommit(t, dir)
-	second := rootCasGit(t, dir, "commit-tree", first+"^{tree}", "-p", first, "-m", "second")
+	second := testutil.Git(t, dir, "commit-tree", first+"^{tree}", "-p", first, "-m", "second")
 
 	// Ref absent: the create-only update must succeed.
-	if out, code := rootCasGitTry(t, dir, "update-ref", "refs/heads/target", first, zeroSHA); code != 0 {
+	if out, code := testutil.GitTry(t, dir, "update-ref", "refs/heads/target", first, zeroSHA); code != 0 {
 		t.Fatalf("create-only update-ref on an absent ref should succeed, got exit %d: %s", code, out)
 	}
-	if got := rootCasGit(t, dir, "rev-parse", "refs/heads/target"); got != first {
+	if got := testutil.Git(t, dir, "rev-parse", "refs/heads/target"); got != first {
 		t.Fatalf("refs/heads/target = %s, want %s", got, first)
 	}
 
 	// Ref present: the same update must be refused, leaving the ref untouched.
-	out, code := rootCasGitTry(t, dir, "update-ref", "refs/heads/target", second, zeroSHA)
+	out, code := testutil.GitTry(t, dir, "update-ref", "refs/heads/target", second, zeroSHA)
 	if code == 0 {
 		t.Fatalf("create-only update-ref on an existing ref should fail, got exit 0: %s", out)
 	}
@@ -271,16 +234,16 @@ func TestRootCommitZeroOldValueRefusesExistingRef(t *testing.T) {
 		t.Errorf("expected the refusal to contain \"cannot lock ref\" (the substring safegit's "+
 			"isTransientRefError matches at internal/commit/commit.go:472), got: %s", out)
 	}
-	if got := rootCasGit(t, dir, "rev-parse", "refs/heads/target"); got != first {
+	if got := testutil.Git(t, dir, "rev-parse", "refs/heads/target"); got != first {
 		t.Fatalf("refused update still moved the ref: %s, want %s", got, first)
 	}
 
 	// And the shape safegit actually uses today -- no old value at all -- is an
 	// unconditional write that overwrites the existing ref.
-	if out, code := rootCasGitTry(t, dir, "update-ref", "refs/heads/target", second); code != 0 {
+	if out, code := testutil.GitTry(t, dir, "update-ref", "refs/heads/target", second); code != 0 {
 		t.Fatalf("unconditional update-ref should succeed, got exit %d: %s", code, out)
 	}
-	if got := rootCasGit(t, dir, "rev-parse", "refs/heads/target"); got != second {
+	if got := testutil.Git(t, dir, "rev-parse", "refs/heads/target"); got != second {
 		t.Fatalf("unconditional update-ref did not move the ref: %s, want %s", got, second)
 	}
 }
@@ -321,7 +284,7 @@ func TestRootCommitConcurrentSafegitBothLand(t *testing.T) {
 		t.Errorf("expected %d commits on main (root + child), got %d", n, got)
 	}
 
-	tree := rootCasGit(t, dir, "ls-tree", "-r", "--name-only", "HEAD")
+	tree := testutil.Git(t, dir, "ls-tree", "-r", "--name-only", "HEAD")
 	for i := 0; i < n; i++ {
 		name := fmt.Sprintf("racer%d.txt", i)
 		if !strings.Contains(tree, name) {

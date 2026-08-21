@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // A `--dry-run` commit promises a preview: docs/commands-guide.md states it
@@ -87,7 +89,7 @@ func dryPurityDescribe(t *testing.T, repoDir string, added []string) string {
 			continue
 		}
 		sha := parts[0] + parts[1]
-		typ := strings.TrimSpace(gitCmd(t, repoDir, "cat-file", "-t", sha))
+		typ := strings.TrimSpace(testutil.Git(t, repoDir, "cat-file", "-t", sha))
 		b.WriteString("  (" + typ + " " + sha + ")")
 	}
 	return b.String()

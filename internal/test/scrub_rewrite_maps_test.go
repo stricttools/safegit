@@ -4,10 +4,11 @@ import (
 	"bufio"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // rewriteMapLine is a generic parsed line from rewrite-maps.jsonl.
@@ -46,18 +47,6 @@ func readRewriteMaps(t *testing.T, dir string) []rewriteMapLine {
 	return lines
 }
 
-// gitCmd runs a git command in dir, failing the test on error.
-func gitCmd(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, out)
-	}
-	return strings.TrimSpace(string(out))
-}
-
 // scrubFileJSON mirrors the scrub file --json output fields used by tests.
 type scrubFileJSON struct {
 	Rewrites          map[string]string `json:"rewrites"`
@@ -89,12 +78,12 @@ func TestScrubFileRewriteMapsPersisted(t *testing.T) {
 	initialSHA := shas[0]
 
 	// Tags on a commit that will be rewritten: one annotated, one lightweight.
-	gitCmd(t, dir, "tag", "-a", "v-annot", "-m", "annotated tag", c2)
-	gitCmd(t, dir, "tag", "v-light", c2)
+	testutil.Git(t, dir, "tag", "-a", "v-annot", "-m", "annotated tag", c2)
+	testutil.Git(t, dir, "tag", "v-light", c2)
 
 	// Remote-tracking ref simulating a previously-fetched remote state.
 	oldHead := commitFileEnv(t, dir, scrubEnv, "secret.txt", "REDACTED\n", "commit replacement")
-	gitCmd(t, dir, "update-ref", "refs/remotes/origin/main", oldHead)
+	testutil.Git(t, dir, "update-ref", "refs/remotes/origin/main", oldHead)
 
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--json", "scrub", "file",
 		"--from", initialSHA, "--reason", "test rewrite maps", "secret.txt")
@@ -127,7 +116,7 @@ func TestScrubFileRewriteMapsPersisted(t *testing.T) {
 
 	// The remote-tracking ref was rewritten locally; only the persisted
 	// record retains the pre-rewrite value.
-	remoteNow := gitCmd(t, dir, "rev-parse", "refs/remotes/origin/main")
+	remoteNow := testutil.Git(t, dir, "rev-parse", "refs/remotes/origin/main")
 	if remoteNow == oldHead {
 		t.Error("refs/remotes/origin/main was not rewritten; expected updateRefs to move it")
 	}
@@ -213,7 +202,7 @@ func TestScrubMatchRewriteMapsIncludeAnnotationPassTagRewrites(t *testing.T) {
 
 	// Annotated tag whose BODY contains the secret; the tag target commit has
 	// clean content, so only the annotation pass rewrites this tag's body.
-	gitCmd(t, dir, "tag", "-a", "leaky-tag", "-m", "release with SECRETXYZ inside", c1)
+	testutil.Git(t, dir, "tag", "-a", "leaky-tag", "-m", "release with SECRETXYZ inside", c1)
 
 	// A separate file carries the secret so blobs are rewritten too.
 	commitFileEnv(t, dir, scrubEnv, "config.env", "token=SECRETXYZ\n", "add config")
@@ -238,8 +227,8 @@ func TestScrubMatchRewriteMapsIncludeAnnotationPassTagRewrites(t *testing.T) {
 
 	// The final tag object SHA (after the annotation pass) must appear as a
 	// new_sha in the persisted refs record.
-	finalTagSHA := gitCmd(t, dir, "rev-parse", "refs/tags/leaky-tag")
-	tagBody := gitCmd(t, dir, "cat-file", "-p", finalTagSHA)
+	finalTagSHA := testutil.Git(t, dir, "rev-parse", "refs/tags/leaky-tag")
+	tagBody := testutil.Git(t, dir, "cat-file", "-p", finalTagSHA)
 	if !strings.Contains(tagBody, "GONE") || strings.Contains(tagBody, "SECRETXYZ") {
 		t.Fatalf("tag body not rewritten: %s", tagBody)
 	}
@@ -287,9 +276,9 @@ func TestScrubMatchTagAnnotationOnlyRewriteWritesRewriteMaps(t *testing.T) {
 	dir := newRepo(t)
 
 	c1 := commitFileEnv(t, dir, scrubEnv, "notes.txt", "clean content\n", "add notes")
-	gitCmd(t, dir, "tag", "-a", "leaky-tag", "-m", "release with TAGONLYSECRET inside", c1)
+	testutil.Git(t, dir, "tag", "-a", "leaky-tag", "-m", "release with TAGONLYSECRET inside", c1)
 
-	headBefore := gitCmd(t, dir, "rev-parse", "HEAD")
+	headBefore := testutil.Git(t, dir, "rev-parse", "HEAD")
 
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--json", "scrub", "match",
 		"--pattern", "TAGONLYSECRET", "--replace", "GONE", "--reason", "tag-annotation-only rewrite",
@@ -313,14 +302,14 @@ func TestScrubMatchTagAnnotationOnlyRewriteWritesRewriteMaps(t *testing.T) {
 	}
 
 	// The tag ref moved and its body was scrubbed.
-	finalTagSHA := gitCmd(t, dir, "rev-parse", "refs/tags/leaky-tag")
-	tagBody := gitCmd(t, dir, "cat-file", "-p", finalTagSHA)
+	finalTagSHA := testutil.Git(t, dir, "rev-parse", "refs/tags/leaky-tag")
+	tagBody := testutil.Git(t, dir, "cat-file", "-p", finalTagSHA)
 	if !strings.Contains(tagBody, "GONE") || strings.Contains(tagBody, "TAGONLYSECRET") {
 		t.Fatalf("tag body not rewritten: %s", tagBody)
 	}
 
 	// HEAD is untouched (no commit was rewritten).
-	if headAfter := gitCmd(t, dir, "rev-parse", "HEAD"); headAfter != headBefore {
+	if headAfter := testutil.Git(t, dir, "rev-parse", "HEAD"); headAfter != headBefore {
 		t.Errorf("HEAD moved (%s -> %s) despite identity commit map", headBefore, headAfter)
 	}
 
@@ -372,7 +361,7 @@ func TestScrubFilePureNoOpWritesNoRewriteMaps(t *testing.T) {
 	// The on-disk content equals the committed content, so the replacement
 	// blob is identical and every commit maps to itself.
 	commitFileEnv(t, dir, scrubEnv, "clean.txt", "already clean\n", "add clean file")
-	headSHA := gitCmd(t, dir, "rev-parse", "HEAD")
+	headSHA := testutil.Git(t, dir, "rev-parse", "HEAD")
 
 	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "file",
 		"--from", headSHA, "--reason", "pure no-op", "clean.txt")

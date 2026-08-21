@@ -2,11 +2,12 @@ package test
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // A git command that stops mid-sequence -- a conflicted cherry-pick, a
@@ -75,56 +76,18 @@ func (s seqConflictState) String() string {
 		"; exit=" + itoa(s.exitCode)
 }
 
-// seqConflictGit runs git in dir without failing the test on a nonzero exit --
-// every fixture here depends on a command that exits 1 by design.
-func seqConflictGit(t *testing.T, dir string, args ...string) (string, int) {
-	t.Helper()
-	return seqConflictGitEnv(t, dir, nil, args...)
-}
-
-// seqConflictGitEnv is seqConflictGit with extra environment entries, needed
-// for the `--continue` calls that would otherwise open an editor.
-func seqConflictGitEnv(t *testing.T, dir string, extraEnv []string, args ...string) (string, int) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	if len(extraEnv) > 0 {
-		cmd.Env = append(os.Environ(), extraEnv...)
-	}
-	out, err := cmd.CombinedOutput()
-	code := 0
-	if err != nil {
-		exitErr, ok := err.(*exec.ExitError)
-		if !ok {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-		code = exitErr.ExitCode()
-	}
-	return string(out), code
-}
-
-// seqConflictMustGit runs git and fails the test on a nonzero exit.
-func seqConflictMustGit(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	out, code := seqConflictGit(t, dir, args...)
-	if code != 0 {
-		t.Fatalf("git %v exited %d: %s", args, code, oneLine(out))
-	}
-	return strings.TrimSpace(out)
-}
-
 // seqConflictCapture reads the continuable state of a repository.
 func seqConflictCapture(t *testing.T, dir string, exitCode int) seqConflictState {
 	t.Helper()
 	st := seqConflictState{exitCode: exitCode}
 
-	unmerged := seqConflictMustGit(t, dir, "ls-files", "-u")
+	unmerged := testutil.Git(t, dir, "ls-files", "-u")
 	if unmerged != "" {
 		st.unmerged = strings.Split(unmerged, "\n")
 	}
 	sort.Strings(st.unmerged)
 
-	porcelain := seqConflictMustGit(t, dir, "status", "--porcelain")
+	porcelain := testutil.Git(t, dir, "status", "--porcelain")
 	if porcelain != "" {
 		st.porcelain = strings.Split(porcelain, "\n")
 	}
@@ -163,26 +126,26 @@ func seqConflictRepo(t *testing.T) string {
 
 	seqConflictWrite(t, dir, "c.txt", "line1\nbase\nline3\n")
 	seqConflictWrite(t, dir, "other.txt", "v1\n")
-	seqConflictMustGit(t, dir, "add", "c.txt", "other.txt")
-	seqConflictMustGit(t, dir, "commit", "-m", "base")
+	testutil.Git(t, dir, "add", "c.txt", "other.txt")
+	testutil.Git(t, dir, "commit", "-m", "base")
 
-	seqConflictMustGit(t, dir, "branch", "side")
+	testutil.Git(t, dir, "branch", "side")
 
 	seqConflictWrite(t, dir, "c.txt", "line1\nmain\nline3\n")
-	seqConflictMustGit(t, dir, "add", "c.txt")
-	seqConflictMustGit(t, dir, "commit", "-m", "main edit")
+	testutil.Git(t, dir, "add", "c.txt")
+	testutil.Git(t, dir, "commit", "-m", "main edit")
 
-	seqConflictMustGit(t, dir, "switch", "side")
+	testutil.Git(t, dir, "switch", "side")
 	seqConflictWrite(t, dir, "extra.txt", "extra\n")
-	seqConflictMustGit(t, dir, "add", "extra.txt")
-	seqConflictMustGit(t, dir, "commit", "-m", "add extra")
+	testutil.Git(t, dir, "add", "extra.txt")
+	testutil.Git(t, dir, "commit", "-m", "add extra")
 
 	seqConflictWrite(t, dir, "c.txt", "line1\nside\nline3\n")
 	seqConflictWrite(t, dir, "newfile.txt", "new\n")
-	seqConflictMustGit(t, dir, "add", "c.txt", "newfile.txt")
-	seqConflictMustGit(t, dir, "commit", "-m", "side edit")
+	testutil.Git(t, dir, "add", "c.txt", "newfile.txt")
+	testutil.Git(t, dir, "commit", "-m", "side edit")
 
-	seqConflictMustGit(t, dir, "switch", "main")
+	testutil.Git(t, dir, "switch", "main")
 	return dir
 }
 
@@ -202,7 +165,7 @@ func seqConflictTwins(t *testing.T, setup func(t *testing.T, dir string), argv .
 		setup(t, sgDir)
 	}
 
-	_, gitCode := seqConflictGit(t, gitDir, argv...)
+	_, gitCode := testutil.GitTry(t, gitDir, argv...)
 	gitState = seqConflictCapture(t, gitDir, gitCode)
 
 	_, _, sgCode := runSafegit(t, sgDir, argv...)
@@ -268,12 +231,12 @@ func TestSeqConflictCherryPickContinueProducesSameCommit(t *testing.T) {
 
 	resolveAndContinue := func(dir string) (paths []string, out string, code int) {
 		seqConflictWrite(t, dir, "c.txt", "line1\nresolved\nline3\n")
-		seqConflictMustGit(t, dir, "add", "c.txt")
-		out, code = seqConflictGitEnv(t, dir, []string{"GIT_EDITOR=true"}, "cherry-pick", "--continue")
+		testutil.Git(t, dir, "add", "c.txt")
+		out, code = testutil.GitTryEnv(t, dir, []string{"GIT_EDITOR=true"}, "cherry-pick", "--continue")
 		if code != 0 {
 			return nil, out, code
 		}
-		listing := seqConflictMustGit(t, dir, "ls-tree", "-r", "--name-only", "HEAD")
+		listing := testutil.Git(t, dir, "ls-tree", "-r", "--name-only", "HEAD")
 		if listing != "" {
 			paths = strings.Split(listing, "\n")
 		}
@@ -383,7 +346,7 @@ func TestSeqConflictMergePreservesConflictState(t *testing.T) {
 func TestSeqConflictRebasePreservesConflictState(t *testing.T) {
 	onSide := func(t *testing.T, dir string) {
 		t.Helper()
-		seqConflictMustGit(t, dir, "switch", "side")
+		testutil.Git(t, dir, "switch", "side")
 	}
 	_, _, gitState, sgState := seqConflictTwins(t, onSide, "rebase", "main")
 	seqConflictAssertMidSequence(t, gitState, "rebase-merge")

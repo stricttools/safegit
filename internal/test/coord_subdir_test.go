@@ -2,10 +2,11 @@ package test
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // This file pins the behavior safegit must have when it is invoked from a
@@ -34,34 +35,22 @@ func coordSubdirRepo(t *testing.T) (string, string) {
 	if err := os.WriteFile(filepath.Join(sub, "s.txt"), []byte("sub content\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	coordSubdirGit(t, dir, "add", "sub/s.txt")
-	coordSubdirGit(t, dir, "commit", "-m", "add sub")
+	testutil.GitRaw(t, dir, "add", "sub/s.txt")
+	testutil.GitRaw(t, dir, "commit", "-m", "add sub")
 	return dir, sub
-}
-
-// coordSubdirGit runs a git command in dir and fails the test on error.
-func coordSubdirGit(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
-	}
-	return string(out)
 }
 
 // coordSubdirBranch returns the current branch name.
 func coordSubdirBranch(t *testing.T, dir string) string {
 	t.Helper()
-	return strings.TrimSpace(coordSubdirGit(t, dir, "rev-parse", "--abbrev-ref", "HEAD"))
+	return strings.TrimSpace(testutil.GitRaw(t, dir, "rev-parse", "--abbrev-ref", "HEAD"))
 }
 
 // coordSubdirHasSkipWorktree reports whether file carries the skip-worktree
 // flag in the main index.
 func coordSubdirHasSkipWorktree(t *testing.T, dir, file string) bool {
 	t.Helper()
-	out := coordSubdirGit(t, dir, "ls-files", "-v")
+	out := testutil.GitRaw(t, dir, "ls-files", "-v")
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		if strings.HasPrefix(line, "S ") && strings.TrimSpace(line[2:]) == file {
 			return true
@@ -73,13 +62,13 @@ func coordSubdirHasSkipWorktree(t *testing.T, dir, file string) bool {
 // coordSubdirTrackedPaths returns the paths git currently tracks in the index.
 func coordSubdirTrackedPaths(t *testing.T, dir string) []string {
 	t.Helper()
-	return splitLines(strings.TrimSpace(coordSubdirGit(t, dir, "ls-files")))
+	return splitLines(strings.TrimSpace(testutil.GitRaw(t, dir, "ls-files")))
 }
 
 // coordSubdirTreePaths returns every path in a commit's tree, repo-relative.
 func coordSubdirTreePaths(t *testing.T, dir, rev string) []string {
 	t.Helper()
-	return splitLines(strings.TrimSpace(coordSubdirGit(t, dir, "ls-tree", "-r", "--full-tree", "--name-only", rev)))
+	return splitLines(strings.TrimSpace(testutil.GitRaw(t, dir, "ls-tree", "-r", "--full-tree", "--name-only", rev)))
 }
 
 func coordSubdirContains(haystack []string, needle string) bool {
@@ -108,16 +97,16 @@ func coordSubdirIgnoreRepo(t *testing.T) (string, string) {
 	if err := os.WriteFile(filepath.Join(sub, "secret.txt"), []byte("token=production_key\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	coordSubdirGit(t, dir, "add", "config.env", "sub/secret.txt")
-	coordSubdirGit(t, dir, "commit", "-m", "add secrets")
+	testutil.GitRaw(t, dir, "add", "config.env", "sub/secret.txt")
+	testutil.GitRaw(t, dir, "commit", "-m", "add secrets")
 
 	// Gitignore config.env AFTER it was committed: the tracked-but-ignored
 	// state git.ListTrackedIgnoredFiles exists to protect.
 	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("config.env\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	coordSubdirGit(t, dir, "update-index", "--add", "--", ".gitignore")
-	coordSubdirGit(t, dir, "commit", "-m", "gitignore config.env")
+	testutil.GitRaw(t, dir, "update-index", "--add", "--", ".gitignore")
+	testutil.GitRaw(t, dir, "commit", "-m", "gitignore config.env")
 	return dir, sub
 }
 
@@ -129,7 +118,7 @@ func coordSubdirIgnoreRepo(t *testing.T) (string, string) {
 // root the guard sees an untracked file and refuses the checkout.
 func TestCoordSubdirCheckoutRefusesUntrackedFromRoot(t *testing.T) {
 	dir, _ := coordSubdirRepo(t)
-	coordSubdirGit(t, dir, "branch", "other")
+	testutil.GitRaw(t, dir, "branch", "other")
 
 	if err := os.WriteFile(filepath.Join(dir, "stray.txt"), []byte("uncommitted work\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -157,7 +146,7 @@ func TestCoordSubdirCheckoutRefusesUntrackedFromRoot(t *testing.T) {
 // guard reports a clean tree.
 func TestCoordSubdirCheckoutRefusesUntrackedFromSubdir(t *testing.T) {
 	dir, sub := coordSubdirRepo(t)
-	coordSubdirGit(t, dir, "branch", "other")
+	testutil.GitRaw(t, dir, "branch", "other")
 
 	if err := os.WriteFile(filepath.Join(dir, "stray.txt"), []byte("uncommitted work\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -180,7 +169,7 @@ func TestCoordSubdirCheckoutRefusesUntrackedFromSubdir(t *testing.T) {
 // so a modified tracked file outside the subtree is still seen from sub/.
 func TestCoordSubdirCheckoutRefusesModifiedFromSubdir(t *testing.T) {
 	dir, sub := coordSubdirRepo(t)
-	coordSubdirGit(t, dir, "branch", "other")
+	testutil.GitRaw(t, dir, "branch", "other")
 
 	if err := os.WriteFile(filepath.Join(dir, "seed.txt"), []byte("locally modified\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -231,9 +220,9 @@ func TestCoordSubdirSkipWorktreeSurvivesCommitFromRoot(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "config.local"), []byte("local\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	coordSubdirGit(t, dir, "add", "config.local")
-	coordSubdirGit(t, dir, "commit", "-m", "add config.local")
-	coordSubdirGit(t, dir, "update-index", "--skip-worktree", "config.local")
+	testutil.GitRaw(t, dir, "add", "config.local")
+	testutil.GitRaw(t, dir, "commit", "-m", "add config.local")
+	testutil.GitRaw(t, dir, "update-index", "--skip-worktree", "config.local")
 
 	if err := os.WriteFile(filepath.Join(sub, "feature.txt"), []byte("feature\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -261,9 +250,9 @@ func TestCoordSubdirSkipWorktreeSurvivesCommitFromSubdir(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "config.local"), []byte("local\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	coordSubdirGit(t, dir, "add", "config.local")
-	coordSubdirGit(t, dir, "commit", "-m", "add config.local")
-	coordSubdirGit(t, dir, "update-index", "--skip-worktree", "config.local")
+	testutil.GitRaw(t, dir, "add", "config.local")
+	testutil.GitRaw(t, dir, "commit", "-m", "add config.local")
+	testutil.GitRaw(t, dir, "update-index", "--skip-worktree", "config.local")
 	if !coordSubdirHasSkipWorktree(t, dir, "config.local") {
 		t.Fatal("precondition: skip-worktree not set")
 	}

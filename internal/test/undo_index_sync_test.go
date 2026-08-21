@@ -2,10 +2,11 @@ package test
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // safegit keeps one invariant about the shared .git/index: it equals HEAD.
@@ -44,40 +45,11 @@ func undoSyncRead(t *testing.T, dir, name string) string {
 	return string(data)
 }
 
-// undoSyncGit runs git in dir and returns trimmed stdout, failing on error.
-func undoSyncGit(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v failed: %v\n%s", args, err, out)
-	}
-	return strings.TrimSpace(string(out))
-}
-
-// undoSyncGitAllowFail runs git without failing the test on a nonzero exit.
-func undoSyncGitAllowFail(t *testing.T, dir string, args ...string) (string, int) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	code := 0
-	if err != nil {
-		exitErr, ok := err.(*exec.ExitError)
-		if !ok {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
-		code = exitErr.ExitCode()
-	}
-	return string(out), code
-}
-
 // undoSyncStagedStatus returns `git diff --cached --name-status` as lines: the
 // staged-vs-HEAD delta, which is exactly the state a read-tree sync destroys.
 func undoSyncStagedStatus(t *testing.T, dir string) []string {
 	t.Helper()
-	out := undoSyncGit(t, dir, "diff", "--cached", "--name-status")
+	out := testutil.Git(t, dir, "diff", "--cached", "--name-status")
 	if out == "" {
 		return nil
 	}
@@ -98,7 +70,7 @@ func undoSyncHasStagedPath(lines []string, path string) bool {
 // undoSyncHead returns the repo's HEAD SHA.
 func undoSyncHead(t *testing.T, dir string) string {
 	t.Helper()
-	return undoSyncGit(t, dir, "rev-parse", "HEAD")
+	return testutil.Git(t, dir, "rev-parse", "HEAD")
 }
 
 // undoSyncUnmergedStages returns `git ls-files -u` output: the conflict stages
@@ -106,7 +78,7 @@ func undoSyncHead(t *testing.T, dir string) string {
 // believes there is a conflict to resolve.
 func undoSyncUnmergedStages(t *testing.T, dir string) string {
 	t.Helper()
-	return undoSyncGit(t, dir, "ls-files", "-u")
+	return testutil.Git(t, dir, "ls-files", "-u")
 }
 
 // undoSyncSession is the session handshake for the session that owns the
@@ -150,8 +122,8 @@ func TestUndoPreservesForeignStagedState(t *testing.T) {
 	// The other session stages three kinds of work in the shared index.
 	undoSyncWrite(t, dir, "foreign.txt", "staged edit\n")
 	undoSyncWrite(t, dir, "brand-new.txt", "staged addition\n")
-	undoSyncGit(t, dir, "add", "foreign.txt", "brand-new.txt")
-	undoSyncGit(t, dir, "rm", "--cached", "seed.txt")
+	testutil.Git(t, dir, "add", "foreign.txt", "brand-new.txt")
+	testutil.Git(t, dir, "rm", "--cached", "seed.txt")
 
 	staged := undoSyncStagedStatus(t, dir)
 	for _, want := range []string{"foreign.txt", "brand-new.txt", "seed.txt"} {
@@ -184,7 +156,7 @@ func TestUndoPreservesForeignStagedState(t *testing.T) {
 			"  cause: undo.go:207 calls git.SyncMainIndex (read-tree, internal/git/git.go:265-300),\n"+
 			"         which replaces the whole shared index with the rollback target's tree.",
 			strings.Join(lost, ", "), staged, after,
-			oneLine(undoSyncGit(t, dir, "status", "--porcelain")))
+			oneLine(testutil.Git(t, dir, "status", "--porcelain")))
 	}
 }
 
@@ -217,8 +189,8 @@ func TestUndoRefusedMidMerge(t *testing.T) {
 	}
 
 	// feature: a conflicting edit plus one clean addition.
-	undoSyncGit(t, dir, "branch", "feature")
-	undoSyncGit(t, dir, "switch", "feature")
+	testutil.Git(t, dir, "branch", "feature")
+	testutil.Git(t, dir, "switch", "feature")
 	undoSyncWrite(t, dir, "conflicted.txt", "line1\nfeature\nline3\n")
 	undoSyncWrite(t, dir, "feature-only.txt", "only on feature\n")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "feature edit", "--", "conflicted.txt", "feature-only.txt"); code != 0 {
@@ -226,7 +198,7 @@ func TestUndoRefusedMidMerge(t *testing.T) {
 	}
 
 	// main: the conflicting edit. This is the commit undo would roll back.
-	undoSyncGit(t, dir, "switch", "main")
+	testutil.Git(t, dir, "switch", "main")
 	undoSyncWrite(t, dir, "conflicted.txt", "line1\nmain\nline3\n")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "main edit", "--", "conflicted.txt"); code != 0 {
 		t.Fatalf("main commit failed (code %d): %s", code, stderr)
@@ -259,7 +231,7 @@ func TestUndoRefusedMidMerge(t *testing.T) {
 			mainSHA, undoSyncHead(t, dir),
 			!undoSyncMergeStateGone(t, dir),
 			undoSyncUnmergedStages(t, dir), len(strings.Split(stagesBefore, "\n")),
-			oneLine(undoSyncGit(t, dir, "status", "--porcelain")),
+			oneLine(testutil.Git(t, dir, "status", "--porcelain")),
 			oneLine(stdout))
 	}
 
@@ -327,7 +299,7 @@ func TestUndoLeavesWorkingTreeIntact(t *testing.T) {
 		t.Errorf("added.txt content changed after undo: %q", got)
 	}
 
-	status := undoSyncGit(t, dir, "status", "--porcelain")
+	status := testutil.Git(t, dir, "status", "--porcelain")
 	if !strings.Contains(status, "tracked.txt") {
 		t.Errorf("tracked.txt is not reported as modified after undo; status: %s", oneLine(status))
 	}
@@ -359,15 +331,15 @@ func TestGuardedPassthroughKeepsCherryPickConflictStages(t *testing.T) {
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "base", "--", "c.txt"); code != 0 {
 		t.Fatalf("base commit failed (code %d): %s", code, stderr)
 	}
-	undoSyncGit(t, dir, "branch", "side")
-	undoSyncGit(t, dir, "switch", "side")
+	testutil.Git(t, dir, "branch", "side")
+	testutil.Git(t, dir, "switch", "side")
 	undoSyncWrite(t, dir, "c.txt", "side\n")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "side edit", "--", "c.txt"); code != 0 {
 		t.Fatalf("side commit failed (code %d): %s", code, stderr)
 	}
 	sideSHA := undoSyncHead(t, dir)
 
-	undoSyncGit(t, dir, "switch", "main")
+	testutil.Git(t, dir, "switch", "main")
 	undoSyncWrite(t, dir, "c.txt", "trunk\n")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "trunk edit", "--", "c.txt"); code != 0 {
 		t.Fatalf("trunk commit failed (code %d): %s", code, stderr)
@@ -382,7 +354,7 @@ func TestGuardedPassthroughKeepsCherryPickConflictStages(t *testing.T) {
 
 	stages := undoSyncUnmergedStages(t, dir)
 	if stages == "" {
-		statusOut, _ := undoSyncGitAllowFail(t, dir, "status", "--porcelain")
+		statusOut, _ := testutil.GitTry(t, dir, "status", "--porcelain")
 		t.Fatalf("`safegit cherry-pick` erased the conflict stages git had just written.\n"+
 			"  git ls-files -u: empty (raw `git cherry-pick` leaves three stages for c.txt)\n"+
 			"  git status: %s (raw git reports `UU c.txt`)\n"+

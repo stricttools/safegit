@@ -28,6 +28,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // --- helpers (all prefixed intakeEdge to avoid collisions in package test) ---
@@ -40,18 +42,6 @@ func intakeEdgeWrite(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
-}
-
-// intakeEdgeGit runs git in dir and fails the test on a non-zero exit.
-func intakeEdgeGit(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, out)
-	}
-	return string(out)
 }
 
 // intakeEdgeShow returns the blob content of path at rev, and whether it exists.
@@ -340,11 +330,11 @@ func TestIntakeEdgeSameArgvDifferentMeaningByCwd(t *testing.T) {
 // is absent from disk while being tracked on the target branch.
 func intakeEdgeBranchWithFile(t *testing.T, dir, name, content string) {
 	t.Helper()
-	intakeEdgeGit(t, dir, "checkout", "-b", "other")
+	testutil.GitRaw(t, dir, "checkout", "-b", "other")
 	intakeEdgeWrite(t, filepath.Join(dir, name), content)
-	intakeEdgeGit(t, dir, "add", name)
-	intakeEdgeGit(t, dir, "commit", "-m", "add "+name+" on other")
-	intakeEdgeGit(t, dir, "checkout", "main")
+	testutil.GitRaw(t, dir, "add", name)
+	testutil.GitRaw(t, dir, "commit", "-m", "add "+name+" on other")
+	testutil.GitRaw(t, dir, "checkout", "main")
 }
 
 // TestIntakeEdgeCrossBranchDeleteSharedControl is the discriminator for the
@@ -359,7 +349,7 @@ func TestIntakeEdgeCrossBranchDeleteSharedControl(t *testing.T) {
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "add shared", "--", name); code != 0 {
 		t.Fatalf("seed commit failed (%d): %s", code, stderr)
 	}
-	intakeEdgeGit(t, dir, "branch", "other")
+	testutil.GitRaw(t, dir, "branch", "other")
 	if err := os.Remove(filepath.Join(dir, name)); err != nil {
 		t.Fatal(err)
 	}
@@ -432,7 +422,7 @@ func TestIntakeEdgeCrossBranchDeleteTrackedOnlyOnHead(t *testing.T) {
 		t.Fatalf("seed commit failed (%d): %s", code, stderr)
 	}
 	// `other` points at the commit before the file existed.
-	intakeEdgeGit(t, dir, "branch", "other", "HEAD~1")
+	testutil.GitRaw(t, dir, "branch", "other", "HEAD~1")
 	if _, ok := intakeEdgeShow(t, dir, "refs/heads/other", name); ok {
 		t.Fatalf("setup: %s should not exist on other", name)
 	}
@@ -483,7 +473,7 @@ func TestIntakeEdgeCrossBranchAmendDeleteTrackedOnlyOnTarget(t *testing.T) {
 // tracked-deletion path.
 func TestIntakeEdgeCrossBranchAddControl(t *testing.T) {
 	dir := newRepo(t)
-	intakeEdgeGit(t, dir, "branch", "other")
+	testutil.GitRaw(t, dir, "branch", "other")
 	intakeEdgeWrite(t, filepath.Join(dir, "fresh.txt"), "fresh\n")
 
 	_, stderr, code := runSafegit(t, dir, "commit", "--branch", "other", "-m", "add fresh on other", "--", "fresh.txt")

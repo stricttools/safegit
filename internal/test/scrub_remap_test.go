@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 var hex40Re = regexp.MustCompile(`[0-9a-f]{40,}`)
@@ -118,7 +120,7 @@ func TestScrubFileRemapShas(t *testing.T) {
 	}
 	// Every referenced SHA must resolve to a commit in the rewritten repo.
 	for _, ref := range fullShasIn(finalContent) {
-		gitCmd(t, dir, "rev-parse", "--verify", ref+"^{commit}")
+		testutil.Git(t, dir, "rev-parse", "--verify", ref+"^{commit}")
 	}
 }
 
@@ -165,7 +167,7 @@ func TestScrubFileRemapPartialRange(t *testing.T) {
 		t.Errorf("old in-range SHA %s still referenced: %s", c3[:12], finalContent)
 	}
 	// The pre-range commit still exists.
-	gitCmd(t, dir, "rev-parse", "--verify", c1+"^{commit}")
+	testutil.Git(t, dir, "rev-parse", "--verify", c1+"^{commit}")
 }
 
 // TestScrubFileRemapStaleHash: an unresolvable 40-hex hash is left untouched,
@@ -410,8 +412,8 @@ func TestScrubFileInSubmoduleRemapShas(t *testing.T) {
 		[]byte(fmt.Sprintf("{\"commits\":[%q],\"user_facing\":false}\n", firstSubCommit)), 0644); err != nil {
 		t.Fatal(err)
 	}
-	gitCmd(t, subDir, "add", "changelog.jsonl")
-	gitCmd(t, subDir, "commit", "-m", "sub changelog")
+	testutil.Git(t, subDir, "add", "changelog.jsonl")
+	testutil.Git(t, subDir, "commit", "-m", "sub changelog")
 
 	// Parent changelog references the parent's "add submodule" commit, which
 	// carries the old gitlink and will therefore be rewritten.
@@ -424,10 +426,10 @@ func TestScrubFileInSubmoduleRemapShas(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(subDir, "secret.txt"), []byte("CLEANED\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	gitCmd(t, subDir, "add", "secret.txt")
-	gitCmd(t, subDir, "commit", "-m", "commit replacement")
-	gitCmd(t, parentDir, "add", "mysub")
-	gitCmd(t, parentDir, "commit", "-m", "update submodule ref")
+	testutil.Git(t, subDir, "add", "secret.txt")
+	testutil.Git(t, subDir, "commit", "-m", "commit replacement")
+	testutil.Git(t, parentDir, "add", "mysub")
+	testutil.Git(t, parentDir, "commit", "-m", "update submodule ref")
 
 	stdout, stderr, code := runSafegitEnv(t, parentDir, submoduleEnv,
 		"--approve-consequential", "--json", "scrub", "file",

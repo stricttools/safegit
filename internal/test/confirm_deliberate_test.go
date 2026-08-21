@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // Destructive confirmations are DELIBERATE: `--json` produces machine-readable
@@ -211,10 +213,10 @@ func TestScrubFileInSubmoduleJSONDoesNotConfirm(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(subDir, "secret.txt"), []byte("CLEANED\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	gitCmd(t, subDir, "add", "secret.txt")
-	gitCmd(t, subDir, "commit", "-m", "commit replacement")
-	gitCmd(t, parentDir, "add", "mysub")
-	gitCmd(t, parentDir, "commit", "-m", "update submodule ref")
+	testutil.Git(t, subDir, "add", "secret.txt")
+	testutil.Git(t, subDir, "commit", "-m", "commit replacement")
+	testutil.Git(t, parentDir, "add", "mysub")
+	testutil.Git(t, parentDir, "commit", "-m", "update submodule ref")
 
 	parentHeadBefore := revParseHEAD(t, parentDir)
 	subHeadBefore := revParseHEAD(t, subDir)
@@ -269,7 +271,7 @@ func TestDeclinedDeliberateConfirmationExitsNonzero(t *testing.T) {
 	t.Run("backup to unclassifiable remote", func(t *testing.T) {
 		dir := newRepo(t)
 		commitFileEnv(t, dir, confirmEnv, "file.txt", "content\n", "add file")
-		gitIn(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
+		testutil.Git(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
 
 		_, stderr, code := runSafegitNoConsent(t, dir, confirmEnv, "backup", "backup", "cloudy")
 		if code == 0 {

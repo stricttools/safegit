@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // The tests in this file pin the CLI-level consequences of strictcli's
@@ -50,8 +52,8 @@ func TestPushDeclinedModeIsRefused(t *testing.T) {
 
 	// Give the repo a tag and a second branch, so a stray push of any mode
 	// would leave a visible mark on the remote.
-	gitCmd(t, dir, "tag", "v0.0.1")
-	gitCmd(t, dir, "branch", "side")
+	testutil.Git(t, dir, "tag", "v0.0.1")
+	testutil.Git(t, dir, "branch", "side")
 
 	for _, negation := range []string{"--no-refs", "--no-only-tags"} {
 		_, stderr, code := runSafegit(t, dir, "push", negation, "origin")
@@ -84,7 +86,7 @@ func TestPushNoModeIsRefused(t *testing.T) {
 // four choices, so a fifth mode cannot reach the handler's switch.
 func TestPushUnknownRefsValueIsRefused(t *testing.T) {
 	dir, remoteDir := newRepoWithRemote(t)
-	gitCmd(t, dir, "tag", "v0.0.1")
+	testutil.Git(t, dir, "tag", "v0.0.1")
 
 	_, stderr, code := runSafegit(t, dir, "push", "--refs", "everything", "origin")
 	assertParseRefusal(t, "push --refs everything", stderr, code,
