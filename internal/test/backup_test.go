@@ -8,19 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-)
 
-// gitIn runs a git command in dir and fails the test if it errors.
-func gitIn(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s in %s: %v\n%s", strings.Join(args, " "), dir, err, out)
-	}
-	return strings.TrimSpace(string(out))
-}
+	"github.com/smm-h/safegit/internal/testutil"
+)
 
 // remoteRefSHA returns the SHA a bare remote holds for a ref, or "" if absent.
 func remoteRefSHA(t *testing.T, remoteDir, ref string) string {
@@ -80,16 +70,16 @@ func oplogEntries(t *testing.T, dir, op string) []map[string]interface{} {
 func pushForeignBackup(t *testing.T, remoteDir, branch string) string {
 	t.Helper()
 	other := evalTempDir(t)
-	gitIn(t, ".", "clone", "--quiet", remoteDir, other)
-	gitIn(t, other, "config", "user.email", "other@test.com")
-	gitIn(t, other, "config", "user.name", "Other")
+	testutil.Git(t, ".", "clone", "--quiet", remoteDir, other)
+	testutil.Git(t, other, "config", "user.email", "other@test.com")
+	testutil.Git(t, other, "config", "user.name", "Other")
 	if err := os.WriteFile(filepath.Join(other, "elsewhere.txt"), []byte("work from another machine\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	gitIn(t, other, "add", "elsewhere.txt")
-	gitIn(t, other, "commit", "-m", "work from another machine")
-	gitIn(t, other, "push", remoteDir, "HEAD:refs/backups/"+branch)
-	return gitIn(t, other, "rev-parse", "HEAD")
+	testutil.Git(t, other, "add", "elsewhere.txt")
+	testutil.Git(t, other, "commit", "-m", "work from another machine")
+	testutil.Git(t, other, "push", remoteDir, "HEAD:refs/backups/"+branch)
+	return testutil.Git(t, other, "rev-parse", "HEAD")
 }
 
 // TestBackupCreatesFirstSlotAndLists: with no slot on the remote, the backup is
@@ -152,7 +142,7 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 	}
 
 	// Simulate losing local work (e.g. a fresh clone of a stale state).
-	gitIn(t, dir, "reset", "--hard", base)
+	testutil.Git(t, dir, "reset", "--hard", base)
 	if got := revParseHEAD(t, dir); got != base {
 		t.Fatalf("reset failed: HEAD = %s", got)
 	}
@@ -267,7 +257,7 @@ func TestBackupRestoreWithoutSlotErrors(t *testing.T) {
 // proven private is refused, nothing is pushed, and no remote is contacted.
 func TestBackupUnconsentedContactsNoRemote(t *testing.T) {
 	dir := newRepo(t)
-	gitIn(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
+	testutil.Git(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
 
 	stdout, stderr, code := runSafegitNoConsent(t, dir, nil, "backup", "backup", "cloudy")
 	if code == 0 {
@@ -284,7 +274,7 @@ func TestBackupUnconsentedContactsNoRemote(t *testing.T) {
 // network error.
 func TestBackupJSONIsNotConsent(t *testing.T) {
 	dir := newRepo(t)
-	gitIn(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
+	testutil.Git(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
 
 	stdout, stderr, code := runSafegitNoConsent(t, dir, nil, "--json", "backup", "backup", "cloudy")
 	if code == 0 {
@@ -302,7 +292,7 @@ func TestBackupJSONIsNotConsent(t *testing.T) {
 // satisfied rather than declined.
 func TestBackupAllowPublicRemoteSatisfiesExposureConfirmation(t *testing.T) {
 	dir := newRepo(t)
-	gitIn(t, dir, "remote", "add", "refused", "git://127.0.0.1:1/owner/repo.git")
+	testutil.Git(t, dir, "remote", "add", "refused", "git://127.0.0.1:1/owner/repo.git")
 
 	stdout, stderr, code := runSafegit(t, dir, "backup", "backup", "--allow-public-remote", "refused")
 	if code == 0 {
@@ -321,7 +311,7 @@ func TestBackupAllowPublicRemoteSatisfiesExposureConfirmation(t *testing.T) {
 // network call is made.
 func TestBackupDryRunMakesNoNetworkContact(t *testing.T) {
 	dir := newRepo(t)
-	gitIn(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
+	testutil.Git(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
 
 	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "backup", "backup", "cloudy")
 	if code != 0 {
@@ -370,7 +360,7 @@ func TestBackupRestoreDryRunTouchesNothing(t *testing.T) {
 	if _, stderr, code := runSafegit(t, dir, "backup", "backup", "origin"); code != 0 {
 		t.Fatalf("backup failed (code %d): %s", code, stderr)
 	}
-	gitIn(t, dir, "reset", "--hard", base)
+	testutil.Git(t, dir, "reset", "--hard", base)
 
 	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "backup", "restore", "origin")
 	if code != 0 {
@@ -411,7 +401,7 @@ func TestBackupWritesOplogEntries(t *testing.T) {
 		t.Errorf("oplog remote = %v, want origin", extra["remote"])
 	}
 
-	gitIn(t, dir, "reset", "--hard", base)
+	testutil.Git(t, dir, "reset", "--hard", base)
 	if _, stderr, code := runSafegit(t, dir, "backup", "restore", "origin"); code != 0 {
 		t.Fatalf("restore failed (code %d): %s", code, stderr)
 	}
@@ -457,7 +447,7 @@ func TestEmptyLeaseRejectsConcurrentSlot(t *testing.T) {
 // TestBackupDetachedHeadErrors: slots are per branch.
 func TestBackupDetachedHeadErrors(t *testing.T) {
 	dir, _ := newRepoWithRemote(t)
-	gitIn(t, dir, "checkout", "--detach")
+	testutil.Git(t, dir, "checkout", "--detach")
 
 	_, stderr, code := runSafegit(t, dir, "backup", "backup", "origin")
 	if code == 0 {
@@ -487,7 +477,7 @@ func TestApproveConsequentialDoesNotConsentToAnUnprovenRemote(t *testing.T) {
 		// Not a forge safegit can classify, and unreachable -- so if the run
 		// gets past the exposure gate it fails at the network, which is exactly
 		// the difference the assertions below key on.
-		gitIn(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
+		testutil.Git(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
 		return dir
 	}
 

@@ -2,10 +2,11 @@ package test
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // These tests cover committing pre-staged deletions when the caller names a
@@ -20,20 +21,6 @@ import (
 // index, which git rejects with exit 128. The file-path form never hits this,
 // because the individual paths are in the explicit set that move detection
 // skips.
-
-// runGitIn runs a raw git command inside a test's scratch repo and fails the
-// test if it errors. Raw git is fine here: the repo is a throwaway created by
-// newRepo, and the point is to simulate a third-party deletion tool.
-func runGitIn(t *testing.T, repoDir string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = repoDir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
-	}
-	return string(out)
-}
 
 // seedDeletedDir creates dir/ holding the given name->content files, commits
 // it via safegit, then simulates the deletion tool with `git rm -r dir`, which
@@ -57,7 +44,7 @@ func seedDeletedDir(t *testing.T, files map[string]string) string {
 		t.Fatalf("seed commit failed (code %d): %s", code, stderr)
 	}
 
-	runGitIn(t, dir, "rm", "-r", "dir")
+	testutil.GitRaw(t, dir, "rm", "-r", "dir")
 	if _, err := os.Stat(filepath.Join(dir, "dir")); !os.IsNotExist(err) {
 		t.Fatalf("expected dir/ to be gone from the working tree, stat err = %v", err)
 	}
@@ -69,8 +56,8 @@ func seedDeletedDir(t *testing.T, files map[string]string) string {
 func assertDeletedInHead(t *testing.T, dir string, paths ...string) {
 	t.Helper()
 
-	diff := runGitIn(t, dir, "diff-tree", "--no-commit-id", "-r", "--name-status", "HEAD")
-	tree := runGitIn(t, dir, "ls-tree", "-r", "--name-only", "HEAD")
+	diff := testutil.GitRaw(t, dir, "diff-tree", "--no-commit-id", "-r", "--name-status", "HEAD")
+	tree := testutil.GitRaw(t, dir, "ls-tree", "-r", "--name-only", "HEAD")
 	for _, p := range paths {
 		if !strings.Contains(diff, "D\t"+p) {
 			t.Errorf("expected %q deleted in HEAD diff-tree, got:\n%s", p, diff)
@@ -84,7 +71,7 @@ func assertDeletedInHead(t *testing.T, dir string, paths ...string) {
 // assertPresentInHead verifies each named path is in the HEAD tree.
 func assertPresentInHead(t *testing.T, dir string, paths ...string) {
 	t.Helper()
-	tree := runGitIn(t, dir, "ls-tree", "-r", "--name-only", "HEAD")
+	tree := testutil.GitRaw(t, dir, "ls-tree", "-r", "--name-only", "HEAD")
 	for _, p := range paths {
 		if !strings.Contains(tree, p) {
 			t.Errorf("%s missing from HEAD tree, got:\n%s", p, tree)

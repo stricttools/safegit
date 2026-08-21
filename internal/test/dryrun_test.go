@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // plantLiveRewriteLock writes a rewrite lock file owned by the (live) test
@@ -161,20 +163,20 @@ func newRawSecretRepo(t *testing.T) (dir, initialSHA string) {
 	t.Helper()
 	dir = evalTempDir(t)
 
-	gitCmd(t, dir, "init", "--initial-branch=main")
-	gitCmd(t, dir, "config", "user.email", "test@test.com")
-	gitCmd(t, dir, "config", "user.name", "Test")
+	testutil.Git(t, dir, "init", "--initial-branch=main")
+	testutil.Git(t, dir, "config", "user.email", "test@test.com")
+	testutil.Git(t, dir, "config", "user.name", "Test")
 
 	writeRepoFile(t, dir, "secret.txt", "hunter2\n")
-	gitCmd(t, dir, "add", "secret.txt")
-	gitCmd(t, dir, "commit", "-m", "add secret")
-	initialSHA = gitCmd(t, dir, "rev-parse", "HEAD")
+	testutil.Git(t, dir, "add", "secret.txt")
+	testutil.Git(t, dir, "commit", "-m", "add secret")
+	initialSHA = testutil.Git(t, dir, "rev-parse", "HEAD")
 
 	// Replacement content committed on top, so the tree is clean and
 	// `scrub file` has something to substitute.
 	writeRepoFile(t, dir, "secret.txt", "REDACTED\n")
-	gitCmd(t, dir, "add", "secret.txt")
-	gitCmd(t, dir, "commit", "-m", "commit replacement")
+	testutil.Git(t, dir, "add", "secret.txt")
+	testutil.Git(t, dir, "commit", "-m", "commit replacement")
 
 	if _, err := os.Stat(filepath.Join(dir, ".git", "safegit")); !os.IsNotExist(err) {
 		t.Fatalf("fixture is wrong: .git/safegit already exists (stat err: %v)", err)

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // A destructive history rewrite in a repository managed by release tooling is
@@ -107,7 +109,7 @@ func TestScrubInRlsblManagedRepoWritesJournal(t *testing.T) {
 func authorNames(t *testing.T, dir string) map[string]bool {
 	t.Helper()
 	names := map[string]bool{}
-	for _, line := range strings.Split(gitCmd(t, dir, "log", "--format=%an", "--all"), "\n") {
+	for _, line := range strings.Split(testutil.Git(t, dir, "log", "--format=%an", "--all"), "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			names[line] = true

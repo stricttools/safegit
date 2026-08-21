@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // The scrub engine rewrites trees through git.LsTree (internal/git/git.go:655),
@@ -34,26 +36,13 @@ import (
 
 const scrubSubdirSecret = "AKIA_SECRET_VALUE_123"
 
-// scrubSubdirGit runs git in dir and returns trimmed stdout, failing the test
-// on error.
-func scrubSubdirGit(t *testing.T, dir string, args ...string) string {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s in %s: %v\n%s", strings.Join(args, " "), dir, err, out)
-	}
-	return strings.TrimSpace(string(out))
-}
-
 // scrubSubdirCommit stages the given repo-relative paths with raw git and
 // commits them. Raw git is fine here: these are throwaway repos created by
 // newRepo, not the safegit working tree.
 func scrubSubdirCommit(t *testing.T, root, msg string, paths ...string) {
 	t.Helper()
-	scrubSubdirGit(t, root, append([]string{"add", "--"}, paths...)...)
-	scrubSubdirGit(t, root, "commit", "-m", msg)
+	testutil.Git(t, root, append([]string{"add", "--"}, paths...)...)
+	testutil.Git(t, root, "commit", "-m", msg)
 }
 
 // scrubSubdirWrite writes content to a repo-relative path, creating parents.
@@ -99,7 +88,7 @@ func scrubSubdirRepoNestedSecret(t *testing.T) (root, sub string) {
 // scrubSubdirFirstCommit returns the root commit SHA.
 func scrubSubdirFirstCommit(t *testing.T, root string) string {
 	t.Helper()
-	out := scrubSubdirGit(t, root, "rev-list", "--max-parents=0", "HEAD")
+	out := testutil.Git(t, root, "rev-list", "--max-parents=0", "HEAD")
 	return strings.Fields(out)[0]
 }
 
@@ -108,7 +97,7 @@ func scrubSubdirFirstCommit(t *testing.T, root string) string {
 // answer cannot itself be distorted by a cwd prefix.
 func scrubSubdirSecretInHistory(t *testing.T, root string) bool {
 	t.Helper()
-	revs := strings.Fields(scrubSubdirGit(t, root, "rev-list", "--all"))
+	revs := strings.Fields(testutil.Git(t, root, "rev-list", "--all"))
 	if len(revs) == 0 {
 		return false
 	}
@@ -124,7 +113,7 @@ func scrubSubdirSecretInHistory(t *testing.T, root string) bool {
 // from the repository root.
 func scrubSubdirHeadPaths(t *testing.T, root string) []string {
 	t.Helper()
-	out := scrubSubdirGit(t, root, "ls-tree", "-r", "--name-only", "HEAD")
+	out := testutil.Git(t, root, "ls-tree", "-r", "--name-only", "HEAD")
 	if out == "" {
 		return nil
 	}
