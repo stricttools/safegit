@@ -384,8 +384,6 @@ func runBackupRestore(flags globalFlags, remote string) int {
 			slot, branch, slot, fetched[:12], oldHead[:12], oldHead[:12], fetched[:12]))
 	}
 
-	syncMainIndex(flags, "backup restore")
-
 	_ = oplog.Append(sgDir, oplog.Entry{
 		Op: "backup-restore",
 		Extra: map[string]interface{}{
