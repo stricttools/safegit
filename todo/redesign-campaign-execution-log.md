@@ -109,6 +109,28 @@ existing entries are never rewritten.
   stdout-only (`testutil.GitOut` added), and SHA-feeding call sites in
   `root_commit_cas_test.go` re-pointed at stdout-only readers.
 
+## Ratified 1.1 decisions
+
+- The effects-handle exit-code verification (a recorded task in the plan):
+  strictcli's Run with default check-on returns a plain formatted error and
+  an UNSETTLED Completed (ExitCode() panics); the child's code is reachable
+  only with Check(false) via Completed.ExitCode(). runGitMutation now uses
+  Stream(true)+Check(false), returns the child's code, returns 0 on the
+  dry-run branch before touching ExitCode(), and prints framework-level
+  failures (previously discarded silently) mapping them to exitcode.General.
+  Signature became a bare int (framework errors handled inside).
+- 1.1 healed the index-sync doc claims in docs/commands-guide.md ahead of
+  Phase 9 (seven per-command bullets plus intro sentences) because the 1.1
+  change made them false and Appendix A does not list them. A prose note
+  above the generated exit table states that guarded passthroughs exit
+  with git's own code, which is not a registry constant (deliberately
+  prose, not table rows, so the registration sweep stays meaningful).
+- Cosmetic leftovers, deliberately untouched: stale explanatory text in
+  the failure branches of two now-green investigation tests
+  (undo_index_sync_test.go's historic-cause message;
+  sequencer_conflict_test.go's RED/GREEN header). Phase 10's fresh audit
+  should not read those as live claims.
+
 ## Deliberately not done (with reasons)
 
 - **0.3/4.2 scrub mode-inference divergence left live.** After the 0.3 root
