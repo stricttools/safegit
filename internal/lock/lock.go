@@ -115,6 +115,13 @@ func Acquire(locksBaseDir, safegitDir, ref, op string, timeout time.Duration) (*
 }
 
 // tryCreate atomically creates the lock file with O_CREAT|O_EXCL and writes owner info.
+//
+// The owner info includes start=, the holder's process start identity, which is
+// what lets a later staleness check tell the original holder apart from an
+// unrelated process that inherited its PID. When the platform cannot report a
+// start time the field is omitted and reuse detection is simply absent (see
+// IsStale). started= is the same instant in human-readable form and carries no
+// decision.
 func tryCreate(path, op string) error {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
@@ -129,6 +136,12 @@ func tryCreate(path, op string) error {
 		op,
 		hostname,
 	)
+	if start, startErr := procutil.StartTime(os.Getpid()); startErr == nil {
+		content += fmt.Sprintf("start=%d\n", start.Ticks)
+		if !start.Wall.IsZero() {
+			content += fmt.Sprintf("started=%s\n", start.Wall.Format(time.RFC3339Nano))
+		}
+	}
 	_, err = f.WriteString(content)
 	return err
 }
@@ -143,13 +156,25 @@ func (l *RefLock) Release() error {
 // Returns (true, nil) if the lock is stale and can be reclaimed.
 // A corrupt or zero-length lock file (no parseable PID) is treated as stale.
 //
-// Hardening checks beyond simple PID liveness:
+// Reclaiming a lock whose holder is still running lets two operations mutate
+// the same ref at once, so every check beyond plain PID liveness must have
+// positive evidence before it declares a lock stale:
 //   - If the lock contains a host= field that differs from the local hostname,
 //     refuse to reclaim (the PID belongs to a different machine's namespace).
-//   - On Linux, if the process started after the lock was created, the PID was
-//     reused by a new process and the lock is stale.
+//   - PID reuse is decided by comparing the start identity recorded at acquire
+//     time against the current start time of whatever now holds that PID: a
+//     mismatch means the recorded holder is gone and an unrelated process
+//     inherited its PID. Nothing else -- and in particular no file timestamp --
+//     is evidence of reuse. When either side of the comparison is missing
+//     (no start= field, or a platform that cannot report start times) the check
+//     fails closed and the lock is left alone.
 func IsStale(path string) (bool, error) {
-	pid, err := ParsePID(path)
+	fields, err := parseLockFields(path)
+	if err != nil {
+		// Unreadable lock -- treat as stale
+		return true, nil
+	}
+	pid, err := pidFromFields(fields, path)
 	if err != nil {
 		// Corrupt lock (e.g. zero-length from a crash mid-create) -- treat as stale
 		return true, nil
@@ -157,8 +182,7 @@ func IsStale(path string) (bool, error) {
 
 	// If lock has a host= field and it doesn't match this machine, the PID
 	// check is meaningless (different PID namespace on NFS/shared FS).
-	lockHost := parseHost(path)
-	if lockHost != "" {
+	if lockHost := fields["host"]; lockHost != "" {
 		localHost, hostErr := os.Hostname()
 		if hostErr == nil && lockHost != localHost {
 			return false, nil
@@ -169,13 +193,26 @@ func IsStale(path string) (bool, error) {
 		return true, nil // process does not exist
 	}
 
-	// On Linux, detect PID reuse: if /proc/<pid> was created after the lock
-	// file, a different process now occupies the PID and the lock is stale.
-	if processStartedAfterLock(pid, path) {
-		return true, nil
-	}
+	return pidWasReused(pid, fields["start"]), nil
+}
 
-	return false, nil
+// pidWasReused reports whether the live process now occupying pid is a
+// different process instance than the one that recorded recordedStart when it
+// took the lock. Any inability to compare returns false: without evidence of
+// reuse the holder is assumed to be alive and the lock stays.
+func pidWasReused(pid int, recordedStart string) bool {
+	if recordedStart == "" {
+		return false
+	}
+	recorded, err := strconv.ParseUint(recordedStart, 10, 64)
+	if err != nil {
+		return false
+	}
+	current, err := procutil.StartTime(pid)
+	if err != nil {
+		return false
+	}
+	return current.Ticks != recorded
 }
 
 // ForceRelease unconditionally removes the lock file for a ref.
@@ -190,85 +227,58 @@ func ForceRelease(locksBaseDir, ref string) error {
 	return err
 }
 
+// parseLockFields reads a lock file's key=value lines. Every reader of a lock
+// file goes through it, so the file's format is described in exactly one place.
+// Unknown keys are kept; a line without '=' is ignored.
+func parseLockFields(lockPath string) (map[string]string, error) {
+	f, err := os.Open(lockPath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	fields := make(map[string]string)
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		key, value, ok := strings.Cut(scanner.Text(), "=")
+		if ok {
+			fields[key] = value
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, err
+	}
+	return fields, nil
+}
+
+// pidFromFields extracts the pid from already-parsed lock fields.
+func pidFromFields(fields map[string]string, lockPath string) (int, error) {
+	pidStr, ok := fields["pid"]
+	if !ok {
+		return 0, fmt.Errorf("no pid= line in lock file %s", lockPath)
+	}
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid pid in lock file: %q", pidStr)
+	}
+	return pid, nil
+}
+
 // ParsePID reads the lock file and extracts the pid= value.
 func ParsePID(lockPath string) (int, error) {
-	f, err := os.Open(lockPath)
+	fields, err := parseLockFields(lockPath)
 	if err != nil {
 		return 0, err
 	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "pid=") {
-			pidStr := strings.TrimPrefix(line, "pid=")
-			pid, err := strconv.Atoi(pidStr)
-			if err != nil {
-				return 0, fmt.Errorf("invalid pid in lock file: %q", pidStr)
-			}
-			return pid, nil
-		}
-	}
-	return 0, fmt.Errorf("no pid= line in lock file %s", lockPath)
-}
-
-// parseHost reads the lock file and extracts the host= value.
-// Returns "" if the field is missing or the file can't be read.
-func parseHost(lockPath string) string {
-	f, err := os.Open(lockPath)
-	if err != nil {
-		return ""
-	}
-	defer f.Close()
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "host=") {
-			return strings.TrimPrefix(line, "host=")
-		}
-	}
-	return ""
-}
-
-// processStartedAfterLock checks whether the process with the given PID
-// started after the lock file was created. If so, the PID was reused and the
-// lock is stale. Only works on Linux (reads /proc/<pid>); returns false on
-// other platforms or on any error (fail-open: assume no reuse).
-func processStartedAfterLock(pid int, lockPath string) bool {
-	procInfo, err := os.Stat(fmt.Sprintf("/proc/%d", pid))
-	if err != nil {
-		return false // /proc not available or PID gone; can't determine
-	}
-	lockInfo, err := os.Stat(lockPath)
-	if err != nil {
-		return false
-	}
-	// If the process started after the lock was created, PID was reused.
-	return procInfo.ModTime().After(lockInfo.ModTime())
+	return pidFromFields(fields, lockPath)
 }
 
 // describeHolder returns a human-readable description of the lock holder.
 func describeHolder(lockPath string) string {
-	f, err := os.Open(lockPath)
+	fields, err := parseLockFields(lockPath)
 	if err != nil {
 		return "unknown"
 	}
-	defer f.Close()
-
-	var pid, op, host string
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		line := scanner.Text()
-		switch {
-		case strings.HasPrefix(line, "pid="):
-			pid = strings.TrimPrefix(line, "pid=")
-		case strings.HasPrefix(line, "op="):
-			op = strings.TrimPrefix(line, "op=")
-		case strings.HasPrefix(line, "host="):
-			host = strings.TrimPrefix(line, "host=")
-		}
-	}
-	return fmt.Sprintf("pid=%s op=%s host=%s", pid, op, host)
+	return fmt.Sprintf("pid=%s op=%s host=%s started=%s",
+		fields["pid"], fields["op"], fields["host"], fields["started"])
 }

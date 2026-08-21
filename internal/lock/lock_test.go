@@ -110,29 +110,39 @@ func TestIsStale(t *testing.T) {
 	}
 }
 
-func TestParseHost(t *testing.T) {
+func TestParseLockFields(t *testing.T) {
 	dir := t.TempDir()
 
-	// Normal lock file with host= field
+	// Normal lock file with every field
 	f := filepath.Join(dir, "withhost.lock")
-	os.WriteFile(f, []byte("pid=42\nts=2026-01-01T00:00:00Z\nop=test\nhost=myhost\n"), 0644)
-	got := parseHost(f)
-	if got != "myhost" {
-		t.Errorf("parseHost = %q, want %q", got, "myhost")
+	os.WriteFile(f, []byte("pid=42\nts=2026-01-01T00:00:00Z\nop=test\nhost=myhost\nstart=12345\n"), 0644)
+	fields, err := parseLockFields(f)
+	if err != nil {
+		t.Fatalf("parseLockFields: %v", err)
+	}
+	for key, want := range map[string]string{"pid": "42", "op": "test", "host": "myhost", "start": "12345"} {
+		if fields[key] != want {
+			t.Errorf("fields[%q] = %q, want %q", key, fields[key], want)
+		}
 	}
 
-	// Lock file without host= field (backward compat)
+	// Lock file without host= or start= fields
 	noHost := filepath.Join(dir, "nohost.lock")
 	os.WriteFile(noHost, []byte("pid=42\nts=2026-01-01T00:00:00Z\nop=test\n"), 0644)
-	got = parseHost(noHost)
-	if got != "" {
-		t.Errorf("parseHost = %q, want empty string", got)
+	fields, err = parseLockFields(noHost)
+	if err != nil {
+		t.Fatalf("parseLockFields: %v", err)
+	}
+	if fields["host"] != "" {
+		t.Errorf("host = %q, want empty string", fields["host"])
+	}
+	if fields["start"] != "" {
+		t.Errorf("start = %q, want empty string", fields["start"])
 	}
 
 	// Nonexistent file
-	got = parseHost(filepath.Join(dir, "nope.lock"))
-	if got != "" {
-		t.Errorf("parseHost on missing file = %q, want empty", got)
+	if _, err := parseLockFields(filepath.Join(dir, "nope.lock")); err == nil {
+		t.Error("expected an error reading a missing lock file")
 	}
 }
 
