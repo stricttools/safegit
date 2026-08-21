@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/smm-h/safegit/internal/git"
 )
@@ -378,7 +379,11 @@ func SetConfigValue(cfg *Config, key, value string) error {
 		return fmt.Errorf("unknown config key: %s", key)
 	}
 
-	intVal, err := parseInt(value)
+	// strconv.Atoi parses the WHOLE string or fails. A scan
+	// (fmt.Sscanf("%d")) stops at the first non-digit and reports success on
+	// the prefix it consumed, so `config set push.retryAttempts 5abc` used to
+	// store 5 -- a typo silently accepted as a value the operator never typed.
+	intVal, err := strconv.Atoi(value)
 	if err != nil {
 		return fmt.Errorf("invalid value %q for %s: must be an integer", value, key)
 	}
@@ -398,10 +403,4 @@ func ValidConfigKeys() []string {
 		"hooks.preprepush.timeoutSeconds",
 		"push.retryAttempts",
 	}
-}
-
-func parseInt(s string) (int, error) {
-	var v int
-	_, err := fmt.Sscanf(s, "%d", &v)
-	return v, err
 }
