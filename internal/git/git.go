@@ -185,20 +185,38 @@ func CommitTree(ctx context.Context, treeSHA, parentSHA, message string) (string
 // git refuses with "reference already exists" when the ref is already there.
 const ZeroSHA = "0000000000000000000000000000000000000000"
 
+// ErrNoExpectedValue is returned by UpdateRef and DeleteRef when the caller
+// supplies no expected old value.
+//
+// It used to mean "omit the old-value argument", which is git's spelling of an
+// UNCONDITIONAL write: the ref moved to whatever the caller computed no matter
+// what another process had done to it in the meantime. That is precisely the
+// compare-and-swap safegit exists to provide, so the empty string is now a
+// refusal rather than a mode. A caller that means "this ref must not exist yet"
+// says so with ZeroSHA.
+var ErrNoExpectedValue = errors.New("update-ref requires an expected old value; pass git.ZeroSHA to require that the ref does not exist yet")
+
 // UpdateRef atomically updates a ref using compare-and-swap.
-// oldSHA is the expected current value; if empty, the ref must not exist.
+//
+// oldSHA is the expected current value and is MANDATORY. Pass ZeroSHA to
+// require that the ref does not exist yet, which git enforces by refusing with
+// "reference already exists".
 func UpdateRef(ctx context.Context, ref, newSHA, oldSHA string) error {
-	args := []string{"update-ref", ref, newSHA}
-	if oldSHA != "" {
-		args = append(args, oldSHA)
+	if oldSHA == "" {
+		return ErrNoExpectedValue
 	}
-	_, _, err := Run(ctx, args...)
+	_, _, err := Run(ctx, "update-ref", ref, newSHA, oldSHA)
 	return err
 }
 
 // DeleteRef atomically deletes a ref using compare-and-swap.
-// oldSHA is the expected current value of the ref.
+//
+// oldSHA is the expected current value and is MANDATORY, for the same reason it
+// is on UpdateRef: without it git deletes whatever the ref points at now.
 func DeleteRef(ctx context.Context, ref, oldSHA string) error {
+	if oldSHA == "" {
+		return ErrNoExpectedValue
+	}
 	_, _, err := Run(ctx, "update-ref", "-d", ref, oldSHA)
 	return err
 }

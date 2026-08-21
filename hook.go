@@ -176,7 +176,8 @@ func synthesizeHookStdin(ctx context.Context) ([]byte, error) {
 		return nil, fmt.Errorf("resolving %s: %w", headRef, err)
 	}
 
-	nullSHA := "0000000000000000000000000000000000000000"
-	line := fmt.Sprintf("%s %s %s %s\n", headRef, localSHA, headRef, nullSHA)
+	// The remote-side SHA a synthesized pre-push line reports: the all-zero
+	// object name, git's "this ref does not exist there" convention.
+	line := fmt.Sprintf("%s %s %s %s\n", headRef, localSHA, headRef, git.ZeroSHA)
 	return []byte(line), nil
 }

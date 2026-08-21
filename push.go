@@ -33,8 +33,10 @@ const (
 	pushModeBoth                     // push all branches and all tags
 )
 
-// nullSHA is the zero SHA used when a ref does not exist on the remote.
-const nullSHA = "0000000000000000000000000000000000000000"
+// nullSHA is the zero SHA used when a ref does not exist on the remote. It is
+// the same all-zero object name git.ZeroSHA carries into update-ref; there is
+// one convention and one spelling of it.
+const nullSHA = git.ZeroSHA
 
 // pushRefInfo describes a single ref being pushed.
 type pushRefInfo struct {
@@ -350,7 +352,6 @@ func resolveTagRefs(ctx context.Context, remote string) ([]pushRefInfo, error) {
 }
 
 func getRemoteSHA(ctx context.Context, remote, ref string) string {
-	nullSHA := "0000000000000000000000000000000000000000"
 	stdout, _, err := git.Run(ctx, "ls-remote", remote, ref)
 	if err != nil || stdout == "" {
 		return nullSHA
