@@ -57,7 +57,10 @@ deliberate.
 
 ## Phase 0 -- Groundwork
 
-Subphases 0.1-0.8 are mutually independent and may run in parallel.
+Subphases 0.1-0.8 are logically independent, but several share files
+(0.5 and 0.8 both edit `internal/lock`; 0.6 and 0.7 both edit `doctor.go`;
+0.2 and 0.3 both rework `internal/git`): run overlapping pairs sequentially
+or under one implementor; the rest may run in parallel.
 
 ### 0.1 Test-suite baseline and helper consolidation
 
@@ -259,9 +262,9 @@ refuses on a corrupted log line; doctor reports the count.
 
 **Verify:** goreleaser lists linux+darwin in both copies and
 `GOOS=windows go build ./...` fails; exactly one workflow named CI and one
-push-triggered test workflow with the matrix; an N-iteration parallel
-first-init test (state N, e.g. 50 x 8-way) shows no flake; version-floor
-unit tests.
+push-triggered test workflow with the matrix; a parallel first-init test
+with a stated iteration count and parallelism (e.g. 50 iterations x 8
+concurrent) shows no flake; version-floor unit tests.
 
 ### 0.8 Lock staleness: stop stealing live locks
 
@@ -820,6 +823,9 @@ stores across the cascade.
   legacy-location safegit-owned names and NEVER touches the tracked
   store.
 - Update location preconditions inside `hook_safety_test.go:199-202, 243`.
+- `hook migrate` is a new subcommand: it joins the pinned command
+  registries (`classification_test.go:70-117` and the group tree) like
+  every other command this campaign adds.
 
 **Verify (red going green):**
 `TestHookInstallArbitraryBasenameIsDiscoverable`,
@@ -986,17 +992,21 @@ committed exemption works, uncommitted does not; marker-size and diff3
 fidelity; delete/modify and add/add conclusions pass without region
 verification but fail structural checks when garbage markers are added.
 
-### 6.4 Queued-pick delegation `[%%]`
+### 6.4 Queued-sequence delegation `[%%]`
 
-`cherry-pick-continue` with the sequencer dir present refuses native
-authorship and delegates: same staging into the temp copy, same
-completeness and marker checks, then git's own `cherry-pick --continue`
-with `GIT_INDEX_FILE` at the copy (probed: git advances its queue and
-leaves the shared index stale -- reconciled afterward via the 1.3 helper).
+`cherry-pick-continue` AND `revert-continue` with the sequencer dir
+present refuse native authorship and delegate: same staging into the temp
+copy, same completeness and marker checks, then git's own
+`cherry-pick --continue` / `revert --continue` with `GIT_INDEX_FILE` at
+the copy. For cherry-pick this was probed (git advances its queue and
+leaves the shared index stale -- reconciled afterward via the 1.3 helper);
+for revert the same behavior is EXPECTED (shared sequencer machinery) but
+must be probe-verified as this subphase's first task before relying on it.
 The delegation is stated in output.
 
-**Verify:** NEW -- multi-pick with a mid-queue conflict concludes, the
-queue completes, the shared index ends clean, output names the delegation.
+**Verify:** NEW -- multi-pick AND multi-revert with a mid-queue conflict
+conclude, the queue completes, the shared index ends clean, output names
+the delegation; the revert `GIT_INDEX_FILE` probe result is recorded.
 
 ### 6.5 Passthrough texts and the revert restructure
 
@@ -1104,6 +1114,9 @@ registries updated.
 
 Single-commit `safegit revert` of a commit carrying `Moved:` records emits
 the inverse records (new -> old) in the revert commit authored via 6.5.
+Multi-commit reverts (the 6.4 delegation path, where git authors the
+commits) emit NO records -- stated in the revert docs, consistent with
+records existing only on pipeline-authored commits.
 
 **Verify:** NEW -- revert of a move commit carries the inverse records;
 projection across the revert answers correctly.
@@ -1275,7 +1288,7 @@ verification, "fix" rows need edits. Generated files heal via
 | 36 | main.go:121 | "31 commands" | delete the number |
 | 37 | main.go:241; docs/commands-guide.md:159, 205-215 | force-with-lease help + semantics + push exit table | rewrite to pinned-lease semantics + consent (8.1/8.2) |
 | 38 | docs/commands-guide.md:334-341 | backup exit table decline row contradiction | fix to decline=1 |
-| 39 | docs/commands-guide.md:387-425, 500, 580-609 | scrub file os.Stat mode inference examples; scrub verify policy-store text | rewrite to mode flags (4.2) and stateless verify (4.3) |
+| 39 | docs/commands-guide.md:387-425, 500, 580-609; docs/_CLAUDE.md:73 | scrub file os.Stat mode inference examples; scrub verify policy-store text (incl. the template's verify description) | rewrite to mode flags (4.2) and stateless verify (4.3) |
 | 40 | docs/commands-guide.md:27; docs/_CLAUDE.md consequential list | "exactly four" consequential commands | update if 8.2's conditional form changes the count phrasing |
 | 41 | docs/req.md:17 | lock must notify without polling | annotate as historical requirement; implementation polls with backoff |
 | 42 | docs/_CLAUDE.md:34-37 | stress command docs | update for the 0.7 env re-keying |
