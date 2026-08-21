@@ -150,15 +150,6 @@ func parentsOf(t *testing.T, dir, ref string) []string {
 	return fields[1:]
 }
 
-func contains(hay []string, needle string) bool {
-	for _, h := range hay {
-		if h == needle {
-			return true
-		}
-	}
-	return false
-}
-
 // A conflicted merge with its conflicts resolved must be concludable by some
 // safegit command, producing a genuine two-parent merge commit that carries the
 // merge's whole staged result.
@@ -197,7 +188,7 @@ func TestMergeCanBeConcludedThroughSafegit(t *testing.T) {
 		}
 
 		paths := testutil.TreePaths(t, fx.dir, head)
-		if !contains(paths, "feature-only.txt") {
+		if !testutil.Contains(paths, "feature-only.txt") {
 			problems = append(problems, "tree lost feature-only.txt (has: "+strings.Join(paths, ", ")+")")
 		}
 		if blob := testutil.Git(t, fx.dir, "show", head+":conflicted.txt"); !strings.Contains(blob, "resolved") {
@@ -258,7 +249,7 @@ func TestCommitWithPathspecRefusedDuringMerge(t *testing.T) {
 			"  MERGE_HEAD still present: %t\n"+
 			"  stdout: %s",
 			head, parents, fx.mainSHA, fx.featureSHA,
-			paths, contains(paths, "feature-only.txt"),
+			paths, testutil.Contains(paths, "feature-only.txt"),
 			!mergeStateGone(t, fx.dir), oneLine(stdout))
 	}
 

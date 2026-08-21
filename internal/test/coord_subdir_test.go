@@ -65,15 +65,6 @@ func coordSubdirTrackedPaths(t *testing.T, dir string) []string {
 	return testutil.SplitLines(strings.TrimSpace(testutil.GitRaw(t, dir, "ls-files")))
 }
 
-func coordSubdirContains(haystack []string, needle string) bool {
-	for _, h := range haystack {
-		if h == needle {
-			return true
-		}
-	}
-	return false
-}
-
 // coordSubdirIgnoreRepo builds a repo where config.env is tracked AND
 // gitignored (committed first, gitignored afterwards) and sub/secret.txt
 // carries the same secret. Both files contain the literal "production_key".
@@ -293,7 +284,7 @@ func TestCoordSubdirScrubProtectsTrackedIgnoredFromRoot(t *testing.T) {
 	if string(disk) != "SECRET=production_key\n" {
 		t.Errorf("on-disk config.env = %q, want the untouched local content", string(disk))
 	}
-	if tracked := coordSubdirTrackedPaths(t, dir); coordSubdirContains(tracked, "config.env") {
+	if tracked := coordSubdirTrackedPaths(t, dir); testutil.Contains(tracked, "config.env") {
 		t.Errorf("config.env should have been untracked from the index; tracked: %v", tracked)
 	}
 	if content, ok := testutil.Show(t, dir, "HEAD", "config.env"); !ok || content != "SECRET=REDACTED\n" {
@@ -332,7 +323,7 @@ func TestCoordSubdirScrubProtectsTrackedIgnoredFromSubdir(t *testing.T) {
 	case string(disk) != "SECRET=production_key\n":
 		t.Errorf("on-disk config.env = %q, want the untouched local content", string(disk))
 	}
-	if tracked := coordSubdirTrackedPaths(t, dir); coordSubdirContains(tracked, "config.env") {
+	if tracked := coordSubdirTrackedPaths(t, dir); testutil.Contains(tracked, "config.env") {
 		t.Errorf("config.env should have been untracked from the index; tracked: %v", tracked)
 	}
 	if content, ok := testutil.Show(t, dir, "HEAD", "config.env"); !ok || content != "SECRET=REDACTED\n" {
@@ -362,7 +353,7 @@ func TestCoordSubdirScrubFromSubdirPreservesHistoryPaths(t *testing.T) {
 
 	before := testutil.TreePaths(t, dir, "HEAD")
 	for _, want := range []string{".gitignore", "config.env", "sub/secret.txt"} {
-		if !coordSubdirContains(before, want) {
+		if !testutil.Contains(before, want) {
 			t.Fatalf("precondition: %s missing from HEAD tree; got %v", want, before)
 		}
 	}
@@ -382,7 +373,7 @@ func TestCoordSubdirScrubFromSubdirPreservesHistoryPaths(t *testing.T) {
 	for _, sha := range revListReverse(t, dir) {
 		paths := testutil.TreePaths(t, dir, sha)
 		for _, want := range []string{".gitignore", "config.env", "sub/secret.txt"} {
-			if !coordSubdirContains(paths, want) {
+			if !testutil.Contains(paths, want) {
 				t.Errorf("commit %s: %s vanished from the tree after a scrub issued from a subdirectory; tree now: %v", sha[:8], want, paths)
 			}
 		}
