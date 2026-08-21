@@ -170,6 +170,17 @@ func RevTry(t *testing.T, dir, rev string) string {
 	return strings.TrimSpace(out)
 }
 
+// Parents returns the parent SHAs of a commit, in order. A commit that cannot
+// be read at all fails the test; a root commit yields an empty slice.
+func Parents(t *testing.T, dir, ref string) []string {
+	t.Helper()
+	fields := strings.Fields(Git(t, dir, "rev-list", "--parents", "-n", "1", ref))
+	if len(fields) == 0 {
+		t.Fatalf("rev-list --parents produced nothing for %s", ref)
+	}
+	return fields[1:]
+}
+
 // Show returns the verbatim content of a repo-relative path at rev, and
 // whether that path exists in that revision.
 func Show(t *testing.T, dir, rev, path string) (string, bool) {
