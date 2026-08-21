@@ -1,8 +1,10 @@
 package lock
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -51,6 +53,63 @@ func TestAcquireConflict(t *testing.T) {
 	_, err = Acquire(sgDir, sgDir, "refs/heads/main", "commit", 50*time.Millisecond)
 	if err == nil {
 		t.Fatal("expected timeout error on conflicting acquire")
+	}
+}
+
+// TestAcquireTimeoutIsTyped pins the shape callers depend on: a contended
+// acquire fails with *TimeoutError carrying the ref and the holder record, so
+// safegit can report it as its own exit code without matching message text.
+func TestAcquireTimeoutIsTyped(t *testing.T) {
+	sgDir := setupSafegitDir(t)
+
+	held, err := Acquire(sgDir, sgDir, "safegit/rewrite", "scrub-file", 5*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer held.Release()
+
+	_, err = Acquire(sgDir, sgDir, "safegit/rewrite", "scrub-match", 50*time.Millisecond)
+	if err == nil {
+		t.Fatal("expected a timeout on the contended acquire")
+	}
+	if !IsTimeout(err) {
+		t.Fatalf("IsTimeout(%v) = false, want true", err)
+	}
+	var te *TimeoutError
+	if !errors.As(err, &te) {
+		t.Fatalf("errors.As did not find a *TimeoutError in %v", err)
+	}
+	if te.Ref != "safegit/rewrite" {
+		t.Errorf("TimeoutError.Ref = %q, want safegit/rewrite", te.Ref)
+	}
+	if !strings.Contains(te.Holder, "op=scrub-file") {
+		t.Errorf("TimeoutError.Holder = %q, want it to name the holding operation", te.Holder)
+	}
+	if te.Timeout != 50*time.Millisecond {
+		t.Errorf("TimeoutError.Timeout = %v, want 50ms", te.Timeout)
+	}
+	if !strings.Contains(err.Error(), "timeout acquiring lock on safegit/rewrite") {
+		t.Errorf("error text = %q, want it to name the ref", err.Error())
+	}
+}
+
+// TestNonTimeoutAcquireFailureIsNotTyped keeps IsTimeout honest: a lock that
+// fails for a reason other than contention must not be reported as a timeout,
+// or the exit code would lie about what happened.
+func TestNonTimeoutAcquireFailureIsNotTyped(t *testing.T) {
+	sgDir := setupSafegitDir(t)
+	// A regular file where the ref's lock directory needs to be makes MkdirAll
+	// fail, which is a lock failure that is not contention.
+	blocker := filepath.Join(sgDir, "locks", "safegit")
+	if err := os.WriteFile(blocker, []byte("not a directory\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Acquire(sgDir, sgDir, "safegit/rewrite", "scrub-file", 50*time.Millisecond)
+	if err == nil {
+		t.Fatal("expected an error when the locks directory cannot be created")
+	}
+	if IsTimeout(err) {
+		t.Errorf("IsTimeout(%v) = true, but the failure was not contention", err)
 	}
 }
 
