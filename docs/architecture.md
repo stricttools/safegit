@@ -79,16 +79,18 @@ Required fields: `ts`, `pid`, `op`. Other fields are op-specific. Writes use `O_
 
 ### Lock file format
 
-Lock files at `locks/refs/heads/<branch>.lock` are short text files created atomically via `O_CREAT|O_EXCL` (exclusive create) to serialize ref updates on a per-branch basis. Each lock file records the holder's PID, hostname, timestamp, and operation type, providing the information needed for liveness checks, stale lock recovery, and diagnostic inspection by `safegit doctor`.
+Lock files at `locks/refs/heads/<branch>.lock` are short text files created atomically via `O_CREAT|O_EXCL` (exclusive create) to serialize ref updates on a per-branch basis. Each lock file records the holder's PID, hostname, timestamp, operation type, and process start time, providing the information needed for liveness checks, stale lock recovery, and diagnostic inspection by `safegit doctor`.
 
 ```
 pid=12345
 ts=2026-04-26T11:39:42.123Z
 op=commit
 host=hostname.local
+start=736936933
+started=2026-04-26T11:39:42.120Z
 ```
 
-`pid` and `host` are the keys for liveness. `op` is informational (for `safegit doctor` and operator inspection).
+`pid`, `host` and `start` are the keys for liveness: `start` is the holder's start time in clock ticks since boot (from `/proc/<pid>/stat`), which pins the PID to one specific process instance so a recycled PID cannot pass as the original holder. `op` and `started` are informational (for `safegit doctor` and operator inspection).
 
 ## Commit Pipeline
 

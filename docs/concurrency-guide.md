@@ -62,16 +62,18 @@ safegit uses per-ref file locks, not a global repository lock. This means commit
 
 ### Lock file format
 
-Each lock file is a plain text file recording the holder's identity with PID, timestamp, operation type, and hostname fields that enable liveness checks and diagnostics when a lock appears stale or is held longer than expected:
+Each lock file is a plain text file recording the holder's identity with PID, timestamp, operation type, hostname, and process start time -- the fields that enable liveness checks and diagnostics when a lock appears stale or is held longer than expected:
 
 ```
 pid=12345
 ts=2026-04-26T11:39:42.123Z
 op=commit
 host=myhost
+start=736936933
+started=2026-04-26T11:39:42.120Z
 ```
 
-The `pid` and `host` fields enable liveness checks. The `op` field is informational for diagnostics.
+The `pid`, `host` and `start` fields enable liveness checks. `start` is the holder's start time in clock ticks since boot, read from `/proc/<pid>/stat`; it distinguishes the holder from a later process that inherits the same PID. The `op` and `started` fields are informational for diagnostics (`started` is `start` rendered as wall-clock time and is never compared). On platforms that cannot report a process start time, `start` and `started` are absent.
 
 ### Stale lock recovery
 
@@ -81,7 +83,7 @@ When a process crashes while holding a lock (killed by the OS, power failure, or
 
 2. **Host check.** If the lock file contains a `host=` field that differs from the local hostname, the PID check is skipped -- the PID belongs to a different machine's namespace (relevant for NFS/shared filesystems).
 
-3. **PID reuse detection (Linux).** On Linux, if `/proc/<pid>` was created after the lock file, the PID was recycled by the kernel and the lock is stale despite the PID appearing alive.
+3. **PID reuse detection (Linux).** The `start` value recorded when the lock was taken is compared against the current start time of whatever process now holds that PID. A mismatch means the kernel recycled the PID and the lock is stale despite the PID appearing alive. A match means the original holder is still running, whatever the file timestamps say. When either side of the comparison is unavailable -- an old lock file with no `start` field, or a platform without `/proc` -- the check fails closed and the lock is left alone.
 
 4. **Corrupt lock files.** A zero-length or unparseable lock file (from a crash mid-write) is treated as stale.
 
