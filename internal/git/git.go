@@ -488,10 +488,15 @@ func CommonGitDir(ctx context.Context) (string, error) {
 }
 
 // CommonGitDirOf returns the common git directory for a given gitDir.
-// Unlike CommonGitDir, this does not depend on the process working directory;
-// it sets GIT_DIR explicitly so the result is always relative to gitDir.
+//
+// Unlike CommonGitDir, this does not depend on the process working directory:
+// the repository is an argument, so the call goes through RunWithGitDir -- the
+// declared explicit-directory exemption from the repository-root pin -- which
+// sets GIT_DIR and runs git in that directory. An absolute gitDir therefore
+// yields an absolute answer; a relative one yields an answer relative to gitDir
+// itself, never to this process's working directory.
 func CommonGitDirOf(ctx context.Context, gitDir string) (string, error) {
-	out, _, err := RunWithEnv(ctx, []string{"GIT_DIR=" + gitDir}, "rev-parse", "--git-common-dir")
+	out, _, err := RunWithGitDir(ctx, gitDir, "", "rev-parse", "--git-common-dir")
 	if err != nil {
 		return "", err
 	}

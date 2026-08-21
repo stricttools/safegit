@@ -141,6 +141,76 @@ func TestExtraEnvIsAppendedToTheProcessEnvironment(t *testing.T) {
 	}
 }
 
+// TestEnvCannotSmuggleADirectoryOverride: the exemption pairing inspects the
+// GitDir, WorkTree and Dir fields, so a directory override spelled as an
+// environment entry would reach another repository with nothing declared. The
+// boundary refuses all three spellings.
+func TestEnvCannotSmuggleADirectoryOverride(t *testing.T) {
+	for _, name := range []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"} {
+		_, err := Command(context.Background(), Spec{
+			Args: []string{"rev-parse", "--git-common-dir"},
+			Env:  []string{name + "=/other/.git"},
+		})
+		if err == nil {
+			t.Errorf("Command accepted %s in Spec.Env", name)
+			continue
+		}
+		if !strings.Contains(err.Error(), name) {
+			t.Errorf("refusal should name %s; got %v", name, err)
+		}
+		if !strings.Contains(err.Error(), "exemption table") {
+			t.Errorf("refusal should point at the declared fields and the exemption table; got %v", err)
+		}
+	}
+}
+
+// TestEnvDirectoryRefusalDoesNotCatchLookalikes: the refusal is on the variable
+// NAME, so a variable that merely starts with one of the banned names (or
+// carries one in its value) is untouched.
+func TestEnvDirectoryRefusalDoesNotCatchLookalikes(t *testing.T) {
+	cmd, err := Command(context.Background(), Spec{
+		Args: []string{"write-tree"},
+		Env:  []string{"GIT_DIR_SUFFIX=/other/.git", "GIT_INDEX_FILE=/idx/GIT_DIR=x"},
+	})
+	if err != nil {
+		t.Fatalf("Command: %v", err)
+	}
+	assertEnv(t, cmd.Env, "GIT_DIR_SUFFIX=/other/.git")
+	assertEnv(t, cmd.Env, "GIT_INDEX_FILE=/idx/GIT_DIR=x")
+}
+
+// TestExemptSpecStillGetsTheCommonEnvironmentTail is the property the comment
+// above the environment assembly states: exemption from the DIRECTORY pin is
+// exemption from nothing else. A spec that targets its own repository must
+// still receive every other override the boundary assembles -- today the extra
+// environment entries, tomorrow whatever else travels the same way -- so the
+// explicit-directory branch must not short-circuit the tail.
+func TestExemptSpecStillGetsTheCommonEnvironmentTail(t *testing.T) {
+	ctx := WithRoot(context.Background(), "/repo/root")
+	cmd, err := Command(ctx, Spec{
+		Args:     []string{"rev-list", "--all"},
+		Exempt:   ExemptRunWithGitDir,
+		GitDir:   "/other/.git",
+		WorkTree: "/other",
+		Env:      []string{"GIT_INDEX_FILE=/idx/tmp", "GIT_TERMINAL_PROMPT=0"},
+	})
+	if err != nil {
+		t.Fatalf("Command: %v", err)
+	}
+	// The directory targeting the exemption covers...
+	assertEnv(t, cmd.Env, "GIT_DIR=/other/.git")
+	assertEnv(t, cmd.Env, "GIT_WORK_TREE=/other")
+	if cmd.Dir != "/other" {
+		t.Errorf("cmd.Dir = %q, want the explicitly targeted work tree", cmd.Dir)
+	}
+	// ...and the spec's own environment, which it does not.
+	assertEnv(t, cmd.Env, "GIT_INDEX_FILE=/idx/tmp")
+	assertEnv(t, cmd.Env, "GIT_TERMINAL_PROMPT=0")
+	if len(cmd.Env) <= 4 {
+		t.Errorf("the subprocess environment must extend the process one, got %v", cmd.Env)
+	}
+}
+
 func TestArgvAnyCarriesBinaryAndPrefix(t *testing.T) {
 	argv, err := ArgvAny(ExemptGitMutation, "checkout", "other")
 	if err != nil {
