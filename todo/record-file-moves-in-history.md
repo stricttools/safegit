@@ -5,184 +5,175 @@
 Git stores snapshots, not operations. A move is never recorded: the commit
 contains a deletion at the old path and an addition at the new path, and every
 consumer (git log --follow, diff -M/-C, blame) reconstructs the move at read
-time with similarity heuristics. Those heuristics fail when a file is moved and
-edited in the same commit, behave differently across consumers and settings,
-and get slower and less reliable as history grows. Directory moves are worse:
-they are only ever inferred file-by-file.
+time with similarity heuristics that are allowed to be wrong. safegit
+additionally has automatic move detection inside commit: a newly-added file
+whose blob matches a parent-tree blob triggers an auto-staged deletion of the
+"old" path.
 
-safegit owns the commit path for its repositories, which is exactly the
-position from which a durable, authoritative record of moves can be produced.
+An earlier version of this file surveyed ten candidate approaches. The design
+has since been settled; this file records the decisions and the remaining open
+points. Red tests for the defects in the current behavior are committed in
+internal/test/moves_cross_session_test.go.
 
-## Problem
+## Decision: automatic move detection is removed
 
-There is no trustworthy, durable answer to "when did this file live at that
-path, and where did it go?" Everything downstream that wants file identity
-across renames (blame, per-file history, changelog tooling, scrub targeting a
-file across its whole life) is built on a heuristic that is allowed to be
-wrong.
+Adversarial testing proved the detection heuristic unsafe by construction: a
+same-session move and another session's unrelated uncommitted deletion produce
+byte-identical repository state, so no similarity floor, blob-uniqueness rule,
+or directory restriction can tell them apart -- the discriminating information
+does not exist. Measured consequences (all red-tested): detection
+deterministically adopts another session's deletion into an unrelated commit
+(empty files collide universally), ties between victims are settled
+alphabetically, the adoption is completely invisible under --quiet and --json,
+the stderr notice asserts a rename that never happened, and the victim session
+is afterwards hard-blocked from committing its own deletion.
 
-## Approaches
+Automatic detection and its auto-staged deletions are deleted entirely,
+including the detectMoves pass in internal/commit/moves.go and its invocation
+from both commit and amend. Moves become declared.
 
-Ten options, ordered from pure discipline to restructuring the problem away.
-Each is more engineered than the last. They are not all mutually exclusive;
-see the recommendation at the end.
+## Decision: moves are declared, two ways
 
-### 1. Convention only
+1. **`safegit mv <old> <new>`** -- a new verb that performs the filesystem
+   move and commits it in one operation (one commit per move; safegit has no
+   persistent staging area by design, so a stage-only mv has no home in the
+   architecture). The move record is written as part of the commit it creates.
+2. **Explicit both-path pairing in `safegit commit`** -- when the caller names
+   BOTH the old path (absent from disk, tracked in the parent) and the new
+   path in the pathspec, and the old path's blob in the parent commit hashes
+   identically to the new path's blob, the commit records the pair as a move.
+   No blob match, no record. This makes `mv old new` via the shell followed by
+   `safegit commit -- old new` produce a record, closing the hole where an
+   ordinary manual move went unrecorded.
 
-Rule: every move happens in its own commit, unmixed with content edits, with a
-message convention like `move: old/path -> new/path`. Git's rename detection
-then works at 100% similarity and the message is the human-readable record.
+Anything else (a hand-written record via the existing `--trailer` flag) is
+possible because the record format is an open convention, but safegit vouches
+only for records it writes itself.
 
-- Pros: zero tooling, works today.
-- Cons: relies entirely on discipline; one session mixing a move with an edit
-  silently breaks it; nothing machine-checkable.
+## Decision: storage is commit-message trailers
 
-### 2. Commit message trailers
+Each record is a `Moved:` trailer on the commit that performs the move. One
+trailer line per record; repeated keys are the normal trailer idiom (as with
+Signed-off-by) and git's tooling extracts them per-line natively. A
+from/to-split across two trailer keys was considered and rejected: nothing
+guarantees two lines stay adjacent or both present, so pairing by position is
+fragile, while a single line is a self-contained record that survives
+reordering and filtering. A single key carrying a JSON array of all moves was
+also rejected: it fights the line-oriented carrier, collapses per-record
+extraction and grep, and makes corrections unable to reference one record.
 
-Machine-readable form of the same: a `Moved: old/path -> new/path` trailer per
-move, parseable with `git interpret-trailers`. `internal/trailer` already
-implements trailer injection and parsing.
+Why trailers over any separate ledger (local journal, tracked file, notes ref,
+dedicated ref):
 
-- Pros: parseable; near-zero new code.
-- Cons: hand-written, so it can be forgotten or wrong; still trust-based.
+- **Concurrency-safe by construction.** No shared mutable file exists, so
+  concurrent sessions cannot conflict over the record store -- the hazard
+  safegit exists to remove. A tracked central file appended by every moving
+  commit is merge conflicts by construction and would have to be silently
+  staged into commits whose pathspec never named it.
+- **Rewrite-immune.** The record rides the commit through scrub, and being
+  paths-only it never needs hash remapping.
+- **Undo-correct automatically.** `safegit undo` of a move commit removes the
+  record with the commit; no compensation logic. A later semantic move-back is
+  simply a new record.
+- **DAG-anchored by construction.** "As of commit X" is answered by X's
+  position in history; no anchors are stored.
+- **Queryable today.** `safegit scan --target trailers` already searches
+  trailers across all of history.
 
-### 3. A `safegit mv` command
+Multi-hop history (A to B in one commit, B to C in a later one) is the chain
+of per-commit records; nothing is ever overwritten because each record lives
+in an immutable commit.
 
-The tool performs the filesystem move, stages the deletion and the addition
-atomically through the existing per-invocation index machinery, and writes the
-trailer itself. The record is generated, not typed.
+## Decision: record grammar
 
-- Pros: cannot be forgotten or mistyped on the path that goes through the
-  command; fits the existing command surface.
-- Cons: moves made outside the command (editor refactor, bare `mv` followed by
-  `safegit commit`) go unrecorded.
+- **Paths only, never commit hashes.** This is what keeps records stable
+  under history rewrites.
+- **File form:** old path and new path, e.g. `Moved: src/a.py -> lib/a.py`
+  (exact syntax pending the encoding decision below).
+- **Subtree form:** a trailing slash means everything under the prefix, e.g.
+  `Moved: src/old-name/ -> src/new-name/` -- one record for a directory move
+  regardless of file count, with per-file answers derived by prefix
+  application at query time.
+- **Corrections are append-only.** Commit messages cannot be edited after the
+  fact, so a wrong record is repaired by a later commit carrying a correction
+  record that retracts or amends it -- an ordinary commit, never a history
+  rewrite. Readers fold corrections when projecting. Exact correction
+  semantics (retract vs replace, and how a correction identifies its target
+  record by content) are an implementation-plan detail.
+- **No confidence field is stored.** Whether a move was content-identical is
+  recomputable by any reader: compare the old path's blob in the commit's
+  parent tree with the new path's blob in the commit's tree. Storing a claim
+  that can be recomputed creates a second authority that can contradict the
+  first; readers derive exact-vs-declared at read time instead. (Records
+  safegit writes are verified before writing: mv is exact by construction,
+  pairing records only on a verified blob match.)
+- **No similarity scoring.** A declared move needs no corroborating score;
+  similarity was only ever needed to power inference, which is removed.
 
-### 4. Detection at commit time, journaled locally
+## OPEN: value encoding
 
-The commit pipeline compares deletions against additions in the commit it is
-about to make -- exact blob-SHA matching first, similarity matching second --
-and appends detected moves to an append-only journal at
-`.git/safegit/moves.jsonl`, the same pattern as the oplog and the scrub
-rewrite journal.
+No separator character can be guaranteed absent from filenames (Unix allows
+every byte except NUL and the path separator, and both of those are unusable
+in a trailer line), so an escape mechanism is unavoidable. Two candidates,
+both established conventions rather than inventions:
 
-- Pros: captures all moves that pass through safegit regardless of how the
-  file was moved; no operator action required.
-- Cons: the journal is local to one clone and dies with the machine; similarity
-  matches are still heuristic (though recorded once, at the moment the change
-  was made, when the evidence is freshest).
+1. **Arrow form with git's C-style path quoting.** Bare `old -> new` by
+   default; a path containing whitespace, a double quote, a backslash, a
+   newline, or the literal arrow sequence MUST be C-quoted (slightly stricter
+   than git's default core.quotePath trigger, so the bare token stream parses
+   unambiguously). Maximally readable in git log; quoting fires only on
+   pathological names; the convention is git's own.
+2. **One JSON object per trailer line**, e.g.
+   `Moved: {"from": "src/a.py", "to": "lib/a.py"}`. Zero invented grammar,
+   escaping solved by JSON strings, uniform machine parsing; every record
+   pays the syntax cost and log output reads as payload rather than prose.
 
-### 5. The journal as a tracked file
+Same schema and semantics either way; decide before implementation.
 
-Same detection, but the record lives in a committed file in the repository,
-updated as part of the same commit that contains the move (safegit can inject
-it into the tree it builds).
+## Consumers
 
-- Pros: survives clones; visible to every consumer with no extra fetch.
-- Cons: a shared mutable file that concurrent sessions append to -- merge
-  conflicts by construction; history noise in every moving commit.
+- `safegit scan --target trailers` works with no new code.
+- A **derived local query index** under `.git/safegit/` for fast "where did
+  this path live at commit X" queries: built by walking trailers (folding
+  corrections), regenerable at any time, never authoritative -- a doubted or
+  stale index is regenerated, not repaired.
+- A future scrub could consume the records for rename-aware remapping of
+  file-targeted rewrites across a file's whole life. Design note only;
+  nothing to build now.
 
-### 6. Git notes on a tool-owned ref
+## Documentation
 
-Attach the move record to the exact commit that performed the move, via
-`refs/notes/moves`. Notes live outside the working tree, attach to the precise
-commit, are shareable with push/fetch, and have their own merge machinery.
-This fits safegit's existing habit of tool-owned namespaces
-(`refs/backups/*`) and CAS ref updates; `safegit push` could carry the notes
-ref automatically.
-
-- Pros: no working-tree conflicts; exact commit attachment; shareable.
-- Cons: notes are second-class in most hosting UIs and easy to forget to push
-  without tool support.
-
-### 7. Verified records, not claimed ones
-
-Orthogonal to storage: each record carries evidence and a confidence class.
-
-- `exact`: old blob SHA equals new blob SHA -- cryptographically certain.
-- `similar`: similarity score recorded, threshold declared.
-- `declared`: the operator asserted the move via `safegit mv` but content
-  changed too much to verify.
-
-Consumers trust `exact` unconditionally and treat the rest accordingly. The
-record becomes a checkable claim instead of an assertion.
-
-- Pros: honest; downstream tooling can choose its own trust threshold.
-- Cons: adds schema and classification logic; only meaningful combined with
-  one of the storage options above.
-
-### 8. A parallel move history under a dedicated ref
-
-Each move becomes its own object: a commit on `refs/safegit/moves` whose tree
-encodes the mapping (old path, new path, blob SHAs, and the working-history
-commit it corresponds to), CAS-updated like every other safegit ref, pushed
-and fetched as a unit. The move log becomes a first-class, append-only,
-concurrency-safe data structure with git's own integrity guarantees -- a
-queryable sibling of the real history rather than an annotation on it.
-Follow-style queries read this ref instead of re-running heuristics.
-
-- Pros: fully structured and queryable; concurrency-safe with existing lock
-  and CAS machinery; independent of commit messages and notes.
-- Cons: a new ref namespace to design, push, fetch, and garbage-collect; the
-  correspondence between move commits and working-history commits must be
-  maintained across rewrites (scrub already journals commit maps, which
-  helps).
-
-### 9. Stable file identity
-
-Stop recording moves; make them derivable. Every file gets a persistent ID at
-creation, held in a tracked identity map of ID to current path (compare
-Unity's .meta files and Mercurial's copies model). A move is that map entry's
-path changing; an edit is the blob changing under a stable ID; per-file
-history is a lookup, not a heuristic chase. Rename detection stops being a
-reconstruction problem because identity is never lost.
-
-- Pros: moves, splits, and copies all become representable; every downstream
-  question gets an exact answer.
-- Cons: the map must be maintained atomically with every add, move, and
-  delete -- which a commit-owning tool can enforce, but files created outside
-  the tool need adoption on first commit; the map is repo-visible state that
-  other tooling must tolerate.
-
-### 10. An operation log as the source of truth, git as the projection
-
-The full restructuring: the primary record is an append-only log of typed
-operations -- create, edit, move, delete, split, merge -- in the spirit of
-patch-theory systems (Pijul, darcs), where a move is a primitive, not an
-inference. Git commits are generated from the operation log, so snapshot
-history stays perfectly standard for CI, hosting, and teammates, while every
-question about moves (or any operation) is answered from the log directly.
-Options 3 through 9 are partial shadows of this: option 9's identity map is
-the log's projection of current identity state; option 8's move ref is the
-log restricted to one operation type.
-
-- Pros: complete; every operation-level question becomes answerable.
-- Cons: the log must never be bypassed, so every write path has to go through
-  the tool -- less alien for a wrapper whose premise is already "all commits
-  go through safegit", but a major project and a real lock-in decision.
-
-## Recommendation shape
-
-Options 3 and 4 combined (declared moves via `safegit mv`, detected moves at
-commit time) with storage from option 6 (notes on a tool-owned ref) and
-evidence classes from option 7 is a coherent, shippable middle. Options 9 and
-10 change what the repository is and are projects in their own right.
+safegit's docs describe the `Moved:` trailer as a repo-level convention --
+any tool may write or read these records; the grammar is stated fully
+(writer and reader behavior, subtree form, corrections, encoding). No
+separate specification artifact: the docs section is the reference, and can
+be promoted to a standalone document if a second independent implementer
+ever appears.
 
 ## Affected areas
 
-- `internal/commit` -- detection pass between staged deletions and additions;
-  hook point for record emission
-- `internal/trailer` -- trailer format if options 2/3 storage is used
-- `internal/git` -- notes plumbing (if option 6), ref plumbing (if option 8),
-  blob SHA comparison
-- `internal/oplog` -- journal pattern to copy for option 4
-- `main.go` -- new `mv` command registration
-- `internal/test` -- integration tests for declared and detected moves,
-  move-plus-edit commits, directory moves, concurrent sessions
+- `internal/commit/moves.go` -- deleted (detection removal), along with its
+  call sites in commit and amend
+- `main.go` -- `mv` command registration; pairing wiring in commit
+- `internal/trailer` -- writing is one AppendCustom call; reading needs a
+  key-value trailer parser plus correction folding (does not exist today)
+- `internal/git` -- blob-compare helpers for pairing verification (hash
+  plumbing exists)
+- `internal/test` -- existing TestMoveDetection_* green tests retire with the
+  detection; moves_cross_session_test.go flips green via the removal; new
+  tests for mv, pairing, subtree records, corrections, the derived index,
+  and the encoding rule
+- docs -- the convention section; removal of auto-detection from all
+  descriptions
+
+## Open items besides encoding
+
+- Whether `safegit mv` accepts multiple old/new pairs in one invocation (one
+  commit, several records) or exactly one pair per commit.
+- Correction-record semantics (retract vs replace; target identification).
 
 ## Effort estimate
 
-- Options 1-2: hours.
-- Options 3-4: a day or two each, including tests.
-- Options 5-8: several days each; option 8 the largest of the group.
-- Option 7: a day on top of whichever storage exists.
-- Options 9-10: separate projects, weeks, requiring their own design rounds.
+Detection removal: small (deletion plus test retirement). mv + pairing +
+trailer emission: a few days including tests. Trailer parser + correction
+folding + derived index: a few days. Docs: a day.
