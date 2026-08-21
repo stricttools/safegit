@@ -223,6 +223,12 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
 - 12 files carry pre-existing gofmt drift under the installed Go 1.26.3
   (const-block alignment); implementors format their own edits only and
   never whole-file reformat.
+- `internal/test`'s TestMain builds the safegit binary from the LIVE
+  working tree, so during parallel implementor waves a concurrent agent's
+  half-finished edits get compiled into the binary under test and produce
+  transient failures in unrelated tests. Consequence: mid-wave test
+  results are advisory only; every authoritative verification runs on a
+  quiescent tree.
 - The repo's gitignored `go.work` overlays a local strictcli checkout;
   Phase 10.1 mandates a `GOWORK=off` full run before release.
 - The installed safegit binary (used by implementors to commit) predates
