@@ -1,4 +1,4 @@
-// Package lock provides ref-lock primitives for concurrent ref updates using O_CREAT|O_EXCL for atomic lock file creation and exponential backoff polling.
+// Package lock provides ref-lock primitives for concurrent ref updates using atomic lock file creation (link(2) of a fully-written temporary sibling) and exponential backoff polling.
 // PID liveness checks detect and clean up stale locks left by crashed processes.
 package lock
 
@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -54,8 +55,10 @@ func lockPath(locksBaseDir, ref string) string {
 // for worktrees this should be the shared (common) safegit dir so that all
 // worktrees serialize on the same lock. safegitDir is the worktree-local
 // safegit dir used for oplog writes (stale-lock recovery events).
-// It uses O_CREAT|O_EXCL for atomic creation. If the lock is held by a dead
-// process, it is automatically replaced. Uses exponential backoff polling
+// Creation is atomic, so exactly one caller wins it. If the lock is held by a
+// dead process, it is automatically replaced -- see the reclamation rules in
+// reclaim.go, which are what keep two contenders facing the same stale lock
+// from both deciding they reclaimed it. Uses exponential backoff polling
 // bounded by timeout.
 func Acquire(locksBaseDir, safegitDir, ref, op string, timeout time.Duration) (*RefLock, error) {
 	lp := lockPath(locksBaseDir, ref)
@@ -79,20 +82,38 @@ func Acquire(locksBaseDir, safegitDir, ref, op string, timeout time.Duration) (*
 			return nil, fmt.Errorf("creating lock file: %w", err)
 		}
 
-		// Lock file exists -- check if it's stale
-		stale, staleErr := IsStale(lp)
-		if staleErr == nil && stale {
-			// Capture stale holder's PID before removing the lock file
-			stalePid, _ := ParsePID(lp)
-			os.Remove(lp)
-			_ = oplog.Append(safegitDir, oplog.Entry{
-				Op: "lock_recovered",
-				Extra: map[string]interface{}{
-					"ref":      ref,
-					"stalePid": stalePid,
-				},
-			})
-			continue
+		// Lock file exists -- reclaim it only if its holder is genuinely gone.
+		//
+		// IsStale here is a cheap pre-filter that keeps the common contended
+		// case (a live holder) off the flock path entirely. It is NOT what
+		// authorizes the removal: two contenders can both pass it on the same
+		// stale lock, and if both then removed the path, the second would
+		// delete the fresh lock the first had already created and both would
+		// believe they held the ref. The judgement that authorizes removal is
+		// re-made inside reclaimLocked, under the lock file's own flock and
+		// against the descriptor's inode.
+		if stale, staleErr := IsStale(lp); staleErr == nil && stale {
+			f, outcome := openForReclaim(lp)
+			if f != nil {
+				var stalePid int
+				outcome, stalePid = reclaimLocked(f, lp)
+				if outcome == reclaimDone {
+					_ = oplog.Append(safegitDir, oplog.Entry{
+						Op: "lock_recovered",
+						Extra: map[string]interface{}{
+							"ref":      ref,
+							"stalePid": stalePid,
+						},
+					})
+					continue
+				}
+			}
+			// Nothing was removed. A restart is worth taking immediately only
+			// while there is still time; past the deadline fall through to the
+			// timeout below rather than looping.
+			if outcome == reclaimRestart && time.Now().Before(deadline) {
+				continue
+			}
 		}
 
 		// Not stale -- wait with backoff
@@ -114,21 +135,55 @@ func Acquire(locksBaseDir, safegitDir, ref, op string, timeout time.Duration) (*
 	}
 }
 
-// tryCreate atomically creates the lock file with O_CREAT|O_EXCL and writes owner info.
+// tryCreate creates the lock file with its owner record already in it, failing
+// with os.ErrExist when someone else holds the lock.
 //
-// The owner info includes start=, the holder's process start identity, which is
-// what lets a later staleness check tell the original holder apart from an
+// The record is written to a temporary sibling and published with link(2)
+// rather than written in place after an O_CREAT|O_EXCL open. Both give the same
+// atomic "one winner" property against a competing creator, but only the link
+// makes the file's CONTENT atomic too: with the in-place form the file exists,
+// empty, for the instant between the open and the write, and a contender that
+// reads it in that instant finds no pid= line, judges the lock a crashed
+// holder's leftover, and removes a lock whose owner is very much alive. link(2)
+// publishes a file that is already complete, so no reader ever sees a half-made
+// lock.
+//
+// The owner record includes start=, the holder's process start identity, which
+// is what lets a later staleness check tell the original holder apart from an
 // unrelated process that inherited its PID. When the platform cannot report a
 // start time the field is omitted and reuse detection is simply absent (see
 // IsStale). started= is the same instant in human-readable form and carries no
 // decision.
 func tryCreate(path, op string) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-")
 	if err != nil {
+		return fmt.Errorf("creating temporary lock file: %w", err)
+	}
+	tmpName := tmp.Name()
+	// The temp name is unlinked whichever way this goes: on success the lock
+	// lives at path under its own link, on failure nothing is left behind.
+	defer os.Remove(tmpName)
+
+	if err := writeLockContent(tmp, op); err != nil {
+		tmp.Close()
 		return err
 	}
-	defer f.Close()
+	if err := tmp.Chmod(0644); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
 
+	// link(2) fails with EEXIST when path already exists, which is the same
+	// atomic "one winner" property O_CREAT|O_EXCL gives, and Acquire reads that
+	// error as "someone else holds it".
+	return os.Link(tmpName, path)
+}
+
+// writeLockContent writes the owner record into an open lock file.
+func writeLockContent(f *os.File, op string) error {
 	hostname, _ := os.Hostname()
 	content := fmt.Sprintf("pid=%d\nts=%s\nop=%s\nhost=%s\n",
 		os.Getpid(),
@@ -142,7 +197,7 @@ func tryCreate(path, op string) error {
 			content += fmt.Sprintf("started=%s\n", start.Wall.Format(time.RFC3339Nano))
 		}
 	}
-	_, err = f.WriteString(content)
+	_, err := f.WriteString(content)
 	return err
 }
 
@@ -169,31 +224,59 @@ func (l *RefLock) Release() error {
 //     (no start= field, or a platform that cannot report start times) the check
 //     fails closed and the lock is left alone.
 func IsStale(path string) (bool, error) {
-	fields, err := parseLockFields(path)
+	f, err := os.Open(path)
 	if err != nil {
 		// Unreadable lock -- treat as stale
 		return true, nil
 	}
+	defer f.Close()
+
+	stale, _ := staleFile(f, path)
+	return stale, nil
+}
+
+// staleFile is IsStale's judgement applied to an already-open lock file,
+// returning the verdict and the holder's pid (0 when the file names none).
+//
+// Reading through the descriptor instead of re-opening path is what lets a
+// reclaimer judge the exact file it holds open: between opening a lock file and
+// deciding to remove it, another contender may have unlinked that file and
+// created a different one at the same path, and a fresh read of the path would
+// then judge -- and condemn -- the wrong file. See reclaimLocked.
+func staleFile(f *os.File, path string) (bool, int) {
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return true, 0
+	}
+	fields, err := readLockFields(f)
+	if err != nil {
+		// Unreadable lock -- treat as stale
+		return true, 0
+	}
 	pid, err := pidFromFields(fields, path)
 	if err != nil {
 		// Corrupt lock (e.g. zero-length from a crash mid-create) -- treat as stale
-		return true, nil
+		return true, 0
 	}
+	return staleFromFields(fields, pid), pid
+}
 
+// staleFromFields decides staleness from already-parsed lock fields and the
+// pid they name.
+func staleFromFields(fields map[string]string, pid int) bool {
 	// If lock has a host= field and it doesn't match this machine, the PID
 	// check is meaningless (different PID namespace on NFS/shared FS).
 	if lockHost := fields["host"]; lockHost != "" {
 		localHost, hostErr := os.Hostname()
 		if hostErr == nil && lockHost != localHost {
-			return false, nil
+			return false
 		}
 	}
 
 	if !procutil.ProcessAlive(pid) {
-		return true, nil // process does not exist
+		return true // process does not exist
 	}
 
-	return pidWasReused(pid, fields["start"]), nil
+	return pidWasReused(pid, fields["start"])
 }
 
 // pidWasReused reports whether the live process now occupying pid is a
@@ -236,9 +319,15 @@ func parseLockFields(lockPath string) (map[string]string, error) {
 		return nil, err
 	}
 	defer f.Close()
+	return readLockFields(f)
+}
 
+// readLockFields parses lock-file lines from an already-open source, so a
+// reader that holds a descriptor can parse the file it holds rather than
+// whatever the path names by the time it looks again.
+func readLockFields(r io.Reader) (map[string]string, error) {
 	fields := make(map[string]string)
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		key, value, ok := strings.Cut(scanner.Text(), "=")
 		if ok {
