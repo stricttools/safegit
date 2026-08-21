@@ -21,6 +21,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 // Binary is the git executable safegit invokes.
@@ -122,6 +123,12 @@ type Spec struct {
 	// Env holds extra environment entries ("KEY=value"). When non-empty (or
 	// when an override adds entries) the subprocess inherits os.Environ() plus
 	// these.
+	//
+	// It may NOT carry a directory override: GIT_DIR, GIT_WORK_TREE and
+	// GIT_COMMON_DIR are refused here (see validateEnv). Setting one through the
+	// environment targets another repository without declaring it, which is
+	// exactly what the exemption table exists to make impossible; the GitDir and
+	// WorkTree fields are the declared way to say it.
 	Env []string
 
 	// Exempt names this site's entry in the declared directory-pin exemption
@@ -154,6 +161,9 @@ func Command(ctx context.Context, s Spec) (*exec.Cmd, error) {
 		return nil, err
 	}
 	if err := s.validateExemption(); err != nil {
+		return nil, err
+	}
+	if err := s.validateEnv(); err != nil {
 		return nil, err
 	}
 
@@ -242,6 +252,32 @@ func (s Spec) validateExemption() error {
 	}
 	if !s.explicitDir() && e.Kind == KindExplicitDir {
 		return &Error{Msg: "gitexec: exemption " + string(s.Exempt) + " is declared " + string(KindExplicitDir) + " but the spec sets no git directory"}
+	}
+	return nil
+}
+
+// dirEnvVars are the environment variables that retarget git's directories.
+// The boundary sets them itself, from Spec.GitDir/WorkTree or from the
+// context-carried override; a spec may not smuggle one in through Spec.Env.
+var dirEnvVars = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"}
+
+// validateEnv refuses a directory override spelled as an environment entry.
+//
+// Without this, the exemption pairing enforced by validateExemption inspects
+// only the GitDir, WorkTree and Dir fields, and a site could reach another
+// repository -- escaping the repository-root pin and the declared table both --
+// simply by writing "GIT_DIR=..." into Spec.Env.
+func (s Spec) validateEnv() error {
+	for _, e := range s.Env {
+		name := e
+		if i := strings.IndexByte(e, '='); i >= 0 {
+			name = e[:i]
+		}
+		for _, banned := range dirEnvVars {
+			if name == banned {
+				return &Error{Msg: "gitexec: " + banned + " in Spec.Env is an undeclared directory override; set Spec.GitDir/Spec.WorkTree with the matching entry from the directory-pin exemption table instead"}
+			}
+		}
 	}
 	return nil
 }
