@@ -311,6 +311,14 @@ func TestBoundaryGuardCatchesItsRefusedShapes(t *testing.T) {
 			want: true,
 		},
 		{
+			// The same shape in its []any spelling: isInterfaceSlice accepts
+			// both, and the two are one gofmt -s away from each other.
+			name: "effects-handle argv literal spelled []any",
+			rel:  "somepkg/a.go",
+			src:  "package p\nvar argv = []any{\"git\", \"push\"}\n",
+			want: true,
+		},
+		{
 			name: "the boundary's own prefix rebuilt by hand",
 			rel:  "somepkg/a.go",
 			src:  "package p\nvar argv = []string{\"--no-optional-locks\"}\n",
