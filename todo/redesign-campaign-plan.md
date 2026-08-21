@@ -59,8 +59,11 @@ deliberate.
 
 Subphases 0.1-0.8 are logically independent, but several share files
 (0.5 and 0.8 both edit `internal/lock`; 0.6 and 0.7 both edit `doctor.go`;
-0.2 and 0.3 both rework `internal/git`): run overlapping pairs sequentially
-or under one implementor; the rest may run in parallel.
+0.2, 0.3 AND 0.4 all rework `internal/git`; 0.5 and 0.6 both edit
+`undo.go`): run overlapping groups sequentially or under one implementor;
+the rest may run in parallel. The same rule applies across phases: 4.3,
+5.2 and 5.5 all edit `doctor.go`, so the "phases 4, 5, 8 may parallelize"
+note at the spine holds only if those subphases coordinate on that file.
 
 ### 0.1 Test-suite baseline and helper consolidation
 
@@ -100,7 +103,9 @@ Fix structurally:
   subphase's guard, Phase 3.1's object-writing list, and Phase 3.3's
   observe-allowlist prefixes. One table, three views.
 - Guard test: no `exec.Command` of git AND no `[]interface{}{"git", ...}`
-  argv literal outside the boundary package(s).
+  argv literal outside the boundary package(s). Scope rule: `_test.go`
+  files and the test-only `internal/testutil` package are exempt wholesale
+  (tests exercise git directly by design); production packages are not.
 
 **Verify:** the guard test passes; would-do argv recorded by the effects
 handle for passthrough dry runs carries `--no-optional-locks` (assert in
@@ -111,9 +116,16 @@ true.
 
 - Build the execution context once at dispatch (a helper on `globalFlags`
   replacing the ~37 bare `context.Background()` calls): it carries the
-  repo-root pin (the `git.WithDir` machinery, `internal/git/git.go:28-47`),
-  applied inside every exec site of the boundary (all eight already call
-  `applyDirOverride`: `git.go:58, 82, 408, 735, 766, 862, 884, 911`).
+  repo-root pin (the `git.WithDir` machinery, `internal/git/git.go:28-47`).
+  Correction from review: of the eight exec sites (`git.go:58, 82, 408,
+  735, 766, 862, 884, 911`), only FIVE call `applyDirOverride`; the three
+  `*WithDir` variants (`:862, :884, :911`) set `GIT_DIR`/`cmd.Dir`
+  explicitly from their own arguments. The pin applies at the five; the
+  three `*WithDir` variants are exempt-by-construction for the DIRECTORY
+  pin (they take explicit dirs) and are listed as such in the declared
+  exemption table -- but they must NOT be exempt from the other
+  context-carried overrides (Phase 3.1's object quarantine applies at ALL
+  eight).
 - Passthrough commands that legitimately observe the operator's cwd get a
   DECLARED EXEMPTION TABLE in code, with a test enumerating it -- not
   prose.
@@ -151,12 +163,14 @@ contract: `UpdateRef` and `DeleteRef` hard-error on an empty old value;
 export `git.ZeroSHA` (git's "must not exist" convention -- git refuses with
 "reference already exists", which `isTransientRefError` already classifies
 for retry); the root-commit site passes `git.ZeroSHA`. Consolidate the four
-null-SHA literals (`commit.go:142`, `push.go:36`, `push.go:352`,
+null-SHA literals (root `commit.go:142`, `push.go:36`, `push.go:352`,
 `hook.go:179`).
 
 **Verify:** `TestRootCommitDoesNotClobberRefCreatedInWindow` goes green;
 `TestRootCommitZeroOldValueRefusesExistingRef` and
-`TestRootCommitConcurrentSafegitBothLand` keep passing.
+`TestRootCommitConcurrentSafegitBothLand` keep passing; NEW unit tests pin
+the contract itself -- `UpdateRef` AND `DeleteRef` error on an empty old
+value, and `ZeroSHA` means create-only.
 
 ### 0.5 The exit-code registry
 
@@ -210,9 +224,20 @@ code the registry does not define.
   `LastRefUpdate`/`LastRefUpdateForSession` at `oplog.go:161/:188`, which
   FAIL CLOSED -- they return an error on a nonzero skip count, since
   bypass detection and undo arithmetic rely on completeness). `safegit
-  undo` hard-errors on a nonzero count; `doctor` diagnose reports it (a
-  new read call -- doctor's only current oplog usage, `LogSize`/`Rotate`,
-  is deleted below).
+  undo` hard-errors on a nonzero count; `doctor` diagnose reports it.
+  Correction from review: doctor is ALREADY an oplog consumer beyond
+  `LogSize`/`Rotate` -- the bypass-detection check reads
+  `oplog.LastRefUpdate`/`TipSHA` at `doctor.go:142-144`, and its current
+  guard would silently SKIP the check when the read errors. Specify:
+  under a skip-count error, bypass detection reports the oplog corruption
+  as its own FAILING finding (the corrupted-oplog case is exactly when
+  bypass detection is most wanted; a check silently disabled by a runtime
+  condition is the banned silent-degradation shape).
+- While first touching doctor here, convert its inline sequential check
+  appends into a small check-REGISTRATION table (name, severity, fn) --
+  five later subphases (0.7, 1.5, 4.3, 5.2, 5.5) add doctor checks, and
+  the table turns each into an isolated entry instead of a hand-merged
+  edit of one long function.
 - Delete rotation entirely: `Rotate` + `LogSize` (`oplog.go:105-153`),
   doctor wiring (`doctor.go:260-283, 301-309, 323-325`), and the
   `log.maxSizeMB` config key everywhere (`internal/repo/repo.go:22, 51-54,
@@ -245,8 +270,11 @@ refuses on a corrupted log line; doctor reports the count.
   hand-made `ci.yml` is not) absorbs the linux+macos MATRIX content via
   the scaffold base; the hand-made `ci.yml` is deleted; the docker
   workflow is renamed (its `name:` field) so exactly one workflow is
-  named `CI`. Stress-test skips are re-keyed from `-short` to an explicit
-  environment variable (e.g. a stress opt-in the stress script sets) so
+  named `CI`. Note `ci-docker.yml` is ALSO scaffold-managed
+  (`.rlsbl/managed-files.json`), so its rename goes into the scaffold
+  base, not the generated file, or a future three-way merge reverts it.
+  Stress-test skips are re-keyed from `-short` to the explicit opt-in
+  environment variable `SAFEGIT_STRESS=1` (set by the stress script) so
   CI can drop `-short` and run the full integration suite within its
   timeout; `scripts/stress` and `docs/_CLAUDE.md:34-37` updated.
 - Fix the non-atomic `config.json` write: `repo.Init`
@@ -264,7 +292,8 @@ refuses on a corrupted log line; doctor reports the count.
 `GOOS=windows go build ./...` fails; exactly one workflow named CI and one
 push-triggered test workflow with the matrix; a parallel first-init test
 with a stated iteration count and parallelism (e.g. 50 iterations x 8
-concurrent) shows no flake; version-floor unit tests.
+concurrent) shows no flake -- with the 10.1 stress run named as the real
+statistical check; version-floor unit tests.
 
 ### 0.8 Lock staleness: stop stealing live locks
 
@@ -279,12 +308,16 @@ holder's true start time in the lock file at acquire (read from
 `/proc/<pid>/stat` field 22, converted via boot time and clock ticks) and
 compare against the CURRENT process-start reading at staleness time;
 absent or unparseable start info fails CLOSED (not stale). Keep the
-hostname refusal as is.
+hostname refusal as is. Parsing trap, stated so nobody re-derives it: the
+stat file's comm field can contain spaces and parentheses, so fields are
+indexed only after splitting at the LAST `)` -- naive whitespace
+splitting mis-indexes everything.
 
 **Verify:** NEW red-green test -- a lock held by a live process is never
 removed as stale regardless of file mtimes; a genuinely dead holder's lock
 still is; PID-reuse simulation (dead holder, new unrelated live process
-with the same recorded pid) is correctly treated as stale.
+with the same recorded pid) is correctly treated as stale; a holder whose
+process name contains spaces and parentheses parses correctly.
 
 ---
 
@@ -301,12 +334,14 @@ and all call sites: checkout `:89`, pull `:152`, merge `:193`, rebase
 `:234`, reset `:280`, bisect `:326`, `runGuardedPassthrough` `:373`; also
 the sync after `backup restore`'s `--ff-only` merge (`backup.go:395`).
 While there: ALL `runGitMutation` callers stop returning a hardcoded 1 and
-propagate git's real exit code -- that is seven sites (checkout `:82-84`,
+propagate git's real exit code -- that is EIGHT sites (checkout `:82-84`,
 pull `:129-131` and `:145-147`, merge `:186-188`, rebase `:227-229`, reset
-`:272-274`, bisect `:319-321`), not two; verify FIRST whether the error
-returned by the effects handle's Run carries the child's exit code, and if
-not, capture it from the completed result -- this is a recorded
-verification task, not an assumption.
+`:272-274`, bisect `:319-321`, and `runGuardedPassthrough`'s dry-run
+branch `:365-366`, which keeps returning 0 since no git ran -- stated so
+the count is exhaustive); verify FIRST whether the error returned by the
+effects handle's Run carries the child's exit code, and if not, capture it
+from the completed result -- a recorded verification task, not an
+assumption.
 
 **Verify (red going green):** all seven red tests in
 `sequencer_conflict_test.go` plus
@@ -356,7 +391,11 @@ passing; NEW: foreign staged state (modification + addition + rm-cached
 deletion) survives commit, amend, AND reword; NEW direct unit test --
 construct stage 1/2/3 entries via `update-index --index-info`, run the
 helper, assert byte-identical `ls-files -s` after (the unmerged-replay
-machinery must be exercised here, not first in Phase 6).
+machinery must be exercised here, not first in Phase 6); plus a
+randomized-index property test (random mixes of stage-0/1/2/3 entries,
+modes, and pathological names round-trip byte-identically) -- this helper
+is the single reconciliation authority for every command, and a bug here
+corrupts users' staged work.
 
 ### 1.4 Mid-sequencer hard refusals -- as a declared pipeline input
 
@@ -389,9 +428,11 @@ ref update). Ordering declared once: operation lock OUTERMOST, per-ref
 lock inside. Timeout: the existing `lock.acquireTimeoutSeconds` key.
 Extend `safegit unlock` with an explicit naming grammar for non-ref locks
 (worktree-local and pseudo-ref names; today `unlock.go:20-22` prefixes
-`refs/heads/` unconditionally, which is why the `safegit/rewrite` lock is
-unreachable -- fixed in the same pass) and extend `doctor`'s lock scan
-(`doctor.go:257, 312`) to both lock trees. Note: a passthrough holds the
+`refs/heads/` onto any argument lacking a `refs/` prefix, which is why the
+`safegit/rewrite` lock is unreachable -- fixed in the same pass) and
+extend `doctor`'s lock handling to both lock trees in BOTH paths: the
+diagnose scan (`doctor.go:98-113`) and the fix-path counting
+(`doctor.go:257, 312`). Note: a passthrough holds the
 lock for its full duration, including `rebase -i`'s editor -- documented.
 
 **Verify:** NEW -- two concurrent passthroughs in one worktree serialize; a
@@ -434,7 +475,11 @@ pass; `TestIntakeEdgeDanglingSymlinkNoColon` goes green as a side effect.
   boundaries via the 0.3 anchoring helper.
 - Directory expansion at intake `[%%]`: union of on-disk contents and the
   commit's parent tree under the prefix (deletions included), never
-  descending into gitlink/submodule boundaries.
+  descending into gitlink/submodule boundaries. Gitignored files under an
+  expanded directory are SKIPPED silently (matching git's own directory
+  semantics -- expansion produces names the caller never typed, so the
+  per-path ignore refusal applies only to EXPLICITLY NAMED paths; tracked
+  ignored files still expand, since they are already in the parent tree).
 - A named path or directory contributing nothing is a HARD error naming
   the path -- covering all three current inconsistencies: vanished dirs
   (early error stays), existing-but-empty dirs (late misleading error
@@ -451,7 +496,10 @@ pass; `TestIntakeEdgeDanglingSymlinkNoColon` goes green as a side effect.
 `...AmendDeleteTrackedOnlyOnTarget`,
 `TestAmendCrossBranchDeletionOfPathTrackedOnlyOnTarget`. Green controls
 keep passing. NEW: no-match hard error for a file, an empty directory, AND
-a named-but-unchanged file; expansion stops at a submodule boundary.
+a named-but-unchanged file; expansion stops at a submodule boundary; a
+directory containing untracked gitignored files commits its other contents
+with the ignored files skipped, while explicitly naming an ignored file
+still refuses.
 
 ### 2.3 Symlink policy
 
@@ -567,10 +615,14 @@ Depends on 0.2/0.3 and 2.8.
 ### 3.1 Object quarantine with enforcement
 
 - Context-carried object-directory override in the boundary (sibling of
-  `WithDir`, applied in the same eight exec sites): `GIT_OBJECT_DIRECTORY`
-  to a throwaway dir; APPEND the repo's object dir to any inherited
-  `GIT_ALTERNATE_OBJECT_DIRECTORIES` (Go's env dedup keeps the last
-  occurrence -- blind append clobbers).
+  `WithDir`), applied at ALL EIGHT exec sites -- including the three
+  `*WithDir` variants (`git.go:862, 884, 911`), which per the 0.3
+  correction do NOT run `applyDirOverride` today and need the quarantine
+  env added explicitly (they are the submodule scan/cat-file paths, so a
+  submodule scrub preview would otherwise escape the quarantine):
+  `GIT_OBJECT_DIRECTORY` to a throwaway dir; APPEND the repo's object dir
+  to any inherited `GIT_ALTERNATE_OBJECT_DIRECTORIES` (Go's env dedup
+  keeps the last occurrence -- blind append clobbers).
 - Installed at handler entry for every previewing command, BEFORE the
   first git call (`git.RepoRoot` at `internal/commit/commit.go:85`
   currently precedes preview-dir creation; a missing quarantine dir makes
@@ -586,7 +638,8 @@ Depends on 0.2/0.3 and 2.8.
 
 **Verify (red going green):** all three `dryrun_object_purity_test.go`
 tests. NEW: the enforcement refusal fires for an unquarantined object
-write in preview mode.
+write in preview mode; a SUBMODULE scrub preview leaves both object
+stores untouched (covers the `*WithDir` paths).
 
 ### 3.2 Honest preview reporting
 
@@ -606,8 +659,17 @@ dry_run true.
 
 ### 3.3 Pipeline onto the effects handle
 
-Mint `update-ref` through the handle in BOTH modes (delete the dry-only
-branch in `recordCommitRefUpdate`, root `commit.go:126-148`). Declare the
+Mint `update-ref` through the handle in BOTH modes, with the MECHANISM
+stated (the code's own comment at root `commit.go:129-136` names the trap:
+a handler-side mint alongside the pipeline's own update would double-fire
+and break CAS): the effects handle is threaded into the pipeline (direct
+threading, decided earlier) and the pipeline's ref update INSIDE the CAS
+retry loop goes through the handle's Run -- in real mode the handle
+executes the very update-ref the loop needs (CAS argv unchanged, retries
+work because a real failure returns an error); in dry mode the first
+recorded mint returns nil and the loop exits after one iteration.
+`recordCommitRefUpdate` (root `commit.go:126-148`) is DELETED, not
+modified -- there is exactly one mint site, inside the loop. Declare the
 observe allowlist (`WithProcObserveAllowlist`) generated from the 0.2 argv
 table's read view -- every prefix spelled with the literal
 `--no-optional-locks` element, at least two tokens. Ref-lock
@@ -621,7 +683,10 @@ values in dry mode).
 
 **Verify:** effects-regime suite green with the new wiring;
 `--dump-schema` shows the allowlist; a dry-run commit's envelope carries
-exactly one would-do record plus preview data.
+exactly one would-do record plus preview data; NEW real-mode assertions --
+a real commit performs exactly ONE ref update, records exactly one
+mutation, and the CAS retry path still succeeds under contention (extend
+the existing concurrency tests to assert the recorded-mutation count).
 
 ---
 
@@ -743,7 +808,9 @@ is the oplog: `scrub match` records the pattern in `extra.pattern`
 - The scrub oplog entries STOP recording the pattern (drop
   `extra.pattern`; `extra.reason` and scope suffice for audit)
   `[adopted-from-instinct]` -- otherwise the store deletion removes one
-  verbatim copy and leaves the other.
+  verbatim copy and leaves the other. The `extra.replace` string
+  (`scrub_match.go:809, :886`) is deliberately RETAINED: the replacement
+  is the redaction, not the secret -- stated so this is not re-litigated.
 - `doctor` diagnose reports a leftover `.git/safegit/scrub-policies.jsonl`
   (written by older published safegit versions in consumer repos) as an
   error naming its content class; `--action fix` deletes it.
@@ -769,8 +836,14 @@ leaves both repos' refs untouched. The per-repo journals keep their
 existing shapes.
 
 **Verify:** NEW -- a parent-side Tier A failure leaves submodule AND
-parent refs untouched; the happy path produces the same end state as
-today; submodule journal ordering preserved.
+parent refs untouched; the happy path's end state is PINNED explicitly
+(parent and submodule refs and tags at their rewritten SHAs, both
+journals carrying start/refs/complete in order, cleanup done in both) --
+not compared against pre-change behavior, which will no longer exist;
+crash-injection tests at each boundary (after submodule objects, after
+parent objects, between the two finalizes) assert journal and ref state
+so a crash window always reads as either untouched or
+journal-explainable.
 
 ---
 
@@ -846,15 +919,14 @@ command registries (`classification_test.go:70-117` and the group tree).
 **Verify:** NEW -- remove installed; remove nonexistent (error); remove
 tracked-name (explanatory error); dry-run records the removal.
 
-### 5.4 Dead code disposition
+### 5.4 (folded into 5.2)
 
-Delete `hooks.Install` (`hooks.go:296-313`) and `hooks.InstallPlaceholder`
-(`hooks.go:316-337`) and their tests; the no-clobber logic they carried is
-absorbed by 5.2's install refusal.
-
-**Verify:** the absorption is asserted by 5.2's install-collision test;
-`go vet`/build confirm no callers remain; the package exports neither
-symbol.
+The dead-code deletion -- `hooks.Install` (`hooks.go:296-313`) and
+`hooks.InstallPlaceholder` (`hooks.go:316-337`) plus their tests, with the
+no-clobber logic absorbed by the install refusal -- is part of 5.2's
+single pass over `internal/hooks`, not a separate visit; 5.2's
+install-collision test asserts the absorption and the build asserts no
+callers remain.
 
 ### 5.5 Doctor: never-executed git hooks
 
@@ -928,8 +1000,15 @@ revert-continue when the reader reports a SINGLE operation): temp index
 copied from the shared index; per-path declared resolutions `--resolve
 'path=ours|theirs|worktree|delete'` (repeatable string flag,
 registration-declared per-element validator; the framework's dict flag
-cannot validate values -- file that upstream bug during this subphase) and
-`--resolve-file <toml>` (same schema as the scrub-run recipe style); a
+cannot validate values -- file that upstream bug during this subphase).
+Keyword semantics are DEFINED BY STAGE, not by operation folklore: `ours`
+= the stage-2 blob (the current branch's side), `theirs` = the stage-3
+blob (the operation's incoming side -- which for a REVERT is the
+inverse-patch side, the classic confusion; each command's help states its
+concrete meaning). `--resolve-file <toml>` carries an array of tables,
+each with `path` and `choice` keys (same TOML conventions as the
+scrub-run recipe); flag and file forms may be combined, duplicate paths
+across them are hard errors. A
 conclusion must name every conflicted path (omissions and strays are hard
 errors listing them); completeness enforced by `write-tree` refusing
 unmerged entries, with a readable `ls-files -u` pre-pass. Parents: HEAD
@@ -990,7 +1069,11 @@ no meaningful marker regions):
 marker content passes; the byte-identical-block case is refused;
 committed exemption works, uncommitted does not; marker-size and diff3
 fidelity; delete/modify and add/add conclusions pass without region
-verification but fail structural checks when garbage markers are added.
+verification but fail structural checks when garbage markers are added;
+plus a PROPERTY test generating randomized conflicts across the config
+matrix (conflictStyle x marker size) and asserting the merge-file
+reconstruction is byte-identical to the actual `AUTO_MERGE` blob -- the
+hard-refusal path is not wired until this property test passes.
 
 ### 6.4 Queued-sequence delegation `[%%]`
 
@@ -1029,10 +1112,13 @@ commit with trailers, ZERO residual state files, and a subsequent
 `--dry-run` on the three passthroughs computes the real outcome via
 `git merge-tree --write-tree` (with `--merge-base` for pick/revert) under
 the quarantine: clean-vs-conflict plus the conflicted path list in the
-preview. Invocations merge-tree cannot faithfully compute (strategy
-options, `--squash`) are refused at runtime with the reason (hand-rolled
-per-invocation refusal; the framework only has per-command refusal --
-noted for migration when the framework ruling ships).
+preview. The refusal set is defined by CRITERION, not example list: any
+forwarded flag that alters TREE COMPUTATION and is not representable in
+merge-tree's argv (`-s` strategies other than ort, `-X` strategy options,
+`--squash`'s staging behavior) is refused at runtime with the reason;
+flags affecting only commit creation or reporting are accepted. The
+refusal is hand-rolled per-invocation (the framework only has per-command
+refusal -- noted for migration when the framework ruling ships).
 
 **Verify:** NEW -- clean preview, conflict preview with paths,
 unsupported-option refusal, object store untouched.
@@ -1099,7 +1185,10 @@ as destination, no nested pairs); filesystem moves minted through the
 effects handle (`Rename` -- honest dry run); mid-sequence failure rolls
 back completed renames. Directories accepted (one subtree record).
 Case-only renames on case-insensitive filesystems (via `core.ignorecase`)
-take an explicit same-file path. The command commits (one commit per
+take an explicit same-file path whose mechanism is: index-only rename
+(remove the old entry, add the new, same blob) plus a two-step filesystem
+rename through a temporary name in the same directory (a direct rename is
+a no-op or error on such filesystems). The command commits (one commit per
 invocation), registers its own oplog op (undo rolls back the commit, NOT
 the filesystem moves -- consistent with undo's worktree-untouched
 contract; undo's output says so), declares a payload schema, joins the
@@ -1246,7 +1335,10 @@ order is safe sequentially.
 
 Editable-source locations; "true-after" rows need no text change beyond
 verification, "fix" rows need edits. Generated files heal via
-`--dump-schema` + `selfdoc gen` after their origins are fixed.
+`--dump-schema` + `selfdoc gen` after their origins are fixed. Line
+numbers here will have drifted heavily by Phase 9 -- treat each row's
+CLAIM text as the anchor and re-locate by searching for it; the wide
+ranges (e.g. row 16) especially.
 
 | # | Location | Claim | Resolution |
 |---|---|---|---|
