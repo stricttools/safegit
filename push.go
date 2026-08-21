@@ -60,7 +60,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	forceFlag := forceWithLease
 
 	// Resolve the remote URL
-	ctx := context.Background()
+	ctx := flags.ctx()
 	remoteURL, err := resolveRemoteURL(ctx, remote)
 	if err != nil {
 		die(1, fmt.Sprintf("resolving remote URL: %v", err))

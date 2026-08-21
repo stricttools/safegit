@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"regexp"
@@ -64,7 +63,7 @@ func runScrubVerify(flags globalFlags) int {
 		die(4, err.Error())
 	}
 
-	ctx := context.Background()
+	ctx := flags.ctx()
 
 	sgDir := repo.SafegitDir(gitDir)
 

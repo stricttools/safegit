@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -76,7 +75,7 @@ func runAuthorCheck(flags globalFlags, kwargs map[string]interface{}) int {
 		return 2
 	}
 
-	ctx := context.Background()
+	ctx := flags.ctx()
 
 	// Get all commits with SHA + author/committer identity in one pass.
 	// Format: sha\x01author_name\x01author_email\x01committer_name\x01committer_email

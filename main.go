@@ -8,9 +8,11 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strings"
+	"sync"
 
 	"github.com/smm-h/safegit/internal/commit"
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/stage"
 	"github.com/smm-h/strictcli/go/strictcli"
@@ -51,6 +53,61 @@ type globalFlags struct {
 	// effects handle without rewriting ~60 call signatures. Nil in unit tests
 	// that never dispatch; effects() is the guarded accessor.
 	sc *strictcli.Context
+	// root caches this dispatch's repository root, resolved at most once. It is
+	// a pointer so the cache survives globalFlags being copied by value into
+	// every handler.
+	root *executionRoot
+}
+
+// executionRoot resolves the repository root once per dispatch.
+type executionRoot struct {
+	once sync.Once
+	dir  string
+}
+
+// resolve returns the repository root, asking git at most once. A nil receiver
+// (a globalFlags built by a unit test rather than by dispatch) resolves without
+// caching rather than reporting no root at all.
+func (r *executionRoot) resolve() string {
+	if r == nil {
+		return repoRootOrEmpty()
+	}
+	r.once.Do(func() { r.dir = repoRootOrEmpty() })
+	return r.dir
+}
+
+// repoRootOrEmpty asks git for the top of the working tree, starting from the
+// OPERATOR'S own directory -- discovery is the one thing the pin cannot itself
+// be applied to. Something with no working tree (a bare repository, or no
+// repository at all) has no root; the empty string means "no pin", which
+// gitexec.WithRoot reads as leaving the context unchanged.
+func repoRootOrEmpty() string {
+	root, err := git.RepoRoot(context.Background())
+	if err != nil {
+		return ""
+	}
+	return root
+}
+
+// ctx builds this dispatch's execution context, and is the ONE place a context
+// for a git call is created: a bare context.Background() in a handler is a git
+// call that escaped the pin.
+//
+// Every git subprocess safegit itself constructs from this context runs with
+// its working directory pinned to the repository root. A large part of git's
+// plumbing vocabulary is scoped to the process working directory -- `ls-files`
+// defaults to the pathspec ".", `ls-tree` prefixes the current directory onto
+// the tree it reads, `apply` resolves the paths inside a patch against it -- so
+// without the pin an operator invoking safegit from a subdirectory silently
+// narrows what safegit sees, what it protects and what it rewrites.
+//
+// User-typed relative PATH ARGUMENTS are unaffected: they are canonicalized
+// against the invoking directory at intake, before any git call is built.
+//
+// The sites that cannot take the pin are not decided here: they are enumerated
+// in internal/gitexec's declared directory-pin exemption table.
+func (g globalFlags) ctx() context.Context {
+	return gitexec.WithRoot(context.Background(), g.root.resolve())
 }
 
 // effects returns the effects handle for this dispatch. Handlers mint every
@@ -642,6 +699,7 @@ func newGlobalFlags(r reservedFlags, configPath string, jsonOut bool) globalFlag
 		approved:   r.approved,
 		configPath: configPath,
 		json:       jsonOut,
+		root:       &executionRoot{},
 	}
 }
 

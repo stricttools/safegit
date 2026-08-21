@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -76,7 +75,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	}
 
 	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg}
-	result, err := p.Execute(context.Background(), commit.CommitRequest{
+	result, err := p.Execute(flags.ctx(), commit.CommitRequest{
 		Message:    msg,
 		FileSpecs:  fileSpecs,
 		Branch:     branch,
@@ -100,7 +99,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		fmt.Fprintf(os.Stderr, "  sha: %s\n", result.SHA)
 	}
 
-	if err := maybeAutoBumpParent(context.Background(), flags, gitDir, result.SHA, "commit", firstLine(msg)); err != nil {
+	if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "commit", firstLine(msg)); err != nil {
 		fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
 		os.Exit(1)
 	}
@@ -178,7 +177,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			}
 		}
 
-		result, err := p.Amend(context.Background(), commit.AmendRequest{
+		result, err := p.Amend(flags.ctx(), commit.AmendRequest{
 			Message:   msg,
 			FileSpecs: fileSpecs,
 			Branch:    branch,
@@ -202,7 +201,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			fmt.Fprintf(os.Stderr, "  sha: %s\n", result.SHA)
 		}
 
-		if err := maybeAutoBumpParent(context.Background(), flags, gitDir, result.SHA, "amend", firstLine(msg)); err != nil {
+		if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "amend", firstLine(msg)); err != nil {
 			fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
 			os.Exit(1)
 		}
@@ -243,7 +242,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			}
 		}
 
-		result, err := p.Reword(context.Background(), commit.RewordRequest{
+		result, err := p.Reword(flags.ctx(), commit.RewordRequest{
 			Message:  msg,
 			Branch:   branch,
 			Trailers: trailers,
@@ -264,7 +263,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			fmt.Fprintf(os.Stderr, "  sha: %s\n", result.SHA)
 		}
 
-		if err := maybeAutoBumpParent(context.Background(), flags, gitDir, result.SHA, "reword", firstLine(msg)); err != nil {
+		if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "reword", firstLine(msg)); err != nil {
 			fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
 			os.Exit(1)
 		}

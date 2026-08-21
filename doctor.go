@@ -57,7 +57,7 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 		return 0
 	}
 
-	ctx := context.Background()
+	ctx := flags.ctx()
 
 	var checks []checkResult
 	var checkStart time.Time

@@ -44,7 +44,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 
 	sgDir := repo.SafegitDir(gitDir)
-	ctx := context.Background()
+	ctx := flags.ctx()
 
 	// The clean-tree requirement belongs to the execute path only, so it is
 	// checked after the dry-run branch below. A preview is exactly what a dirty

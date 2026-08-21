@@ -204,7 +204,7 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 		die(4, err.Error())
 	}
 	sgDir := repo.SafegitDir(gitDir)
-	ctx := context.Background()
+	ctx := flags.ctx()
 
 	branch := currentBranch(ctx, flags, cmd)
 	slot := backupRef(branch)
@@ -297,7 +297,7 @@ func runBackupList(flags globalFlags, remote string) int {
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		die(4, err.Error())
 	}
-	ctx := context.Background()
+	ctx := flags.ctx()
 
 	if _, err := resolveRemoteURL(ctx, remote); err != nil {
 		die(1, fmt.Sprintf("resolving remote URL: %v", err))
@@ -348,7 +348,7 @@ func runBackupRestore(flags globalFlags, remote string) int {
 		return code
 	}
 
-	ctx := context.Background()
+	ctx := flags.ctx()
 	branch := currentBranch(ctx, flags, cmd)
 	slot := backupRef(branch)
 

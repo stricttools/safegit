@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -47,7 +46,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		die(1, fmt.Sprintf("loading config: %v", err))
 	}
 
-	ctx := context.Background()
+	ctx := flags.ctx()
 
 	// Resolve current branch
 	ref, err := git.HeadRef(ctx)

@@ -48,7 +48,7 @@ func hookRun(flags globalFlags, name string) int {
 	}
 
 	// Synthesize stdin from current branch state
-	ctx := context.Background()
+	ctx := flags.ctx()
 	hookStdin, err := synthesizeHookStdin(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
