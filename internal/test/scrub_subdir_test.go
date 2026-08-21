@@ -2,7 +2,6 @@ package test
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -91,10 +90,10 @@ func scrubSubdirSecretInHistory(t *testing.T, root string) bool {
 	}
 	args := append([]string{"grep", "-I", "--fixed-strings", "--quiet", scrubSubdirSecret}, revs...)
 	args = append(args, "--")
-	cmd := exec.Command("git", args...)
-	cmd.Dir = root
-	err := cmd.Run()
-	return err == nil
+	// git grep --quiet exits 0 on a match and 1 on none, so "found" is exactly
+	// "git exited zero" -- which is what GitTryOut reports.
+	_, found := testutil.GitTryOut(t, root, args...)
+	return found
 }
 
 // scrubSubdirRequirePaths fails when any of the given repo-relative paths is
