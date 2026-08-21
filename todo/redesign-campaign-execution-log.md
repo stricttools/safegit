@@ -281,6 +281,20 @@ existing entries are never rewritten.
   unrouted through exitcode.OK (cosmetic; decide once, sweep or
   declare fine).
 
+## Brief additions for Phase 1.4/1.5
+
+- undo's `--count must be positive` validation exits exitcode.General;
+  the registry defines post-parse argument validation as Usage. Route it
+  while undo's refusals are in scope.
+
+## Brief additions for Phase 5 (hooks subsystem)
+
+- internal/hooks/hooks.go hardcodes `ExitCode: 21` in a HookResult,
+  duplicating exitcode.PushHookTimeout by value with no registry
+  reference — invisible to the exit-site guard (it is a result field,
+  not an exit). Route it through the registry constant during the
+  hooks rework.
+
 ## Phase 9 additions (locking rework falsified these claims)
 
 The atomic publication and flock-based reclamation invalidated every
