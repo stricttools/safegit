@@ -174,7 +174,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 		die(4, err.Error())
 	}
 
-	ctx := context.Background()
+	ctx := flags.ctx()
 
 	// The clean-tree requirement belongs to the execute path only; it is checked
 	// after the dry-run branch below. A preview is exactly what a dirty working

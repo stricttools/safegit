@@ -220,7 +220,7 @@ func runScan(flags globalFlags, kwargs map[string]interface{}) int {
 		die(4, err.Error())
 	}
 
-	ctx := context.Background()
+	ctx := flags.ctx()
 
 	// Compile regex.
 	compiledPattern, err := regexp.Compile(pattern)

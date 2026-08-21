@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -37,7 +36,7 @@ func runGitMutation(flags globalFlags, args ...string) error {
 // coordGuard runs coord.Check and prints a refusal if dirty.
 // Returns exit code 5 if dirty, 0 if clean, or 1 on error.
 func coordGuard(flags globalFlags, sgDir, operation string) int {
-	ctx := context.Background()
+	ctx := flags.ctx()
 	dirty, err := coord.Check(ctx, sgDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -52,7 +51,7 @@ func coordGuard(flags globalFlags, sgDir, operation string) int {
 
 // syncMainIndex runs git read-tree HEAD to keep the main index in sync after tree mutations.
 func syncMainIndex(flags globalFlags, op string) {
-	ctx := context.Background()
+	ctx := flags.ctx()
 	if err := git.SyncMainIndex(ctx, "HEAD"); err != nil {
 		if !flags.silent() {
 			fmt.Fprintf(os.Stderr, "warning: failed to sync main index after %s: %v\n", op, err)
@@ -82,7 +81,7 @@ func runCheckout(flags globalFlags, args []string) int {
 	}
 
 	// Capture old HEAD for oplog
-	ctx := context.Background()
+	ctx := flags.ctx()
 	oldHead, _ := git.RevParse(ctx, "HEAD")
 
 	if err := runGitMutation(flags, append([]string{"checkout"}, args...)...); err != nil {
@@ -188,7 +187,7 @@ func runMerge(flags globalFlags, args []string) int {
 		return 2
 	}
 
-	ctx := context.Background()
+	ctx := flags.ctx()
 	if err := runGitMutation(flags, append([]string{"merge"}, args...)...); err != nil {
 		return 1
 	}
@@ -374,7 +373,7 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 		return 0
 	}
 
-	code := runPassthrough(gitCmd, args)
+	code := runPassthrough(flags, gitCmd, args)
 
 	syncMainIndex(flags, gitCmd)
 
@@ -388,9 +387,13 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 }
 
 // runPassthrough executes a git command directly, forwarding all args.
-// Used for read-only commands (status, diff, log, show).
-func runPassthrough(gitCmd string, args []string) int {
-	ctx := context.Background()
+//
+// The context still carries the dispatch's repository-root pin; git.RunPassthrough
+// suspends it under the declared operator-cwd exemption, because the argv here is
+// the operator's own and any pathspec in it must mean what it meant where it was
+// typed. Every other context-carried override still applies.
+func runPassthrough(flags globalFlags, gitCmd string, args []string) int {
+	ctx := flags.ctx()
 	if err := git.RunPassthrough(ctx, append([]string{gitCmd}, args...)...); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()

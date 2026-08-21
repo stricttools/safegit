@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -40,7 +39,7 @@ var authorListPayloadSchema = strictcli.SchemaArray(strictcli.SchemaObject(
 ))
 
 func runAuthorList(flags globalFlags) int {
-	ctx := context.Background()
+	ctx := flags.ctx()
 
 	// Get all author and committer identities in one pass.
 	// Format: author_name\x01author_email\x01committer_name\x01committer_email
