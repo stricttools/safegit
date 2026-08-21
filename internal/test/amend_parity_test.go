@@ -47,16 +47,6 @@ func amendParParents(t *testing.T, dir, ref string) []string {
 	return fields[1:]
 }
 
-// amendParTreePaths returns every path in a commit's tree.
-func amendParTreePaths(t *testing.T, dir, ref string) []string {
-	t.Helper()
-	out := strings.TrimSpace(testutil.GitRaw(t, dir, "ls-tree", "-r", "--name-only", ref))
-	if out == "" {
-		return nil
-	}
-	return strings.Split(out, "\n")
-}
-
 // amendParHas reports whether hay contains needle.
 func amendParHas(hay []string, needle string) bool {
 	for _, h := range hay {
@@ -194,7 +184,7 @@ func TestAmendStagedDeletions_DirectoryPathWithMovedFile(t *testing.T) {
 		t.Errorf("amended commit parents = %v, want [%s]", parents, base)
 	}
 
-	paths := amendParTreePaths(t, dir, "HEAD")
+	paths := testutil.TreePaths(t, dir, "HEAD")
 	for _, gone := range []string{"dir/a.txt", "dir/b.txt"} {
 		if amendParHas(paths, gone) {
 			t.Errorf("%s should be absent from the amended tree, got: %v", gone, paths)
@@ -232,7 +222,7 @@ func TestAmendStagedDeletions_DirectoryPathWithUnrelatedEmptyFile(t *testing.T) 
 			code, stdout, stderr)
 	}
 
-	paths := amendParTreePaths(t, dir, "HEAD")
+	paths := testutil.TreePaths(t, dir, "HEAD")
 	for _, gone := range []string{"dir/empty.txt", "dir/b.txt"} {
 		if amendParHas(paths, gone) {
 			t.Errorf("%s should be absent from the amended tree, got: %v", gone, paths)
@@ -264,7 +254,7 @@ func TestAmendStagedDeletions_FilePathsWithMovedFile(t *testing.T) {
 		t.Fatalf("amending staged deletions by file path failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 
-	paths := amendParTreePaths(t, dir, "HEAD")
+	paths := testutil.TreePaths(t, dir, "HEAD")
 	for _, gone := range []string{"dir/a.txt", "dir/b.txt"} {
 		if amendParHas(paths, gone) {
 			t.Errorf("%s should be absent from the amended tree, got: %v", gone, paths)
@@ -380,7 +370,7 @@ func TestAmendUntrackGitignoredPath(t *testing.T) {
 		t.Fatalf("amending the untrack cleanup failed (code %d)\nstdout=%s\nstderr=%s", code, stdout, stderr)
 	}
 
-	paths := amendParTreePaths(t, dir, "HEAD")
+	paths := testutil.TreePaths(t, dir, "HEAD")
 	if !amendParHas(paths, ".gitignore") {
 		t.Errorf(".gitignore missing from the amended tree, got: %v", paths)
 	}
@@ -426,7 +416,7 @@ func TestAmendCrossBranchDeletionOfPathTrackedOnlyOnTarget(t *testing.T) {
 	if got := amendParParents(t, dir, "refs/heads/other"); strings.Join(got, ",") != strings.Join(otherParents, ",") {
 		t.Errorf("other's amended tip parents = %v, want %v", got, otherParents)
 	}
-	if paths := amendParTreePaths(t, dir, "refs/heads/other"); amendParHas(paths, "only-on-other.txt") {
+	if paths := testutil.TreePaths(t, dir, "refs/heads/other"); amendParHas(paths, "only-on-other.txt") {
 		t.Errorf("only-on-other.txt should be gone from other's amended tip, got: %v", paths)
 	}
 	if head := testutil.Rev(t, dir, "HEAD"); head != testutil.Rev(t, dir, "refs/heads/main") {
@@ -544,7 +534,7 @@ func TestAmendMergeCommitWithFilesPreservesBothParents(t *testing.T) {
 		t.Errorf("parents = %v, want [%s %s]", parents, fx.mainSHA, fx.featureSHA)
 	}
 
-	paths := amendParTreePaths(t, fx.dir, "HEAD")
+	paths := testutil.TreePaths(t, fx.dir, "HEAD")
 	for _, want := range []string{"extra.txt", "m.txt", "f.txt", "base.txt"} {
 		if !amendParHas(paths, want) {
 			t.Errorf("%s missing from the amended merge tree, got: %v", want, paths)
@@ -678,7 +668,7 @@ func TestAmendRefusedWhileMerging(t *testing.T) {
 					"  MERGE_HEAD still present: %t\n"+
 					"  stdout: %s",
 					strings.Join(tc.args, " "), head, before,
-					amendParParents(t, dir, head), amendParTreePaths(t, dir, "HEAD"),
+					amendParParents(t, dir, head), testutil.TreePaths(t, dir, "HEAD"),
 					!amendParMergeStateGone(t, dir), strings.Join(strings.Fields(stdout), " "))
 			}
 

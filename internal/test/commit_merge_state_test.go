@@ -150,16 +150,6 @@ func parentsOf(t *testing.T, dir, ref string) []string {
 	return fields[1:]
 }
 
-// treePaths returns every path in a commit's tree.
-func treePaths(t *testing.T, dir, ref string) []string {
-	t.Helper()
-	out := testutil.Git(t, dir, "ls-tree", "-r", "--name-only", ref)
-	if strings.TrimSpace(out) == "" {
-		return nil
-	}
-	return strings.Split(strings.TrimSpace(out), "\n")
-}
-
 func contains(hay []string, needle string) bool {
 	for _, h := range hay {
 		if h == needle {
@@ -206,7 +196,7 @@ func TestMergeCanBeConcludedThroughSafegit(t *testing.T) {
 			}
 		}
 
-		paths := treePaths(t, fx.dir, head)
+		paths := testutil.TreePaths(t, fx.dir, head)
 		if !contains(paths, "feature-only.txt") {
 			problems = append(problems, "tree lost feature-only.txt (has: "+strings.Join(paths, ", ")+")")
 		}
@@ -260,7 +250,7 @@ func TestCommitWithPathspecRefusedDuringMerge(t *testing.T) {
 	if code == 0 {
 		head := testutil.Git(t, fx.dir, "rev-parse", "HEAD")
 		parents := parentsOf(t, fx.dir, head)
-		paths := treePaths(t, fx.dir, head)
+		paths := testutil.TreePaths(t, fx.dir, head)
 		t.Fatalf("safegit commit with a pathspec succeeded mid-merge (git refuses the same command).\n"+
 			"  new commit: %s\n"+
 			"  parents: %v (want a refusal, or 2 parents: %s, %s)\n"+
@@ -307,7 +297,7 @@ func TestCommitAllowEmptyRefusedDuringMerge(t *testing.T) {
 			"  conflicted.txt content: %s\n"+
 			"  MERGE_HEAD still present: %t\n"+
 			"  stdout: %s",
-			head, parentsOf(t, fx.dir, head), treePaths(t, fx.dir, head),
+			head, parentsOf(t, fx.dir, head), testutil.TreePaths(t, fx.dir, head),
 			oneLine(testutil.Git(t, fx.dir, "show", head+":conflicted.txt")),
 			!mergeStateGone(t, fx.dir), oneLine(stdout))
 	}

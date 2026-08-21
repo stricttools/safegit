@@ -62,13 +62,7 @@ func coordSubdirHasSkipWorktree(t *testing.T, dir, file string) bool {
 // coordSubdirTrackedPaths returns the paths git currently tracks in the index.
 func coordSubdirTrackedPaths(t *testing.T, dir string) []string {
 	t.Helper()
-	return splitLines(strings.TrimSpace(testutil.GitRaw(t, dir, "ls-files")))
-}
-
-// coordSubdirTreePaths returns every path in a commit's tree, repo-relative.
-func coordSubdirTreePaths(t *testing.T, dir, rev string) []string {
-	t.Helper()
-	return splitLines(strings.TrimSpace(testutil.GitRaw(t, dir, "ls-tree", "-r", "--full-tree", "--name-only", rev)))
+	return testutil.SplitLines(strings.TrimSpace(testutil.GitRaw(t, dir, "ls-files")))
 }
 
 func coordSubdirContains(haystack []string, needle string) bool {
@@ -366,7 +360,7 @@ func TestCoordSubdirScrubProtectsTrackedIgnoredFromSubdir(t *testing.T) {
 func TestCoordSubdirScrubFromSubdirPreservesHistoryPaths(t *testing.T) {
 	dir, sub := coordSubdirIgnoreRepo(t)
 
-	before := coordSubdirTreePaths(t, dir, "HEAD")
+	before := testutil.TreePaths(t, dir, "HEAD")
 	for _, want := range []string{".gitignore", "config.env", "sub/secret.txt"} {
 		if !coordSubdirContains(before, want) {
 			t.Fatalf("precondition: %s missing from HEAD tree; got %v", want, before)
@@ -386,7 +380,7 @@ func TestCoordSubdirScrubFromSubdirPreservesHistoryPaths(t *testing.T) {
 
 	// Every commit in the rewritten history must keep its paths.
 	for _, sha := range revListReverse(t, dir) {
-		paths := coordSubdirTreePaths(t, dir, sha)
+		paths := testutil.TreePaths(t, dir, sha)
 		for _, want := range []string{".gitignore", "config.env", "sub/secret.txt"} {
 			if !coordSubdirContains(paths, want) {
 				t.Errorf("commit %s: %s vanished from the tree after a scrub issued from a subdirectory; tree now: %v", sha[:8], want, paths)
