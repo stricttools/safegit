@@ -63,17 +63,31 @@ func TestDocumentedExitCodesAreRegistered(t *testing.T) {
 }
 
 // exitCodeAssertion matches the ways this repository's tests name a numeric
-// exit code: a comparison against a code variable, and the want-value in the
-// helpers that take one.
+// exit code on a single line: a comparison against a code variable in either
+// operand order, the want-value in the helpers and table structs that take one,
+// and a code variable assigned a literal.
 var exitCodeAssertion = regexp.MustCompile(
 	`\b(?:code|exitCode|gotCode|wantCode)\b\s*(?:!=|==)\s*(\d+)|` +
-		`\b(?:want|wantExit|wantCode)\s*:\s*(\d+)\b`)
+		`(\d+)\s*(?:!=|==)\s*\b(?:code|exitCode|gotCode|wantCode)\b|` +
+		`\b(?:want|wantExit|wantCode)\s*:\s*(\d+)\b|` +
+		`\b(?:code|exitCode|gotCode|wantCode|want|wantExit)\s*:?=\s*(\d+)\b`)
 
 // TestNoTestAssertsAnUnregisteredExitCode sweeps every _test.go file in the
 // repository for a numeric exit-code assertion and requires the registry to
 // define the number. A test that pins a code nothing registers is either
 // testing a code that no longer exists or asserting one that was never
 // declared; both are the drift this registry exists to stop.
+//
+// Honest scope, because a reader will otherwise over-trust this. The sweep is
+// name-based and line-scoped: it reads source TEXT one line at a time and
+// recognizes an exit-code assertion only by the spelling of the identifier next
+// to the literal (code, exitCode, gotCode, wantCode, want, wantExit). It
+// therefore MISSES a literal passed as a positional argument to a helper
+// (`assertExit(t, out, 14)`), a literal in a switch case, a literal reached
+// through a differently named variable, and anything spanning two lines. Making
+// those visible would need full type-checking of every test package, which is a
+// different tool; this is a best-effort tripwire for the common spellings, not
+// a proof that no unregistered code is asserted anywhere.
 //
 // Zero and one are always legal (success and the general error), and the
 // sweep deliberately reads source text: the assertions it polices are written
@@ -102,9 +116,14 @@ func TestNoTestAssertsAnUnregisteredExitCode(t *testing.T) {
 		scanned++
 		for i, line := range strings.Split(string(raw), "\n") {
 			for _, m := range exitCodeAssertion.FindAllStringSubmatch(line, -1) {
-				text := m[1]
-				if text == "" {
-					text = m[2]
+				// Exactly one alternative matched, so exactly one capture group
+				// is non-empty; take it whichever it is.
+				text := ""
+				for _, g := range m[1:] {
+					if g != "" {
+						text = g
+						break
+					}
 				}
 				code, convErr := strconv.Atoi(text)
 				if convErr != nil {

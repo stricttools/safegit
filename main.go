@@ -227,7 +227,7 @@ func newApp() *strictcli.App {
 		trailers := kwargsStrSlice(kwargs["trailer"])
 		files := kwargsStrSlice(kwargs["files"])
 		runCommit(gf, messages, messageFile, branch, amend, allowEmpty, trailers, files)
-		return strictcli.Exit(0)
+		return strictcli.Exit(exitcode.OK)
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
 		strictcli.WithGrants(strictcli.Grant{
@@ -586,7 +586,7 @@ func newApp() *strictcli.App {
 		// dependency is declared rather than an ambient os.Getenv.
 		sessionID, _ := ctx.InfraValue(sessionIDEnvVar)
 		runUndo(globalsToFlags(ctx, kwargs), bypassSession, count, sessionID)
-		return strictcli.Exit(0)
+		return strictcli.Exit(exitcode.OK)
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
 		strictcli.WithGrants(strictcli.Grant{
@@ -622,7 +622,7 @@ func newApp() *strictcli.App {
 	)
 	app.Command("version", "print safegit version, Go runtime version, and git version", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		runVersion(globalsToFlags(ctx, kwargs))
-		return strictcli.Exit(0)
+		return strictcli.Exit(exitcode.OK)
 	}, strictcli.WithEffect(strictcli.EffectReadOnly), strictcli.PayloadSchema(versionPayloadSchema))
 
 	return app
