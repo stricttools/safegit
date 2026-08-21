@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // countLooseObjects returns the number of loose objects in the repo's object
@@ -48,7 +50,7 @@ func commitFileEnv(t *testing.T, dir string, env []string, path, content, msg st
 	if code != 0 {
 		t.Fatalf("commit failed (code %d): %s", code, stderr)
 	}
-	return revParseHEAD(t, dir)
+	return testutil.Rev(t, dir, "HEAD")
 }
 
 // revListReverse returns commit SHAs in chronological order (oldest first).
@@ -61,19 +63,6 @@ func revListReverse(t *testing.T, dir string) []string {
 		t.Fatalf("git rev-list --reverse HEAD: %v", err)
 	}
 	return splitLines(strings.TrimSpace(string(out)))
-}
-
-// gitShow returns the content of a file at a given commit.
-// Returns empty string and false if the file does not exist in that commit.
-func gitShow(t *testing.T, dir, sha, path string) (string, bool) {
-	t.Helper()
-	cmd := exec.Command("git", "show", sha+":"+path)
-	cmd.Dir = dir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", false
-	}
-	return string(out), true
 }
 
 // gitLsTree returns the list of files in a commit's tree.
@@ -144,7 +133,7 @@ func TestScrubFlatFile(t *testing.T) {
 	newSHAs := revListReverse(t, dir)
 	// Skip initial commit (index 0)
 	for i := 1; i < len(newSHAs); i++ {
-		content, ok := gitShow(t, dir, newSHAs[i], "secret.txt")
+		content, ok := testutil.Show(t, dir, newSHAs[i], "secret.txt")
 		if !ok {
 			t.Errorf("commit %d (%s): secret.txt not found", i, newSHAs[i][:12])
 			continue
@@ -187,7 +176,7 @@ func TestScrubNestedPath(t *testing.T) {
 
 	newSHAs := revListReverse(t, dir)
 	for i := 1; i < len(newSHAs); i++ {
-		content, ok := gitShow(t, dir, newSHAs[i], "a/b/secret.txt")
+		content, ok := testutil.Show(t, dir, newSHAs[i], "a/b/secret.txt")
 		if !ok {
 			// Some commits may not have the file (e.g., commit that only added other.txt)
 			continue
@@ -199,7 +188,7 @@ func TestScrubNestedPath(t *testing.T) {
 
 	// Verify sibling file is untouched in commits where it exists
 	for i := 1; i < len(newSHAs); i++ {
-		content, ok := gitShow(t, dir, newSHAs[i], "a/b/other.txt")
+		content, ok := testutil.Show(t, dir, newSHAs[i], "a/b/other.txt")
 		if !ok {
 			continue
 		}
@@ -243,7 +232,7 @@ func TestScrubRemoveFile(t *testing.T) {
 
 	newSHAs := revListReverse(t, dir)
 	for i := 1; i < len(newSHAs); i++ {
-		_, ok := gitShow(t, dir, newSHAs[i], "secret.txt")
+		_, ok := testutil.Show(t, dir, newSHAs[i], "secret.txt")
 		if ok {
 			t.Errorf("commit %d (%s): secret.txt still exists after removal scrub", i, newSHAs[i][:12])
 		}
@@ -251,7 +240,7 @@ func TestScrubRemoveFile(t *testing.T) {
 
 	// Verify keepme.txt is still present in the last commit
 	lastSHA := newSHAs[len(newSHAs)-1]
-	content, ok := gitShow(t, dir, lastSHA, "keepme.txt")
+	content, ok := testutil.Show(t, dir, lastSHA, "keepme.txt")
 	if !ok {
 		t.Error("keepme.txt missing from HEAD after scrub")
 	}
@@ -298,7 +287,7 @@ func TestScrubMergeCommit(t *testing.T) {
 	initialSHA := shas[0]
 
 	// Capture the merge commit SHA before scrub
-	mergeSHA := revParseHEAD(t, dir)
+	mergeSHA := testutil.Rev(t, dir, "HEAD")
 	preParents := gitParents(t, dir, mergeSHA)
 	if len(preParents) != 2 {
 		t.Fatalf("expected merge to have 2 parents, got %d", len(preParents))
@@ -314,7 +303,7 @@ func TestScrubMergeCommit(t *testing.T) {
 
 	// HEAD is the replacement commit (1 parent). The rewritten merge commit
 	// is HEAD~1. Verify the merge structure is preserved.
-	headSHA := revParseHEAD(t, dir)
+	headSHA := testutil.Rev(t, dir, "HEAD")
 	headParents := gitParents(t, dir, headSHA)
 	if len(headParents) != 1 {
 		t.Fatalf("HEAD (replacement commit) should have 1 parent, got %d", len(headParents))
@@ -326,7 +315,7 @@ func TestScrubMergeCommit(t *testing.T) {
 	}
 
 	// Verify secret.txt is REDACTED in HEAD
-	content, ok := gitShow(t, dir, headSHA, "secret.txt")
+	content, ok := testutil.Show(t, dir, headSHA, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in HEAD after scrub")
 	}
@@ -384,7 +373,7 @@ func TestScrubAnnotatedTag(t *testing.T) {
 	tagTargetSHA := strings.TrimSpace(string(tagTarget))
 
 	// The tagged commit should have the REDACTED content
-	content, ok := gitShow(t, dir, tagTargetSHA, "secret.txt")
+	content, ok := testutil.Show(t, dir, tagTargetSHA, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in tagged commit after scrub")
 	}
@@ -441,7 +430,7 @@ func TestScrubFromScope(t *testing.T) {
 
 	// Verify rewritten commits have the scrubbed content (inclusive of --from)
 	for i := 2; i <= 5; i++ {
-		content, ok := gitShow(t, dir, newSHAs[i], "secret.txt")
+		content, ok := testutil.Show(t, dir, newSHAs[i], "secret.txt")
 		if !ok {
 			t.Errorf("commit %d (%s): secret.txt not found", i, newSHAs[i][:12])
 			continue
@@ -529,7 +518,7 @@ func TestScrubUnconsentedRewritesNothing(t *testing.T) {
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "hunter2\n", "add secret")
 	initialSHA := revListReverse(t, dir)[0]
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "REDACTED\n", "commit replacement")
-	headBefore := revParseHEAD(t, dir)
+	headBefore := testutil.Rev(t, dir, "HEAD")
 
 	// `scrub file` declares itself `consequential`: without approval strictcli
 	// refuses before the handler runs. Piping "n" is not consent, and history
@@ -540,7 +529,7 @@ func TestScrubUnconsentedRewritesNothing(t *testing.T) {
 		t.Errorf("an unconsented scrub must not succeed; stderr: %s", stderr)
 	}
 
-	if headAfter := revParseHEAD(t, dir); headAfter != headBefore {
+	if headAfter := testutil.Rev(t, dir, "HEAD"); headAfter != headBefore {
 		t.Errorf("HEAD changed despite the refusal: %s -> %s", headBefore, headAfter)
 	}
 }
@@ -556,7 +545,7 @@ func TestScrubDryRun(t *testing.T) {
 	// Write replacement and commit so tree is clean for scrub
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "REDACTED\n", "commit replacement")
 
-	headBefore := revParseHEAD(t, dir)
+	headBefore := testutil.Rev(t, dir, "HEAD")
 
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--dry-run", "scrub", "file", "--from", initialSHA, "--reason", "dry run test", "secret.txt")
 	if code != 0 {
@@ -570,7 +559,7 @@ func TestScrubDryRun(t *testing.T) {
 	}
 
 	// HEAD should not have changed
-	headAfter := revParseHEAD(t, dir)
+	headAfter := testutil.Rev(t, dir, "HEAD")
 	if headAfter != headBefore {
 		t.Errorf("HEAD changed during dry run: %s -> %s", headBefore, headAfter)
 	}
@@ -638,7 +627,7 @@ func TestScrubRootCommitInclusive(t *testing.T) {
 		}
 	}
 
-	rootSHA := revParseHEAD(t, dir)
+	rootSHA := testutil.Rev(t, dir, "HEAD")
 
 	// Add a second commit
 	if err := os.WriteFile(secretPath, []byte("secret v2\n"), 0644); err != nil {
@@ -682,7 +671,7 @@ func TestScrubRootCommitInclusive(t *testing.T) {
 	}
 
 	// Verify root commit has scrubbed content
-	content, ok := gitShow(t, dir, newSHAs[0], "secret.txt")
+	content, ok := testutil.Show(t, dir, newSHAs[0], "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in rewritten root commit")
 	} else if content != "SCRUBBED\n" {
@@ -690,7 +679,7 @@ func TestScrubRootCommitInclusive(t *testing.T) {
 	}
 
 	// Verify second commit also has scrubbed content
-	content, ok = gitShow(t, dir, newSHAs[1], "secret.txt")
+	content, ok = testutil.Show(t, dir, newSHAs[1], "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in rewritten second commit")
 	} else if content != "SCRUBBED\n" {
@@ -704,10 +693,10 @@ func TestScrubFromHead(t *testing.T) {
 	dir := newRepo(t)
 
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "sensitive data\n", "add secret")
-	firstSecretSHA := revParseHEAD(t, dir)
+	firstSecretSHA := testutil.Rev(t, dir, "HEAD")
 
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "more sensitive\n", "update secret")
-	secondSecretSHA := revParseHEAD(t, dir)
+	secondSecretSHA := testutil.Rev(t, dir, "HEAD")
 
 	// Write replacement and commit so tree is clean for scrub
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "SCRUBBED\n", "commit replacement")
@@ -719,7 +708,7 @@ func TestScrubFromHead(t *testing.T) {
 		t.Fatalf("scrub failed (code %d): %s", code, stderr)
 	}
 
-	headAfter := revParseHEAD(t, dir)
+	headAfter := testutil.Rev(t, dir, "HEAD")
 
 	newSHAs := revListReverse(t, dir)
 	// newSHAs: seed, first secret, rewritten second secret, rewritten replacement
@@ -738,7 +727,7 @@ func TestScrubFromHead(t *testing.T) {
 	}
 
 	// Verify scrubbed content in the rewritten second secret commit
-	content, ok := gitShow(t, dir, newSHAs[2], "secret.txt")
+	content, ok := testutil.Show(t, dir, newSHAs[2], "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in rewritten second secret commit")
 	} else if content != "SCRUBBED\n" {
@@ -746,7 +735,7 @@ func TestScrubFromHead(t *testing.T) {
 	}
 
 	// Verify scrubbed content in HEAD
-	content, ok = gitShow(t, dir, headAfter, "secret.txt")
+	content, ok = testutil.Show(t, dir, headAfter, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in HEAD")
 	} else if content != "SCRUBBED\n" {
@@ -772,7 +761,7 @@ func TestScrubFromMergeCommit(t *testing.T) {
 
 	// Commit on feature
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "feature v1\n", "feature secret")
-	featureSHA := revParseHEAD(t, dir)
+	featureSHA := testutil.Rev(t, dir, "HEAD")
 
 	// Back to main, commit
 	cmd = exec.Command("git", "checkout", "main")
@@ -782,7 +771,7 @@ func TestScrubFromMergeCommit(t *testing.T) {
 	}
 
 	commitFileEnv(t, dir, scrubEnv, "main.txt", "main work\n", "main only commit")
-	mainPreMergeSHA := revParseHEAD(t, dir)
+	mainPreMergeSHA := testutil.Rev(t, dir, "HEAD")
 
 	// Merge feature into main
 	cmd = exec.Command("git", "merge", "feature", "--no-edit")
@@ -791,7 +780,7 @@ func TestScrubFromMergeCommit(t *testing.T) {
 		t.Fatalf("git merge: %v\n%s", err, out)
 	}
 
-	mergeSHA := revParseHEAD(t, dir)
+	mergeSHA := testutil.Rev(t, dir, "HEAD")
 
 	// Add a post-merge commit
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "post-merge\n", "post-merge update")
@@ -805,7 +794,7 @@ func TestScrubFromMergeCommit(t *testing.T) {
 	}
 
 	// Verify: merge commit itself should be rewritten (inclusive)
-	newMergeSHA := revParseHEAD(t, dir)
+	newMergeSHA := testutil.Rev(t, dir, "HEAD")
 	_ = newMergeSHA // HEAD is now the rewritten post-merge commit
 
 	// The feature branch commit and the main pre-merge commit should be
@@ -839,8 +828,8 @@ func TestScrubFromMergeCommit(t *testing.T) {
 	}
 
 	// Verify HEAD (post-merge) has scrubbed content
-	headSHA := revParseHEAD(t, dir)
-	content, ok := gitShow(t, dir, headSHA, "secret.txt")
+	headSHA := testutil.Rev(t, dir, "HEAD")
+	content, ok := testutil.Show(t, dir, headSHA, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in HEAD after scrub")
 	} else if content != "SCRUBBED\n" {
@@ -863,7 +852,7 @@ func TestScrubFromNonAncestor(t *testing.T) {
 		t.Fatalf("git checkout -b feature: %v\n%s", err, out)
 	}
 	commitFileEnv(t, dir, scrubEnv, "feature.txt", "feature content\n", "feature commit")
-	featureSHA := revParseHEAD(t, dir)
+	featureSHA := testutil.Rev(t, dir, "HEAD")
 
 	// Switch back to main
 	cmd = exec.Command("git", "checkout", "main")
@@ -970,7 +959,7 @@ func TestScrubIdempotent(t *testing.T) {
 		t.Fatalf("first scrub failed (code %d): %s", code, stderr)
 	}
 
-	headAfterFirst := revParseHEAD(t, dir)
+	headAfterFirst := testutil.Rev(t, dir, "HEAD")
 
 	// Get new initial SHA for second scrub (history was rewritten)
 	newSHAs := revListReverse(t, dir)
@@ -982,10 +971,10 @@ func TestScrubIdempotent(t *testing.T) {
 		t.Fatalf("second scrub failed (code %d): %s", code, stderr)
 	}
 
-	headAfterSecond := revParseHEAD(t, dir)
+	headAfterSecond := testutil.Rev(t, dir, "HEAD")
 
 	// Verify content is still scrubbed
-	content, ok := gitShow(t, dir, headAfterSecond, "secret.txt")
+	content, ok := testutil.Show(t, dir, headAfterSecond, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found after second scrub")
 	} else if content != "SCRUBBED\n" {
@@ -1009,7 +998,7 @@ func TestScrubMultipleBranches(t *testing.T) {
 
 	// Create commits with secret.txt on main
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "main secret v1\n", "add secret on main")
-	branchPointSHA := revParseHEAD(t, dir)
+	branchPointSHA := testutil.Rev(t, dir, "HEAD")
 
 	// Create a feature branch pointing to this commit (same as main currently)
 	cmd := exec.Command("git", "branch", "feature", branchPointSHA)
@@ -1021,7 +1010,7 @@ func TestScrubMultipleBranches(t *testing.T) {
 	// Add more commits on main (stay on main the whole time)
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "main secret v2\n", "update secret on main")
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "main secret v3\n", "update secret on main again")
-	mainSHABefore := revParseHEAD(t, dir)
+	mainSHABefore := testutil.Rev(t, dir, "HEAD")
 
 	shas := revListReverse(t, dir)
 	initialSHA := shas[0]
@@ -1037,7 +1026,7 @@ func TestScrubMultipleBranches(t *testing.T) {
 	}
 
 	// Verify main branch points to a new (rewritten) SHA
-	mainSHAAfter := revParseHEAD(t, dir)
+	mainSHAAfter := testutil.Rev(t, dir, "HEAD")
 	if mainSHAAfter == mainSHABefore {
 		t.Errorf("main branch was not rewritten: SHA still %s", mainSHABefore[:12])
 	}
@@ -1055,7 +1044,7 @@ func TestScrubMultipleBranches(t *testing.T) {
 	}
 
 	// Verify scrubbed content on main (HEAD)
-	content, ok := gitShow(t, dir, mainSHAAfter, "secret.txt")
+	content, ok := testutil.Show(t, dir, mainSHAAfter, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found on main after scrub")
 	} else if content != "REDACTED\n" {
@@ -1063,7 +1052,7 @@ func TestScrubMultipleBranches(t *testing.T) {
 	}
 
 	// Verify scrubbed content on feature branch
-	content, ok = gitShow(t, dir, featureSHAAfter, "secret.txt")
+	content, ok = testutil.Show(t, dir, featureSHAAfter, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found on feature after scrub")
 	} else if content != "REDACTED\n" {
@@ -1131,7 +1120,7 @@ func TestScrubLightweightTag(t *testing.T) {
 	dir := newRepo(t)
 
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "tagged secret v1\n", "add secret")
-	taggedSHA := revParseHEAD(t, dir)
+	taggedSHA := testutil.Rev(t, dir, "HEAD")
 
 	// Create a lightweight tag (not annotated)
 	cmd := exec.Command("git", "tag", "v1.0", taggedSHA)
@@ -1179,7 +1168,7 @@ func TestScrubLightweightTag(t *testing.T) {
 	}
 
 	// The tagged commit should have scrubbed content
-	content, ok := gitShow(t, dir, tagTargetSHA, "secret.txt")
+	content, ok := testutil.Show(t, dir, tagTargetSHA, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in tagged commit after scrub")
 	} else if content != "SCRUBBED\n" {
@@ -1245,7 +1234,7 @@ func TestScrubFilePreservesGitignored(t *testing.T) {
 	// Verify historical commits have the scrubbed content
 	newSHAs := revListReverse(t, dir)
 	for i := 1; i < len(newSHAs); i++ {
-		content, ok := gitShow(t, dir, newSHAs[i], "config.env")
+		content, ok := testutil.Show(t, dir, newSHAs[i], "config.env")
 		if !ok {
 			continue // may not exist in all commits
 		}
@@ -1413,7 +1402,7 @@ func TestScrubFileJSONDryRun(t *testing.T) {
 	// Write replacement and commit so tree is clean for scrub.
 	commitFileEnv(t, dir, scrubEnv, "secret.txt", "REDACTED\n", "commit replacement")
 
-	headBefore := revParseHEAD(t, dir)
+	headBefore := testutil.Rev(t, dir, "HEAD")
 
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv,
 		"--approve-consequential", "--json", "--dry-run", "scrub", "file",
@@ -1453,7 +1442,7 @@ func TestScrubFileJSONDryRun(t *testing.T) {
 	}
 
 	// HEAD should be unchanged (dry-run).
-	headAfter := revParseHEAD(t, dir)
+	headAfter := testutil.Rev(t, dir, "HEAD")
 	if headAfter != headBefore {
 		t.Errorf("HEAD changed during dry run: %s -> %s", headBefore[:12], headAfter[:12])
 	}

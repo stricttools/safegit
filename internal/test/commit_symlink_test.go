@@ -11,16 +11,11 @@ import (
 )
 
 // lsTreeHEAD returns `git ls-tree -r HEAD` output, which carries the mode of
-// every entry ("120000" for a symlink, "100644" for a regular file).
+// every entry ("120000" for a symlink, "100644" for a regular file). The
+// testutil.TreePaths listing drops the modes, which are the whole point here.
 func lsTreeHEAD(t *testing.T, repoDir string) string {
 	t.Helper()
-	cmd := exec.Command("git", "ls-tree", "-r", "HEAD")
-	cmd.Dir = repoDir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git ls-tree failed: %v\n%s", err, out)
-	}
-	return string(out)
+	return testutil.GitRaw(t, repoDir, "ls-tree", "-r", "HEAD")
 }
 
 // treeEntryMode returns the mode of path in the HEAD tree, or "" if absent.
@@ -45,16 +40,12 @@ func treeEntryMode(t *testing.T, repoDir, path string) string {
 }
 
 // catFileBlob returns the content of the blob at path in the HEAD tree. For a
-// symlink entry the blob content IS the link target.
+// symlink entry the blob content IS the link target. It reads the blob rather
+// than going through testutil.MustShow so that no path-based interpretation
+// (or filter) can stand between the object store and the assertion.
 func catFileBlob(t *testing.T, repoDir, path string) string {
 	t.Helper()
-	cmd := exec.Command("git", "cat-file", "blob", "HEAD:"+path)
-	cmd.Dir = repoDir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git cat-file blob HEAD:%s failed: %v\n%s", path, err, out)
-	}
-	return string(out)
+	return testutil.GitRaw(t, repoDir, "cat-file", "blob", "HEAD:"+path)
 }
 
 // TestCommitSymlink_LinkToCommittedFile checks that a symlink passed to

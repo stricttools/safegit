@@ -3,10 +3,11 @@ package test
 import (
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 var scanEnv = []string{"CLAUDE_CODE_SESSION_ID=scan-test"}
@@ -229,7 +230,7 @@ func TestScanFrom(t *testing.T) {
 	commitFileEnv(t, dir, scanEnv, "old.txt", "MARKER_OLD\n", "add old")
 
 	// Record the SHA after the first interesting commit.
-	fromSHA := revParseHEAD(t, dir)
+	fromSHA := testutil.Rev(t, dir, "HEAD")
 
 	// Second commit with a different keyword.
 	commitFileEnv(t, dir, scanEnv, "new.txt", "MARKER_NEW\n", "add new")
@@ -593,17 +594,4 @@ type ScanMatchJSON struct {
 	Line       int    `json:"line"`
 	Reachable  bool   `json:"reachable"`
 	Context    string `json:"context"`
-}
-
-// revParseHEADScan is a local helper that calls git rev-parse HEAD.
-// We use the one from undo_session_test.go when available.
-func revParseHEADScan(t *testing.T, dir string) string {
-	t.Helper()
-	cmd := exec.Command("git", "rev-parse", "HEAD")
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("git rev-parse HEAD: %v", err)
-	}
-	return strings.TrimSpace(string(out))
 }

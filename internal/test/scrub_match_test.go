@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 var scrubMatchEnv = []string{"CLAUDE_CODE_SESSION_ID=scrub-match-test"}
@@ -39,7 +41,7 @@ func TestScrubMatchBlobReplace(t *testing.T) {
 	shas := revListReverse(t, dir)
 	for i, sha := range shas {
 		for _, fname := range []string{"file1.txt", "file2.txt", "file3.txt"} {
-			content, ok := gitShow(t, dir, sha, fname)
+			content, ok := testutil.Show(t, dir, sha, fname)
 			if !ok {
 				continue // file may not exist in early commits
 			}
@@ -199,7 +201,7 @@ func TestScrubMatchBinarySkipped(t *testing.T) {
 	}
 
 	// The binary file should be unchanged in HEAD
-	headSHA := revParseHEAD(t, dir)
+	headSHA := testutil.Rev(t, dir, "HEAD")
 	cmd = exec.Command("git", "cat-file", "blob", headSHA+":binary.dat")
 	cmd.Dir = dir
 	blobContent, err := cmd.Output()
@@ -230,7 +232,7 @@ func TestScrubMatchUnreachablePruned(t *testing.T) {
 	dir := newRepo(t)
 
 	commitFileEnv(t, dir, scrubMatchEnv, "secret.txt", "SECRET_ABC data\n", "add secret")
-	oldSHA := revParseHEAD(t, dir)
+	oldSHA := testutil.Rev(t, dir, "HEAD")
 
 	// Amend the commit (creating an unreachable old commit)
 	if err := os.WriteFile(filepath.Join(dir, "secret.txt"), []byte("SECRET_ABC amended\n"), 0644); err != nil {
@@ -323,7 +325,7 @@ func TestScrubMatchSurgicalReflog(t *testing.T) {
 	// Verify the committed history is clean
 	allSHAsAfter := revListReverse(t, dir)
 	for i, sha := range allSHAsAfter {
-		content, ok := gitShow(t, dir, sha, "secret.txt")
+		content, ok := testutil.Show(t, dir, sha, "secret.txt")
 		if !ok {
 			continue
 		}
@@ -384,7 +386,7 @@ func TestScrubMatchStashWarning(t *testing.T) {
 	// Verify the committed history is clean despite the stash issue
 	shas := revListReverse(t, dir)
 	for i, sha := range shas {
-		content, ok := gitShow(t, dir, sha, "secret.txt")
+		content, ok := testutil.Show(t, dir, sha, "secret.txt")
 		if !ok {
 			continue
 		}
@@ -488,7 +490,7 @@ func TestScrubMatchFromScope(t *testing.T) {
 
 	// Verify rewritten commits have REDACTED instead of SECRET_ABC
 	for i := 3; i <= 5; i++ {
-		content, ok := gitShow(t, dir, newSHAs[i], "data.txt")
+		content, ok := testutil.Show(t, dir, newSHAs[i], "data.txt")
 		if !ok {
 			t.Errorf("commit %d (%s): data.txt not found", i, newSHAs[i][:12])
 			continue
@@ -521,7 +523,7 @@ func TestScrubMatchIdempotent(t *testing.T) {
 		t.Fatalf("first scrub match failed (code %d): stdout=%s stderr=%s", code1, stdout1, stderr1)
 	}
 
-	headAfterFirst := revParseHEAD(t, dir)
+	headAfterFirst := testutil.Rev(t, dir, "HEAD")
 
 	// Second run
 	stdout2, stderr2, code2 := runSafegitEnv(t, dir, scrubMatchEnv,
@@ -540,7 +542,7 @@ func TestScrubMatchIdempotent(t *testing.T) {
 		t.Errorf("second run should report no matches, got: %s", combined)
 	}
 
-	headAfterSecond := revParseHEAD(t, dir)
+	headAfterSecond := testutil.Rev(t, dir, "HEAD")
 	if headAfterSecond != headAfterFirst {
 		t.Errorf("HEAD changed on second run: %s -> %s (should be unchanged)", headAfterFirst[:12], headAfterSecond[:12])
 	}
@@ -579,7 +581,7 @@ func TestScrubMatchDryRun(t *testing.T) {
 	dir := newRepo(t)
 
 	commitFileEnv(t, dir, scrubMatchEnv, "data.txt", "SECRET_ABC\n", "add data")
-	headBefore := revParseHEAD(t, dir)
+	headBefore := testutil.Rev(t, dir, "HEAD")
 
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubMatchEnv,
 		"--approve-consequential", "--dry-run", "scrub", "match",
@@ -600,7 +602,7 @@ func TestScrubMatchDryRun(t *testing.T) {
 	}
 
 	// HEAD should be unchanged
-	headAfter := revParseHEAD(t, dir)
+	headAfter := testutil.Rev(t, dir, "HEAD")
 	if headAfter != headBefore {
 		t.Errorf("HEAD changed during dry run: %s -> %s", headBefore[:12], headAfter[:12])
 	}
@@ -698,7 +700,7 @@ func TestScrubMatchScope(t *testing.T) {
 	shas := revListReverse(t, dir)
 	for i, sha := range shas {
 		// Check config/secret.env is scrubbed
-		content, ok := gitShow(t, dir, sha, "config/secret.env")
+		content, ok := testutil.Show(t, dir, sha, "config/secret.env")
 		if ok {
 			if strings.Contains(content, "SECRET_ABC") {
 				t.Errorf("commit %d (%s): config/secret.env still contains SECRET_ABC: %q", i, sha[:12], content)
@@ -709,7 +711,7 @@ func TestScrubMatchScope(t *testing.T) {
 		}
 
 		// Check secret.txt is NOT scrubbed (outside scope)
-		content, ok = gitShow(t, dir, sha, "secret.txt")
+		content, ok = testutil.Show(t, dir, sha, "secret.txt")
 		if ok {
 			if !strings.Contains(content, "SECRET_ABC") {
 				t.Errorf("commit %d (%s): secret.txt should still contain SECRET_ABC (outside scope): %q", i, sha[:12], content)
@@ -771,7 +773,7 @@ func TestScrubMatchMangle(t *testing.T) {
 	// Verify git history is also clean
 	shas := revListReverse(t, dir)
 	for i, sha := range shas {
-		c, ok := gitShow(t, dir, sha, "secret.txt")
+		c, ok := testutil.Show(t, dir, sha, "secret.txt")
 		if !ok {
 			continue
 		}
@@ -1067,7 +1069,7 @@ func TestScrubMatchJSONDryRun(t *testing.T) {
 	commitFileEnv(t, dir, scrubMatchEnv, "file1.txt", "data SECRET_DRYJSON here\n", "add file1")
 	commitFileEnv(t, dir, scrubMatchEnv, "file2.txt", "also SECRET_DRYJSON inside\n", "add file2")
 
-	headBefore := revParseHEAD(t, dir)
+	headBefore := testutil.Rev(t, dir, "HEAD")
 
 	stdout, stderr, code := runSafegitEnv(t, dir, scrubMatchEnv,
 		"--approve-consequential", "--json", "--dry-run", "scrub", "match",
@@ -1111,7 +1113,7 @@ func TestScrubMatchJSONDryRun(t *testing.T) {
 	}
 
 	// HEAD should be unchanged (dry-run).
-	headAfter := revParseHEAD(t, dir)
+	headAfter := testutil.Rev(t, dir, "HEAD")
 	if headAfter != headBefore {
 		t.Errorf("HEAD changed during dry run: %s -> %s", headBefore[:12], headAfter[:12])
 	}
@@ -1129,7 +1131,7 @@ func TestScrubMatchDryRunRangeFilter(t *testing.T) {
 	commitFileEnv(t, dir, scrubMatchEnv, "clean.txt", "nothing here\n", "add clean")
 
 	// Get SHA of commit 2 (HEAD~1 relative to commit 3)
-	commit2SHA := revParseHEAD(t, dir)
+	commit2SHA := testutil.Rev(t, dir, "HEAD")
 
 	// Commit 3: contains LEAKED_SECRET_456
 	commitFileEnv(t, dir, scrubMatchEnv, "secret2.txt", "LEAKED_SECRET_456\n", "add secret2")

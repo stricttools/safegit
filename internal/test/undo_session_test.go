@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // runSafegitCleanEnv runs safegit with the controlled test environment, which
@@ -14,18 +16,6 @@ import (
 func runSafegitCleanEnv(t *testing.T, repoDir string, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
 	return runSafegitNoConsent(t, repoDir, nil, args...)
-}
-
-// revParseHEAD returns the current HEAD SHA in the given repo.
-func revParseHEAD(t *testing.T, dir string) string {
-	t.Helper()
-	cmd := exec.Command("git", "rev-parse", "HEAD")
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("git rev-parse HEAD: %v", err)
-	}
-	return strings.TrimSpace(string(out))
 }
 
 // TestUndoSessionScoped verifies that session A's undo finds session A's commit,
@@ -43,7 +33,7 @@ func TestUndoSessionScoped(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("session A commit failed (code %d): %s", code, stderr)
 	}
-	shaAfterA := revParseHEAD(t, dir)
+	shaAfterA := testutil.Rev(t, dir, "HEAD")
 
 	// Session B commits on top
 	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("from B\n"), 0644); err != nil {
@@ -53,7 +43,7 @@ func TestUndoSessionScoped(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("session B commit failed (code %d): %s", code, stderr)
 	}
-	shaAfterB := revParseHEAD(t, dir)
+	shaAfterB := testutil.Rev(t, dir, "HEAD")
 
 	if shaAfterA == shaAfterB {
 		t.Fatal("HEAD did not advance after session B commit")
@@ -66,7 +56,7 @@ func TestUndoSessionScoped(t *testing.T) {
 	}
 
 	// HEAD should now be at session A's commit
-	shaAfterUndo := revParseHEAD(t, dir)
+	shaAfterUndo := testutil.Rev(t, dir, "HEAD")
 	if shaAfterUndo != shaAfterA {
 		t.Errorf("after session B undo, HEAD = %s, want %s (session A's commit)", shaAfterUndo, shaAfterA)
 	}
@@ -111,7 +101,7 @@ func TestUndoSessionScopedBranchMoved(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("session B commit failed (code %d): %s", code, stderr)
 	}
-	shaBeforeUndo := revParseHEAD(t, dir)
+	shaBeforeUndo := testutil.Rev(t, dir, "HEAD")
 
 	// Session A tries to undo -- should fail because the branch moved past A's tip
 	_, stderr, code = runSafegitEnv(t, dir, envA, "undo")
@@ -123,7 +113,7 @@ func TestUndoSessionScopedBranchMoved(t *testing.T) {
 	}
 
 	// HEAD should not have changed
-	shaAfterUndo := revParseHEAD(t, dir)
+	shaAfterUndo := testutil.Rev(t, dir, "HEAD")
 	if shaAfterUndo != shaBeforeUndo {
 		t.Errorf("HEAD changed despite failed undo: %s -> %s", shaBeforeUndo, shaAfterUndo)
 	}
@@ -144,7 +134,7 @@ func TestUndoBypassSession(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("session A commit failed (code %d): %s", code, stderr)
 	}
-	shaAfterA := revParseHEAD(t, dir)
+	shaAfterA := testutil.Rev(t, dir, "HEAD")
 
 	// Session B commits on top
 	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("from B\n"), 0644); err != nil {
@@ -162,7 +152,7 @@ func TestUndoBypassSession(t *testing.T) {
 	}
 
 	// HEAD should be at session A's commit
-	shaAfterUndo := revParseHEAD(t, dir)
+	shaAfterUndo := testutil.Rev(t, dir, "HEAD")
 	if shaAfterUndo != shaAfterA {
 		t.Errorf("after bypass-session undo, HEAD = %s, want %s", shaAfterUndo, shaAfterA)
 	}
@@ -200,7 +190,7 @@ func TestUndoNoSessionIDErrors(t *testing.T) {
 func TestUndoNoSessionIDWithBypass(t *testing.T) {
 	dir := newRepo(t)
 
-	preSHA := revParseHEAD(t, dir)
+	preSHA := testutil.Rev(t, dir, "HEAD")
 
 	// Commit without session ID
 	if err := os.WriteFile(filepath.Join(dir, "bypass.txt"), []byte("bypass\n"), 0644); err != nil {
@@ -211,7 +201,7 @@ func TestUndoNoSessionIDWithBypass(t *testing.T) {
 		t.Fatalf("commit failed (code %d): %s", code, stderr)
 	}
 
-	postSHA := revParseHEAD(t, dir)
+	postSHA := testutil.Rev(t, dir, "HEAD")
 	if preSHA == postSHA {
 		t.Fatal("HEAD did not advance after commit")
 	}
@@ -222,7 +212,7 @@ func TestUndoNoSessionIDWithBypass(t *testing.T) {
 		t.Fatalf("undo with --bypass-session failed (code %d): %s", code, stderr)
 	}
 
-	undoneSHA := revParseHEAD(t, dir)
+	undoneSHA := testutil.Rev(t, dir, "HEAD")
 	if undoneSHA != preSHA {
 		t.Errorf("after undo HEAD = %s, want %s (pre-commit)", undoneSHA, preSHA)
 	}

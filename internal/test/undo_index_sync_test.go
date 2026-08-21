@@ -59,12 +59,6 @@ func undoSyncHasStagedPath(lines []string, path string) bool {
 	return false
 }
 
-// undoSyncHead returns the repo's HEAD SHA.
-func undoSyncHead(t *testing.T, dir string) string {
-	t.Helper()
-	return testutil.Git(t, dir, "rev-parse", "HEAD")
-}
-
 // undoSyncUnmergedStages returns `git ls-files -u` output: the conflict stages
 // git writes for an unresolved merge or cherry-pick. Empty means git no longer
 // believes there is a conflict to resolve.
@@ -109,7 +103,7 @@ func TestUndoPreservesForeignStagedState(t *testing.T) {
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "owned commit", "--", "owned.txt"); code != 0 {
 		t.Fatalf("owned commit failed (code %d): %s", code, stderr)
 	}
-	beforeUndo := undoSyncHead(t, dir)
+	beforeUndo := testutil.Rev(t, dir, "HEAD")
 
 	// The other session stages three kinds of work in the shared index.
 	testutil.WriteFile(t, dir, "foreign.txt", "staged edit\n")
@@ -128,7 +122,7 @@ func TestUndoPreservesForeignStagedState(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("undo failed (code %d): %s", code, stderr)
 	}
-	if head := undoSyncHead(t, dir); head == beforeUndo {
+	if head := testutil.Rev(t, dir, "HEAD"); head == beforeUndo {
 		t.Fatalf("undo exited 0 but HEAD did not move from %s", beforeUndo)
 	}
 
@@ -195,7 +189,7 @@ func TestUndoRefusedMidMerge(t *testing.T) {
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "main edit", "--", "conflicted.txt"); code != 0 {
 		t.Fatalf("main commit failed (code %d): %s", code, stderr)
 	}
-	mainSHA := undoSyncHead(t, dir)
+	mainSHA := testutil.Rev(t, dir, "HEAD")
 
 	if _, _, code := runSafegitEnv(t, dir, env, "merge", "feature"); code == 0 {
 		t.Fatalf("fixture: safegit merge feature succeeded; a conflict is required")
@@ -220,7 +214,7 @@ func TestUndoRefusedMidMerge(t *testing.T) {
 			"    reports the conflict, because undo.go:207 read-tree'd over them)\n"+
 			"  git status: %s\n"+
 			"  stdout: %s",
-			mainSHA, undoSyncHead(t, dir),
+			mainSHA, testutil.Rev(t, dir, "HEAD"),
 			!undoSyncMergeStateGone(t, dir),
 			undoSyncUnmergedStages(t, dir), len(strings.Split(stagesBefore, "\n")),
 			oneLine(testutil.Git(t, dir, "status", "--porcelain")),
@@ -228,7 +222,7 @@ func TestUndoRefusedMidMerge(t *testing.T) {
 	}
 
 	// A refusal must leave the merge exactly as it found it.
-	if head := undoSyncHead(t, dir); head != mainSHA {
+	if head := testutil.Rev(t, dir, "HEAD"); head != mainSHA {
 		t.Errorf("HEAD moved to %s despite the refusal (was %s)", head, mainSHA)
 	}
 	if got, rerr := os.ReadFile(mergeHeadPath); rerr != nil || strings.TrimSpace(string(got)) != strings.TrimSpace(string(mergeHead)) {
@@ -268,7 +262,7 @@ func TestUndoLeavesWorkingTreeIntact(t *testing.T) {
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "add tracked.txt", "--", "tracked.txt"); code != 0 {
 		t.Fatalf("setup commit failed (code %d): %s", code, stderr)
 	}
-	beforeCommit := undoSyncHead(t, dir)
+	beforeCommit := testutil.Rev(t, dir, "HEAD")
 
 	// One commit that both modifies a tracked file and adds a new one.
 	testutil.WriteFile(t, dir, "tracked.txt", "v2\n")
@@ -280,7 +274,7 @@ func TestUndoLeavesWorkingTreeIntact(t *testing.T) {
 	if _, stderr, code := runSafegitEnv(t, dir, env, "undo"); code != 0 {
 		t.Fatalf("undo failed (code %d): %s", code, stderr)
 	}
-	if head := undoSyncHead(t, dir); head != beforeCommit {
+	if head := testutil.Rev(t, dir, "HEAD"); head != beforeCommit {
 		t.Fatalf("after undo HEAD = %s, want %s", head, beforeCommit)
 	}
 
@@ -329,7 +323,7 @@ func TestGuardedPassthroughKeepsCherryPickConflictStages(t *testing.T) {
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "side edit", "--", "c.txt"); code != 0 {
 		t.Fatalf("side commit failed (code %d): %s", code, stderr)
 	}
-	sideSHA := undoSyncHead(t, dir)
+	sideSHA := testutil.Rev(t, dir, "HEAD")
 
 	testutil.Git(t, dir, "switch", "main")
 	testutil.WriteFile(t, dir, "c.txt", "trunk\n")

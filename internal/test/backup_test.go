@@ -34,7 +34,7 @@ func commitFileIn(t *testing.T, dir, name, content, msg string) string {
 	if code != 0 {
 		t.Fatalf("commit %q failed (code %d): %s", msg, code, stderr)
 	}
-	return revParseHEAD(t, dir)
+	return testutil.Rev(t, dir, "HEAD")
 }
 
 // oplogEntries returns every oplog entry of the given op in a repo.
@@ -134,7 +134,7 @@ func TestBackupListEmptyRemote(t *testing.T) {
 // TestBackupRestoreRoundTrip: backup, lose the local commits, restore them.
 func TestBackupRestoreRoundTrip(t *testing.T) {
 	dir, _ := newRepoWithRemote(t)
-	base := revParseHEAD(t, dir)
+	base := testutil.Rev(t, dir, "HEAD")
 	head := commitFileIn(t, dir, "work.txt", "work\n", "add work")
 
 	if _, stderr, code := runSafegit(t, dir, "backup", "backup", "origin"); code != 0 {
@@ -143,7 +143,7 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 
 	// Simulate losing local work (e.g. a fresh clone of a stale state).
 	testutil.Git(t, dir, "reset", "--hard", base)
-	if got := revParseHEAD(t, dir); got != base {
+	if got := testutil.Rev(t, dir, "HEAD"); got != base {
 		t.Fatalf("reset failed: HEAD = %s", got)
 	}
 
@@ -151,7 +151,7 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("backup restore failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
-	if got := revParseHEAD(t, dir); got != head {
+	if got := testutil.Rev(t, dir, "HEAD"); got != head {
 		t.Errorf("HEAD after restore = %s, want %s", got, head)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "work.txt")); err != nil {
@@ -231,7 +231,7 @@ func TestBackupRestoreRefusesNonFastForward(t *testing.T) {
 	if !strings.Contains(stderr, "fast-forward") {
 		t.Errorf("expected a fast-forward explanation, got: %s", stderr)
 	}
-	if got := revParseHEAD(t, dir); got != head {
+	if got := testutil.Rev(t, dir, "HEAD"); got != head {
 		t.Errorf("HEAD moved despite the refused restore: %s -> %s", head, got)
 	}
 }
@@ -355,7 +355,7 @@ func TestBackupDryRunTouchesNothing(t *testing.T) {
 // TestBackupRestoreDryRunTouchesNothing: the restore preview leaves HEAD alone.
 func TestBackupRestoreDryRunTouchesNothing(t *testing.T) {
 	dir, _ := newRepoWithRemote(t)
-	base := revParseHEAD(t, dir)
+	base := testutil.Rev(t, dir, "HEAD")
 	commitFileIn(t, dir, "work.txt", "work\n", "add work")
 	if _, stderr, code := runSafegit(t, dir, "backup", "backup", "origin"); code != 0 {
 		t.Fatalf("backup failed (code %d): %s", code, stderr)
@@ -369,7 +369,7 @@ func TestBackupRestoreDryRunTouchesNothing(t *testing.T) {
 	if !strings.Contains(stdout, "Would fast-forward") {
 		t.Errorf("expected a preview line, got: %s", stdout)
 	}
-	if got := revParseHEAD(t, dir); got != base {
+	if got := testutil.Rev(t, dir, "HEAD"); got != base {
 		t.Errorf("dry-run restore moved HEAD: %s -> %s", base, got)
 	}
 }
@@ -377,7 +377,7 @@ func TestBackupRestoreDryRunTouchesNothing(t *testing.T) {
 // TestBackupWritesOplogEntries: both mutating backup operations are auditable.
 func TestBackupWritesOplogEntries(t *testing.T) {
 	dir, _ := newRepoWithRemote(t)
-	base := revParseHEAD(t, dir)
+	base := testutil.Rev(t, dir, "HEAD")
 	head := commitFileIn(t, dir, "work.txt", "work\n", "add work")
 
 	if _, stderr, code := runSafegit(t, dir, "backup", "backup", "origin"); code != 0 {
