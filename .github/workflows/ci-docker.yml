@@ -1,4 +1,7 @@
-name: CI
+# Named Docker, not CI: exactly one workflow in this repository is named CI
+# (ci-go.yml, the test workflow), so the release's CI-check resolution has one
+# unambiguous answer.
+name: Docker
 
 on:
   push:
