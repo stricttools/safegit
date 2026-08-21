@@ -481,7 +481,7 @@ pass; `TestIntakeEdgeDanglingSymlinkNoColon` goes green as a side effect.
 - Directory expansion at intake `[%%]`: union of on-disk contents and the
   commit's parent tree under the prefix (deletions included), never
   descending into gitlink/submodule boundaries. Gitignored files under an
-  expanded directory are SKIPPED silently on stderr (matching git's own
+  expanded directory are SKIPPED with no stderr output (matching git's own
   directory semantics -- expansion produces names the caller never typed,
   so the per-path ignore refusal applies only to EXPLICITLY NAMED paths;
   tracked ignored files still expand, since they are already in the
@@ -1323,7 +1323,7 @@ context block), commit it, and the single
 
 | Phase | Depends on | Blocks |
 |---|---|---|
-| 0.1-0.8 | -- (mutually independent) | everything |
+| 0.1-0.8 | -- (logically independent; shared-file groups in the Phase 0 header) | everything |
 | 1.1 | 0.2, 0.3 | 6 |
 | 1.2 | -- | 1.4, 6 |
 | 1.3 | 0.2, 0.3 | 2 (untrack test rewrite), 4.1, 6.2, 6.4 |
@@ -1397,4 +1397,4 @@ ranges (e.g. row 16) especially.
 | 39 | docs/commands-guide.md:387-425, 500, 580-609; docs/_CLAUDE.md:73 | scrub file os.Stat mode inference examples; scrub verify policy-store text (incl. the template's verify description) | rewrite to mode flags (4.2) and stateless verify (4.3) |
 | 40 | docs/commands-guide.md:27; docs/_CLAUDE.md consequential list | "exactly four" consequential commands | update if 8.2's conditional form changes the count phrasing |
 | 41 | docs/req.md:17 | lock must notify without polling | annotate as historical requirement; implementation polls with backoff |
-| 42 | docs/_CLAUDE.md:34-37 | stress command docs | update for the 0.7 env re-keying |
+| 42 | docs/_CLAUDE.md:34-37 | stress command docs | update for the 0.7 --stress test-binary flag |
