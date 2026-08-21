@@ -67,9 +67,9 @@ Concurrency-safe Git wrapper (Go CLI). When multiple AI agent sessions share one
 ## Build and test
 
 - `go build -o safegit .` to build
-- `go test ./... -race` to run all tests with race detection
-- `go test ./internal/test/ -race -count=5 -timeout=15m` for stress tests
-- `testdata/stress` for a quick stress run
+- `go test ./... -race` runs every ordinary test with race detection. It does NOT run the long-running stress scenarios: those are opt-in behind `--stress`, a flag registered on the integration test binary (`internal/test`), so a bare run stays fast and CI needs no `-short` to dodge them
+- `go test ./internal/test/ -race -count=5 -timeout=15m --stress` for the stress scenarios
+- `testdata/stress [count]` runs the same thing (it passes `--stress` for you)
 
 ## Release workflow
 
@@ -90,7 +90,7 @@ This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestrat
 - Per-invocation tmp indexes: never write to the shared .git/index
 - All ref updates use CAS (compare-and-swap) via git update-ref with old-value argument
 - Lock files use O_CREAT|O_EXCL for atomic creation
-- Oplog entries must be < 4096 bytes (POSIX atomic append guarantee)
+- Oplog entries have no size limit: the exclusive flock held across each append is what makes it atomic, not the 4096-byte POSIX O_APPEND guarantee. `oplog.Read` returns a skipped-unparseable-line count; consumers that need a complete log (undo, bypass detection) fail closed on a nonzero count, and doctor reports it
 - Tests in internal/test/ are integration tests that build and run the safegit binary as a subprocess
 - CGO_ENABLED=0 for all builds (static binary, no C dependencies)
 - `safegit undo` reverses the last commit/amend/reword via oplog (session-scoped by default; `--count N` to undo multiple)
