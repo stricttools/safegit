@@ -11,6 +11,13 @@ import (
 	"github.com/smm-h/safegit/internal/git"
 )
 
+// ErrBinaryFile reports that a hunk spec was given for a file git reports as
+// binary, where only whole-file staging exists. It is exported because the
+// refusal has its own exit code (exitcode.BinaryHunkSpec): the commit pipeline
+// recognizes it with errors.Is and reports it as that code rather than as an
+// undifferentiated failure.
+var ErrBinaryFile = errors.New("binary file: hunk staging not supported")
+
 // Hunk represents a single change block from a unified diff.
 type Hunk struct {
 	Index    int      // 1-based
@@ -44,7 +51,7 @@ func ExtractHunks(ctx context.Context, indexPath, file string) (header []string,
 
 	// Check for binary file
 	if strings.Contains(out, "Binary files") {
-		return nil, nil, errors.New("binary file: hunk staging not supported")
+		return nil, nil, ErrBinaryFile
 	}
 
 	header, hunks = ParseDiff(out)

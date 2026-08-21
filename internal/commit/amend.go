@@ -158,7 +158,7 @@ func (p *Pipeline) tryAmend(
 		hunks := req.FileSpecs[i].Hunks
 		if hunks != nil {
 			if err := stage.StageHunks(ctx, tmpIdx.IndexPath, absPath, hunks); err != nil {
-				return nil, false, fmt.Errorf("staging hunks of %s: %w", absPath, err)
+				return nil, false, stagingHunksError(absPath, err)
 			}
 		} else {
 			if err := p.stageFile(ctx, tmpIdx.IndexPath, absPath); err != nil {
