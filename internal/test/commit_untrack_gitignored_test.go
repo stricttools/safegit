@@ -71,12 +71,14 @@ func TestCommitUntrackGitignoredPath(t *testing.T) {
 	}
 }
 
-// TestCommitGitignoreOnlyDropsPreStagedRemoval is the fallback the report tried
+// TestCommitGitignoreOnlyKeepsPreStagedRemoval is the fallback the report tried
 // after the case above was refused: commit only the non-ignored path and hope
-// the pre-staged removals survive for a later commit. It asserts the CURRENT
-// behavior of the shared index after that commit, whatever that behavior is, so
-// any change to it is visible.
-func TestCommitGitignoreOnlyDropsPreStagedRemoval(t *testing.T) {
+// the pre-staged removals survive for a later commit. They do -- the commit
+// reconciles the shared index through the one authority that preserves every
+// staged change the parent tip does not account for -- and this test pins that,
+// so a regression to "the index is rebuilt from the new HEAD and the operator's
+// staged removal is gone" is loud.
+func TestCommitGitignoreOnlyKeepsPreStagedRemoval(t *testing.T) {
 	dir := seedTrackedThenIgnoredFile(t)
 
 	before := testutil.GitRaw(t, dir, "diff", "--cached", "--name-status")
@@ -97,14 +99,20 @@ func TestCommitGitignoreOnlyDropsPreStagedRemoval(t *testing.T) {
 	t.Logf("git status --porcelain after safegit commit: %q", status)
 	t.Logf("git ls-files dir/junk.txt after safegit commit: %q", lsFiles)
 
-	// Current behavior, recorded so a change is loud: the commit records only
-	// .gitignore, and the shared index is rebuilt from the new HEAD -- so the
-	// operator's staged removal is gone and dir/junk.txt is tracked again.
-	if strings.Contains(after, "D\tdir/junk.txt") {
-		t.Errorf("behavior changed: the pre-staged removal survived the commit (staged: %q)", after)
+	// The commit records only .gitignore, and the operator's pre-staged removal
+	// is still staged afterwards: the shared index is reconciled against the
+	// commit's PARENT, so a staged change the parent does not account for is
+	// replayed over the new HEAD instead of being erased by it. The operator
+	// can commit the removal in a second commit, which is the whole point of
+	// the fallback.
+	if !strings.Contains(after, "D\tdir/junk.txt") {
+		t.Errorf("the pre-staged removal did not survive the commit -- another session's staged work was destroyed (staged: %q)", after)
 	}
-	if strings.TrimSpace(lsFiles) != "dir/junk.txt" {
-		t.Errorf("behavior changed: dir/junk.txt is no longer tracked after the commit (ls-files: %q)", lsFiles)
+	if strings.TrimSpace(lsFiles) != "" {
+		t.Errorf("dir/junk.txt is in the index again, so the staged removal was undone (ls-files: %q)", lsFiles)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "dir", "junk.txt")); err != nil {
+		t.Errorf("dir/junk.txt must stay on disk: the removal was staged with --cached: %v", err)
 	}
 
 	diff := testutil.GitRaw(t, dir, "diff-tree", "--no-commit-id", "-r", "--name-status", "HEAD")
