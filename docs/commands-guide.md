@@ -1123,17 +1123,39 @@ All safegit configuration is stored in `.git/safegit/config.json` and managed vi
 
 ## Exit Code Reference
 
+Every code safegit produces is a named constant in `internal/exitcode`, and the
+table below is generated from that registry by `scripts/gen-exit-table`. Do not
+edit it by hand: `go test .` re-renders it from the registry and fails when the
+file is stale.
+
+Two codes cover argument errors, and the split is not cosmetic. The CLI
+framework refuses a command line it cannot parse -- an unknown flag, an unknown
+command, a missing required flag, a value outside a declared choice set -- and
+those refusals **exit 1**, which the framework owns. Code 2 is safegit's own
+validation, reached only after the parse succeeded: mutually exclusive flags, a
+missing commit message, an unparseable hunk spec. Unifying the two awaits an
+upstream ruling on a framework usage-error code.
+
+<!-- BEGIN generated exit-code table (scripts/gen-exit-table) -->
+
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
 | 1 | General error |
-| 2 | Usage / argument error |
+| 2 | Argument error safegit itself rejected (the framework's own parse refusals exit 1) |
 | 3 | Not a git repository |
 | 4 | safegit not initialized |
-| 5 | Coordination guard failed (another operation in progress) |
+| 5 | Coordination guard refused (another operation owns the working tree) |
 | 7 | CAS retries exhausted |
+| 8 | Timed out acquiring a lock a live holder still owns |
 | 9 | write-tree failed |
 | 10 | commit-tree failed |
+| 14 | Hunk spec given for a binary file |
 | 20 | Pre-pre-push hook failed |
 | 21 | Pre-pre-push hook timed out |
+| 22 | The remote backup slot holds work missing from the local history |
+| 23 | The branch has no backup slot on the remote |
 | 40 | Git push failed |
+| 70 | Internal invariant violated (a bug) |
+
+<!-- END generated exit-code table -->
