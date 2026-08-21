@@ -5,6 +5,7 @@ package test
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -23,6 +24,11 @@ import (
 var safegitBin string
 
 func TestMain(m *testing.M) {
+	// Register the stress opt-in before m.Run parses the command line. The
+	// long-running scenarios in stress_test.go skip without it, so a bare
+	// `go test ./internal/test/` is fast and needs no generic -short.
+	stressEnabled = flag.Bool("stress", false, "run the long-running stress scenarios (minutes each)")
+
 	// Build safegit binary once for all tests in this package.
 	tmpDir, err := os.MkdirTemp("", "safegit-test-bin-*")
 	if err != nil {
