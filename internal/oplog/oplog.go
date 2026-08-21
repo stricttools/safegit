@@ -167,38 +167,6 @@ func LastRefUpdate(safegitDir, ref string) (*Entry, error) {
 	return nil, nil
 }
 
-// LastRefUpdateForSession finds the most recent oplog entry for a given ref
-// and session ID that records a new tip SHA. Same logic as LastRefUpdate but
-// with an additional session ID filter.
-// Returns nil if no matching entry is found. Fails closed on an incomplete
-// log, for the same reason as LastRefUpdate.
-func LastRefUpdateForSession(safegitDir, ref, sessionID string) (*Entry, error) {
-	entries, skipped, err := Read(safegitDir)
-	if err != nil {
-		return nil, err
-	}
-	if skipped > 0 {
-		return nil, errSkippedLines(skipped)
-	}
-
-	for i := len(entries) - 1; i >= 0; i-- {
-		e := entries[i]
-		if e.SessionID != sessionID {
-			continue
-		}
-		if e.Extra == nil {
-			continue
-		}
-		if entryRef, ok := e.Extra["ref"].(string); ok && entryRef == ref {
-			if hasTipSHA(e.Extra) {
-				return &e, nil
-			}
-		}
-	}
-
-	return nil, nil
-}
-
 // hasTipSHA returns true if extra contains a new-tip SHA under any of
 // the known keys: "sha" (commit/amend/reword), "to" (checkout),
 // "result" (merge).
