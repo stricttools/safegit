@@ -1,7 +1,9 @@
-// Package filelock provides platform-safe file locking for append operations.
-// On Unix, uses flock(2) for advisory locking. On Windows, flock is a no-op
-// since the write sizes are small enough for atomic O_APPEND guarantees and
-// scrub policies are serialized by a coordination lock.
+// Package filelock provides file locking for append operations, using flock(2)
+// for advisory locking. There is no Windows implementation on purpose: the
+// appended files have no line-size limit, so the lock -- not POSIX O_APPEND
+// atomicity -- is the only thing that keeps concurrent appends intact, and a
+// no-op lock would silently mean no integrity at all. A Windows build fails to
+// compile here; see todo/.defer/windows-lockfileex-support.md.
 package filelock
 
 import (
