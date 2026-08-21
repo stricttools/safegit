@@ -266,10 +266,15 @@ func TestRetiredLogKeyStillParses(t *testing.T) {
 		t.Errorf("RetryAttempts = %d, want 3", cfg.Push.RetryAttempts)
 	}
 
-	if err := SetConfigValue(cfg, "log.maxSizeMB", "50"); err == nil {
-		t.Error("setting log.maxSizeMB should be an unknown-key error")
-	} else if !strings.Contains(err.Error(), "unknown config key") {
-		t.Errorf("error should say unknown config key, got: %v", err)
+	// Both a well-shaped and a malformed value must report the KEY: the key is
+	// resolved before the value is parsed, so a non-numeric value can never
+	// mask a retired key behind "must be an integer".
+	for _, value := range []string{"50", "abc", "", "-1"} {
+		if err := SetConfigValue(cfg, "log.maxSizeMB", value); err == nil {
+			t.Errorf("setting log.maxSizeMB=%q should be an unknown-key error", value)
+		} else if !strings.Contains(err.Error(), "unknown config key") {
+			t.Errorf("setting log.maxSizeMB=%q should say unknown config key, got: %v", value, err)
+		}
 	}
 	if _, err := GetConfigValue(cfg, "log.maxSizeMB"); err == nil {
 		t.Error("getting log.maxSizeMB should be an unknown-key error")

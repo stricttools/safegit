@@ -348,6 +348,10 @@ func GetConfigValue(cfg *Config, key string) (interface{}, error) {
 }
 
 // SetConfigValue sets a dot-separated config key to the given string value.
+//
+// The key is resolved BEFORE the value is parsed, so an unknown key is always
+// reported as an unknown key whatever its value looks like: `config set
+// log.maxSizeMB abc` names the retired key, not the shape of "abc".
 func SetConfigValue(cfg *Config, key, value string) error {
 	// Handle boolean config keys separately.
 	switch key {
@@ -365,6 +369,22 @@ func SetConfigValue(cfg *Config, key, value string) error {
 		return nil
 	}
 
+	// Resolving the key to the field it names is the key check: an unknown key
+	// leaves here, and only a known integer key reaches the value parse below.
+	var target *int
+	switch key {
+	case "commit.casMaxAttempts":
+		target = &cfg.Commit.CASMaxAttempts
+	case "lock.acquireTimeoutSeconds":
+		target = &cfg.Lock.AcquireTimeoutSeconds
+	case "hooks.preprepush.timeoutSeconds":
+		target = &cfg.Hooks.PrePrePush.TimeoutSeconds
+	case "push.retryAttempts":
+		target = &cfg.Push.RetryAttempts
+	default:
+		return fmt.Errorf("unknown config key: %s", key)
+	}
+
 	intVal, err := parseInt(value)
 	if err != nil {
 		return fmt.Errorf("invalid value %q for %s: must be an integer", value, key)
@@ -372,19 +392,7 @@ func SetConfigValue(cfg *Config, key, value string) error {
 	if intVal <= 0 {
 		return fmt.Errorf("invalid value %q for %s: must be positive", value, key)
 	}
-
-	switch key {
-	case "commit.casMaxAttempts":
-		cfg.Commit.CASMaxAttempts = intVal
-	case "lock.acquireTimeoutSeconds":
-		cfg.Lock.AcquireTimeoutSeconds = intVal
-	case "hooks.preprepush.timeoutSeconds":
-		cfg.Hooks.PrePrePush.TimeoutSeconds = intVal
-	case "push.retryAttempts":
-		cfg.Push.RetryAttempts = intVal
-	default:
-		return fmt.Errorf("unknown config key: %s", key)
-	}
+	*target = intVal
 	return nil
 }
 
