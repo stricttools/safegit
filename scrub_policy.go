@@ -50,9 +50,9 @@ func appendScrubPolicy(sgDir string, policy ScrubPolicy) error {
 }
 
 // appendJSONLLine appends one pre-marshaled JSON line to <sgDir>/<filename>.
-// Uses O_APPEND with advisory locking for concurrency safety, following the same
-// pattern as oplog.Append (but without the 4096-byte line cap, since the lock —
-// not POSIX append atomicity — guarantees line integrity here).
+// Uses O_APPEND with advisory locking for concurrency safety, the same pattern
+// as oplog.Append: the lock, not POSIX append atomicity, is what guarantees
+// line integrity, so lines have no size limit.
 func appendJSONLLine(sgDir, filename string, data []byte) error {
 	line := append(data[:len(data):len(data)], '\n')
 	path := filepath.Join(sgDir, filename)

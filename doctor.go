@@ -22,6 +22,93 @@ type checkResult struct {
 	Detail string
 }
 
+// doctorEnv is everything a registered check may look at. It is built once per
+// doctor run so a check function takes no other arguments and can be added,
+// removed or reordered without touching any other check.
+type doctorEnv struct {
+	ctx    context.Context
+	flags  globalFlags
+	gitDir string
+	sgDir  string
+	inited bool
+}
+
+// doctorFinding is one check's outcome.
+//
+// A check that found nothing to say (its precondition does not exist in this
+// repo -- no HEAD ref, no hook directory) returns findingNone and is reported
+// as nothing at all. Otherwise the finding is either ok or a failure carrying
+// the check's declared severity, which a finding may override when the reason
+// for failing is graver than the check's ordinary one.
+type doctorFinding struct {
+	reported bool
+	ok       bool
+	status   string // overrides the check's Severity when non-empty
+	detail   string
+}
+
+func findingNone() doctorFinding { return doctorFinding{} }
+
+func findingOK(detail string) doctorFinding {
+	return doctorFinding{reported: true, ok: true, detail: detail}
+}
+
+func findingFail(format string, args ...interface{}) doctorFinding {
+	return doctorFinding{reported: true, detail: fmt.Sprintf(format, args...)}
+}
+
+// findingAt is findingFail with an explicit status instead of the check's
+// declared severity.
+func findingAt(status, format string, args ...interface{}) doctorFinding {
+	return doctorFinding{reported: true, status: status, detail: fmt.Sprintf(format, args...)}
+}
+
+// resolveFinding turns a check plus its finding into the status doctor
+// reports, and whether it reports anything at all. Passing ok wins over the
+// declared severity; a finding's own status overrides it.
+func resolveFinding(c doctorCheck, f doctorFinding) (string, bool) {
+	if !f.reported {
+		return "", false
+	}
+	if f.ok {
+		return "ok", true
+	}
+	if f.status != "" {
+		return f.status, true
+	}
+	return c.Severity, true
+}
+
+// doctorCheck is one registered diagnostic.
+//
+// Severity is the status a failing finding carries: "warn" for advisory
+// findings the operator may live with, "error" for ones that mean safegit
+// cannot work correctly here.
+//
+// RequiresInit skips the check entirely when .git/safegit/ has not been
+// created yet -- for those checks there is nothing to diagnose, not a passing
+// state to report.
+type doctorCheck struct {
+	Name         string
+	Severity     string
+	RequiresInit bool
+	Fn           func(env doctorEnv) doctorFinding
+}
+
+// doctorChecks is the check registry: doctor runs exactly these, in order.
+// Adding a diagnostic is one entry plus one function, never an edit to the
+// reporting loop.
+var doctorChecks = []doctorCheck{
+	{Name: "initialized", Severity: "error", Fn: checkInitialized},
+	{Name: "tmp_dirs", Severity: "warn", RequiresInit: true, Fn: checkTmpDirs},
+	{Name: "stale_locks", Severity: "warn", RequiresInit: true, Fn: checkStaleLocks},
+	{Name: "config", Severity: "warn", RequiresInit: true, Fn: checkConfig},
+	{Name: "oplog", Severity: "error", RequiresInit: true, Fn: checkOplog},
+	{Name: "bypass_detect", Severity: "warn", RequiresInit: true, Fn: checkBypassDetect},
+	{Name: "filesystem", Severity: "warn", Fn: checkFilesystemRegistered},
+	{Name: "hook_perms", Severity: "warn", RequiresInit: true, Fn: checkHookPerms},
+}
+
 // runDoctor returns the process exit code. A declined confirmation is a
 // refusal, not a success: it exits nonzero so a script or agent cannot read
 // "aborted" as "done".
@@ -59,151 +146,28 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 
 	ctx := flags.ctx()
 
+	env := doctorEnv{
+		ctx:    ctx,
+		flags:  flags,
+		gitDir: gitDir,
+		sgDir:  repo.SafegitDir(gitDir),
+		inited: repo.IsInitialized(gitDir),
+	}
+
 	var checks []checkResult
-	var checkStart time.Time
-
-	// Check 1: Is safegit initialized?
-	checkStart = time.Now()
-	if repo.IsInitialized(gitDir) {
-		checks = append(checks, checkResult{Name: "initialized", Status: "ok"})
-	} else {
-		checks = append(checks, checkResult{Name: "initialized", Status: "error", Detail: "not initialized (run any safegit command to auto-init)"})
-	}
-	if flags.verbose {
-		fmt.Fprintf(os.Stderr, "  checked: initialized (%v)\n", time.Since(checkStart))
-	}
-
-	sgDir := repo.SafegitDir(gitDir)
-
-	// Check 2: Orphan tmp dirs (report only; --fix cleans them up)
-	if repo.IsInitialized(gitDir) {
-		checkStart = time.Now()
-		orphans, err := index.GarbageCollectDryRun(sgDir)
-		if err != nil {
-			checks = append(checks, checkResult{Name: "tmp_dirs", Status: "warn", Detail: err.Error()})
-		} else if len(orphans) > 0 {
-			checks = append(checks, checkResult{
-				Name:   "tmp_dirs",
-				Status: "warn",
-				Detail: fmt.Sprintf("%d orphan tmp dir(s) found (run 'safegit doctor --action fix' to clean)", len(orphans)),
-			})
-		} else {
-			checks = append(checks, checkResult{Name: "tmp_dirs", Status: "ok"})
+	for _, c := range doctorChecks {
+		if c.RequiresInit && !env.inited {
+			continue
+		}
+		checkStart := time.Now()
+		f := c.Fn(env)
+		if status, reported := resolveFinding(c, f); reported {
+			checks = append(checks, checkResult{Name: c.Name, Status: status, Detail: f.detail})
 		}
 		if flags.verbose {
-			fmt.Fprintf(os.Stderr, "  checked: tmp_dirs (%v)\n", time.Since(checkStart))
+			fmt.Fprintf(os.Stderr, "  checked: %s (%v)\n", c.Name, time.Since(checkStart))
 		}
 	}
-
-	// Check 3: Stale locks (scan the shared safegit dir so worktree locks are found)
-	if repo.IsInitialized(gitDir) {
-		checkStart = time.Now()
-		sharedDir := repo.SharedSafegitDir(ctx, gitDir)
-		staleCount := countStaleLocks(sharedDir)
-		if staleCount > 0 {
-			checks = append(checks, checkResult{
-				Name:   "stale_locks",
-				Status: "warn",
-				Detail: fmt.Sprintf("%d stale lock(s) found", staleCount),
-			})
-		} else {
-			checks = append(checks, checkResult{Name: "stale_locks", Status: "ok"})
-		}
-		if flags.verbose {
-			fmt.Fprintf(os.Stderr, "  checked: stale_locks (%v)\n", time.Since(checkStart))
-		}
-	}
-
-	// Check 4: Config readable
-	if repo.IsInitialized(gitDir) {
-		checkStart = time.Now()
-		cfg, err := repo.LoadConfig(gitDir)
-		if err != nil {
-			checks = append(checks, checkResult{Name: "config", Status: "error", Detail: err.Error()})
-		} else if cfg.SchemaVersion != 1 {
-			checks = append(checks, checkResult{
-				Name:   "config",
-				Status: "warn",
-				Detail: fmt.Sprintf("unknown schema version %d", cfg.SchemaVersion),
-			})
-		} else {
-			checks = append(checks, checkResult{Name: "config", Status: "ok"})
-		}
-		if flags.verbose {
-			fmt.Fprintf(os.Stderr, "  checked: config (%v)\n", time.Since(checkStart))
-		}
-	}
-
-	// Check 6: Raw git bypass detection -- compare oplog's last ref-update against actual tip
-	if repo.IsInitialized(gitDir) {
-		checkStart = time.Now()
-		ref, refErr := git.HeadRef(ctx)
-		if refErr == nil && ref != "" {
-			lastEntry, entryErr := oplog.LastRefUpdate(sgDir, ref)
-			if entryErr == nil && lastEntry != nil {
-				if sha := oplog.TipSHA(lastEntry.Extra); sha != "" {
-					tipSHA, tipErr := git.RevParse(ctx, ref)
-					if tipErr == nil && tipSHA != sha {
-						checks = append(checks, checkResult{
-							Name:   "bypass_detect",
-							Status: "warn",
-							Detail: fmt.Sprintf("tip of %s (%s) diverged from last oplog entry (%s); raw git may have been used", refShortName(ref), tipSHA[:8], sha[:8]),
-						})
-					} else if tipErr == nil {
-						checks = append(checks, checkResult{Name: "bypass_detect", Status: "ok"})
-					}
-				}
-			} else if entryErr == nil {
-				// No oplog entries for this ref -- skip check
-				checks = append(checks, checkResult{Name: "bypass_detect", Status: "ok", Detail: "no oplog entries for current ref"})
-			}
-		}
-		if flags.verbose {
-			fmt.Fprintf(os.Stderr, "  checked: bypass_detect (%v)\n", time.Since(checkStart))
-		}
-	}
-
-	// Check 7: NFS/network filesystem detection (platform-specific)
-	checkStart = time.Now()
-	checks = append(checks, checkFilesystem(gitDir))
-	if flags.verbose {
-		fmt.Fprintf(os.Stderr, "  checked: filesystem (%v)\n", time.Since(checkStart))
-	}
-
-	// Check 8: Non-executable hooks in pre-pre-push.d/
-	if repo.IsInitialized(gitDir) {
-		checkStart = time.Now()
-		hookDir := filepath.Join(gitDir, "hooks", "pre-pre-push.d")
-		entries, readErr := os.ReadDir(hookDir)
-		if readErr == nil {
-			var nonExec []string
-			for _, e := range entries {
-				if e.IsDir() || strings.HasPrefix(e.Name(), ".") || strings.HasSuffix(e.Name(), "~") {
-					continue
-				}
-				info, sErr := e.Info()
-				if sErr != nil {
-					continue
-				}
-				if info.Mode()&0111 == 0 {
-					nonExec = append(nonExec, e.Name())
-				}
-			}
-			if len(nonExec) > 0 {
-				checks = append(checks, checkResult{
-					Name:   "hook_perms",
-					Status: "warn",
-					Detail: fmt.Sprintf("%d non-executable hook(s) in pre-pre-push.d/: %s", len(nonExec), strings.Join(nonExec, ", ")),
-				})
-			} else {
-				checks = append(checks, checkResult{Name: "hook_perms", Status: "ok"})
-			}
-		}
-		if flags.verbose {
-			fmt.Fprintf(os.Stderr, "  checked: hook_perms (%v)\n", time.Since(checkStart))
-		}
-	}
-
 
 	allOK := true
 	for _, c := range checks {
@@ -233,11 +197,138 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 	return 0
 }
 
-// doctorFix performs cleanup: orphan tmp dirs, legacy queue dir, and oplog
-// rotation. With --dry-run it only reports what would be done.
+// --- registered checks ------------------------------------------------------
+//
+// One function per entry in doctorChecks. Each reads only its doctorEnv and
+// returns one finding, so checks never see each other.
+
+func checkInitialized(env doctorEnv) doctorFinding {
+	if env.inited {
+		return findingOK("")
+	}
+	return findingFail("not initialized (run any safegit command to auto-init)")
+}
+
+func checkTmpDirs(env doctorEnv) doctorFinding {
+	orphans, err := index.GarbageCollectDryRun(env.sgDir)
+	if err != nil {
+		return findingFail("%v", err)
+	}
+	if len(orphans) > 0 {
+		return findingFail("%d orphan tmp dir(s) found (run 'safegit doctor --action fix' to clean)", len(orphans))
+	}
+	return findingOK("")
+}
+
+// checkStaleLocks scans the shared safegit dir so worktree locks are found.
+func checkStaleLocks(env doctorEnv) doctorFinding {
+	staleCount := countStaleLocks(repo.SharedSafegitDir(env.ctx, env.gitDir))
+	if staleCount > 0 {
+		return findingFail("%d stale lock(s) found", staleCount)
+	}
+	return findingOK("")
+}
+
+func checkConfig(env doctorEnv) doctorFinding {
+	cfg, err := repo.LoadConfig(env.gitDir)
+	if err != nil {
+		// An unreadable config is not advisory: every command reads it.
+		return findingAt("error", "%v", err)
+	}
+	if cfg.SchemaVersion != 1 {
+		return findingFail("unknown schema version %d", cfg.SchemaVersion)
+	}
+	return findingOK("")
+}
+
+// checkOplog reports whether the operation log reads back completely. Lines
+// that do not parse mean recorded operations that can no longer be read, which
+// is what undo and bypass detection both depend on.
+func checkOplog(env doctorEnv) doctorFinding {
+	entries, skipped, err := oplog.Read(env.sgDir)
+	if err != nil {
+		return findingFail("reading %s: %v", oplog.Path(env.sgDir), err)
+	}
+	if skipped > 0 {
+		return findingFail("%d unparseable line(s) in %s; undo refuses on this log", skipped, oplog.Path(env.sgDir))
+	}
+	return findingOK(fmt.Sprintf("%d entries", len(entries)))
+}
+
+// checkBypassDetect compares the oplog's last ref-update against the actual
+// tip: a divergence means something other than safegit moved the ref.
+//
+// A corrupted oplog makes the comparison impossible, and that is exactly when
+// the answer is most wanted -- so it is reported as a failing finding of this
+// check rather than silently disabling it.
+func checkBypassDetect(env doctorEnv) doctorFinding {
+	ref, refErr := git.HeadRef(env.ctx)
+	if refErr != nil || ref == "" {
+		return findingNone()
+	}
+	lastEntry, entryErr := oplog.LastRefUpdate(env.sgDir, ref)
+	if entryErr != nil {
+		return findingAt("error", "cannot compare %s against the oplog: %v", refShortName(ref), entryErr)
+	}
+	if lastEntry == nil {
+		return findingOK("no oplog entries for current ref")
+	}
+	sha := oplog.TipSHA(lastEntry.Extra)
+	if sha == "" {
+		return findingNone()
+	}
+	tipSHA, tipErr := git.RevParse(env.ctx, ref)
+	if tipErr != nil {
+		return findingNone()
+	}
+	if tipSHA != sha {
+		return findingFail("tip of %s (%s) diverged from last oplog entry (%s); raw git may have been used", refShortName(ref), tipSHA[:8], sha[:8])
+	}
+	return findingOK("")
+}
+
+// checkFilesystemRegistered adapts the platform-specific network-filesystem
+// probe to the registry's finding shape.
+func checkFilesystemRegistered(env doctorEnv) doctorFinding {
+	r := checkFilesystem(env.gitDir)
+	if r.Status == "ok" {
+		return findingOK(r.Detail)
+	}
+	return findingAt(r.Status, "%s", r.Detail)
+}
+
+// checkHookPerms reports non-executable hooks in pre-pre-push.d/, which git
+// would silently never run.
+func checkHookPerms(env doctorEnv) doctorFinding {
+	hookDir := filepath.Join(env.gitDir, "hooks", "pre-pre-push.d")
+	entries, readErr := os.ReadDir(hookDir)
+	if readErr != nil {
+		// No hook directory at all: nothing to report either way.
+		return findingNone()
+	}
+	var nonExec []string
+	for _, e := range entries {
+		if e.IsDir() || strings.HasPrefix(e.Name(), ".") || strings.HasSuffix(e.Name(), "~") {
+			continue
+		}
+		info, sErr := e.Info()
+		if sErr != nil {
+			continue
+		}
+		if info.Mode()&0111 == 0 {
+			nonExec = append(nonExec, e.Name())
+		}
+	}
+	if len(nonExec) > 0 {
+		return findingFail("%d non-executable hook(s) in pre-pre-push.d/: %s", len(nonExec), strings.Join(nonExec, ", "))
+	}
+	return findingOK("")
+}
+
+// doctorFix performs cleanup: orphan tmp dirs, legacy queue dir and stale
+// locks. With --dry-run it only reports what would be done.
 func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 	sgDir := repo.SafegitDir(gitDir)
-	cfg, _ := loadConfig(flags, gitDir)
 
 	if flags.dryRun {
 		orphanDirs, err := index.GarbageCollectDryRun(sgDir)
@@ -257,17 +348,6 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 		sharedDir := repo.SharedSafegitDir(ctx, gitDir)
 		staleLocks := countStaleLocks(sharedDir)
 
-		logSizeMB := float64(0)
-		logSize, _ := oplog.LogSize(sgDir)
-		if logSize > 0 {
-			logSizeMB = float64(logSize) / (1024 * 1024)
-		}
-		maxMB := 100
-		if cfg != nil && cfg.Log.MaxSizeMB > 0 {
-			maxMB = cfg.Log.MaxSizeMB
-		}
-		wouldRotate := logSize >= int64(maxMB)*1024*1024
-
 		if !flags.silent() {
 			fmt.Printf("would remove %d orphan tmp dir(s)\n", len(orphanDirs))
 			if hasLegacyQueue {
@@ -276,11 +356,6 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 			if staleLocks > 0 {
 				fmt.Printf("would remove %d stale lock(s)\n", staleLocks)
 			}
-			fmt.Printf("log size: %.1f MB (max: %d MB)", logSizeMB, maxMB)
-			if wouldRotate {
-				fmt.Print(" -- would rotate")
-			}
-			fmt.Println()
 		}
 	} else {
 		// Actual cleanup.
@@ -298,16 +373,6 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 			queueRemoved = true
 		}
 
-		// Log rotation.
-		maxMB := 100
-		if cfg != nil && cfg.Log.MaxSizeMB > 0 {
-			maxMB = cfg.Log.MaxSizeMB
-		}
-		rotated, rotErr := oplog.Rotate(sgDir, maxMB)
-		if rotErr != nil && !flags.silent() {
-			fmt.Fprintf(os.Stderr, "warning: log rotation failed: %v\n", rotErr)
-		}
-
 		// Clean stale locks in the shared safegit dir (covers worktrees).
 		sharedDir := repo.SharedSafegitDir(ctx, gitDir)
 		staleCleaned := removeStaleLocks(sharedDir)
@@ -319,9 +384,6 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 			}
 			if staleCleaned > 0 {
 				fmt.Printf("removed %d stale lock(s)\n", staleCleaned)
-			}
-			if rotated {
-				fmt.Println("log rotated (old log saved as log.1)")
 			}
 		}
 	}

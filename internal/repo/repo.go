@@ -13,13 +13,17 @@ import (
 )
 
 // Config holds safegit configuration persisted in config.json.
+//
+// A key this struct no longer declares (log.maxSizeMB, removed with oplog
+// rotation) still LOADS from an existing config.json: encoding/json ignores
+// unknown members. Writing one does not: GetConfigValue and SetConfigValue
+// answer "unknown config key" for anything outside ValidConfigKeys.
 type Config struct {
 	SchemaVersion int          `json:"schemaVersion"`
 	Commit        CommitConfig `json:"commit"`
 	Lock          LockConfig   `json:"lock"`
 	Hooks         HooksConfig  `json:"hooks"`
 	Push          PushConfig   `json:"push"`
-	Log           LogConfig    `json:"log"`
 }
 
 // CommitConfig holds commit-related settings.
@@ -48,11 +52,6 @@ type PushConfig struct {
 	RetryAttempts int `json:"retryAttempts"`
 }
 
-// LogConfig holds operation log size settings.
-type LogConfig struct {
-	MaxSizeMB int `json:"maxSizeMB"`
-}
-
 // DefaultConfig returns the default safegit configuration.
 func DefaultConfig() Config {
 	return Config{
@@ -61,7 +60,6 @@ func DefaultConfig() Config {
 		Lock:          LockConfig{AcquireTimeoutSeconds: 30},
 		Hooks:         HooksConfig{PrePrePush: PrePrePushConfig{TimeoutSeconds: 1800}},
 		Push:          PushConfig{RetryAttempts: 3},
-		Log:           LogConfig{MaxSizeMB: 100},
 	}
 }
 
@@ -229,7 +227,6 @@ func (c *Config) Validate() error {
 		{"lock.acquireTimeoutSeconds", c.Lock.AcquireTimeoutSeconds},
 		{"hooks.preprepush.timeoutSeconds", c.Hooks.PrePrePush.TimeoutSeconds},
 		{"push.retryAttempts", c.Push.RetryAttempts},
-		{"log.maxSizeMB", c.Log.MaxSizeMB},
 	}
 	for _, ch := range checks {
 		if ch.val <= 0 {
@@ -290,8 +287,6 @@ func GetConfigValue(cfg *Config, key string) (interface{}, error) {
 		return cfg.Hooks.PrePrePush.TimeoutSeconds, nil
 	case "push.retryAttempts":
 		return cfg.Push.RetryAttempts, nil
-	case "log.maxSizeMB":
-		return cfg.Log.MaxSizeMB, nil
 	default:
 		return nil, fmt.Errorf("unknown config key: %s", key)
 	}
@@ -332,8 +327,6 @@ func SetConfigValue(cfg *Config, key, value string) error {
 		cfg.Hooks.PrePrePush.TimeoutSeconds = intVal
 	case "push.retryAttempts":
 		cfg.Push.RetryAttempts = intVal
-	case "log.maxSizeMB":
-		cfg.Log.MaxSizeMB = intVal
 	default:
 		return fmt.Errorf("unknown config key: %s", key)
 	}
@@ -348,7 +341,6 @@ func ValidConfigKeys() []string {
 		"lock.acquireTimeoutSeconds",
 		"hooks.preprepush.timeoutSeconds",
 		"push.retryAttempts",
-		"log.maxSizeMB",
 	}
 }
 

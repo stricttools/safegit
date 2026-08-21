@@ -54,10 +54,16 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		die(1, "HEAD is detached; undo requires a branch")
 	}
 
-	// Read all oplog entries
-	allEntries, err := oplog.Read(sgDir)
+	// Read all oplog entries. Undo walks the log backwards and reverses what
+	// it finds, so a log with unreadable lines cannot be undone from: the
+	// entry that would be reversed next may be one of the lines that did not
+	// parse. Refuse instead of undoing the wrong operation.
+	allEntries, skipped, err := oplog.Read(sgDir)
 	if err != nil {
 		die(1, fmt.Sprintf("reading oplog: %v", err))
+	}
+	if skipped > 0 {
+		die(1, fmt.Sprintf("operation log has %d unparseable line(s); undo needs a complete log and refuses to guess (inspect %s)", skipped, oplog.Path(sgDir)))
 	}
 
 	// Filter to entries for this ref (and session, unless bypass-session)
@@ -247,8 +253,11 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 // that immediately follows the given entry (by timestamp). Returns the parent
 // bump SHA if found, empty string otherwise.
 func findAssociatedParentBump(sgDir string, target *oplog.Entry) string {
-	entries, err := oplog.Read(sgDir)
-	if err != nil || len(entries) == 0 {
+	// runUndo refuses before this point when the log has unparseable lines, so
+	// a nonzero skip count here is not reachable through undo; treat it like a
+	// read error anyway rather than searching an incomplete log.
+	entries, skipped, err := oplog.Read(sgDir)
+	if err != nil || skipped > 0 || len(entries) == 0 {
 		return ""
 	}
 

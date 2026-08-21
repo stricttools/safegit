@@ -13,10 +13,11 @@ import (
 	"github.com/smm-h/safegit/internal/git"
 )
 
-// rewriteMapsFile is the filename for the JSONL rewrite-map log. Unlike the
-// oplog (which caps lines at 4096 bytes for POSIX append atomicity), this file
-// holds arbitrarily large commit maps, so it uses the flock-guarded append
-// pattern from scrub-policies.jsonl instead.
+// rewriteMapsFile is the filename for the JSONL rewrite-map log. Its lines
+// hold whole commit maps and have no size limit: the flock held across each
+// append is what makes a concurrent write atomic, so the 4096-byte POSIX
+// O_APPEND guarantee is not what any of these files rely on. The oplog is
+// written the same way, for the same reason.
 const rewriteMapsFile = "rewrite-maps.jsonl"
 
 // Rewrite-map record phases. Each rewrite appends up to three lines sharing
