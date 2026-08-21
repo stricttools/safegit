@@ -173,6 +173,32 @@ existing entries are never rewritten.
   `--reason` as its carrier and needs a new carrier if reason ever moves.
 - **Phase 6.1:** `gitversion.Require` has no production caller yet by
   design; it is the API the version-floor refusals call.
+- **Phase 6, from the 1.2 sequencer probes (all assertion-backed in
+  internal/sequencer's tests):** (a) an OCTOPUS merge writes no AUTO_MERGE
+  at all — 6.3's "AUTO_MERGE absent and reconstruction impossible for a
+  content conflict means hard-refuse" would fire on every conflicted
+  octopus; the 6.3 implementor must either cover octopus via
+  reconstruction or explicitly scope the refusal. (b) git's own
+  post-commit cleanup can remove the ENTIRE sequencer state when a
+  mid-sequence commit completes the last todo item — a queue can vanish
+  out from under a conclusion flow. (c) MERGE_MODE is an EMPTY file for an
+  ordinary conflicted merge ("no-ff" only with --no-ff) — presence checks
+  work, content reads yield "". (d) sequencer.Cleanup on a cherry-pick or
+  revert removes the sequencer queue directory, so it must only be called
+  for SINGLE operations (6.2 already restricts native conclusion to
+  single ops; documented on the function). (e) The reader reports
+  KindAM for `git am` (shares .git/rebase-apply with the apply-backend
+  rebase, separated by git's rebasing/applying marker files) — refusal
+  texts must not advise `git rebase --continue` for an am. (f) The
+  reader resolves coexisting stale markers by git's own probe order
+  instead of erroring; the stale-AUTO_MERGE hard error remains Phase 6's
+  own check at its entry. (g) SourceAuthor is a separate ctx-taking call,
+  not a State field (the only fact needing a subprocess; refusal paths
+  stay filesystem-only).
+- **Phase 9:** internal/sequencer (and internal/exitcode, internal/gitexec,
+  internal/gitversion, internal/procutil, internal/filelock) need rows in
+  the architecture/package tables in the doc templates; the tables
+  predate the campaign's new packages.
 - **Phase 9:** the doc rows Appendix A assigns to 0.6/0.7 were left for
   Phase 9 as planned, EXCEPT rows already healed alongside code: 0.8's lock
   docs (architecture, concurrency-guide, _README template paragraph on lock
