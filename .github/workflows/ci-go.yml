@@ -15,7 +15,14 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # This is the repository's ONE push-triggered test workflow, and the only
+    # workflow named CI. The linux+macos matrix came from a hand-made second
+    # workflow that was also named CI, which made the release's CI-check
+    # resolution ambiguous and doubled the wait.
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     env:
       GIT_CONFIG_COUNT: 1
       GIT_CONFIG_KEY_0: protocol.file.allow
@@ -27,4 +34,7 @@ jobs:
         with:
           go-version-file: go.mod
       - run: go vet ./...
-      - run: go test ./... -race -short -timeout=10m
+      # No -short: the multi-minute stress scenarios are opt-in behind the test
+      # binary's own --stress flag, so an ordinary run is already the fast one
+      # and -short would only silence unrelated tests.
+      - run: go test ./... ${{ matrix.os == 'ubuntu-latest' && '-race' || '' }} -timeout=15m
