@@ -134,14 +134,23 @@ func Init(gitDir string) error {
 		}
 	}
 
-	// Write config.json
+	// Write config.json through a temp file and a rename, so it appears
+	// complete or not at all.
+	//
+	// IsInitialized stats this exact path and every command then READS it, so a
+	// plain write publishes a path whose content is still being written: a
+	// concurrent first init in the same repo used to observe the empty prefix
+	// and fail with "unexpected end of JSON input". The temp name comes from
+	// os.CreateTemp in the SAME directory (rename is only atomic within a
+	// filesystem) and is per-process unique -- a fixed temp name would just
+	// move the race onto the temp file.
 	cfg := DefaultConfig()
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
 	configPath := filepath.Join(sgDir, "config.json")
-	if err := os.WriteFile(configPath, append(data, '\n'), 0644); err != nil {
+	if err := writeFileAtomic(configPath, append(data, '\n'), 0644); err != nil {
 		return fmt.Errorf("writing config.json: %w", err)
 	}
 
@@ -153,6 +162,43 @@ func Init(gitDir string) error {
 	}
 	f.Close()
 
+	return nil
+}
+
+// writeFileAtomic writes data to path via a temp file in the same directory
+// followed by a rename, so a reader ever sees the old content or the new one,
+// never a partial write. A failed write leaves no temp file behind.
+func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	f, err := os.CreateTemp(dir, filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return fmt.Errorf("creating temp file in %s: %w", dir, err)
+	}
+	tmpPath := f.Name()
+	cleanup := func() {
+		f.Close()
+		os.Remove(tmpPath)
+	}
+	if _, err := f.Write(data); err != nil {
+		cleanup()
+		return fmt.Errorf("writing %s: %w", tmpPath, err)
+	}
+	// CreateTemp makes the file 0600; the published file needs the caller's
+	// mode, and chmod before the rename so it is never briefly readable-wrong.
+	// Unlike os.WriteFile's create mode, an explicit chmod is not filtered by
+	// the process umask, so the file lands at exactly perm.
+	if err := f.Chmod(perm); err != nil {
+		cleanup()
+		return fmt.Errorf("setting mode on %s: %w", tmpPath, err)
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("closing %s: %w", tmpPath, err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("renaming %s to %s: %w", tmpPath, path, err)
+	}
 	return nil
 }
 
