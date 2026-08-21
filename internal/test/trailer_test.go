@@ -2,23 +2,10 @@ package test
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
-
-// commitMessage returns the full commit message of the given ref.
-func commitMessage(t *testing.T, dir, ref string) string {
-	t.Helper()
-	cmd := exec.Command("git", "log", "-1", "--format=%B", ref)
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("git log -1 --format=%%B %s: %v", ref, err)
-	}
-	return string(out)
-}
 
 func TestSessionTrailer_CommitWithEnv(t *testing.T) {
 	dir := newRepo(t)
