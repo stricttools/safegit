@@ -99,10 +99,21 @@ func scanFile(path string, pattern *regexp.Regexp) ([]Match, error) {
 }
 
 // scanWorktreeFiles lists tracked files via `git ls-files` and scans each one.
+//
+// The listed paths are repo-relative, so each one is anchored to the repository
+// root before being read: an os.ReadFile resolves against the PROCESS working
+// directory, which from a subdirectory is not where git said the file is, and
+// the scan would silently report no matches for files it never opened. The
+// reported Path stays repo-relative -- that is the identifier a reader wants.
 func scanWorktreeFiles(ctx context.Context, pattern *regexp.Regexp) ([]Match, error) {
 	stdout, _, err := git.Run(ctx, "ls-files", "-z")
 	if err != nil {
 		return nil, err
+	}
+
+	root, err := git.AnchorRoot(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolving repository root for the working-tree scan: %w", err)
 	}
 
 	var matches []Match
@@ -111,9 +122,12 @@ func scanWorktreeFiles(ctx context.Context, pattern *regexp.Regexp) ([]Match, er
 			continue
 		}
 
-		fileMatches, err := scanFile(relPath, pattern)
+		fileMatches, err := scanFile(git.Anchor(root, relPath), pattern)
 		if err != nil {
 			continue // Skip unreadable files.
+		}
+		for i := range fileMatches {
+			fileMatches[i].Path = relPath
 		}
 		matches = append(matches, fileMatches...)
 	}

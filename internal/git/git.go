@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -73,6 +74,39 @@ func runCaptured(ctx context.Context, spec gitexec.Spec, stdin []byte) (stdout, 
 		err = fmt.Errorf("git %s: %w\nstderr: %s", strings.Join(spec.Args, " "), err, strings.TrimSpace(stderr))
 	}
 	return
+}
+
+// AnchorRoot returns the directory that repo-relative paths reported by git in
+// this context resolve against.
+//
+// Pinning the git SUBPROCESS working directory does not change how Go resolves
+// a relative path: an os.Lstat, os.ReadFile or os.WriteFile on a path git just
+// listed still resolves against the PROCESS working directory. From a
+// subdirectory the two disagree, and the file the syscall reaches is not the
+// file git named -- which is how a protection that reads a git listing and then
+// touches the filesystem silently protects nothing. Every filesystem syscall
+// that consumes a git-listed path goes through Anchor(AnchorRoot(ctx), path).
+//
+// The order is most-specific-first: a context targeting another repository
+// anchors at that repository's work tree, a pinned context at the pin, and an
+// unpinned context at whatever the repository root is from here.
+func AnchorRoot(ctx context.Context) (string, error) {
+	if _, workTree, ok := gitexec.DirOverride(ctx); ok && workTree != "" {
+		return workTree, nil
+	}
+	if root, ok := gitexec.Root(ctx); ok {
+		return root, nil
+	}
+	return RepoRoot(ctx)
+}
+
+// Anchor joins a repo-relative path onto root. An absolute path is returned
+// unchanged: a caller that already resolved a path must not have it re-rooted.
+func Anchor(root, repoRelative string) string {
+	if repoRelative == "" || filepath.IsAbs(repoRelative) {
+		return repoRelative
+	}
+	return filepath.Join(root, repoRelative)
 }
 
 // RepoRoot returns the absolute path to the repository root.
@@ -334,6 +368,15 @@ func SyncMainIndexWithWorktree(ctx context.Context, treeish string) ([]string, e
 	// git read-tree --reset -u does not respect skip-worktree when the
 	// index blob differs from the tree blob, so skip-worktree alone is
 	// insufficient. We save content before read-tree and restore after.
+	//
+	// The paths come from `git ls-files`, so they are repo-relative and must be
+	// anchored before any filesystem syscall: resolving them against the process
+	// working directory would reach the wrong file (or none) from a
+	// subdirectory, and the protection would silently do nothing.
+	anchor, aerr := AnchorRoot(ctx)
+	if aerr != nil {
+		return nil, fmt.Errorf("resolving repository root to protect tracked-but-ignored files: %w", aerr)
+	}
 	type savedFile struct {
 		path    string
 		content []byte
@@ -341,19 +384,20 @@ func SyncMainIndexWithWorktree(ctx context.Context, treeish string) ([]string, e
 	}
 	var saved []savedFile
 	for _, f := range trackedIgnored {
-		info, serr := os.Lstat(f)
+		abs := Anchor(anchor, f)
+		info, serr := os.Lstat(abs)
 		if serr != nil {
 			continue // file doesn't exist on disk, nothing to save
 		}
 		if !info.Mode().IsRegular() {
 			continue // skip symlinks, directories, etc.
 		}
-		content, rerr := os.ReadFile(f)
+		content, rerr := os.ReadFile(abs)
 		if rerr != nil {
 			fmt.Fprintf(os.Stderr, "safegit: warning: failed to save %s before read-tree: %v\n", f, rerr)
 			continue
 		}
-		saved = append(saved, savedFile{path: f, content: content, mode: info.Mode().Perm()})
+		saved = append(saved, savedFile{path: abs, content: content, mode: info.Mode().Perm()})
 	}
 
 	// Run read-tree --reset -u.
@@ -626,8 +670,17 @@ func parseLsTreeOutput(out string, blobOnly bool) []TreeEntry {
 
 // LsTreeAll returns all blob entries in the given treeish, recursively.
 // Empty trees return an empty slice, not an error.
+//
+// --full-tree is not optional here. Without it git resolves a tree listing
+// against the process working directory PREFIX: from a subdirectory,
+// `ls-tree <root-tree>` returns that subdirectory's entries with the prefix
+// stripped, and a caller that rebuilds a tree from the result promotes the
+// subdirectory to the repository root and deletes everything outside it.
+// Pinning the working directory alone does not fix this, because the *WithDir
+// family and any future caller can still run somewhere else; the flag makes the
+// listing repository-rooted no matter where the process stands.
 func LsTreeAll(ctx context.Context, treeish string) ([]TreeEntry, error) {
-	out, _, err := Run(ctx, "ls-tree", "-r", "-z", treeish)
+	out, _, err := Run(ctx, "ls-tree", "--full-tree", "-r", "-z", treeish)
 	if err != nil {
 		return nil, fmt.Errorf("ls-tree %s: %w", treeish, err)
 	}
@@ -637,8 +690,10 @@ func LsTreeAll(ctx context.Context, treeish string) ([]TreeEntry, error) {
 // LsTree returns all entries (blobs and subtrees) at one level of the given
 // treeish, without recursing into subtrees. Each entry includes Mode and
 // ObjectType so callers can distinguish blobs from trees.
+// --full-tree is mandatory for the same reason it is on LsTreeAll: a listing
+// resolved against the working-directory prefix is a listing of the wrong tree.
 func LsTree(ctx context.Context, treeish string) ([]TreeEntry, error) {
-	out, _, err := Run(ctx, "ls-tree", "-z", treeish)
+	out, _, err := Run(ctx, "ls-tree", "--full-tree", "-z", treeish)
 	if err != nil {
 		return nil, fmt.Errorf("ls-tree %s: %w", treeish, err)
 	}
