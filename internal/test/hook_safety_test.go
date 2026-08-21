@@ -32,9 +32,12 @@ import (
 
 var hookSafetyEnv = []string{"CLAUDE_CODE_SESSION_ID=hook-safety-test"}
 
-// hookSafetyWriteScript writes an executable /bin/sh script at path (creating
-// parent directories) whose body is the given lines.
-func hookSafetyWriteScript(t *testing.T, path string, body string) {
+// writeHookScript writes an executable /bin/sh script at path (creating parent
+// directories) whose body is the given lines, followed by `exit 0`. Both hook
+// suites in this package write their fixtures through it; a script that has to
+// leave evidence behind passes a body like `printf ran > <absolute marker>`,
+// absolute because a hook runs with its own directory as the working directory.
+func writeHookScript(t *testing.T, path string, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
@@ -91,7 +94,7 @@ func TestHookInstallDoesNotClobberNativeGitHook(t *testing.T) {
 
 	nativePath := filepath.Join(dir, ".git", "hooks", "pre-commit")
 	nativeMarker := filepath.Join(dir, "native-pre-commit-ran.txt")
-	hookSafetyWriteScript(t, nativePath, "printf native > "+nativeMarker)
+	writeHookScript(t, nativePath, "printf native > "+nativeMarker)
 	nativeBefore, err := hookSafetyRead(t, nativePath)
 	if err != nil {
 		t.Fatalf("reading the native hook we just wrote: %v", err)
@@ -100,7 +103,7 @@ func TestHookInstallDoesNotClobberNativeGitHook(t *testing.T) {
 	// A safegit hook source that happens to carry the same basename.
 	srcPath := filepath.Join(dir, "hooksrc", "pre-commit")
 	srcMarker := filepath.Join(dir, "installed-hook-ran.txt")
-	hookSafetyWriteScript(t, srcPath, "printf installed > "+srcMarker)
+	writeHookScript(t, srcPath, "printf installed > "+srcMarker)
 	srcBody, err := hookSafetyRead(t, srcPath)
 	if err != nil {
 		t.Fatal(err)
@@ -153,14 +156,14 @@ func TestHookInstallLeavesUnrelatedNativeHookAlone(t *testing.T) {
 	dir := newRepo(t)
 
 	nativePath := filepath.Join(dir, ".git", "hooks", "pre-commit")
-	hookSafetyWriteScript(t, nativePath, "true")
+	writeHookScript(t, nativePath, "true")
 	nativeBefore, err := hookSafetyRead(t, nativePath)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	srcPath := filepath.Join(dir, "hooksrc", "pre-pre-push")
-	hookSafetyWriteScript(t, srcPath, "true")
+	writeHookScript(t, srcPath, "true")
 
 	if _, stderr, code := runSafegitEnv(t, dir, hookSafetyEnv, "hook", "install", srcPath); code != 0 {
 		t.Fatalf("hook install failed (code %d): %s", code, stderr)
@@ -191,7 +194,7 @@ func TestDoctorUninstallRemovesInstalledHooks(t *testing.T) {
 	dir := newRepo(t)
 
 	srcPath := filepath.Join(dir, "hooksrc", "pre-pre-push")
-	hookSafetyWriteScript(t, srcPath, "true")
+	writeHookScript(t, srcPath, "true")
 	if _, stderr, code := runSafegitEnv(t, dir, hookSafetyEnv, "hook", "install", srcPath); code != 0 {
 		t.Fatalf("hook install failed (code %d): %s", code, stderr)
 	}
@@ -203,7 +206,7 @@ func TestDoctorUninstallRemovesInstalledHooks(t *testing.T) {
 
 	// An operator-authored hook alongside it, for evidence only.
 	operatorPath := filepath.Join(dir, ".git", "hooks", "pre-pre-push.d", "20-operator")
-	hookSafetyWriteScript(t, operatorPath, "true")
+	writeHookScript(t, operatorPath, "true")
 
 	stdout, stderr, code := runSafegitEnv(t, dir, hookSafetyEnv,
 		"doctor", "--action", "uninstall", "--approve-consequential")
@@ -241,7 +244,7 @@ func TestScanSeesHooksInPrePrePushDir(t *testing.T) {
 
 	const secret = "HOOKSAFETY_LEAK_TOKEN_NESTED"
 	leakyPath := filepath.Join(dir, ".git", "hooks", "pre-pre-push.d", "leaky.sh")
-	hookSafetyWriteScript(t, leakyPath, "TOKEN="+secret+"; export TOKEN")
+	writeHookScript(t, leakyPath, "TOKEN="+secret+"; export TOKEN")
 
 	paths := hookSafetyFileMatchPaths(t, dir, secret)
 	found := false
@@ -265,7 +268,7 @@ func TestScanSeesTopLevelPrePrePushHook(t *testing.T) {
 
 	const secret = "HOOKSAFETY_LEAK_TOKEN_TOPLEVEL"
 	hookPath := filepath.Join(dir, ".git", "hooks", "pre-pre-push")
-	hookSafetyWriteScript(t, hookPath, "TOKEN="+secret+"; export TOKEN")
+	writeHookScript(t, hookPath, "TOKEN="+secret+"; export TOKEN")
 
 	paths := hookSafetyFileMatchPaths(t, dir, secret)
 	found := false
