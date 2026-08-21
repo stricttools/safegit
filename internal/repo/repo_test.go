@@ -298,6 +298,102 @@ func TestRetiredLogKeyStillParses(t *testing.T) {
 	}
 }
 
+// integerConfigKeys are the keys SetConfigValue parses as an integer: every
+// valid key except the single boolean one. Deriving them from ValidConfigKeys
+// means a new integer key is covered by the tests below the day it is added.
+func integerConfigKeys(t *testing.T) []string {
+	t.Helper()
+	var out []string
+	for _, k := range ValidConfigKeys() {
+		if k == "commit.autoBumpParent" {
+			continue
+		}
+		out = append(out, k)
+	}
+	if len(out) == 0 {
+		t.Fatal("no integer config keys found; the derivation above is wrong")
+	}
+	return out
+}
+
+// TestSetConfigValueRequiresAWholeInteger pins whole-string integer parsing.
+// A scanning parse (fmt.Sscanf("%d")) consumes the leading digits and reports
+// success, so `config set push.retryAttempts 5abc` stored 5: a typo accepted as
+// a value the operator never typed, and never reported back. Every one of these
+// must be refused, and refused without touching the value already in the config.
+func TestSetConfigValueRequiresAWholeInteger(t *testing.T) {
+	refused := []string{
+		"5abc",  // the trailing-garbage case itself
+		"5 ",    // a trailing space is garbage too
+		" 5",    // and so is a leading one
+		"5.0",   // not an integer
+		"5,000", // grouped
+		"0x10",  // not decimal
+		"1e3",   // not an integer literal
+		"abc",   // nothing numeric at all
+		"",      // empty
+		"--5",   // a doubled sign
+	}
+	for _, key := range integerConfigKeys(t) {
+		for _, value := range refused {
+			cfg := DefaultConfig()
+			before, err := GetConfigValue(&cfg, key)
+			if err != nil {
+				t.Fatalf("reading %s before the set: %v", key, err)
+			}
+
+			err = SetConfigValue(&cfg, key, value)
+			if err == nil {
+				after, _ := GetConfigValue(&cfg, key)
+				t.Errorf("setting %s=%q was accepted and stored %v; only a whole integer is a value",
+					key, value, after)
+				continue
+			}
+			if !strings.Contains(err.Error(), "must be an integer") {
+				t.Errorf("setting %s=%q should be refused as not an integer, got: %v", key, value, err)
+			}
+			if !strings.Contains(err.Error(), value) {
+				t.Errorf("the refusal of %s=%q does not quote the value back: %v", key, value, err)
+			}
+			if after, _ := GetConfigValue(&cfg, key); after != before {
+				t.Errorf("setting %s=%q was refused but still changed the value from %v to %v",
+					key, value, before, after)
+			}
+		}
+	}
+}
+
+// TestSetConfigValueAcceptsWholeIntegers is the other half: a plain integer is
+// stored, and a non-positive one is refused as non-positive rather than as
+// unparseable -- the two refusals name different problems.
+func TestSetConfigValueAcceptsWholeIntegers(t *testing.T) {
+	for _, key := range integerConfigKeys(t) {
+		cfg := DefaultConfig()
+		if err := SetConfigValue(&cfg, key, "7"); err != nil {
+			t.Errorf("setting %s=7: %v", key, err)
+			continue
+		}
+		got, err := GetConfigValue(&cfg, key)
+		if err != nil {
+			t.Fatalf("reading %s back: %v", key, err)
+		}
+		if got != 7 {
+			t.Errorf("%s = %v after setting it to 7", key, got)
+		}
+
+		for _, value := range []string{"0", "-1"} {
+			err := SetConfigValue(&cfg, key, value)
+			if err == nil {
+				t.Errorf("setting %s=%q should be refused as non-positive", key, value)
+				continue
+			}
+			if !strings.Contains(err.Error(), "must be positive") {
+				t.Errorf("setting %s=%q should say the value must be positive, got: %v", key, value, err)
+			}
+		}
+	}
+}
+
 func TestAutoBumpParent_DefaultNil(t *testing.T) {
 	cfg := DefaultConfig()
 	if cfg.Commit.AutoBumpParent != nil {
