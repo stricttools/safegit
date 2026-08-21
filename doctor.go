@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/gitversion"
 	"github.com/smm-h/safegit/internal/index"
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/oplog"
@@ -107,6 +108,7 @@ var doctorChecks = []doctorCheck{
 	{Name: "bypass_detect", Severity: "warn", RequiresInit: true, Fn: checkBypassDetect},
 	{Name: "filesystem", Severity: "warn", Fn: checkFilesystemRegistered},
 	{Name: "hook_perms", Severity: "warn", RequiresInit: true, Fn: checkHookPerms},
+	{Name: "git_version", Severity: "warn", Fn: checkGitVersion},
 }
 
 // runDoctor returns the process exit code. A declined confirmation is a
@@ -323,6 +325,25 @@ func checkHookPerms(env doctorEnv) doctorFinding {
 		return findingFail("%d non-executable hook(s) in pre-pre-push.d/: %s", len(nonExec), strings.Join(nonExec, ", "))
 	}
 	return findingOK("")
+}
+
+// checkGitVersion reports the git version safegit found against the highest
+// floor any safegit feature declares, so an operator learns about a too-old
+// git here rather than from the one command that needs it.
+func checkGitVersion(env doctorEnv) doctorFinding {
+	raw, _, err := git.Run(env.ctx, "--version")
+	if err != nil {
+		return findingFail("running git --version: %v", err)
+	}
+	v, parseErr := gitversion.Parse(raw)
+	if parseErr != nil {
+		return findingFail("%v", parseErr)
+	}
+	highest := gitversion.HighestFloor()
+	if v.Before(highest.Floor) {
+		return findingFail("git %s is older than %s, required by %s", v, highest.Floor, highest.Name)
+	}
+	return findingOK(fmt.Sprintf("git %s (highest feature floor: %s for %s)", v, highest.Floor, highest.Name))
 }
 
 // doctorFix performs cleanup: orphan tmp dirs, legacy queue dir and stale
