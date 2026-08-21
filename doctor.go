@@ -464,8 +464,7 @@ func countStaleLocks(sgDir string) int {
 		if !strings.HasSuffix(info.Name(), ".lock") {
 			return nil
 		}
-		stale, sErr := lock.IsStale(path)
-		if sErr == nil && stale {
+		if lock.IsStale(path) {
 			count++
 		}
 		return nil
@@ -485,8 +484,7 @@ func removeStaleLocks(sgDir string) int {
 		if !strings.HasSuffix(info.Name(), ".lock") {
 			return nil
 		}
-		stale, sErr := lock.IsStale(path)
-		if sErr == nil && stale {
+		if lock.IsStale(path) {
 			if os.Remove(path) == nil {
 				removed++
 			}
