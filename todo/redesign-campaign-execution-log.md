@@ -1,0 +1,165 @@
+# Redesign campaign execution log (append-only)
+
+Purpose: this file records every ratified deviation from
+`todo/redesign-campaign-plan.md`, every plan extension, everything
+deliberately not done, and cross-phase notes produced during execution. The
+plan file itself is never edited; where this log and the plan disagree, this
+log records the as-built decision and the reason. Phase 10.2 auditors must
+read this log alongside the plan: items listed here as ratified deviations
+are deliberate, not audit failures. Entries are appended as phases complete;
+existing entries are never rewritten.
+
+## Ratified deviations from the plan text
+
+- **0.1 baseline flags.** The plan says `go test ./internal/test/ -json`;
+  the baseline artifact and `scripts/test-baseline` always pass `-short`
+  (stress scenarios recorded as SKIP, matching what CI ran at capture time)
+  and `-count=1` (so a cached result can never shape a baseline). Both
+  recorded in the artifact header. Baseline at capture: 688 PASS / 67 FAIL /
+  8 SKIP at HEAD b1d1385.
+- **0.1 consolidation scope.** Helper consolidation was package-wide over
+  `internal/test`, not limited to the seventeen investigation files — the
+  plan's own collision counts only reconcile package-wide. The run-git
+  group was 19 spellings, not the plan's ~17.
+- **0.2 argv literals.** The plan named one `[]interface{}{"git", ...}`
+  argv-literal site (`runGitMutation`); five existed (`push.go`'s
+  `execGitPush`, `commit.go`'s `recordCommitRefUpdate`, four records in
+  `scrub_preview.go`'s `recordHistoryRewrite`). All five routed through the
+  boundary.
+- **0.2 vocabulary table contains `git commit`.** Three `internal/git` unit
+  tests build fixtures via `git.Run(ctx, "commit", ...)`. The verb is
+  declared in the classification table with a note that safegit's own
+  pipeline never invokes it. Declaring a superset is harmless; rewriting
+  the fixtures would have made the table a policy statement the plan did
+  not ask for.
+- **0.3 rewritten red test.** `TestCoordSubdirScrubFromSubdirPreservesHistoryPaths`
+  was unsatisfiable as originally committed (it demanded all three fixture
+  paths in every commit, but the fixture builds them across three
+  successive commits, so ancestor commits could never comply). Rewritten to
+  capture each commit's path set before the scrub and assert per-commit set
+  equality after, plus a history-length check and a scrub-effect content
+  check. The independent 0.2–0.4 audit judged the rewrite faithful and
+  stronger than the plan's required property (it also catches paths
+  appearing). This is the only red test whose assertions were changed in
+  Phase 0.
+- **0.7 scaffold bases stay pristine.** The plan says the CI matrix
+  absorption and the docker-workflow rename go into the `.rlsbl/bases/`
+  scaffold bases (and the goreleaser change is mirrored there). That
+  instruction is inverted with respect to how rlsbl's scaffold actually
+  merges: rlsbl's three-way merge writes the new template whenever the
+  working file equals the stored base (verified by reading rlsbl's
+  scaffold implementation: when ours equals base, theirs is written, and
+  the stored base is replaced by theirs after every apply). A customization
+  copied into the base therefore gets overwritten by the next template
+  update; customizations survive only in the generated file, with the base
+  left as pristine template output — which is exactly how this repo's
+  pre-existing customizations (the `GIT_CONFIG_*` block in ci-go.yml, the
+  `main.version` ldflag in .goreleaser.yml) already survive. As built:
+  `.github/workflows/ci-go.yml`, `.github/workflows/ci-docker.yml` and
+  `.goreleaser.yml` changed; all files under `.rlsbl/bases/` untouched.
+- **0.8 comparison key is raw start ticks, not a derived absolute time.**
+  The plan says to convert `/proc/<pid>/stat` field 22 via boot time and
+  clock ticks and compare the converted time. As built, the raw ticks value
+  is recorded and compared; the converted wall-clock time is written only
+  as an informational `started=` field, never compared. Reason, endorsed by
+  the independent 0.8 audit as strictly better in both error directions:
+  `/proc/stat`'s btime is wall-clock-derived, whole-second, and can shift
+  between reads (NTP, suspend), so comparing converted times can falsely
+  classify a live holder as a reused PID — the exact bug the subphase
+  removes — and whole-second truncation can also collapse genuinely
+  different start instants into a false match. Raw ticks are constant for a
+  process's life. Residual risk (post-reboot same-PID-same-tick collision)
+  errs toward never stealing, which is the fail-closed direction.
+
+## Plan extensions (work done beyond the plan, reversible on request)
+
+- **0.8 reclamation race fix.** The independent 0.8 audit found a remaining
+  live-lock-steal path the plan does not cover: between one contender's
+  staleness judgment and its `os.Remove`, another contender can reclaim the
+  same stale lock and create its own fresh lock, which the first contender
+  then removes unconditionally — mutual exclusion broken in post-crash
+  contention. Fixed (as a marked extension) with reclamation performed only
+  under an exclusive flock on the lock file plus an inode identity re-check
+  before removal, with a deterministic regression test for the
+  interleaving. Deliberately NOT added in the same pass: recording a boot
+  id (residual collision already errs safe), and any change to
+  `internal/index` tmp-dir garbage collection (the audit proved its
+  PID-reuse exposure can only retain an orphan directory, never delete a
+  live process's directory).
+- **0.7 `git.Version` helper** (single place that asks the git binary for
+  its version, feeding the `internal/gitversion` floors and the doctor
+  check) — not named by the plan; added to avoid duplicating the query at
+  each future call site.
+- **0.1 audit remediations** beyond the plan's text: `scripts/test-baseline`
+  build-failure guard rewritten (the original `printf | grep -q` pipeline
+  was defeated by SIGPIPE under pipefail); `testutil` runner family
+  documents per-function stream contracts, SHA-returning readers are
+  stdout-only (`testutil.GitOut` added), and SHA-feeding call sites in
+  `root_commit_cas_test.go` re-pointed at stdout-only readers.
+
+## Deliberately not done (with reasons)
+
+- **0.3/4.2 scrub mode-inference divergence left live.** After the 0.3 root
+  pin, `scrub file`'s mode inference (`os.Stat` at the operator's cwd vs
+  tree lookup at the repo root) is incoherent from a subdirectory: a
+  root-level target scrubbed from a subdirectory silently DELETES the file
+  from history (stat misses, mode becomes remove); a nested same-named file
+  produces a loud hash error. Phase 4.2 deletes the inference entirely
+  (required `--delete` / `--replace-with`), which is the designed fix; an
+  interim anchoring of the stat would have re-reddened a red test and
+  contradicted 4.2. The 4.2 implementor must treat this as live behavior,
+  not hypothetical.
+- **`IsStale`'s error return is now dead** (every path returns nil) and
+  should collapse to a bool per the fleet dead-API rule; deferred while
+  `doctor.go` and `internal/lock` were being edited concurrently, assigned
+  to the Phase 0 remediation wave.
+- **`internal/hooks` `TestRunTimeout` stays keyed to `-short`** (it is a
+  ~1s timeout test, not a stress scenario). Consequence: CI, which no
+  longer passes `-short`, newly executes it; bare `-short` runs still skip
+  it, keeping the baseline SKIP set byte-identical.
+
+## Notes for later phases
+
+- **Phase 3.1:** `gitexec.ArgvAny` takes no context, so context-carried
+  overrides (the object-directory quarantine) cannot reach the four
+  effects-handle argv sites. Assess whether those argv (push, update-ref
+  records) can ever write objects in preview mode; wire the quarantine
+  through if so.
+- **Phase 3.3 / 6:** the exemption table's `operator-cwd` reason text for
+  the guarded-mutation entry under-describes its coverage (cherry-pick and
+  revert DRY RUNS also route through it); queued for the Phase 0
+  remediation wave, but keep the per-exec-site (not per-command) exemption
+  model in mind.
+- **Phase 4.2:** see the scrub mode-inference note above; also the
+  submodule branch of `scrub file` already resolves its stat absolutely and
+  the two branches are inconsistent until 4.2 unifies them.
+- **Phase 4.3:** must KEEP the oplog `extra.reason` field (the plan already
+  says so: metadata kept is op, reason, scope, counts). The end-to-end
+  oplog no-cap test (`TestOplogAcceptsOversizedEntry`) uses a 20 KB scrub
+  `--reason` as its carrier and needs a new carrier if reason ever moves.
+- **Phase 6.1:** `gitversion.Require` has no production caller yet by
+  design; it is the API the version-floor refusals call.
+- **Phase 9:** the doc rows Appendix A assigns to 0.6/0.7 were left for
+  Phase 9 as planned, EXCEPT rows already healed alongside code: 0.8's lock
+  docs (architecture, concurrency-guide, _README template paragraph on lock
+  staleness) and 0.6/0.7's stress/oplog lines in the _CLAUDE template.
+  `scripts/test-baseline`'s header comment still gives the pre-0.7 reason
+  for `-short` (stress scenarios), now stale; queued for the remediation
+  wave.
+- **Phase 10.2:** audit against the plan PLUS this log; per-phase auditors,
+  one per phase, each briefed with its phase text, the relevant Appendix A
+  rows, and this log.
+
+## Known flakes and environment facts
+
+- `TestRootCommitConcurrentSafegitBothLand` races two safegit processes on
+  an unborn ref and can spuriously FAIL under load; re-run before drawing
+  conclusions from a one-line baseline diff.
+- 12 files carry pre-existing gofmt drift under the installed Go 1.26.3
+  (const-block alignment); implementors format their own edits only and
+  never whole-file reformat.
+- The repo's gitignored `go.work` overlays a local strictcli checkout;
+  Phase 10.1 mandates a `GOWORK=off` full run before release.
+- The installed safegit binary (used by implementors to commit) predates
+  the campaign: commits are made from the repo root with a single `-m` and
+  plain file paths to stay off its known-buggy paths.
