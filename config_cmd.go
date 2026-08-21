@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
@@ -32,13 +33,13 @@ func runConfigShow(flags globalFlags) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 4
+		return exitcode.NotInitialized
 	}
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 
 	for _, key := range repo.ValidConfigKeys() {
@@ -52,19 +53,19 @@ func runConfigGet(flags globalFlags, key string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 4
+		return exitcode.NotInitialized
 	}
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 
 	val, err := repo.GetConfigValue(cfg, key)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 	outf(flags, "%s\n", formatConfigValue(val))
 	return 0
@@ -74,24 +75,24 @@ func runConfigSet(flags globalFlags, key, value string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 4
+		return exitcode.NotInitialized
 	}
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 
 	if err := repo.SetConfigValue(cfg, key, value); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 
 	data, err := repo.MarshalConfig(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 	configPath := flags.configPath
 	if configPath == "" {
@@ -101,7 +102,7 @@ func runConfigSet(flags globalFlags, key, value string) int {
 	// record the change instead of performing it.
 	if _, err := flags.effects().Write(configPath, data, strictcli.Resource("safegit-config:"+configPath)); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 	if !flags.silent() && !flags.dryRun {
 		fmt.Printf("%s = %s\n", key, value)

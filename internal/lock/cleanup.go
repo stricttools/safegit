@@ -4,6 +4,8 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+
+	"github.com/smm-h/safegit/internal/exitcode"
 )
 
 var (
@@ -27,7 +29,7 @@ func registerCleanup(path string) {
 				os.Remove(p)
 			}
 			cleanupMu.Unlock()
-			os.Exit(1)
+			os.Exit(exitcode.General)
 		}()
 	})
 }

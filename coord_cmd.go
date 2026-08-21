@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/smm-h/safegit/internal/coord"
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/oplog"
@@ -40,11 +41,11 @@ func coordGuard(flags globalFlags, sgDir, operation string) int {
 	dirty, err := coord.Check(ctx, sgDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 	if dirty != nil {
 		fmt.Fprint(os.Stderr, dirty.Refuse(operation))
-		return 5
+		return exitcode.CoordinationBusy
 	}
 	return 0
 }
@@ -67,7 +68,7 @@ func runCheckout(flags globalFlags, args []string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 4
+		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
@@ -77,7 +78,7 @@ func runCheckout(flags globalFlags, args []string) int {
 
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: safegit checkout <ref>")
-		return 2
+		return exitcode.Usage
 	}
 
 	// Capture old HEAD for oplog
@@ -85,7 +86,7 @@ func runCheckout(flags globalFlags, args []string) int {
 	oldHead, _ := git.RevParse(ctx, "HEAD")
 
 	if err := runGitMutation(flags, append([]string{"checkout"}, args...)...); err != nil {
-		return 1
+		return exitcode.General
 	}
 	if flags.dryRun {
 		return 0
@@ -118,7 +119,7 @@ func runPull(flags globalFlags, mode pullMode, remote string, branch string) int
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 4
+		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
@@ -132,7 +133,7 @@ func runPull(flags globalFlags, mode pullMode, remote string, branch string) int
 		fetchArgs = append(fetchArgs, branch)
 	}
 	if err := runGitMutation(flags, fetchArgs...); err != nil {
-		return 1
+		return exitcode.General
 	}
 
 	// Step 2: merge
@@ -148,7 +149,7 @@ func runPull(flags globalFlags, mode pullMode, remote string, branch string) int
 	mergeTarget := "FETCH_HEAD"
 	mergeArgs = append(mergeArgs, mergeTarget)
 	if err := runGitMutation(flags, mergeArgs...); err != nil {
-		return 1
+		return exitcode.General
 	}
 	if flags.dryRun {
 		return 0
@@ -174,7 +175,7 @@ func runMerge(flags globalFlags, args []string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 4
+		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
@@ -184,12 +185,12 @@ func runMerge(flags globalFlags, args []string) int {
 
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: safegit merge <branch>")
-		return 2
+		return exitcode.Usage
 	}
 
 	ctx := flags.ctx()
 	if err := runGitMutation(flags, append([]string{"merge"}, args...)...); err != nil {
-		return 1
+		return exitcode.General
 	}
 	if flags.dryRun {
 		return 0
@@ -216,7 +217,7 @@ func runRebase(flags globalFlags, args []string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 4
+		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
@@ -226,11 +227,11 @@ func runRebase(flags globalFlags, args []string) int {
 
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: safegit rebase <upstream>")
-		return 2
+		return exitcode.Usage
 	}
 
 	if err := runGitMutation(flags, append([]string{"rebase"}, args...)...); err != nil {
-		return 1
+		return exitcode.General
 	}
 	if flags.dryRun {
 		return 0
@@ -255,7 +256,7 @@ func runReset(flags globalFlags, args []string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 4
+		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
@@ -275,7 +276,7 @@ func runReset(flags globalFlags, args []string) int {
 	}
 
 	if err := runGitMutation(flags, append([]string{"reset"}, args...)...); err != nil {
-		return 1
+		return exitcode.General
 	}
 	if flags.dryRun {
 		return 0
@@ -302,7 +303,7 @@ func runBisect(flags globalFlags, args []string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 4
+		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
@@ -322,7 +323,7 @@ func runBisect(flags globalFlags, args []string) int {
 	}
 
 	if err := runGitMutation(flags, append([]string{"bisect"}, args...)...); err != nil {
-		return 1
+		return exitcode.General
 	}
 	if flags.dryRun {
 		return 0
@@ -358,7 +359,7 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 4
+		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
@@ -368,7 +369,7 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 
 	if flags.dryRun {
 		if err := runGitMutation(flags, append([]string{gitCmd}, args...)...); err != nil {
-			return 1
+			return exitcode.General
 		}
 		return 0
 	}
@@ -398,7 +399,7 @@ func runPassthrough(flags globalFlags, gitCmd string, args []string) int {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return exitErr.ExitCode()
 		}
-		return 1
+		return exitcode.General
 	}
 	return 0
 }

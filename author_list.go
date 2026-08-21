@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
@@ -45,7 +46,7 @@ func runAuthorList(flags globalFlags) int {
 	// Format: author_name\x01author_email\x01committer_name\x01committer_email
 	out, _, err := git.Run(ctx, "log", "--all", "--format=%an\x01%ae\x01%cn\x01%ce")
 	if err != nil {
-		die(1, fmt.Sprintf("reading git log: %v", err))
+		die(exitcode.General, fmt.Sprintf("reading git log: %v", err))
 	}
 
 	lines := git.SplitNonEmpty(out)

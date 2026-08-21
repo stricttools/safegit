@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/smm-h/safegit/internal/commit"
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/repo"
@@ -16,21 +17,21 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(4)
+		os.Exit(exitcode.NotInitialized)
 	}
 
 	// Validate: -m and -F are mutually exclusive
 	if len(messages) > 0 && messageFile != "" {
-		die(2, "-m and -F are mutually exclusive")
+		die(exitcode.Usage, "-m and -F are mutually exclusive")
 	}
 
 	if amend {
 		// --amend mode: amend (with files) or reword (without files)
 		if allowEmpty {
-			die(2, "--allow-empty cannot be used with --amend")
+			die(exitcode.Usage, "--allow-empty cannot be used with --amend")
 		}
 		if messageFile != "" {
-			die(2, "-F cannot be used with --amend")
+			die(exitcode.Usage, "-F cannot be used with --amend")
 		}
 
 		runCommitAmend(flags, gitDir, messages, branch, trailers, files)
@@ -41,16 +42,16 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	if messageFile != "" {
 		data, err := os.ReadFile(messageFile)
 		if err != nil {
-			die(1, fmt.Sprintf("reading message file: %v", err))
+			die(exitcode.General, fmt.Sprintf("reading message file: %v", err))
 		}
 		messages = append(messages, strings.TrimRight(string(data), "\n"))
 	}
 
 	if len(messages) == 0 {
-		die(2, "commit message required (-m or -F)")
+		die(exitcode.Usage, "commit message required (-m or -F)")
 	}
 	if len(files) == 0 && !allowEmpty {
-		die(2, "no files specified (use -- file1 file2 ...)")
+		die(exitcode.Usage, "no files specified (use -- file1 file2 ...)")
 	}
 
 	msg := strings.Join(messages, "\n")
@@ -60,7 +61,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(1, fmt.Sprintf("loading config: %v", err))
+		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
 	}
 
 	if flags.verbose {
@@ -101,7 +102,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 
 	if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "commit", firstLine(msg)); err != nil {
 		fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
-		os.Exit(1)
+		os.Exit(exitcode.General)
 	}
 
 	recordCommitRefUpdate(flags, result.Ref, result.SHA, result.Parent)
@@ -153,7 +154,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(1, fmt.Sprintf("loading config: %v", err))
+		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
 	}
 	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg}
 
@@ -203,7 +204,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 
 		if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "amend", firstLine(msg)); err != nil {
 			fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
-			os.Exit(1)
+			os.Exit(exitcode.General)
 		}
 
 		recordCommitRefUpdate(flags, result.Ref, result.SHA, result.OldSHA)
@@ -230,7 +231,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 	} else {
 		// Reword: change the tip commit message without touching files
 		if len(messages) == 0 {
-			die(2, "commit message required (-m) when using --amend without files")
+			die(exitcode.Usage, "commit message required (-m) when using --amend without files")
 		}
 
 		msg := strings.Join(messages, "\n")
@@ -265,7 +266,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 
 		if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "reword", firstLine(msg)); err != nil {
 			fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
-			os.Exit(1)
+			os.Exit(exitcode.General)
 		}
 
 		recordCommitRefUpdate(flags, result.Ref, result.SHA, result.OldSHA)

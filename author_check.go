@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
@@ -72,7 +73,7 @@ func runAuthorCheck(flags globalFlags, kwargs map[string]interface{}) int {
 	if expectName == "" && expectEmail == "" {
 		fmt.Fprintf(os.Stderr, "error: at least one of --name or --email is required\n")
 		fmt.Fprintf(os.Stderr, "Run 'safegit author check --help' for usage.\n")
-		return 2
+		return exitcode.Usage
 	}
 
 	ctx := flags.ctx()
@@ -81,7 +82,7 @@ func runAuthorCheck(flags globalFlags, kwargs map[string]interface{}) int {
 	// Format: sha\x01author_name\x01author_email\x01committer_name\x01committer_email
 	out, _, err := git.Run(ctx, "log", "--all", "--format=%H\x01%an\x01%ae\x01%cn\x01%ce")
 	if err != nil {
-		die(1, fmt.Sprintf("reading git log: %v", err))
+		die(exitcode.General, fmt.Sprintf("reading git log: %v", err))
 	}
 
 	lines := git.SplitNonEmpty(out)
@@ -138,7 +139,7 @@ func runAuthorCheck(flags globalFlags, kwargs map[string]interface{}) int {
 	// beside the envelope.
 	if flags.json {
 		if len(deviations) > 0 {
-			return 1
+			return exitcode.General
 		}
 		return 0
 	}
@@ -190,7 +191,7 @@ func runAuthorCheck(flags globalFlags, kwargs map[string]interface{}) int {
 		fmt.Printf("  safegit author rewrite %s\n", strings.Join(rewriteArgs, " "))
 	}
 
-	return 1
+	return exitcode.General
 }
 
 // mostFrequent returns the key with the highest count in the frequency map,

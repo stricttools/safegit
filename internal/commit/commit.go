@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/index"
 	"github.com/smm-h/safegit/internal/lock"
@@ -20,13 +21,6 @@ import (
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/stage"
 	"github.com/smm-h/safegit/internal/trailer"
-)
-
-// Exit codes for commit-specific errors.
-const (
-	ExitCASExhausted  = 7
-	ExitWriteTree     = 9
-	ExitCommitTree    = 10
 )
 
 // CommitError carries a structured exit code alongside the error message.
@@ -145,7 +139,7 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	}
 
 	return nil, &CommitError{
-		Code:    ExitCASExhausted,
+		Code:    exitcode.CASExhausted,
 		Message: fmt.Sprintf("CAS convergence failure after %d attempts on %s", maxAttempts, ref),
 	}
 }
@@ -252,7 +246,7 @@ func (p *Pipeline) tryCommit(
 	// Step 3: Build tree
 	treeSHA, err := git.WriteTree(ctx, tmpIdx.IndexPath)
 	if err != nil {
-		return nil, false, &CommitError{Code: ExitWriteTree, Message: fmt.Sprintf("write-tree failed: %v", err)}
+		return nil, false, &CommitError{Code: exitcode.WriteTree, Message: fmt.Sprintf("write-tree failed: %v", err)}
 	}
 
 	// Check for empty commit (tree unchanged). Root commits are never empty.
@@ -270,7 +264,7 @@ func (p *Pipeline) tryCommit(
 	msg := trailer.AppendCustom(req.Message, req.Trailers)
 	commitSHA, err := git.CommitTree(ctx, treeSHA, parentSHA, trailer.Inject(msg))
 	if err != nil {
-		return nil, false, &CommitError{Code: ExitCommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
+		return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
 	}
 
 	// Hook for tests to inject concurrent commits between Phase A and Phase B

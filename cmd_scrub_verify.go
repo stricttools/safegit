@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/scan"
 	"github.com/smm-h/strictcli/go/strictcli"
@@ -60,7 +61,7 @@ func runScrubVerify(flags globalFlags) int {
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(4, err.Error())
+		die(exitcode.NotInitialized, err.Error())
 	}
 
 	ctx := flags.ctx()
@@ -69,7 +70,7 @@ func runScrubVerify(flags globalFlags) int {
 
 	policies, err := readScrubPolicies(sgDir)
 	if err != nil {
-		die(1, fmt.Sprintf("reading scrub policies: %v", err))
+		die(exitcode.General, fmt.Sprintf("reading scrub policies: %v", err))
 	}
 
 	if len(policies) == 0 {
@@ -128,7 +129,7 @@ func runScrubVerify(flags globalFlags) int {
 
 		allScanResults, err := scan.ScanObjectsMulti(ctx, patterns, scan.ScanOpts{EntireHistory: true})
 		if err != nil {
-			die(1, fmt.Sprintf("scanning objects: %v", err))
+			die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
 		}
 
 		// Phase 3: For scoped policies, we need attribution. Run AddAttribution
@@ -161,7 +162,7 @@ func runScrubVerify(flags globalFlags) int {
 			}
 
 			if err := scan.AddAttribution(ctx, &combined, scan.ScanOpts{}); err != nil {
-				die(1, fmt.Sprintf("adding attribution: %v", err))
+				die(exitcode.General, fmt.Sprintf("adding attribution: %v", err))
 			}
 
 			// Distribute attributed matches back to per-pattern results.
@@ -221,7 +222,7 @@ func runScrubVerify(flags globalFlags) int {
 				if !ok {
 					scopedBlobs, err = buildScopedBlobSet(ctx, vp.policy.Scope)
 					if err != nil {
-						die(1, fmt.Sprintf("building scoped blob set for %q: %v", vp.policy.Scope, err))
+						die(exitcode.General, fmt.Sprintf("building scoped blob set for %q: %v", vp.policy.Scope, err))
 					}
 					scopedBlobSets[vp.policy.Scope] = scopedBlobs
 				}
@@ -282,7 +283,7 @@ func runScrubVerify(flags globalFlags) int {
 	infof(flags, "\n%d policies checked: %d passed, %d failed\n", len(policies), passed, failed)
 
 	if failed > 0 {
-		return 1
+		return exitcode.General
 	}
 	return 0
 }

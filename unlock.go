@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
 )
@@ -14,7 +15,7 @@ func runUnlock(flags globalFlags, ref string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 4
+		return exitcode.NotInitialized
 	}
 	if !strings.HasPrefix(ref, "refs/") {
 		ref = "refs/heads/" + ref
@@ -26,14 +27,14 @@ func runUnlock(flags globalFlags, ref string) int {
 	lp := filepath.Join(sharedDir, "locks", ref+".lock")
 	if _, err := os.Stat(lp); os.IsNotExist(err) {
 		fmt.Fprintf(os.Stderr, "error: no lock held on %s\n", ref)
-		return 1
+		return exitcode.General
 	}
 
 	// Always check liveness -- refuse to release locks held by live processes
 	if !lock.IsStale(lp) {
 		pid, _ := lock.ParsePID(lp)
 		fmt.Fprintf(os.Stderr, "error: lock on %s is held by a live process (pid %d); kill the process or wait for it to finish\n", ref, pid)
-		return 1
+		return exitcode.General
 	}
 
 	if flags.dryRun {
@@ -46,7 +47,7 @@ func runUnlock(flags globalFlags, ref string) int {
 	// Release the lock
 	if err := lock.ForceRelease(sharedDir, ref); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 1
+		return exitcode.General
 	}
 
 	if !flags.silent() {

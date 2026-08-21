@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/hooks"
@@ -14,13 +15,6 @@ import (
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/submodule"
 	"github.com/smm-h/strictcli/go/strictcli"
-)
-
-// Exit codes specific to push
-const (
-	exitPushHookFailed  = 20
-	exitPushHookTimeout = 21
-	exitPushGitFailed   = 40
 )
 
 // pushMode selects which refs to push.
@@ -49,14 +43,14 @@ type pushRefInfo struct {
 func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote string, mode pushMode) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(1, err.Error())
-		return 1
+		die(exitcode.General, err.Error())
+		return exitcode.General
 	}
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(1, fmt.Sprintf("loading config: %v", err))
-		return 1
+		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
+		return exitcode.General
 	}
 
 	forceFlag := forceWithLease
@@ -65,20 +59,20 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	ctx := flags.ctx()
 	remoteURL, err := resolveRemoteURL(ctx, remote)
 	if err != nil {
-		die(1, fmt.Sprintf("resolving remote URL: %v", err))
-		return 1
+		die(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
+		return exitcode.General
 	}
 
 	// Resolve refs to push
 	refs, err := resolveRefsForPush(ctx, remote, mode)
 	if err != nil {
-		die(1, fmt.Sprintf("resolving refs: %v", err))
-		return 1
+		die(exitcode.General, fmt.Sprintf("resolving refs: %v", err))
+		return exitcode.General
 	}
 
 	if len(refs) == 0 {
-		die(1, "nothing to push (no matching refs)")
-		return 1
+		die(exitcode.General, "nothing to push (no matching refs)")
+		return exitcode.General
 	}
 
 	if flags.verbose {
@@ -128,14 +122,14 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 			hookPaths, err = hooks.Discover(gitDir)
 		}
 		if err != nil {
-			die(1, fmt.Sprintf("discovering hooks: %v", err))
-			return 1
+			die(exitcode.General, fmt.Sprintf("discovering hooks: %v", err))
+			return exitcode.General
 		}
 
 		hookResults, err = hooks.RunAll(ctx, hookPaths, hookStdin, timeoutSec, hookEnv)
 		if err != nil {
-			die(1, fmt.Sprintf("running hooks: %v", err))
-			return 1
+			die(exitcode.General, fmt.Sprintf("running hooks: %v", err))
+			return exitcode.General
 		}
 
 		// Check hook results
@@ -145,11 +139,11 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 			}
 			if hr.TimedOut {
 				fmt.Fprintf(os.Stderr, "hook %s timed out after %v\n", hr.Name, hr.Duration)
-				return exitPushHookTimeout
+				return exitcode.PushHookTimeout
 			}
 			if hr.ExitCode != 0 {
 				fmt.Fprintf(os.Stderr, "hook %s failed (exit %d)\n", hr.Name, hr.ExitCode)
-				return exitPushHookFailed
+				return exitcode.PushHookFailed
 			}
 		}
 	}
@@ -190,7 +184,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 
 	if pushErr != nil {
 		fmt.Fprintf(os.Stderr, "push failed: %v\n", pushErr)
-		return exitPushGitFailed
+		return exitcode.PushFailed
 	}
 
 	// Log to oplog. The oplog is an atomically-appended JSONL audit trail; the

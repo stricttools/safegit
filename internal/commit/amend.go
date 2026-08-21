@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/index"
 	"github.com/smm-h/safegit/internal/lock"
@@ -100,7 +101,7 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	}
 
 	return nil, &CommitError{
-		Code:    ExitCASExhausted,
+		Code:    exitcode.CASExhausted,
 		Message: fmt.Sprintf("CAS convergence failure after %d attempts on %s", maxAttempts, ref),
 	}
 }
@@ -176,7 +177,7 @@ func (p *Pipeline) tryAmend(
 	// Build new tree
 	treeSHA, err := git.WriteTree(ctx, tmpIdx.IndexPath)
 	if err != nil {
-		return nil, false, &CommitError{Code: ExitWriteTree, Message: fmt.Sprintf("write-tree failed: %v", err)}
+		return nil, false, &CommitError{Code: exitcode.WriteTree, Message: fmt.Sprintf("write-tree failed: %v", err)}
 	}
 
 	// Create new commit with parent = HEAD^ (replacing HEAD),
@@ -184,7 +185,7 @@ func (p *Pipeline) tryAmend(
 	msg := trailer.AppendCustom(message, req.Trailers)
 	commitSHA, err := git.CommitTree(ctx, treeSHA, parentSHA, trailer.Inject(msg))
 	if err != nil {
-		return nil, false, &CommitError{Code: ExitCommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
+		return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
 	}
 
 	if req.DryRun {
@@ -318,7 +319,7 @@ func (p *Pipeline) Reword(ctx context.Context, req RewordRequest) (*RewordResult
 	}
 
 	return nil, &CommitError{
-		Code:    ExitCASExhausted,
+		Code:    exitcode.CASExhausted,
 		Message: fmt.Sprintf("CAS convergence failure after %d attempts on %s", maxAttempts, ref),
 	}
 }
@@ -348,7 +349,7 @@ func (p *Pipeline) tryReword(
 	msg := trailer.AppendCustom(req.Message, req.Trailers)
 	commitSHA, err := git.CommitTree(ctx, treeSHA, parentSHA, trailer.Inject(msg))
 	if err != nil {
-		return nil, false, &CommitError{Code: ExitCommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
+		return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
 	}
 
 	if req.DryRun {

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/testutil"
@@ -259,8 +260,8 @@ func TestCASExhaustion(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *CommitError, got %T: %v", err, err)
 	}
-	if ce.Code != ExitCASExhausted {
-		t.Errorf("error code = %d, want %d", ce.Code, ExitCASExhausted)
+	if ce.Code != exitcode.CASExhausted {
+		t.Errorf("error code = %d, want %d", ce.Code, exitcode.CASExhausted)
 	}
 }
 
@@ -537,7 +538,7 @@ func TestAmendCASRetry(t *testing.T) {
 		}
 		// CAS exhaustion is acceptable in a tight race if the racer kept winning
 		ce, ok := amendErr.(*CommitError)
-		if ok && ce.Code == ExitCASExhausted {
+		if ok && ce.Code == exitcode.CASExhausted {
 			t.Logf("CAS exhausted (racer kept winning) -- acceptable in race test")
 			return
 		}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
@@ -40,7 +41,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(4, err.Error())
+		die(exitcode.NotInitialized, err.Error())
 	}
 
 	sgDir := repo.SafegitDir(gitDir)
@@ -56,7 +57,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		dryArgs := append([]string{"rev-list", "--topo-order", "--reverse"}, refGlobs...)
 		out, _, err := git.Run(ctx, dryArgs...)
 		if err != nil {
-			die(1, fmt.Sprintf("listing commits: %v", err))
+			die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
 		}
 		shas := git.SplitNonEmpty(out)
 
@@ -64,7 +65,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		for _, sha := range shas {
 			info, err := git.ParseCommit(ctx, sha)
 			if err != nil {
-				die(1, fmt.Sprintf("parsing commit %s: %v", sha, err))
+				die(exitcode.General, fmt.Sprintf("parsing commit %s: %v", sha, err))
 			}
 			nameMatch := oldName != "" && (info.Author.Name == oldName || info.Committer.Name == oldName)
 			emailMatch := oldEmail != "" && (info.Author.Email == oldEmail || info.Committer.Email == oldEmail)
@@ -137,13 +138,13 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	// Acquire rewrite lock to prevent concurrent history rewriting (execute path only)
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(1, fmt.Sprintf("loading config: %v", err))
+		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
 	}
 	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
 	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
 	lk, err := lock.Acquire(sharedDir, sgDir, "safegit/rewrite", "rewrite-author", timeout)
 	if err != nil {
-		die(1, "another rewrite operation is in progress")
+		die(exitcode.General, "another rewrite operation is in progress")
 	}
 	defer lk.Release()
 
@@ -155,7 +156,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		countArgs := append([]string{"rev-list", "--topo-order", "--reverse"}, refGlobs...)
 		out, _, err := git.Run(ctx, countArgs...)
 		if err != nil {
-			die(1, fmt.Sprintf("listing commits: %v", err))
+			die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
 		}
 		total := len(git.SplitNonEmpty(out))
 		infof(flags, "Rewriting %d commits. This cannot be undone.\n", total)
@@ -164,20 +165,20 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	// Capture old HEAD before rewrite
 	oldHeadSHA, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
-		die(1, fmt.Sprintf("resolving HEAD: %v", err))
+		die(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
 	}
 
 	// Actual rewrite
 	infof(flags, "Capturing pre-rewrite snapshot...\n")
 	before, err := captureSnapshot(ctx)
 	if err != nil {
-		die(1, fmt.Sprintf("capturing pre-rewrite snapshot: %v", err))
+		die(exitcode.General, fmt.Sprintf("capturing pre-rewrite snapshot: %v", err))
 	}
 
 	infof(flags, "Rewriting commits...\n")
 	shaMap, nameChanged, err := rewriteCommits(ctx, oldName, newName, oldEmail, newEmail, flags.verbose)
 	if err != nil {
-		die(1, fmt.Sprintf("rewriting commits: %v", err))
+		die(exitcode.General, fmt.Sprintf("rewriting commits: %v", err))
 	}
 
 	// Summary counts (computed before Finalize for JSON output)
@@ -244,7 +245,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 
 	// Finalize: updateRefs, cleanup, verify, index sync, oplog, push hint
 	if err := result.Finalize(ctx, flags, cmd, nil, verifyFunc); err != nil {
-		die(1, err.Error())
+		die(exitcode.General, err.Error())
 	}
 
 	// The one computation both renderings read: the three counts below are the

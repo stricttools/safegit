@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/oplog"
@@ -31,19 +32,19 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	const cmd = "undo"
 
 	if count <= 0 {
-		die(1, fmt.Sprintf("--count must be positive, got %d", count))
+		die(exitcode.General, fmt.Sprintf("--count must be positive, got %d", count))
 	}
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(4, err.Error())
+		die(exitcode.NotInitialized, err.Error())
 	}
 
 	sgDir := repo.SafegitDir(gitDir)
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(1, fmt.Sprintf("loading config: %v", err))
+		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
 	}
 
 	ctx := flags.ctx()
@@ -51,7 +52,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	// Resolve current branch
 	ref, err := git.HeadRef(ctx)
 	if err != nil || ref == "" {
-		die(1, "HEAD is detached; undo requires a branch")
+		die(exitcode.General, "HEAD is detached; undo requires a branch")
 	}
 
 	// Read all oplog entries. Undo walks the log backwards and reverses what
@@ -60,15 +61,15 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	// parse. Refuse instead of undoing the wrong operation.
 	allEntries, skipped, err := oplog.Read(sgDir)
 	if err != nil {
-		die(1, fmt.Sprintf("reading oplog: %v", err))
+		die(exitcode.General, fmt.Sprintf("reading oplog: %v", err))
 	}
 	if skipped > 0 {
-		die(1, fmt.Sprintf("operation log has %d unparseable line(s); undo needs a complete log and refuses to guess (inspect %s)", skipped, oplog.Path(sgDir)))
+		die(exitcode.General, fmt.Sprintf("operation log has %d unparseable line(s); undo needs a complete log and refuses to guess (inspect %s)", skipped, oplog.Path(sgDir)))
 	}
 
 	// Filter to entries for this ref (and session, unless bypass-session)
 	if !bypassSession && sessionID == "" {
-		die(1, "no session ID found ("+sessionIDEnvVar+" not set); pass --bypass-session to undo across all sessions")
+		die(exitcode.General, "no session ID found ("+sessionIDEnvVar+" not set); pass --bypass-session to undo across all sessions")
 	}
 
 	var entries []oplog.Entry
@@ -108,7 +109,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 			// Scrub and rewrite-author operations invalidate all prior SHAs in
 			// the oplog. We cannot safely undo anything before them.
 			if strings.HasPrefix(e.Op, "scrub-") || e.Op == "rewrite-author" {
-				die(1, fmt.Sprintf("cannot undo %s — history rewrite invalidated prior oplog entries", e.Op))
+				die(exitcode.General, fmt.Sprintf("cannot undo %s — history rewrite invalidated prior oplog entries", e.Op))
 			}
 			// Other non-undoable ops are simply skipped.
 			continue
@@ -135,16 +136,16 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 
 	if targetEntry == nil {
 		if liveSteps == 0 {
-			die(1, fmt.Sprintf("no undoable operations found for %s in the oplog", refShortName(ref)))
+			die(exitcode.General, fmt.Sprintf("no undoable operations found for %s in the oplog", refShortName(ref)))
 		}
-		die(1, fmt.Sprintf("only %d undoable operations available, requested %d", liveSteps, count))
+		die(exitcode.General, fmt.Sprintf("only %d undoable operations available, requested %d", liveSteps, count))
 	}
 
 	// Determine the target key and SHA for the rollback
 	targetKey := undoableOps[targetEntry.Op]
 	targetSHARaw, fieldPresent := targetEntry.Extra[targetKey]
 	if !fieldPresent {
-		die(1, fmt.Sprintf("oplog entry for %q is missing %q field", targetEntry.Op, targetKey))
+		die(exitcode.General, fmt.Sprintf("oplog entry for %q is missing %q field", targetEntry.Op, targetKey))
 	}
 
 	targetSHA, _ := targetSHARaw.(string)
@@ -157,7 +158,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 			isRootUndo = true
 		} else {
 			// amend/reword can't have empty oldSha
-			die(1, fmt.Sprintf("oplog entry for %q has empty %q field", targetEntry.Op, targetKey))
+			die(exitcode.General, fmt.Sprintf("oplog entry for %q has empty %q field", targetEntry.Op, targetKey))
 		}
 	}
 
@@ -169,7 +170,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		// Fallback: resolve HEAD directly (shouldn't happen for well-formed oplog)
 		currentSHA, err = git.RevParse(ctx, "HEAD")
 		if err != nil {
-			die(1, fmt.Sprintf("resolving HEAD: %v", err))
+			die(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
 		}
 	}
 
@@ -188,18 +189,18 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
 	lk, err := lock.Acquire(sharedDir, sgDir, ref, "undo", timeout)
 	if err != nil {
-		die(1, fmt.Sprintf("acquiring lock: %v", err))
+		die(exitcode.General, fmt.Sprintf("acquiring lock: %v", err))
 	}
 	defer lk.Release()
 
 	// Perform the ref update
 	if isRootUndo {
 		if err := git.DeleteRef(ctx, ref, currentSHA); err != nil {
-			die(1, fmt.Sprintf("delete-ref failed (ref may have moved): %v", err))
+			die(exitcode.General, fmt.Sprintf("delete-ref failed (ref may have moved): %v", err))
 		}
 	} else {
 		if err := git.UpdateRef(ctx, ref, targetSHA, currentSHA); err != nil {
-			die(1, fmt.Sprintf("update-ref failed (ref may have moved): %v", err))
+			die(exitcode.General, fmt.Sprintf("update-ref failed (ref may have moved): %v", err))
 		}
 	}
 
@@ -220,7 +221,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 
 	if err := maybeAutoBumpParent(ctx, flags, gitDir, targetSHA, "undo", ""); err != nil {
 		fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
-		os.Exit(1)
+		os.Exit(exitcode.General)
 	}
 
 	// Log the undo to the oplog
