@@ -201,6 +201,38 @@ existing entries are never rewritten.
 - `internal/repo` parseInt uses fmt.Sscanf, which accepts trailing
   garbage ("5abc" sets 5) — tighten to strconv.Atoi semantics.
 
+## Queued 0.5 polish (from the 0.5 audit; dispatch after Phase 1 wave A)
+
+- Route `hook run`'s and `push`'s ensureInitialized failures to
+  exitcode.NotInitialized (they exit General today, falsifying the
+  constant's "every command that needs .git/safegit" doc); add `scrub
+  verify` and `scan` to the producer lists they are missing from.
+- Fix the false hand-written backup table row in docs/commands-guide.md
+  ("0 | Success (including a declined confirmation)") — a declined
+  confirmation exits nonzero (backup.go returns General), and the prose
+  eleven lines above says so; the registration sweep cannot catch a
+  wrong MEANING, only an unregistered number.
+- Package-doc carve-out (coordinates with 1.1): passthrough commands
+  propagate git's own exit code; the registry's "every numeric exit code
+  safegit produces is a named constant here" claim needs that stated in
+  internal/exitcode's package doc and the generated guide prose.
+- TestAmendHunkSpecOnBinaryFileIsTyped: add the same stderr "binary
+  file" text assertion its commit sibling has.
+- exitcode's completeness test parses only the hardcoded "exitcode.go";
+  parse the whole package so a constant added in another file cannot
+  escape.
+- Widen TestNoTestAssertsAnUnregisteredExitCode modestly (reversed
+  operands, a few more variable spellings) and make its comment state
+  the honest scope; document (or cheaply police) the two guard scope
+  holes: strictcli.Exit(N) and Code: N composite literals.
+- coordGuard's doc comment still says numeric "5/0/1" where constants
+  exist.
+- Small-items queue addition: internal/lock/cleanup.go's signal handler
+  exits General; the Unix convention is 128+signum — decide and register
+  when convenient. Also: 61 bare `return 0` in package main are
+  unrouted through exitcode.OK (cosmetic; decide once, sweep or
+  declare fine).
+
 ## Phase 9 additions (locking rework falsified these claims)
 
 The atomic publication and flock-based reclamation invalidated every
