@@ -331,13 +331,9 @@ func checkHookPerms(env doctorEnv) doctorFinding {
 // floor any safegit feature declares, so an operator learns about a too-old
 // git here rather than from the one command that needs it.
 func checkGitVersion(env doctorEnv) doctorFinding {
-	raw, _, err := git.Run(env.ctx, "--version")
+	v, err := git.Version(env.ctx)
 	if err != nil {
-		return findingFail("running git --version: %v", err)
-	}
-	v, parseErr := gitversion.Parse(raw)
-	if parseErr != nil {
-		return findingFail("%v", parseErr)
+		return findingFail("%v", err)
 	}
 	highest := gitversion.HighestFloor()
 	if v.Before(highest.Floor) {

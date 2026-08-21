@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/smm-h/safegit/internal/gitexec"
+	"github.com/smm-h/safegit/internal/gitversion"
 )
 
 // WithDir returns a context that carries git directory overrides. All git
@@ -33,6 +34,17 @@ func WithDir(ctx context.Context, gitDir, workTree string) context.Context {
 // pin. See gitexec.WithRoot for what the pin is for.
 func WithRoot(ctx context.Context, root string) context.Context {
 	return gitexec.WithRoot(ctx, root)
+}
+
+// Version returns the version of the git binary safegit is running against,
+// parsed. It is the one place a caller asks; a feature with a version floor
+// compares this against its floor via gitversion.Require.
+func Version(ctx context.Context) (gitversion.Version, error) {
+	out, stderr, err := Run(ctx, "--version")
+	if err != nil {
+		return gitversion.Version{}, fmt.Errorf("running git --version: %w: %s", err, strings.TrimSpace(stderr))
+	}
+	return gitversion.Parse(out)
 }
 
 // Run executes a git command and returns stdout, stderr, and any error.
@@ -608,7 +620,7 @@ func ParseCommit(ctx context.Context, sha string) (CommitInfo, error) {
 			info.Author = parseIdentity(val)
 		case "committer":
 			info.Committer = parseIdentity(val)
-		// gpgsig and other unknown headers are ignored.
+			// gpgsig and other unknown headers are ignored.
 		}
 	}
 
