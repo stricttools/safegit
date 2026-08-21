@@ -7,6 +7,17 @@
 // from the AST; it is how the registry was derived and how a later reviewer
 // re-derives it.
 //
+// The one carve-out, and it is deliberate: the guarded passthroughs --
+// checkout, pull, merge, rebase, reset, bisect, cherry-pick and revert -- exit
+// with the wrapped git command's OWN exit code once git has run. Those codes
+// are git's (1 for a conflicted merge, 128 or 129 for a fatal error), they are
+// foreign to safegit, and they are deliberately NOT registered here: safegit
+// reports git's verdict verbatim rather than translating it, and a registry row
+// would claim ownership of a number safegit does not choose. A code from one of
+// those commands is safegit's own only when the failure happened before git ran
+// -- the coordination guard, an uninitialized repository, a rejected argument.
+// docs/commands-guide.md states the same split above the generated table.
+//
 // # Standing rule for the redesign campaign
 //
 // Every later campaign phase that introduces a new hard error registers its
@@ -41,26 +52,31 @@ const (
 
 	// General is an operation that failed for a reason with no more specific
 	// code: a git invocation that returned an error, a file that could not be
-	// read, a ref that would not resolve. Produced by every command.
+	// read, a ref that would not resolve, a declined public-remote backup
+	// confirmation. Produced by every command except version, which reads
+	// nothing and cannot fail.
 	General = 1
 
 	// Usage is a command line safegit itself rejects after strictcli has
 	// accepted it: mutually exclusive flags, a missing message, a hunk spec
-	// that does not parse, an empty file list. Produced by commit, scrub
-	// file/match/run, author check, and the guarded passthroughs. Note that a
-	// refusal by the framework's own parser exits General (1) instead -- see
-	// the package comment.
+	// that does not parse, an empty file list, a malformed glob or --target
+	// value. Produced by commit, scan, scrub file/match/run, author check, and
+	// the three guarded passthroughs that take a bare positional argument
+	// (checkout, merge, rebase). Note that a refusal by the framework's own
+	// parser exits General (1) instead -- see the package comment.
 	Usage = 2
 
 	// NoRepository means the working directory is not inside a git repository
-	// (or git is not installed). Produced by every command, at the point where
-	// it resolves the git directory.
+	// (or git is not installed). Produced by every command that resolves the
+	// git directory, at that point -- which is every command except version,
+	// author list and author check, none of which resolve it (they read git
+	// log, and a failure there is General).
 	NoRepository = 3
 
 	// NotInitialized means safegit's own state directory could not be created
 	// or read. Produced by every command that needs .git/safegit: commit,
-	// undo, unlock, config, scan, hook, backup, the guarded passthroughs, and
-	// the four rewrite commands.
+	// push, undo, unlock, config, scan, hook, backup, scrub verify, the
+	// guarded passthroughs, and the four rewrite commands.
 	NotInitialized = 4
 
 	// CoordinationBusy means the coordination guard refused: another safegit
