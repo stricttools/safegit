@@ -43,8 +43,8 @@ type pushRefInfo struct {
 func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote string, mode pushMode) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(exitcode.General, err.Error())
-		return exitcode.General
+		die(exitcode.NotInitialized, err.Error())
+		return exitcode.NotInitialized
 	}
 
 	cfg, err := loadConfig(flags, gitDir)

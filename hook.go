@@ -39,7 +39,7 @@ func hookRun(flags globalFlags, name string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return exitcode.General
+		return exitcode.NotInitialized
 	}
 
 	cfg, err := loadConfig(flags, gitDir)
