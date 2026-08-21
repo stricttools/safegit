@@ -47,7 +47,25 @@ func runGitMutation(flags globalFlags, args ...string) int {
 	}
 	if flags.dryRun {
 		// The invocation was recorded instead of performed: no child process
-		// ran, so the Completed is unsettled and carries no exit code.
+		// ran, so the Completed is unsettled and reading its exit code would
+		// panic.
+		//
+		// This keys off the flag rather than off the carrier because strictcli
+		// exposes no settled-ness: Completed's `settled` field is unexported
+		// and its only public methods (ExitCode, Stdout, Stderr) panic instead
+		// of reporting it, and Effects.Recorded() cannot serve as a probe
+		// because calling it claims the would-do render. The coupling that
+		// makes the flag a correct stand-in is that safegit declares NO
+		// app-level proc-observe allowlist, so no argv reaches Run's observe
+		// branch -- which executes the child even in dry mode and returns a
+		// settled Completed.
+		//
+		// The hazard, if that ever changes: an allowlisted prefix matching a
+		// runGitMutation argv would run git for real during --dry-run and this
+		// branch would report success while discarding git's own exit code.
+		// TestSafegitDeclaresNoProcObserveAllowlist pins the premise, and the
+		// execution log's Phase 3.3 note records the same requirement for
+		// whoever declares the allowlist.
 		return 0
 	}
 	return done.ExitCode()
