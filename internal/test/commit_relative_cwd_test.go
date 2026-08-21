@@ -60,7 +60,7 @@ func TestCommitFromSubdirRelativePathNoPendingChange(t *testing.T) {
 	}
 
 	// And the working tree must be clean afterwards.
-	if status := gitStatusPorcelain(t, dir); status != "" {
+	if status := testutil.Git(t, dir, "status", "--porcelain"); status != "" {
 		t.Fatalf("expected clean working tree, got: %s", status)
 	}
 }
@@ -97,7 +97,7 @@ func TestCommitFromSubdirRelativePathOnlyChanged(t *testing.T) {
 	if got := testutil.MustShow(t, dir, "HEAD", "sub/edited.txt"); got != "after\n" {
 		t.Fatalf("sub/edited.txt at HEAD = %q, want %q", got, "after\n")
 	}
-	if status := gitStatusPorcelain(t, dir); status != "" {
+	if status := testutil.Git(t, dir, "status", "--porcelain"); status != "" {
 		t.Fatalf("expected clean working tree, got: %s", status)
 	}
 }
@@ -135,7 +135,7 @@ func TestCommitFromRepoRootUnchangedPath(t *testing.T) {
 	if got := testutil.MustShow(t, dir, "HEAD", "unchanged.txt"); got != "unchanged\n" {
 		t.Fatalf("unchanged.txt at HEAD = %q, want %q", got, "unchanged\n")
 	}
-	if status := gitStatusPorcelain(t, dir); status != "" {
+	if status := testutil.Git(t, dir, "status", "--porcelain"); status != "" {
 		t.Fatalf("expected clean working tree, got: %s", status)
 	}
 }

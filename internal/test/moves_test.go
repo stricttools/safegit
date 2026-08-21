@@ -2,38 +2,12 @@ package test
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/smm-h/safegit/internal/testutil"
 )
-
-// gitDiffTreeRename runs git diff-tree with rename detection on HEAD and
-// returns the combined output.
-func gitDiffTreeRename(t *testing.T, repoDir string) string {
-	t.Helper()
-	cmd := exec.Command("git", "diff-tree", "--no-commit-id", "-r", "-M", "HEAD")
-	cmd.Dir = repoDir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git diff-tree failed: %v\n%s", err, out)
-	}
-	return string(out)
-}
-
-// gitStatusPorcelain runs git status --porcelain and returns trimmed output.
-func gitStatusPorcelain(t *testing.T, repoDir string) string {
-	t.Helper()
-	cmd := exec.Command("git", "status", "--porcelain")
-	cmd.Dir = repoDir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git status failed: %v\n%s", err, out)
-	}
-	return strings.TrimSpace(string(out))
-}
 
 func TestMoveDetection_BasicRename(t *testing.T) {
 	dir := newRepo(t)
@@ -62,7 +36,7 @@ func TestMoveDetection_BasicRename(t *testing.T) {
 	}
 
 	// git diff-tree should show a rename
-	diffTree := gitDiffTreeRename(t, dir)
+	diffTree := testutil.GitRaw(t, dir, "diff-tree", "--no-commit-id", "-r", "-M", "HEAD")
 	if !strings.Contains(diffTree, "foo.txt") || !strings.Contains(diffTree, "bar.txt") {
 		t.Fatalf("expected diff-tree to mention both foo.txt and bar.txt, got: %s", diffTree)
 	}
@@ -71,7 +45,7 @@ func TestMoveDetection_BasicRename(t *testing.T) {
 	}
 
 	// Working tree should be clean
-	status := gitStatusPorcelain(t, dir)
+	status := testutil.Git(t, dir, "status", "--porcelain")
 	if status != "" {
 		t.Fatalf("expected clean working tree, got: %s", status)
 	}
@@ -105,7 +79,7 @@ func TestMoveDetection_MoveAndEdit(t *testing.T) {
 	}
 
 	// foo.txt deletion should NOT be auto-staged
-	status := gitStatusPorcelain(t, dir)
+	status := testutil.Git(t, dir, "status", "--porcelain")
 	if !strings.Contains(status, "D foo.txt") {
 		t.Fatalf("expected 'D foo.txt' in status, got: %s", status)
 	}
@@ -138,7 +112,7 @@ func TestMoveDetection_ExplicitBothPaths(t *testing.T) {
 	}
 
 	// Working tree should be clean
-	status := gitStatusPorcelain(t, dir)
+	status := testutil.Git(t, dir, "status", "--porcelain")
 	if status != "" {
 		t.Fatalf("expected clean working tree, got: %s", status)
 	}
@@ -180,7 +154,7 @@ func TestMoveDetection_UnrelatedDeletion(t *testing.T) {
 	}
 
 	// a.txt should still show as deleted in status
-	status := gitStatusPorcelain(t, dir)
+	status := testutil.Git(t, dir, "status", "--porcelain")
 	if !strings.Contains(status, "D a.txt") {
 		t.Fatalf("expected 'D a.txt' in status, got: %s", status)
 	}
@@ -213,7 +187,7 @@ func TestMoveDetection_Amend(t *testing.T) {
 	}
 
 	// Working tree should be clean
-	status := gitStatusPorcelain(t, dir)
+	status := testutil.Git(t, dir, "status", "--porcelain")
 	if status != "" {
 		t.Fatalf("expected clean working tree, got: %s", status)
 	}
@@ -246,7 +220,7 @@ func TestMoveDetection_QuietSuppresses(t *testing.T) {
 	}
 
 	// But move detection should still have run -- working tree should be clean
-	status := gitStatusPorcelain(t, dir)
+	status := testutil.Git(t, dir, "status", "--porcelain")
 	if status != "" {
 		t.Fatalf("expected clean working tree (move detection should still run), got: %s", status)
 	}
@@ -282,13 +256,13 @@ func TestMoveDetection_MoveToSubdirectory(t *testing.T) {
 	}
 
 	// Working tree should be clean
-	status := gitStatusPorcelain(t, dir)
+	status := testutil.Git(t, dir, "status", "--porcelain")
 	if status != "" {
 		t.Fatalf("expected clean working tree, got: %s", status)
 	}
 
 	// git diff-tree should show a rename
-	diffTree := gitDiffTreeRename(t, dir)
+	diffTree := testutil.GitRaw(t, dir, "diff-tree", "--no-commit-id", "-r", "-M", "HEAD")
 	if !strings.Contains(diffTree, "R") {
 		t.Fatalf("expected diff-tree to show rename (R), got: %s", diffTree)
 	}
@@ -331,7 +305,7 @@ func TestMoveDetection_MultipleMoves(t *testing.T) {
 	}
 
 	// Working tree should be clean
-	status := gitStatusPorcelain(t, dir)
+	status := testutil.Git(t, dir, "status", "--porcelain")
 	if status != "" {
 		t.Fatalf("expected clean working tree, got: %s", status)
 	}
@@ -375,7 +349,7 @@ func TestMoveDetection_PathSimilarityTiebreak(t *testing.T) {
 	}
 
 	// lib/helper.txt should still be deleted in working tree (unstaged)
-	status := gitStatusPorcelain(t, dir)
+	status := testutil.Git(t, dir, "status", "--porcelain")
 	if !strings.Contains(status, "D lib/helper.txt") {
 		t.Fatalf("expected lib/helper.txt to remain as unstaged deletion, got: %s", status)
 	}
@@ -409,7 +383,7 @@ func TestMoveDetection_OriginalPathRecreated(t *testing.T) {
 	}
 
 	// Working tree should be clean (both files explicitly listed)
-	status := gitStatusPorcelain(t, dir)
+	status := testutil.Git(t, dir, "status", "--porcelain")
 	if status != "" {
 		t.Fatalf("expected clean working tree, got: %s", status)
 	}
@@ -442,13 +416,13 @@ func TestMoveDetection_EmptyFile(t *testing.T) {
 	}
 
 	// Working tree should be clean
-	status := gitStatusPorcelain(t, dir)
+	status := testutil.Git(t, dir, "status", "--porcelain")
 	if status != "" {
 		t.Fatalf("expected clean working tree, got: %s", status)
 	}
 
 	// git diff-tree should show a rename
-	diffTree := gitDiffTreeRename(t, dir)
+	diffTree := testutil.GitRaw(t, dir, "diff-tree", "--no-commit-id", "-r", "-M", "HEAD")
 	if !strings.Contains(diffTree, "R") {
 		t.Fatalf("expected diff-tree to show rename (R), got: %s", diffTree)
 	}

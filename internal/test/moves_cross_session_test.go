@@ -2,7 +2,6 @@ package test
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -26,19 +25,6 @@ import (
 // blobs collide -- trivially for empty files, and deliberately for identical
 // non-empty content.
 
-// crossSessNameStatus returns `git show --name-status --format=%s` for the
-// given rev as a trimmed string, for evidence in failure messages.
-func crossSessNameStatus(t *testing.T, repoDir, rev string) string {
-	t.Helper()
-	cmd := exec.Command("git", "show", "--name-status", "--format=commit %H%n%s", rev)
-	cmd.Dir = repoDir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git show --name-status %s failed: %v\n%s", rev, err, out)
-	}
-	return strings.TrimSpace(string(out))
-}
-
 // crossSessCommitPaths returns the sorted set of paths touched by the given
 // commit, each prefixed with its status letter (e.g. "A todo/b.txt",
 // "D notes/a.txt"). Rename detection is deliberately OFF: this reports the raw
@@ -46,14 +32,9 @@ func crossSessNameStatus(t *testing.T, repoDir, rev string) string {
 // two paths are unrelated.
 func crossSessCommitPaths(t *testing.T, repoDir, rev string) []string {
 	t.Helper()
-	cmd := exec.Command("git", "diff-tree", "--no-commit-id", "--no-renames", "-r", "--name-status", rev)
-	cmd.Dir = repoDir
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git diff-tree %s failed: %v\n%s", rev, err, out)
-	}
+	out := testutil.GitRaw(t, repoDir, "diff-tree", "--no-commit-id", "--no-renames", "-r", "--name-status", rev)
 	var paths []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -114,7 +95,7 @@ func TestCrossSessionMoveDetection_EmptyFileCollision(t *testing.T) {
 	}
 
 	got := crossSessCommitPaths(t, dir, "HEAD")
-	t.Logf("session B commit contents:\n%s", crossSessNameStatus(t, dir, "HEAD"))
+	t.Logf("session B commit contents:\n%s", testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD"))
 	t.Logf("session B stderr: %q", stderr)
 
 	want := []string{"A todo/b.txt"}
@@ -124,7 +105,7 @@ func TestCrossSessionMoveDetection_EmptyFileCollision(t *testing.T) {
 	}
 
 	// Session A's deletion must still be A's to commit.
-	status := gitStatusPorcelain(t, dir)
+	status := testutil.Git(t, dir, "status", "--porcelain")
 	if !strings.Contains(status, "notes/a.txt") {
 		t.Fatalf("expected notes/a.txt to remain an uncommitted deletion in session A's working tree, got status:\n%s", status)
 	}
@@ -155,7 +136,7 @@ func TestCrossSessionMoveDetection_IdenticalContentCollision(t *testing.T) {
 	}
 
 	got := crossSessCommitPaths(t, dir, "HEAD")
-	t.Logf("session B commit contents:\n%s", crossSessNameStatus(t, dir, "HEAD"))
+	t.Logf("session B commit contents:\n%s", testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD"))
 	t.Logf("session B stderr: %q", stderr)
 
 	want := []string{"A todo/b.txt"}
@@ -164,7 +145,7 @@ func TestCrossSessionMoveDetection_IdenticalContentCollision(t *testing.T) {
 			want, got, stderr)
 	}
 
-	status := gitStatusPorcelain(t, dir)
+	status := testutil.Git(t, dir, "status", "--porcelain")
 	if !strings.Contains(status, "notes/a.txt") {
 		t.Fatalf("expected notes/a.txt to remain an uncommitted deletion, got status:\n%s", status)
 	}
@@ -194,7 +175,7 @@ func TestCrossSessionMoveDetection_QuietIsSilentAdoption(t *testing.T) {
 	}
 
 	got := crossSessCommitPaths(t, dir, "HEAD")
-	t.Logf("session B commit contents:\n%s", crossSessNameStatus(t, dir, "HEAD"))
+	t.Logf("session B commit contents:\n%s", testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD"))
 	t.Logf("session B stdout=%q stderr=%q", stdout, stderr)
 
 	if len(got) != 1 || got[0] != "A todo/b.txt" {
@@ -229,7 +210,7 @@ func TestCrossSessionMoveDetection_JSONModeIsSilentAdoption(t *testing.T) {
 	}
 
 	got := crossSessCommitPaths(t, dir, "HEAD")
-	t.Logf("session B commit contents:\n%s", crossSessNameStatus(t, dir, "HEAD"))
+	t.Logf("session B commit contents:\n%s", testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD"))
 	t.Logf("session B --json stdout=%q stderr=%q", stdout, stderr)
 
 	if len(got) != 1 || got[0] != "A todo/b.txt" {
@@ -268,9 +249,9 @@ func TestCrossSessionMoveDetection_MultipleDeletedShareBlob(t *testing.T) {
 	}
 
 	got := crossSessCommitPaths(t, dir, "HEAD")
-	t.Logf("session B commit contents:\n%s", crossSessNameStatus(t, dir, "HEAD"))
+	t.Logf("session B commit contents:\n%s", testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD"))
 	t.Logf("session B stderr: %q", stderr)
-	t.Logf("working tree after B's commit:\n%s", gitStatusPorcelain(t, dir))
+	t.Logf("working tree after B's commit:\n%s", testutil.Git(t, dir, "status", "--porcelain"))
 
 	if len(got) != 1 || got[0] != "A todo/b.txt" {
 		t.Fatalf("with two blob-identical deleted files present, session B's commit contains %v; "+
@@ -301,7 +282,7 @@ func TestCrossSessionMoveDetection_VictimCommitBecomesEmpty(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("session B commit failed (code %d): %s", code, stderr)
 	}
-	bHead := crossSessNameStatus(t, dir, "HEAD")
+	bHead := testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD")
 
 	// Now session A commits the deletion it has been holding.
 	aStdout, aStderr, aCode := runSafegit(t, dir, "commit", "-m", "session A removes notes/a.txt", "--", "notes/a.txt")
