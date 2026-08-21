@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/hooks"
 	"github.com/smm-h/safegit/internal/oplog"
 	"github.com/smm-h/safegit/internal/repo"
@@ -375,10 +376,9 @@ func buildGitPushArgs(remote string, refspecs []string, force bool) []string {
 // stdout/stderr to the user. Routing it here is what makes `--dry-run` honest:
 // the push is recorded in the would-do log and nothing reaches the remote.
 func execGitPush(flags globalFlags, args []string) error {
-	argv := make([]interface{}, 0, len(args)+1)
-	argv = append(argv, "git")
-	for _, a := range args {
-		argv = append(argv, a)
+	argv, err := gitexec.ArgvAny(gitexec.ExemptGitPush, args...)
+	if err != nil {
+		return err
 	}
 	grant := "push"
 	for _, a := range args {
@@ -387,7 +387,7 @@ func execGitPush(flags globalFlags, args []string) error {
 			break
 		}
 	}
-	_, err := flags.effects().Run(argv,
+	_, err = flags.effects().Run(argv,
 		strictcli.Stream(true),
 		strictcli.UseGrant(grant),
 		strictcli.Resource("remote-refs:"+remoteOf(args)),

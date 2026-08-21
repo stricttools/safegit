@@ -1,8 +1,9 @@
 // Package submodule enumerates initialized and deinitialized git submodules, detects parent repos, checks for nesting, and resolves paths through symlinks.
 //
-// This package intentionally does NOT import other internal/* packages to
-// avoid import cycles. Git commands use exec.Command directly -- this is
-// the bootstrap exception (same pattern as internal/testutil).
+// This package intentionally does NOT import internal/git, which would create
+// an import cycle. Its git calls still go through internal/gitexec, safegit's
+// single git-execution boundary: gitexec is a leaf package (standard library
+// only), so both this package and internal/git can route through it.
 package submodule
 
 import (
@@ -11,9 +12,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/smm-h/safegit/internal/gitexec"
 )
 
 // ErrNestedSubmodules is returned when a submodule itself contains submodules.
@@ -256,13 +258,19 @@ func resolveHead(ctx context.Context, workTree string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// runGit executes a git command in the given directory. If dir is empty, the
-// command inherits the current working directory.
+// runGit executes a git command in the given directory. A non-empty dir is the
+// work tree this call must run in, which is the declared explicit-directory
+// exemption from the repository-root pin. An empty dir is the discovery call
+// that has no repository to name yet and takes whatever the context carries.
 func runGit(ctx context.Context, dir string, args ...string) (string, error) {
-	fullArgs := append([]string{"--no-optional-locks"}, args...)
-	cmd := exec.CommandContext(ctx, "git", fullArgs...)
+	spec := gitexec.Spec{Args: args}
 	if dir != "" {
-		cmd.Dir = dir
+		spec.Exempt = gitexec.ExemptSubmoduleRunGit
+		spec.Dir = dir
+	}
+	cmd, err := gitexec.Command(ctx, spec)
+	if err != nil {
+		return "", err
 	}
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf

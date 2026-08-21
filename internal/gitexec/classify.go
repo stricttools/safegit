@@ -1,0 +1,403 @@
+package gitexec
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
+
+// Effect is a set of things one git invocation can do to a repository.
+//
+// The zero value, ObserveOnly, means the invocation changes nothing: no object
+// is added or removed, no ref moves, no index or working-tree file is written
+// and no remote is contacted.
+type Effect uint16
+
+const (
+	// MutatesObjects: the invocation can add objects to, or remove objects
+	// from, the object store.
+	MutatesObjects Effect = 1 << iota
+	// MutatesRefs: the invocation can create, move or delete a ref (local or,
+	// for push, on a remote).
+	MutatesRefs
+	// MutatesIndex: the invocation can write a git index file.
+	MutatesIndex
+	// MutatesWorktree: the invocation can create, change or delete a file in
+	// the working tree.
+	MutatesWorktree
+	// MutatesConfig: the invocation can write git configuration.
+	MutatesConfig
+	// Network: the invocation can contact a remote.
+	Network
+)
+
+// ObserveOnly is the empty effect set.
+const ObserveOnly Effect = 0
+
+// Has reports whether every effect in want is present in e.
+func (e Effect) Has(want Effect) bool { return e&want == want }
+
+// String renders an effect set for diagnostics.
+func (e Effect) String() string {
+	if e == ObserveOnly {
+		return "observe-only"
+	}
+	names := []struct {
+		bit  Effect
+		name string
+	}{
+		{MutatesObjects, "objects"},
+		{MutatesRefs, "refs"},
+		{MutatesIndex, "index"},
+		{MutatesWorktree, "worktree"},
+		{MutatesConfig, "config"},
+		{Network, "network"},
+	}
+	var parts []string
+	for _, n := range names {
+		if e&n.bit != 0 {
+			parts = append(parts, n.name)
+		}
+	}
+	return strings.Join(parts, "|")
+}
+
+// ConditionalEffect adds effects to a verb only when one of Tokens appears in
+// the argv. Tokens are matched literally against whole argv elements, so both
+// option spellings ("-w", "--hard") and subcommand words ("expire", "delete")
+// work.
+type ConditionalEffect struct {
+	Tokens  []string
+	Effects Effect
+	Why     string
+}
+
+// Verb is one git subcommand safegit is allowed to invoke, with what that
+// invocation can do.
+//
+// Base holds the effects every invocation of the verb has; Conditional adds the
+// effects that depend on the argv. Where a verb's effects cannot be decided
+// from a single token, Base is deliberately the WIDER of the possibilities: a
+// consumer that over-quarantines or under-permits is safe, one that
+// under-quarantines is not.
+type Verb struct {
+	Name        string
+	Base        Effect
+	Conditional []ConditionalEffect
+	Note        string
+}
+
+// verbs is the argv classification table: the single authority over the git
+// vocabulary safegit uses. Command and ArgvAny refuse any argv naming a
+// subcommand absent from it, so adding a git call to safegit means declaring it
+// here first.
+//
+// Three views read this one table: Validate (the execution boundary's own
+// vocabulary check), WritesObjects (which invocations touch the object store)
+// and IsObserveOnly (which invocations change nothing).
+var verbs = []Verb{
+	{
+		Name: "--version",
+		Base: ObserveOnly,
+		Note: "a global option that is the whole invocation; safegit reports the git version it found",
+	},
+	{
+		Name: "add",
+		Base: MutatesObjects | MutatesIndex,
+		Note: "safegit only ever runs it against a per-invocation temporary index via GIT_INDEX_FILE",
+	},
+	{
+		Name: "apply",
+		Base: MutatesObjects | MutatesIndex | MutatesWorktree,
+		Note: "safegit uses --cached only, which stages into an index instead of the working tree; the base set stays the wider one",
+	},
+	{
+		Name: "bisect",
+		Base: MutatesRefs | MutatesIndex | MutatesWorktree,
+		Note: "guarded passthrough; the operator's own argv",
+	},
+	{Name: "cat-file", Base: ObserveOnly},
+	{Name: "check-ignore", Base: ObserveOnly},
+	{
+		Name: "checkout",
+		Base: MutatesRefs | MutatesIndex | MutatesWorktree,
+		Note: "guarded passthrough; the operator's own argv",
+	},
+	{
+		Name: "cherry-pick",
+		Base: MutatesObjects | MutatesRefs | MutatesIndex | MutatesWorktree,
+		Note: "guarded passthrough; the operator's own argv",
+	},
+	{
+		Name: "commit",
+		Base: MutatesObjects | MutatesRefs | MutatesIndex,
+		Note: "safegit's own pipeline never uses it -- it builds commits from commit-tree plus a compare-and-swap update-ref, precisely so it never writes the shared index -- but the verb is part of the vocabulary the boundary classifies, and repository fixtures reach it through the plumbing interface",
+	},
+	{Name: "commit-tree", Base: MutatesObjects},
+	{Name: "diff", Base: ObserveOnly},
+	{Name: "fetch", Base: MutatesObjects | MutatesRefs | Network},
+	{Name: "for-each-ref", Base: ObserveOnly},
+	{
+		Name: "hash-object",
+		Base: ObserveOnly,
+		Conditional: []ConditionalEffect{
+			{Tokens: []string{"-w"}, Effects: MutatesObjects, Why: "-w writes the blob to the object store; without it hash-object only computes the SHA"},
+		},
+	},
+	{Name: "log", Base: ObserveOnly},
+	{Name: "ls-files", Base: ObserveOnly},
+	{Name: "ls-remote", Base: Network},
+	{Name: "ls-tree", Base: ObserveOnly},
+	{
+		Name: "merge",
+		Base: MutatesObjects | MutatesRefs | MutatesIndex | MutatesWorktree,
+	},
+	{Name: "merge-base", Base: ObserveOnly},
+	{Name: "mktree", Base: MutatesObjects},
+	{
+		Name: "notes",
+		Base: ObserveOnly,
+		Conditional: []ConditionalEffect{
+			{
+				Tokens:  []string{"add", "append", "copy", "edit", "remove", "prune"},
+				Effects: MutatesObjects | MutatesRefs,
+				Why:     "these notes subcommands rewrite refs/notes/*; safegit only reads with `notes list`",
+			},
+		},
+	},
+	{
+		Name: "prune",
+		Base: MutatesObjects,
+		Note: "removes unreachable objects from the store",
+	},
+	{Name: "push", Base: MutatesRefs | Network},
+	{
+		Name: "read-tree",
+		Base: MutatesIndex,
+		Conditional: []ConditionalEffect{
+			{Tokens: []string{"-u"}, Effects: MutatesWorktree, Why: "-u checks the tree out into the working tree"},
+		},
+	},
+	{
+		Name: "rebase",
+		Base: MutatesObjects | MutatesRefs | MutatesIndex | MutatesWorktree,
+		Note: "guarded passthrough; the operator's own argv",
+	},
+	{
+		Name: "reflog",
+		Base: ObserveOnly,
+		Conditional: []ConditionalEffect{
+			{Tokens: []string{"expire", "delete"}, Effects: MutatesRefs, Why: "both drop reflog entries, which is what makes rewritten commits unreachable"},
+		},
+	},
+	{
+		Name: "remote",
+		Base: ObserveOnly,
+		Conditional: []ConditionalEffect{
+			{
+				Tokens:  []string{"add", "remove", "rename", "set-url", "set-head", "set-branches", "prune"},
+				Effects: MutatesConfig | MutatesRefs,
+				Why:     "safegit only reads with `remote get-url`",
+			},
+		},
+	},
+	{Name: "repack", Base: MutatesObjects},
+	{
+		Name: "reset",
+		Base: MutatesRefs | MutatesIndex,
+		Conditional: []ConditionalEffect{
+			{Tokens: []string{"--hard"}, Effects: MutatesWorktree, Why: "--hard is the one reset mode that overwrites working-tree files"},
+		},
+		Note: "guarded passthrough; the operator's own argv",
+	},
+	{
+		Name: "revert",
+		Base: MutatesObjects | MutatesRefs | MutatesIndex | MutatesWorktree,
+		Note: "guarded passthrough; the operator's own argv",
+	},
+	{Name: "rev-list", Base: ObserveOnly},
+	{Name: "rev-parse", Base: ObserveOnly},
+	{
+		Name: "rm",
+		Base: MutatesIndex | MutatesWorktree,
+		Note: "safegit uses --cached, which leaves the working tree alone; the base set stays the wider one",
+	},
+	{
+		Name: "stash",
+		Base: ObserveOnly,
+		Conditional: []ConditionalEffect{
+			{
+				Tokens:  []string{"push", "save", "pop", "apply", "drop", "clear", "store", "create", "branch"},
+				Effects: MutatesObjects | MutatesRefs | MutatesIndex | MutatesWorktree,
+				Why:     "safegit only reads with `stash list`",
+			},
+		},
+	},
+	{Name: "status", Base: ObserveOnly},
+	{
+		Name: "submodule",
+		Base: ObserveOnly,
+		Conditional: []ConditionalEffect{
+			{
+				Tokens:  []string{"add", "init", "update", "deinit", "sync", "set-url", "set-branch", "absorbgitdirs"},
+				Effects: MutatesObjects | MutatesConfig | MutatesWorktree | Network,
+				Why:     "safegit only enumerates with `submodule foreach`",
+			},
+		},
+	},
+	{
+		Name: "symbolic-ref",
+		Base: ObserveOnly,
+		Conditional: []ConditionalEffect{
+			{Tokens: []string{"-d", "--delete"}, Effects: MutatesRefs, Why: "safegit only reads HEAD"},
+		},
+	},
+	{
+		Name: "tag",
+		Base: ObserveOnly,
+		Conditional: []ConditionalEffect{
+			{
+				Tokens:  []string{"-d", "--delete", "-a", "--annotate", "-s", "--sign", "-m", "-f", "--force"},
+				Effects: MutatesObjects | MutatesRefs,
+				Why:     "safegit only lists with `tag -l`",
+			},
+		},
+	},
+	{Name: "update-index", Base: MutatesIndex},
+	{Name: "update-ref", Base: MutatesRefs},
+	{Name: "write-tree", Base: MutatesObjects},
+}
+
+// byName indexes verbs for lookup.
+var byName = func() map[string]Verb {
+	m := make(map[string]Verb, len(verbs))
+	for _, v := range verbs {
+		m[v.Name] = v
+	}
+	return m
+}()
+
+// Verbs returns the declared vocabulary, sorted by name. It returns a copy.
+func Verbs() []Verb {
+	out := append([]Verb(nil), verbs...)
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// Lookup returns the declared verb by subcommand name.
+func Lookup(name string) (Verb, bool) {
+	v, ok := byName[name]
+	return v, ok
+}
+
+// valueTakingGlobals are git global options whose VALUE is a separate argv
+// element, so the element after them can never be the subcommand.
+var valueTakingGlobals = map[string]bool{
+	"-c": true, "-C": true, "--git-dir": true, "--work-tree": true,
+	"--namespace": true, "--exec-path": true, "--super-prefix": true,
+}
+
+// Subcommand returns the git subcommand an argv names.
+//
+// The argv may or may not carry the binary name and the global prefix; both are
+// skipped. A global option that IS the whole invocation (`git --version`) is
+// returned as the subcommand, because that is how the table declares it.
+func Subcommand(args []string) (string, bool) {
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "" {
+			continue
+		}
+		if i == 0 && a == Binary {
+			continue
+		}
+		if strings.HasPrefix(a, "-") {
+			if _, ok := byName[a]; ok {
+				return a, true
+			}
+			if valueTakingGlobals[a] {
+				i++ // the next element is this option's value, never the verb
+			}
+			continue
+		}
+		return a, true
+	}
+	return "", false
+}
+
+// Validate errors when an argv names no subcommand at all, or names one the
+// classification table does not declare.
+func Validate(args []string) error {
+	name, ok := Subcommand(args)
+	if !ok {
+		return &Error{Msg: "gitexec: git argv names no subcommand: " + strings.Join(args, " ")}
+	}
+	if _, ok := byName[name]; !ok {
+		return &Error{Msg: fmt.Sprintf("gitexec: undeclared git subcommand %q in argv %q; declare it in the classification table (internal/gitexec/classify.go)", name, strings.Join(args, " "))}
+	}
+	return nil
+}
+
+// EffectsOf returns the effects a specific argv can have. It errors on an
+// argv Validate would refuse.
+func EffectsOf(args []string) (Effect, error) {
+	name, ok := Subcommand(args)
+	if !ok {
+		return 0, &Error{Msg: "gitexec: git argv names no subcommand: " + strings.Join(args, " ")}
+	}
+	v, ok := byName[name]
+	if !ok {
+		return 0, &Error{Msg: fmt.Sprintf("gitexec: undeclared git subcommand %q", name)}
+	}
+	eff := v.Base
+	for _, c := range v.Conditional {
+		for _, tok := range c.Tokens {
+			if argvHas(args, name, tok) {
+				eff |= c.Effects
+				break
+			}
+		}
+	}
+	return eff, nil
+}
+
+// argvHas reports whether tok appears in args after the subcommand. The
+// subcommand element itself is skipped so a verb named like one of its own
+// conditional tokens cannot match itself.
+func argvHas(args []string, subcommand, tok string) bool {
+	seen := false
+	for _, a := range args {
+		if !seen {
+			if a == subcommand {
+				seen = true
+			}
+			continue
+		}
+		if a == tok {
+			return true
+		}
+	}
+	return false
+}
+
+// WritesObjects reports whether an argv can change the object store. This is
+// the view Phase 3.1's object quarantine reads. An argv the table does not
+// declare reports true: an unknown invocation is never assumed harmless.
+func WritesObjects(args []string) bool {
+	eff, err := EffectsOf(args)
+	if err != nil {
+		return true
+	}
+	return eff.Has(MutatesObjects)
+}
+
+// IsObserveOnly reports whether an argv changes nothing at all. This is the
+// view Phase 3.3's observe allowlist reads. An argv the table does not declare
+// reports false.
+func IsObserveOnly(args []string) bool {
+	eff, err := EffectsOf(args)
+	if err != nil {
+		return false
+	}
+	return eff == ObserveOnly
+}

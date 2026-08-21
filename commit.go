@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/smm-h/safegit/internal/commit"
+	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
@@ -139,12 +141,13 @@ func recordCommitRefUpdate(flags globalFlags, ref, newSHA, oldSHA string) {
 		return
 	}
 	if oldSHA == "" {
-		oldSHA = "0000000000000000000000000000000000000000"
+		oldSHA = git.ZeroSHA
 	}
-	_, _ = flags.effects().Run(
-		[]interface{}{"git", "update-ref", ref, newSHA, oldSHA},
-		strictcli.Resource("ref:"+ref),
-	)
+	argv, err := gitexec.ArgvAny(gitexec.ExemptCommitRefUpdateRecord, "update-ref", ref, newSHA, oldSHA)
+	if err != nil {
+		return
+	}
+	_, _ = flags.effects().Run(argv, strictcli.Resource("ref:"+ref))
 }
 
 func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch string, trailers []string, files []string) {

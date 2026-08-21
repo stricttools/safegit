@@ -9,6 +9,7 @@ import (
 
 	"github.com/smm-h/safegit/internal/coord"
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/oplog"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/strictcli/go/strictcli"
@@ -18,13 +19,18 @@ import (
 // handle, streaming git's own output straight to the terminal. Routing it here
 // is what makes --dry-run honest for these commands: the invocation is recorded
 // in the would-do log and git is never started.
+// The argv is built by internal/gitexec, safegit's single git-execution
+// boundary, so it carries the same --no-optional-locks prefix every other git
+// invocation does and its subcommand is checked against the one classification
+// table. The invocation is exempt from the repository-root pin: these are the
+// operator's own arguments, and git must read any pathspec in them in the
+// directory the operator typed it in.
 func runGitMutation(flags globalFlags, args ...string) error {
-	argv := make([]interface{}, 0, len(args)+1)
-	argv = append(argv, "git")
-	for _, a := range args {
-		argv = append(argv, a)
+	argv, err := gitexec.ArgvAny(gitexec.ExemptGitMutation, args...)
+	if err != nil {
+		return err
 	}
-	_, err := flags.effects().Run(argv, strictcli.Stream(true))
+	_, err = flags.effects().Run(argv, strictcli.Stream(true))
 	return err
 }
 

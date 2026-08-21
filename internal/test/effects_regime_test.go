@@ -19,6 +19,12 @@ import (
 // its preview member.
 const dryRunLogHeader = "DRY RUN — no changes were made. Would do:"
 
+// noOptionalLocks is the argv prefix internal/gitexec puts on EVERY git
+// invocation safegit builds. A would-do record is an argv safegit would have
+// executed, so it carries the prefix too: a preview that recorded a different
+// command line from the one the execute path runs would not be a preview.
+const noOptionalLocks = "--no-optional-locks"
+
 // machineEnvelope is the framework's machine-mode document (effects contract
 // §19.2), as much of it as safegit's tests read.
 type machineEnvelope struct {
@@ -227,7 +233,7 @@ func TestPushDryRunDoesNotPush(t *testing.T) {
 		t.Fatalf("push --dry-run failed (%d): %s", code, stderr)
 	}
 	log := wouldDoLog(stdout)
-	if !strings.Contains(log, "run: git push") {
+	if !strings.Contains(log, "run: git "+noOptionalLocks+" push") {
 		t.Errorf("the would-do log must record the push, got: %s", log)
 	}
 	if !strings.Contains(log, "granted: push") {
@@ -251,7 +257,7 @@ func TestCommitDryRunRecordsAndCommitsNothing(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("commit --dry-run failed (%d): %s", code, stderr)
 	}
-	if log := wouldDoLog(stdout); !strings.Contains(log, "run: git update-ref") {
+	if log := wouldDoLog(stdout); !strings.Contains(log, "run: git "+noOptionalLocks+" update-ref") {
 		t.Errorf("the would-do log must record the ref update, got: %s", log)
 	}
 	if !strings.Contains(stdout, "would be committed") {
@@ -304,5 +310,32 @@ func TestHookRunRefusesDryRun(t *testing.T) {
 	}
 	if _, err := os.Stat(marker); err != nil {
 		t.Errorf("`hook run` did not execute the hook: %v", err)
+	}
+}
+
+// TestPassthroughDryRunArgvCarriesTheGlobalPrefix pins the 0.2 boundary
+// property from the operator's side: the guarded passthroughs used to build
+// their git argv by hand, so the command they recorded (and, before the effects
+// regime, executed) was missing the --no-optional-locks prefix every other git
+// invocation in safegit carries. The argv now comes from internal/gitexec, so
+// what a dry run records is exactly what the execute path would run.
+//
+// checkout is the whole family's representative: every one of them --
+// checkout, merge, rebase, reset, bisect, pull, cherry-pick and revert -- goes
+// through the same single argv builder.
+func TestPassthroughDryRunArgvCarriesTheGlobalPrefix(t *testing.T) {
+	dir := newRepo(t)
+	testutil.GitRaw(t, dir, "branch", "other")
+
+	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "checkout", "other")
+	if code != 0 {
+		t.Fatalf("checkout --dry-run failed (%d): %s", code, stderr)
+	}
+	log := wouldDoLog(stdout)
+	if !strings.Contains(log, "run: git "+noOptionalLocks+" checkout other") {
+		t.Errorf("the recorded passthrough argv must carry the global prefix, got: %s", log)
+	}
+	if branch := strings.TrimSpace(testutil.GitRaw(t, dir, "rev-parse", "--abbrev-ref", "HEAD")); branch != "main" {
+		t.Errorf("a dry-run checkout moved the branch to %q", branch)
 	}
 }
