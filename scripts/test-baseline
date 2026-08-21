@@ -14,8 +14,12 @@
 # time), then one line per test, sorted, "<RESULT> <package> <testname>" with
 # RESULT in {PASS,FAIL,SKIP}. Subtests appear exactly as go test reports them.
 #
-# -short is always passed: bare runs of ./internal/test/ include multi-minute
-# stress scenarios that are neither deterministic nor useful as a baseline.
+# -short is always passed, and it no longer has anything to do with the stress
+# scenarios: those are opt-in behind the test binary's --stress flag and are
+# excluded here simply because this script does not pass it. What -short still
+# does is keep the artifact deterministic -- it skips internal/hooks'
+# wall-clock hook-timeout test, the one test keyed on testing.Short(), whose
+# result depends on timing rather than on the code under test.
 set -euo pipefail
 
 root="$(git rev-parse --show-toplevel)"
