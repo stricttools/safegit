@@ -24,21 +24,6 @@ import (
 // in: whether the hooks area stays at .git/hooks or moves under .git/safegit is
 // a separate open question, and this contract holds either way.
 
-// writeHookScript writes an executable script at path that creates marker when
-// it runs, and returns the path. The marker path is baked in as an absolute
-// path because hooks execute with their own directory as the working directory.
-func writeHookScript(t *testing.T, path, marker string) string {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	script := "#!/bin/sh\nprintf ran > " + marker + "\nexit 0\n"
-	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
-
 // TestHookInstallArbitraryBasenameIsDiscoverable: `hook install my-check.sh`
 // must either make the script discoverable (list names it, run executes it) or
 // refuse outright. Reporting success while installing something no code path
@@ -48,7 +33,7 @@ func TestHookInstallArbitraryBasenameIsDiscoverable(t *testing.T) {
 
 	src := filepath.Join(dir, "hooksrc", "my-check.sh")
 	marker := filepath.Join(dir, "my-check-ran.txt")
-	writeHookScript(t, src, marker)
+	writeHookScript(t, src, "printf ran > "+marker)
 
 	stdout, stderr, code := runSafegit(t, dir, "hook", "install", src)
 	if code != 0 {
@@ -90,7 +75,7 @@ func TestHookInstallDiscoverableBasenameControl(t *testing.T) {
 
 	src := filepath.Join(dir, "hooksrc", "pre-pre-push")
 	marker := filepath.Join(dir, "pre-pre-push-ran.txt")
-	writeHookScript(t, src, marker)
+	writeHookScript(t, src, "printf ran > "+marker)
 
 	_, stderr, code := runSafegit(t, dir, "hook", "install", src)
 	if code != 0 {
