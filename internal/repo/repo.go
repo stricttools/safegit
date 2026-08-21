@@ -75,6 +75,12 @@ func SafegitDir(gitDir string) string {
 //
 // The parameter accepts either the git directory (.git) or the safegit
 // directory (.git/safegit); callers use both forms.
+//
+// The answer never depends on the process working directory. CommonGitDirOf
+// runs git in the git directory it is handed, so an answer that comes back
+// relative is relative to THAT directory and is anchored there -- filepath.Abs,
+// which would resolve it against this process's own directory, is exactly the
+// wrong anchor and is not used.
 func SharedSafegitDir(ctx context.Context, gitDir string) string {
 	// Normalize: some callers pass the safegit dir instead of the git dir.
 	actualGitDir := gitDir
@@ -82,14 +88,13 @@ func SharedSafegitDir(ctx context.Context, gitDir string) string {
 		actualGitDir = filepath.Dir(gitDir)
 	}
 	commonDir, err := git.CommonGitDirOf(ctx, actualGitDir)
-	if err != nil {
+	if err != nil || commonDir == "" {
 		return filepath.Join(actualGitDir, "safegit")
 	}
-	abs, err := filepath.Abs(commonDir)
-	if err != nil {
-		return filepath.Join(actualGitDir, "safegit")
+	if !filepath.IsAbs(commonDir) {
+		commonDir = filepath.Join(actualGitDir, commonDir)
 	}
-	return filepath.Join(abs, "safegit")
+	return filepath.Join(filepath.Clean(commonDir), "safegit")
 }
 
 // IsInitialized reports whether this repository has a usable safegit data
@@ -106,7 +111,11 @@ func IsInitialized(gitDir string) bool {
 
 // Init creates the .git/safegit/ directory structure and writes default config.json.
 // Idempotent: returns nil if already initialized.
-func Init(gitDir string) error {
+//
+// The context is the dispatch's own: the worktree check below asks git where
+// the common git directory is, and that call belongs on the same context as
+// every other git call the invocation makes.
+func Init(ctx context.Context, gitDir string) error {
 	if IsInitialized(gitDir) {
 		return nil
 	}
@@ -127,7 +136,7 @@ func Init(gitDir string) error {
 
 	// If running inside a worktree, also create the shared locks dir under
 	// the common .git dir so that ref locks are visible to all worktrees.
-	sharedDir := SharedSafegitDir(context.Background(), gitDir)
+	sharedDir := SharedSafegitDir(ctx, gitDir)
 	if sharedDir != sgDir {
 		if err := os.MkdirAll(filepath.Join(sharedDir, "locks", "refs", "heads"), 0755); err != nil {
 			return fmt.Errorf("creating shared locks directory %s: %w", sharedDir, err)
@@ -203,9 +212,9 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 }
 
 // EnsureInitialized auto-initializes .git/safegit/ if it doesn't exist yet.
-func EnsureInitialized(gitDir string) error {
+func EnsureInitialized(ctx context.Context, gitDir string) error {
 	if !IsInitialized(gitDir) {
-		if err := Init(gitDir); err != nil {
+		if err := Init(ctx, gitDir); err != nil {
 			return fmt.Errorf("safegit: auto-init failed: %w", err)
 		}
 		fmt.Fprintf(os.Stderr, "safegit: auto-initialized %s\n", SafegitDir(gitDir))
@@ -215,7 +224,7 @@ func EnsureInitialized(gitDir string) error {
 
 // Uninstall removes the .git/safegit/ directory entirely.
 // In worktree setups, also cleans up the shared lock directory.
-func Uninstall(gitDir string) error {
+func Uninstall(ctx context.Context, gitDir string) error {
 	sgDir := SafegitDir(gitDir)
 	if _, err := os.Stat(sgDir); os.IsNotExist(err) {
 		return errors.New("safegit is not initialized (nothing to remove)")
@@ -223,7 +232,7 @@ func Uninstall(gitDir string) error {
 	if err := os.RemoveAll(sgDir); err != nil {
 		return err
 	}
-	sharedDir := SharedSafegitDir(context.Background(), gitDir)
+	sharedDir := SharedSafegitDir(ctx, gitDir)
 	if sharedDir != sgDir {
 		os.RemoveAll(filepath.Join(sharedDir, "locks"))
 	}
