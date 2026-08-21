@@ -35,8 +35,10 @@ esac
 integration_pkg="./internal/test/"
 mapfile -t unit_pkgs < <(go list ./... | grep -v '/internal/test$')
 
+# Recorded verbatim in the artifact header: the argv actually run, not a
+# description of it, so a later reader can re-run exactly this.
 integration_cmd="go test $integration_pkg -short -count=1 -json"
-unit_cmd="go test -short -count=1 -json <all packages except ./internal/test>"
+unit_cmd="go test ${unit_pkgs[*]} -short -count=1 -json"
 
 # Distill go test -json into "<RESULT> <package> <test>" lines.
 distill() {
@@ -49,11 +51,19 @@ distill() {
 
 # Build failures produce package-level events with no per-test events at all,
 # which would silently shrink the artifact. Refuse instead.
+#
+# The match is a case pattern rather than a pipeline into grep: under
+# `set -o pipefail`, grep -q exits at the first match, the writer at the head of
+# the pipe dies of EPIPE, and the pipeline's status becomes 141 -- so the guard
+# would not fire on exactly the large outputs it exists for. No writer, no
+# SIGPIPE.
 guard_build_failures() {
-	if printf '%s\n' "$1" | grep -q '\[build failed\]'; then
+	case "$1" in
+	*"[build failed]"*)
 		echo "test-baseline: build failure in test output; refusing to write a baseline" >&2
 		exit 1
-	fi
+		;;
+	esac
 }
 
 # The suite is red on purpose, so a nonzero exit is expected and not an error.
