@@ -11,6 +11,25 @@ import (
 	"time"
 )
 
+// stressEnabled is the --stress opt-in for the long-running scenarios in this
+// file. It is registered on the TEST BINARY in TestMain (concurrent_test.go)
+// before the testing package parses flags -- it is a go-test flag, not a
+// safegit CLI flag, and Go treats -stress and --stress identically:
+//
+//	go test ./internal/test/ --stress
+//
+// The default is off, so a bare `go test ./...` is fast and CI needs no
+// generic -short to dodge multi-minute scenarios. testdata/stress passes it.
+var stressEnabled *bool
+
+// requireStress skips a scenario unless --stress was passed.
+func requireStress(t *testing.T) {
+	t.Helper()
+	if stressEnabled == nil || !*stressEnabled {
+		t.Skip("stress scenario: pass --stress to run it")
+	}
+}
+
 // verifyAllFilesInTree checks that every file in the list is present in HEAD's tree.
 func verifyAllFilesInTree(t *testing.T, dir string, n int, prefix string) {
 	t.Helper()
@@ -99,9 +118,7 @@ func runParallelCommits(t *testing.T, dir string, n int, prefix string) (codes [
 // Stress50: 50 parallel commits to main, each with its own file.
 // Verifies all 50 land, all files present, linear history.
 func TestStress50(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping stress test in short mode")
-	}
+	requireStress(t)
 	dir := newRepo(t)
 
 	const N = 50
@@ -120,9 +137,7 @@ func TestStress50(t *testing.T) {
 
 // Stress100: 100 parallel commits to main.
 func TestStress100(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping stress test in short mode")
-	}
+	requireStress(t)
 	dir := newRepo(t)
 
 	const N = 100
@@ -206,9 +221,7 @@ func TestCheckoutCleanProceeds(t *testing.T) {
 
 // T11: Hook timeout. Install a sleeping hook, set short timeout, verify push aborts.
 func TestHookTimeout(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping timeout test in short mode")
-	}
+	requireStress(t)
 	dir := newRepo(t)
 
 	// Install a hook that sleeps forever
@@ -244,9 +257,7 @@ func TestHookTimeout(t *testing.T) {
 // StressDifferentBranches: 50 parallel commits each to their own branch.
 // No lock contention expected (different refs -> different locks).
 func TestStressDifferentBranches(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping stress test in short mode")
-	}
+	requireStress(t)
 	dir := newRepo(t)
 
 	const N = 50
@@ -294,9 +305,7 @@ func TestStressDifferentBranches(t *testing.T) {
 // T6: Two agents commit sequentially to main, then both push to a bare remote
 // concurrently. Both should succeed (same branch tip, linear history).
 func TestConcurrentPush(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping push test in short mode")
-	}
+	requireStress(t)
 	dir := newRepo(t)
 
 	// Create bare remote (--initial-branch=main ensures HEAD resolves after push)
@@ -377,9 +386,7 @@ func TestConcurrentPush(t *testing.T) {
 // T7: Two agents push different branches concurrently to the same bare remote.
 // No contention (different refs), both should succeed.
 func TestConcurrentDifferentBranchPush(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping push test in short mode")
-	}
+	requireStress(t)
 	dir := newRepo(t)
 
 	// Create bare remote and add as origin
@@ -747,9 +754,7 @@ func TestLockRecoveredOplog(t *testing.T) {
 // StressOpLog: 50 parallel commits, verify oplog has exactly 50 commit entries,
 // all valid JSON, no partial or interleaved lines.
 func TestStressOpLog(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping stress test in short mode")
-	}
+	requireStress(t)
 	dir := newRepo(t)
 
 	const N = 50

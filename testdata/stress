@@ -1,9 +1,17 @@
 #!/bin/bash
-# Run stress and concurrency tests with race detection.
-# Usage: scripts/stress [count]   (default: count=5)
+# Run the integration suite INCLUDING the long-running stress scenarios, with
+# race detection.
+#
+# The stress scenarios are opt-in on the test binary: without --stress they
+# skip, so a bare `go test ./internal/test/` stays fast. This script is the
+# thing that passes it.
+#
+# Usage:
+#   testdata/stress [count] [extra go test args...]   (default: count=5)
 set -euo pipefail
 
 COUNT="${1:-5}"
+shift || true
 
-echo "Running all integration tests (race, count=$COUNT)..."
-go test ./internal/test/ -race -count="$COUNT" -timeout=15m -v "$@"
+echo "Running all integration tests including stress scenarios (race, count=$COUNT)..."
+go test ./internal/test/ -race -count="$COUNT" -timeout=15m -v --stress "$@"
