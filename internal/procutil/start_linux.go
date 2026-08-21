@@ -32,9 +32,26 @@ func StartTime(pid int) (Start, error) {
 
 	s := Start{Ticks: ticks}
 	if boot, err := bootTime(); err == nil {
-		s.Wall = boot.Add(time.Duration(ticks) * time.Second / userHZ)
+		s.Wall = wallFromTicks(boot, ticks)
 	}
 	return s, nil
+}
+
+// wallFromTicks converts a start offset in USER_HZ ticks since boot into the
+// wall-clock instant it names.
+//
+// The ticks are split into whole seconds and a sub-second remainder before
+// either part is widened to a time.Duration. The direct form --
+// time.Duration(ticks) * time.Second / userHZ -- multiplies first and overflows
+// int64 nanoseconds once ticks passes about 9.22e9, which a host reaches after
+// roughly 2.9 years of uptime; past that point it wraps and reports an instant
+// that is nowhere near the truth. Nothing decides anything on this value (see
+// Start.Wall), but it is what a human reads out of a lock file, so it must not
+// be nonsense on a long-lived machine.
+func wallFromTicks(boot time.Time, ticks uint64) time.Time {
+	whole := time.Duration(ticks/userHZ) * time.Second
+	frac := time.Duration(ticks%userHZ) * (time.Second / userHZ)
+	return boot.Add(whole + frac)
 }
 
 // parseStartTicks extracts field 22 (starttime, in USER_HZ ticks since boot)
