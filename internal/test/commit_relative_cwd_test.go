@@ -4,19 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-)
 
-// mustShow returns the contents of path (repo-relative) at ref, failing the
-// test when the path is absent from that commit. It wraps the package's
-// gitShow helper, which reports absence instead of failing.
-func mustShow(t *testing.T, repoDir, ref, path string) string {
-	t.Helper()
-	content, ok := gitShow(t, repoDir, ref, path)
-	if !ok {
-		t.Fatalf("%s is absent from %s", path, ref)
-	}
-	return content
-}
+	"github.com/smm-h/safegit/internal/testutil"
+)
 
 // TestCommitFromSubdirRelativePathNoPendingChange reproduces the reported
 // failure: invoked from a repository subdirectory with two cwd-relative path
@@ -59,13 +49,13 @@ func TestCommitFromSubdirRelativePathNoPendingChange(t *testing.T) {
 	}
 
 	// The edit must actually be in the new HEAD commit.
-	if got := mustShow(t, dir, "HEAD", "sub/edited.txt"); got != "after\n" {
+	if got := testutil.MustShow(t, dir, "HEAD", "sub/edited.txt"); got != "after\n" {
 		t.Fatalf("sub/edited.txt at HEAD = %q, want %q", got, "after\n")
 	}
 
 	// sub/unchanged.txt must still be tracked with its original contents --
 	// naming a path with no pending change must never remove it from the tree.
-	if got := mustShow(t, dir, "HEAD", "sub/unchanged.txt"); got != "unchanged\n" {
+	if got := testutil.MustShow(t, dir, "HEAD", "sub/unchanged.txt"); got != "unchanged\n" {
 		t.Fatalf("sub/unchanged.txt at HEAD = %q, want %q", got, "unchanged\n")
 	}
 
@@ -104,7 +94,7 @@ func TestCommitFromSubdirRelativePathOnlyChanged(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("commit from subdir with only the changed path failed (code %d)\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
 	}
-	if got := mustShow(t, dir, "HEAD", "sub/edited.txt"); got != "after\n" {
+	if got := testutil.MustShow(t, dir, "HEAD", "sub/edited.txt"); got != "after\n" {
 		t.Fatalf("sub/edited.txt at HEAD = %q, want %q", got, "after\n")
 	}
 	if status := gitStatusPorcelain(t, dir); status != "" {
@@ -139,10 +129,10 @@ func TestCommitFromRepoRootUnchangedPath(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("commit from root with an unchanged path failed (code %d)\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
 	}
-	if got := mustShow(t, dir, "HEAD", "edited.txt"); got != "after\n" {
+	if got := testutil.MustShow(t, dir, "HEAD", "edited.txt"); got != "after\n" {
 		t.Fatalf("edited.txt at HEAD = %q, want %q", got, "after\n")
 	}
-	if got := mustShow(t, dir, "HEAD", "unchanged.txt"); got != "unchanged\n" {
+	if got := testutil.MustShow(t, dir, "HEAD", "unchanged.txt"); got != "unchanged\n" {
 		t.Fatalf("unchanged.txt at HEAD = %q, want %q", got, "unchanged\n")
 	}
 	if status := gitStatusPorcelain(t, dir); status != "" {

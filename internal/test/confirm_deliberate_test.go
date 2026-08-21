@@ -61,7 +61,7 @@ func newSecretRepo(t *testing.T) (dir, initialSHA string) {
 func secretSurvives(t *testing.T, dir string) bool {
 	t.Helper()
 	for _, sha := range revListReverse(t, dir) {
-		if content, ok := gitShow(t, dir, sha, "secret.txt"); ok && content == "hunter2\n" {
+		if content, ok := testutil.Show(t, dir, sha, "secret.txt"); ok && content == "hunter2\n" {
 			return true
 		}
 	}
@@ -218,16 +218,16 @@ func TestScrubFileInSubmoduleJSONDoesNotConfirm(t *testing.T) {
 	testutil.Git(t, parentDir, "add", "mysub")
 	testutil.Git(t, parentDir, "commit", "-m", "update submodule ref")
 
-	parentHeadBefore := revParseHEAD(t, parentDir)
-	subHeadBefore := revParseHEAD(t, subDir)
+	parentHeadBefore := testutil.Rev(t, parentDir, "HEAD")
+	subHeadBefore := testutil.Rev(t, subDir, "HEAD")
 
 	_, stderr, code := runSafegitNoConsent(t, parentDir, submoduleEnv, "--json", "scrub", "file",
 		"mysub/secret.txt", "--from", firstSubCommit, "--reason", "json consent probe")
 	assertRefusedForConsent(t, code, stderr)
-	if got := revParseHEAD(t, parentDir); got != parentHeadBefore {
+	if got := testutil.Rev(t, parentDir, "HEAD"); got != parentHeadBefore {
 		t.Errorf("--json must not answer the submodule scrub confirmation; parent HEAD moved to %s", got)
 	}
-	if got := revParseHEAD(t, subDir); got != subHeadBefore {
+	if got := testutil.Rev(t, subDir, "HEAD"); got != subHeadBefore {
 		t.Errorf("--json must not answer the submodule scrub confirmation; submodule HEAD moved to %s", got)
 	}
 
@@ -236,7 +236,7 @@ func TestScrubFileInSubmoduleJSONDoesNotConfirm(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("an explicit --approve-consequential must run the submodule scrub, got code %d: %s", code, stderr)
 	}
-	if got := revParseHEAD(t, subDir); got == subHeadBefore {
+	if got := testutil.Rev(t, subDir, "HEAD"); got == subHeadBefore {
 		t.Error("the consented submodule scrub did not rewrite the submodule history")
 	}
 }

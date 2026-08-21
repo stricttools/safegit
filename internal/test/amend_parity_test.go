@@ -67,12 +67,6 @@ func amendParHas(hay []string, needle string) bool {
 	return false
 }
 
-// amendParRev resolves a revision to a full SHA.
-func amendParRev(t *testing.T, dir, rev string) string {
-	t.Helper()
-	return strings.TrimSpace(testutil.GitRaw(t, dir, "rev-parse", rev))
-}
-
 // amendParCommit commits paths through safegit and fails the test if it does
 // not succeed. Used only for fixture setup.
 func amendParCommit(t *testing.T, dir, message string, paths ...string) string {
@@ -82,7 +76,7 @@ func amendParCommit(t *testing.T, dir, message string, paths ...string) string {
 	if code != 0 {
 		t.Fatalf("fixture commit %q failed (code %d): %s", message, code, stderr)
 	}
-	return amendParRev(t, dir, "HEAD")
+	return testutil.Rev(t, dir, "HEAD")
 }
 
 // amendParStatus returns `git status --porcelain`, trimmed.
@@ -126,7 +120,7 @@ func TestAmendSymlink_LinkToCommittedFile(t *testing.T) {
 		t.Fatalf("amending in a symlink failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 
-	head := amendParRev(t, dir, "HEAD")
+	head := testutil.Rev(t, dir, "HEAD")
 	if head == tip {
 		t.Fatalf("HEAD did not move; the amend produced no new commit")
 	}
@@ -195,7 +189,7 @@ func TestAmendStagedDeletions_DirectoryPathWithMovedFile(t *testing.T) {
 			code, stdout, stderr)
 	}
 
-	head := amendParRev(t, dir, "HEAD")
+	head := testutil.Rev(t, dir, "HEAD")
 	if parents := amendParParents(t, dir, head); len(parents) != 1 || parents[0] != base {
 		t.Errorf("amended commit parents = %v, want [%s]", parents, base)
 	}
@@ -314,10 +308,10 @@ func TestAmendFromSubdirRelativePathNoPendingChange(t *testing.T) {
 	if got := amendParParents(t, dir, "HEAD"); strings.Join(got, ",") != strings.Join(tipParents, ",") {
 		t.Errorf("amended commit parents = %v, want %v", got, tipParents)
 	}
-	if got, ok := gitShow(t, dir, "HEAD", "sub/edited.txt"); !ok || got != "after\n" {
+	if got, ok := testutil.Show(t, dir, "HEAD", "sub/edited.txt"); !ok || got != "after\n" {
 		t.Errorf("sub/edited.txt at HEAD = %q (present=%t), want %q", got, ok, "after\n")
 	}
-	if got, ok := gitShow(t, dir, "HEAD", "sub/unchanged.txt"); !ok || got != "unchanged\n" {
+	if got, ok := testutil.Show(t, dir, "HEAD", "sub/unchanged.txt"); !ok || got != "unchanged\n" {
 		t.Errorf("sub/unchanged.txt at HEAD = %q (present=%t): naming a path with no pending change must never remove it", got, ok)
 	}
 	if status := amendParStatus(t, dir); status != "" {
@@ -346,10 +340,10 @@ func TestAmendFromRepoRootUnchangedPath(t *testing.T) {
 		t.Fatalf("amending from the repo root with an unchanged path failed (code %d)\nstdout:\n%s\nstderr:\n%s",
 			code, stdout, stderr)
 	}
-	if got, ok := gitShow(t, dir, "HEAD", "edited.txt"); !ok || got != "after\n" {
+	if got, ok := testutil.Show(t, dir, "HEAD", "edited.txt"); !ok || got != "after\n" {
 		t.Errorf("edited.txt at HEAD = %q (present=%t), want %q", got, ok, "after\n")
 	}
-	if got, ok := gitShow(t, dir, "HEAD", "unchanged.txt"); !ok || got != "unchanged\n" {
+	if got, ok := testutil.Show(t, dir, "HEAD", "unchanged.txt"); !ok || got != "unchanged\n" {
 		t.Errorf("unchanged.txt at HEAD = %q (present=%t), want %q", got, ok, "unchanged\n")
 	}
 }
@@ -435,7 +429,7 @@ func TestAmendCrossBranchDeletionOfPathTrackedOnlyOnTarget(t *testing.T) {
 	if paths := amendParTreePaths(t, dir, "refs/heads/other"); amendParHas(paths, "only-on-other.txt") {
 		t.Errorf("only-on-other.txt should be gone from other's amended tip, got: %v", paths)
 	}
-	if head := amendParRev(t, dir, "HEAD"); head != amendParRev(t, dir, "refs/heads/main") {
+	if head := testutil.Rev(t, dir, "HEAD"); head != testutil.Rev(t, dir, "refs/heads/main") {
 		t.Errorf("HEAD left main during a cross-branch amend")
 	}
 }
@@ -476,7 +470,7 @@ func amendParNewMergedRepo(t *testing.T) amendParMergeFixture {
 		t.Fatalf("safegit merge feature failed (code %d)\nstdout=%s\nstderr=%s", code, stdout, stderr)
 	}
 
-	mergeSHA := amendParRev(t, dir, "HEAD")
+	mergeSHA := testutil.Rev(t, dir, "HEAD")
 	parents := amendParParents(t, dir, mergeSHA)
 	if len(parents) != 2 || parents[0] != mainSHA || parents[1] != featureSHA {
 		t.Fatalf("fixture: HEAD is not the expected merge commit; parents = %v, want [%s %s]",
@@ -499,7 +493,7 @@ func TestRewordMergeCommitPreservesBothParents(t *testing.T) {
 		t.Fatalf("rewording a merge commit failed (code %d)\nstdout=%s\nstderr=%s", code, stdout, stderr)
 	}
 
-	head := amendParRev(t, fx.dir, "HEAD")
+	head := testutil.Rev(t, fx.dir, "HEAD")
 	parents := amendParParents(t, fx.dir, head)
 	if len(parents) != 2 {
 		t.Fatalf("reworded merge commit has %d parent(s) (%v), want 2 (%s, %s): the second parent was dropped, "+
@@ -514,7 +508,7 @@ func TestRewordMergeCommitPreservesBothParents(t *testing.T) {
 	}
 
 	// A reword changes nothing but the message.
-	if got, want := amendParRev(t, fx.dir, "HEAD^{tree}"), amendParRev(t, fx.dir, fx.mergeSHA+"^{tree}"); got != want {
+	if got, want := testutil.Rev(t, fx.dir, "HEAD^{tree}"), testutil.Rev(t, fx.dir, fx.mergeSHA+"^{tree}"); got != want {
 		t.Errorf("reworded tree = %s, want the merge's own tree %s", got, want)
 	}
 	if msg := testutil.GitRaw(t, fx.dir, "log", "-1", "--format=%s"); !strings.Contains(msg, "reworded") {
@@ -540,7 +534,7 @@ func TestAmendMergeCommitWithFilesPreservesBothParents(t *testing.T) {
 		t.Fatalf("amending a merge commit with a new file failed (code %d)\nstdout=%s\nstderr=%s", code, stdout, stderr)
 	}
 
-	head := amendParRev(t, fx.dir, "HEAD")
+	head := testutil.Rev(t, fx.dir, "HEAD")
 	parents := amendParParents(t, fx.dir, head)
 	if len(parents) != 2 {
 		t.Fatalf("amended merge commit has %d parent(s) (%v), want 2 (%s, %s): the second parent was dropped",
@@ -669,14 +663,14 @@ func TestAmendRefusedWhileMerging(t *testing.T) {
 				t.Fatalf("git refused for an unexpected reason (code %d): %s", gitCode, strings.Join(strings.Fields(gitOut), " "))
 			}
 
-			before := amendParRev(t, dir, "HEAD")
+			before := testutil.Rev(t, dir, "HEAD")
 			if before != mainSHA {
 				t.Fatalf("fixture: HEAD = %s, want the pre-merge main tip %s", before, mainSHA)
 			}
 
 			stdout, stderr, code := runSafegit(t, dir, tc.args...)
 			if code == 0 {
-				head := amendParRev(t, dir, "HEAD")
+				head := testutil.Rev(t, dir, "HEAD")
 				t.Fatalf("safegit %s succeeded mid-merge (git refuses the same command).\n"+
 					"  new tip: %s (was %s)\n"+
 					"  parents: %v\n"+
@@ -688,7 +682,7 @@ func TestAmendRefusedWhileMerging(t *testing.T) {
 					!amendParMergeStateGone(t, dir), strings.Join(strings.Fields(stdout), " "))
 			}
 
-			if head := amendParRev(t, dir, "HEAD"); head != before {
+			if head := testutil.Rev(t, dir, "HEAD"); head != before {
 				t.Errorf("HEAD moved to %s despite the refusal (was %s)", head, before)
 			}
 			amendParAssertStillMerging(t, dir, featureSHA)
@@ -744,7 +738,7 @@ func TestAmendRefusedWhileCherryPicking(t *testing.T) {
 
 	stdout, stderr, code = runSafegit(t, dir, "commit", "--amend", "-m", "rewritten mid-cherry-pick")
 	if code == 0 {
-		head := amendParRev(t, dir, "HEAD")
+		head := testutil.Rev(t, dir, "HEAD")
 		t.Fatalf("safegit commit --amend succeeded mid-cherry-pick (git refuses the same command).\n"+
 			"  new tip: %s (was %s)\n"+
 			"  CHERRY_PICK_HEAD still present: %t\n"+
@@ -753,7 +747,7 @@ func TestAmendRefusedWhileCherryPicking(t *testing.T) {
 			amendParFileExists(filepath.Join(dir, ".git", "CHERRY_PICK_HEAD")),
 			strings.Join(strings.Fields(stdout), " "))
 	}
-	if head := amendParRev(t, dir, "HEAD"); head != mainSHA {
+	if head := testutil.Rev(t, dir, "HEAD"); head != mainSHA {
 		t.Errorf("HEAD moved to %s despite the refusal (was %s)", head, mainSHA)
 	}
 	if !strings.Contains(strings.ToLower(stderr), "cherry") {

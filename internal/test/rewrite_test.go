@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // makeCommits creates n commits in repoDir with the given author/committer identity.
@@ -955,7 +957,7 @@ func TestRewriteAuthorJSONDryRun(t *testing.T) {
 	dir := newRepo(t)
 	makeCommits(t, dir, "oldname", "old@test.com", 5, "jsondry")
 
-	headBefore := revParseHEAD(t, dir)
+	headBefore := testutil.Rev(t, dir, "HEAD")
 
 	stdout, stderr, code := runSafegit(t, dir, "--json", "--dry-run", "--approve-consequential", "author", "rewrite", "--old-name", "oldname", "--new-name", "newname")
 	if code != 0 {
@@ -994,7 +996,7 @@ func TestRewriteAuthorJSONDryRun(t *testing.T) {
 	}
 
 	// HEAD should be unchanged (dry-run)
-	headAfter := revParseHEAD(t, dir)
+	headAfter := testutil.Rev(t, dir, "HEAD")
 	if headAfter != headBefore {
 		t.Errorf("HEAD changed during dry run: %s -> %s", headBefore[:12], headAfter[:12])
 	}

@@ -122,7 +122,7 @@ func TestDoctorDeclinedModeIsRefused(t *testing.T) {
 func TestScrubMatchDeclinedMangleIsRefused(t *testing.T) {
 	dir := newRepo(t)
 	commitFileEnv(t, dir, mutexElectionEnv, "secret.txt", "token SECRET_ABC here\n", "add secret")
-	before := revParseHEAD(t, dir)
+	before := testutil.Rev(t, dir, "HEAD")
 
 	_, stderr, code := runSafegitEnv(t, dir, mutexElectionEnv,
 		"--approve-consequential", "scrub", "match",
@@ -142,7 +142,7 @@ func TestScrubMatchDeclinedMangleIsRefused(t *testing.T) {
 func TestScrubMatchDeclinedRangeIsRefused(t *testing.T) {
 	dir := newRepo(t)
 	commitFileEnv(t, dir, mutexElectionEnv, "secret.txt", "token SECRET_ABC here\n", "add secret")
-	before := revParseHEAD(t, dir)
+	before := testutil.Rev(t, dir, "HEAD")
 
 	_, stderr, code := runSafegitEnv(t, dir, mutexElectionEnv,
 		"--approve-consequential", "scrub", "match",
@@ -160,7 +160,7 @@ func TestScrubMatchDeclinedRangeIsRefused(t *testing.T) {
 func TestScrubMatchNoRangeIsRefused(t *testing.T) {
 	dir := newRepo(t)
 	commitFileEnv(t, dir, mutexElectionEnv, "secret.txt", "token SECRET_ABC here\n", "add secret")
-	before := revParseHEAD(t, dir)
+	before := testutil.Rev(t, dir, "HEAD")
 
 	_, stderr, code := runSafegitEnv(t, dir, mutexElectionEnv,
 		"--approve-consequential", "scrub", "match",
@@ -180,7 +180,7 @@ func TestScrubRunDeclinedRangeIsRefused(t *testing.T) {
 	commitFileEnv(t, dir, mutexElectionEnv, "secret.txt", "token SECRET_ABC here\n", "add secret")
 	recipe := "[[operations]]\ntype = \"match\"\npattern = \"SECRET_ABC\"\nreplace = \"REDACTED\"\n"
 	commitFileEnv(t, dir, mutexElectionEnv, "recipe.toml", recipe, "add recipe")
-	before := revParseHEAD(t, dir)
+	before := testutil.Rev(t, dir, "HEAD")
 
 	_, stderr, code := runSafegitEnv(t, dir, mutexElectionEnv,
 		"--approve-consequential", "scrub", "run",
@@ -199,7 +199,7 @@ func TestScrubRunNoRangeIsRefused(t *testing.T) {
 	commitFileEnv(t, dir, mutexElectionEnv, "secret.txt", "token SECRET_ABC here\n", "add secret")
 	recipe := "[[operations]]\ntype = \"match\"\npattern = \"SECRET_ABC\"\nreplace = \"REDACTED\"\n"
 	commitFileEnv(t, dir, mutexElectionEnv, "recipe.toml", recipe, "add recipe")
-	before := revParseHEAD(t, dir)
+	before := testutil.Rev(t, dir, "HEAD")
 
 	_, stderr, code := runSafegitEnv(t, dir, mutexElectionEnv,
 		"--approve-consequential", "scrub", "run",
@@ -216,7 +216,7 @@ func TestScrubRunNoRangeIsRefused(t *testing.T) {
 func TestScrubMatchDoubleElectionIsRefused(t *testing.T) {
 	dir := newRepo(t)
 	commitFileEnv(t, dir, mutexElectionEnv, "secret.txt", "token SECRET_ABC here\n", "add secret")
-	before := revParseHEAD(t, dir)
+	before := testutil.Rev(t, dir, "HEAD")
 
 	_, stderr, code := runSafegitEnv(t, dir, mutexElectionEnv,
 		"--approve-consequential", "scrub", "match",
@@ -235,10 +235,10 @@ func TestScrubMatchDoubleElectionIsRefused(t *testing.T) {
 // string -- i.e. when a refused rewrite rewrote something anyway.
 func assertHistoryIntact(t *testing.T, dir, beforeHead, file, marker string) {
 	t.Helper()
-	if after := revParseHEAD(t, dir); after != beforeHead {
+	if after := testutil.Rev(t, dir, "HEAD"); after != beforeHead {
 		t.Errorf("refused rewrite moved HEAD: %s -> %s", beforeHead, after)
 	}
-	content, ok := gitShow(t, dir, "HEAD", file)
+	content, ok := testutil.Show(t, dir, "HEAD", file)
 	if !ok {
 		t.Fatalf("refused rewrite removed %s from HEAD", file)
 	}

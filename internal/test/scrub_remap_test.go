@@ -42,7 +42,7 @@ func appendChangelogLine(t *testing.T, dir, path, sha string) string {
 	if code != 0 {
 		t.Fatalf("committing changelog failed: %s", stderr)
 	}
-	return revParseHEAD(t, dir)
+	return testutil.Rev(t, dir, "HEAD")
 }
 
 // assertChangelogSelfConsistent walks every commit in the rewritten history
@@ -58,7 +58,7 @@ func assertChangelogSelfConsistent(t *testing.T, dir, path string, oldToNew map[
 		newSHAs[new_] = true
 	}
 	for _, sha := range revListReverse(t, dir) {
-		content, ok := gitShow(t, dir, sha, path)
+		content, ok := testutil.Show(t, dir, sha, path)
 		if !ok {
 			continue
 		}
@@ -109,7 +109,7 @@ func TestScrubFileRemapShas(t *testing.T) {
 	assertChangelogSelfConsistent(t, dir, "changes/changelog.jsonl", result.Rewrites)
 
 	// Final version references exactly the rewritten SHAs.
-	finalContent, ok := gitShow(t, dir, "HEAD", "changes/changelog.jsonl")
+	finalContent, ok := testutil.Show(t, dir, "HEAD", "changes/changelog.jsonl")
 	if !ok {
 		t.Fatal("changelog missing at HEAD")
 	}
@@ -153,7 +153,7 @@ func TestScrubFileRemapPartialRange(t *testing.T) {
 		t.Fatalf("c3 not rewritten: %v", result.Rewrites)
 	}
 
-	finalContent, ok := gitShow(t, dir, "HEAD", "changelog.jsonl")
+	finalContent, ok := testutil.Show(t, dir, "HEAD", "changelog.jsonl")
 	if !ok {
 		t.Fatal("changelog missing at HEAD")
 	}
@@ -192,7 +192,7 @@ func TestScrubFileRemapStaleHash(t *testing.T) {
 		t.Errorf("expected stale-hash report mentioning 'unresolvable', got: %s", stderr)
 	}
 
-	finalContent, ok := gitShow(t, dir, "HEAD", "changelog.jsonl")
+	finalContent, ok := testutil.Show(t, dir, "HEAD", "changelog.jsonl")
 	if !ok {
 		t.Fatal("changelog missing at HEAD")
 	}
@@ -227,7 +227,7 @@ func TestScrubFileRemapLeavesAbbreviatedAndLongerHex(t *testing.T) {
 	}
 	newC1 := result.Rewrites[c1]
 
-	finalContent, ok := gitShow(t, dir, "HEAD", "notes.txt")
+	finalContent, ok := testutil.Show(t, dir, "HEAD", "notes.txt")
 	if !ok {
 		t.Fatal("notes.txt missing at HEAD")
 	}
@@ -268,7 +268,7 @@ func TestScrubMatchRemapShas(t *testing.T) {
 	}
 
 	assertChangelogSelfConsistent(t, dir, "changelog.jsonl", result.Rewrites)
-	finalContent, ok := gitShow(t, dir, "HEAD", "changelog.jsonl")
+	finalContent, ok := testutil.Show(t, dir, "HEAD", "changelog.jsonl")
 	if !ok {
 		t.Fatal("changelog missing at HEAD")
 	}
@@ -312,7 +312,7 @@ func TestScrubRunRemapShas(t *testing.T) {
 	}
 
 	assertChangelogSelfConsistent(t, dir, "changelog.jsonl", result.Rewrites)
-	finalContent, ok := gitShow(t, dir, "HEAD", "changelog.jsonl")
+	finalContent, ok := testutil.Show(t, dir, "HEAD", "changelog.jsonl")
 	if !ok {
 		t.Fatal("changelog missing at HEAD")
 	}
@@ -340,7 +340,7 @@ func TestScrubFileRemapSkipsBinary(t *testing.T) {
 		t.Fatalf("scrub with binary glob match should succeed, got code %d: %s", code, stderr)
 	}
 
-	finalContent, ok := gitShow(t, dir, "HEAD", "data.bin")
+	finalContent, ok := testutil.Show(t, dir, "HEAD", "data.bin")
 	if !ok {
 		t.Fatal("data.bin missing at HEAD")
 	}
@@ -455,7 +455,7 @@ func TestScrubFileInSubmoduleRemapShas(t *testing.T) {
 	// Parent's matched file is remapped: references the rewritten parent
 	// commit, never the pre-rewrite one, at every historical version.
 	assertChangelogSelfConsistent(t, parentDir, "changelog.jsonl", result.Rewrites)
-	parentFinal, ok := gitShow(t, parentDir, "HEAD", "changelog.jsonl")
+	parentFinal, ok := testutil.Show(t, parentDir, "HEAD", "changelog.jsonl")
 	if !ok {
 		t.Fatal("parent changelog missing at HEAD")
 	}
@@ -466,14 +466,14 @@ func TestScrubFileInSubmoduleRemapShas(t *testing.T) {
 
 	// Submodule history was scrubbed (secret gone everywhere)...
 	for i, sha := range revListReverse(t, subDir) {
-		content, ok := gitShow(t, subDir, sha, "secret.txt")
+		content, ok := testutil.Show(t, subDir, sha, "secret.txt")
 		if ok && strings.Contains(content, "SUBREMAP_SECRET") {
 			t.Errorf("submodule commit %d (%s): secret still present", i, sha[:12])
 		}
 	}
 	// ...but its changelog was NOT remapped: it still carries the old
 	// (pre-rewrite, now stale) submodule SHA. Documented limitation.
-	subFinal, ok := gitShow(t, subDir, "HEAD", "changelog.jsonl")
+	subFinal, ok := testutil.Show(t, subDir, "HEAD", "changelog.jsonl")
 	if !ok {
 		t.Fatal("submodule changelog missing at HEAD")
 	}

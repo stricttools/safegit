@@ -105,7 +105,7 @@ func TestConsequentialCommandRefusesWithoutConsent(t *testing.T) {
 	if _, stderr, code := runSafegitNoConsent(t, dir, nil, "commit", "-m", "seed", "--", "a.txt"); code != 0 {
 		t.Fatalf("seeding commit failed: %s", stderr)
 	}
-	before := revParseHEAD(t, dir)
+	before := testutil.Rev(t, dir, "HEAD")
 
 	_, stderr, code := runSafegitNoConsent(t, dir, nil,
 		"author", "rewrite", "--old-name=Test", "--new-name=Renamed")
@@ -115,7 +115,7 @@ func TestConsequentialCommandRefusesWithoutConsent(t *testing.T) {
 	if !strings.Contains(stderr, "must be confirmed at a terminal") && !strings.Contains(stderr, "aborted") {
 		t.Errorf("the refusal must show that approval was missing, got: %s", stderr)
 	}
-	if after := revParseHEAD(t, dir); after != before {
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
 		t.Errorf("an unapproved rewrite moved HEAD anyway: %s -> %s", before, after)
 	}
 }

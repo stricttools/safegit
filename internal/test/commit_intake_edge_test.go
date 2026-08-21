@@ -24,7 +24,6 @@ package test
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -33,30 +32,6 @@ import (
 )
 
 // --- helpers (all prefixed intakeEdge to avoid collisions in package test) ---
-
-// intakeEdgeShow returns the blob content of path at rev, and whether it exists.
-func intakeEdgeShow(t *testing.T, dir, rev, path string) (string, bool) {
-	t.Helper()
-	cmd := exec.Command("git", "show", rev+":"+path)
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		return "", false
-	}
-	return string(out), true
-}
-
-// intakeEdgeTip returns the SHA a ref points at ("" when the ref is missing).
-func intakeEdgeTip(t *testing.T, dir, ref string) string {
-	t.Helper()
-	cmd := exec.Command("git", "rev-parse", ref)
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
-}
 
 // intakeEdgeNumbered builds n lines "line N", with the lines named in
 // replacements substituted, so a file can be given two well-separated hunks.
@@ -104,7 +79,7 @@ func TestIntakeEdgeHunkSpecFromSubdir(t *testing.T) {
 		t.Fatalf("hunk staging from subdirectory failed (%d): %s", code, stderr)
 	}
 
-	got, ok := intakeEdgeShow(t, dir, "HEAD", "sub/edited.txt")
+	got, ok := testutil.Show(t, dir, "HEAD", "sub/edited.txt")
 	if !ok {
 		t.Fatal("sub/edited.txt missing from HEAD")
 	}
@@ -131,7 +106,7 @@ func TestIntakeEdgeHunkSpecFromRoot(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("hunk staging from repo root failed (%d): %s", code, stderr)
 	}
-	got, _ := intakeEdgeShow(t, dir, "HEAD", "sub/edited.txt")
+	got, _ := testutil.Show(t, dir, "HEAD", "sub/edited.txt")
 	if !strings.Contains(got, "FIRST-CHANGE") || strings.Contains(got, "SECOND-CHANGE") {
 		t.Errorf("wrong hunk selection from repo root; HEAD content:\n%s", got)
 	}
@@ -153,7 +128,7 @@ func TestIntakeEdgePlainDeletionControl(t *testing.T) {
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "delete", "--", name); code != 0 {
 		t.Fatalf("committing the deletion of %q failed (%d): %s", name, code, stderr)
 	}
-	if _, ok := intakeEdgeShow(t, dir, "HEAD", name); ok {
+	if _, ok := testutil.Show(t, dir, "HEAD", name); ok {
 		t.Errorf("%q still present in HEAD after the deletion commit", name)
 	}
 }
@@ -175,7 +150,7 @@ func TestIntakeEdgeColonNameNonNumericSuffixDeletion(t *testing.T) {
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "delete", "--", name); code != 0 {
 		t.Fatalf("committing the deletion of %q failed (%d): %s", name, code, stderr)
 	}
-	if _, ok := intakeEdgeShow(t, dir, "HEAD", name); ok {
+	if _, ok := testutil.Show(t, dir, "HEAD", name); ok {
 		t.Errorf("%q still present in HEAD after the deletion commit", name)
 	}
 }
@@ -196,7 +171,7 @@ func TestIntakeEdgeColonNameDeletion(t *testing.T) {
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "add colon file", "--", name); code != 0 {
 		t.Fatalf("seed commit of %q failed (%d): %s", name, code, stderr)
 	}
-	if _, ok := intakeEdgeShow(t, dir, "HEAD", name); !ok {
+	if _, ok := testutil.Show(t, dir, "HEAD", name); !ok {
 		t.Fatalf("%q not committed by the seed step", name)
 	}
 	if err := os.Remove(filepath.Join(dir, name)); err != nil {
@@ -207,7 +182,7 @@ func TestIntakeEdgeColonNameDeletion(t *testing.T) {
 	if code != 0 {
 		t.Errorf("committing the deletion of %q was refused (%d): %s", name, code, stderr)
 	}
-	if _, ok := intakeEdgeShow(t, dir, "HEAD", name); ok {
+	if _, ok := testutil.Show(t, dir, "HEAD", name); ok {
 		t.Errorf("%q still present in HEAD after the deletion commit", name)
 	}
 }
@@ -233,7 +208,7 @@ func TestIntakeEdgeDanglingSymlinkNoColon(t *testing.T) {
 	if code != 0 {
 		t.Errorf("committing dangling symlink %q was refused (%d): %s", name, code, stderr)
 	}
-	if _, ok := intakeEdgeShow(t, dir, "HEAD", name); !ok {
+	if _, ok := testutil.Show(t, dir, "HEAD", name); !ok {
 		t.Errorf("%q missing from HEAD", name)
 	}
 }
@@ -294,10 +269,10 @@ func TestIntakeEdgeSameArgvDifferentMeaningByCwd(t *testing.T) {
 	if _, stderr, code := runSafegit(t, sub, "commit", "-m", "from sub", "--", "notes:1"); code != 0 {
 		t.Fatalf("commit from sub/ failed (%d): %s", code, stderr)
 	}
-	if _, ok := intakeEdgeShow(t, dir, "HEAD", "notes:1"); ok {
+	if _, ok := testutil.Show(t, dir, "HEAD", "notes:1"); ok {
 		t.Errorf("running from sub/ committed the root file notes:1; expected it to be read as a hunk spec")
 	}
-	got, ok := intakeEdgeShow(t, dir, "HEAD", "sub/notes")
+	got, ok := testutil.Show(t, dir, "HEAD", "sub/notes")
 	if !ok {
 		t.Fatal("sub/notes missing from HEAD")
 	}
@@ -308,7 +283,7 @@ func TestIntakeEdgeSameArgvDifferentMeaningByCwd(t *testing.T) {
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "from root", "--", "notes:1"); code != 0 {
 		t.Fatalf("commit from repo root failed (%d): %s", code, stderr)
 	}
-	if _, ok := intakeEdgeShow(t, dir, "HEAD", "notes:1"); !ok {
+	if _, ok := testutil.Show(t, dir, "HEAD", "notes:1"); !ok {
 		t.Errorf("running from the repo root did not commit the literal file notes:1")
 	}
 }
@@ -348,11 +323,11 @@ func TestIntakeEdgeCrossBranchDeleteSharedControl(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("cross-branch deletion of a shared path failed (%d): %s", code, stderr)
 	}
-	if _, ok := intakeEdgeShow(t, dir, "refs/heads/other", name); ok {
+	if _, ok := testutil.Show(t, dir, "refs/heads/other", name); ok {
 		t.Errorf("%s still present on other after the deletion commit", name)
 	}
 	// HEAD must be untouched: the deletion was committed to the other branch.
-	if _, ok := intakeEdgeShow(t, dir, "HEAD", name); !ok {
+	if _, ok := testutil.Show(t, dir, "HEAD", name); !ok {
 		t.Errorf("%s disappeared from HEAD; a --branch commit must not move HEAD's branch", name)
 	}
 }
@@ -373,10 +348,10 @@ func TestIntakeEdgeCrossBranchDeleteTrackedOnlyOnTarget(t *testing.T) {
 	name := "only-on-other.txt"
 	intakeEdgeBranchWithFile(t, dir, name, "other branch content\n")
 
-	if _, ok := intakeEdgeShow(t, dir, "refs/heads/other", name); !ok {
+	if _, ok := testutil.Show(t, dir, "refs/heads/other", name); !ok {
 		t.Fatalf("setup: %s missing from other", name)
 	}
-	if _, ok := intakeEdgeShow(t, dir, "HEAD", name); ok {
+	if _, ok := testutil.Show(t, dir, "HEAD", name); ok {
 		t.Fatalf("setup: %s should not be in HEAD", name)
 	}
 	if _, err := os.Lstat(filepath.Join(dir, name)); !os.IsNotExist(err) {
@@ -387,7 +362,7 @@ func TestIntakeEdgeCrossBranchDeleteTrackedOnlyOnTarget(t *testing.T) {
 	if code != 0 {
 		t.Errorf("deleting a path tracked on the target branch was refused (%d): %s", code, stderr)
 	}
-	if _, ok := intakeEdgeShow(t, dir, "refs/heads/other", name); ok {
+	if _, ok := testutil.Show(t, dir, "refs/heads/other", name); ok {
 		t.Errorf("%s still present on other after the deletion commit", name)
 	}
 }
@@ -413,20 +388,20 @@ func TestIntakeEdgeCrossBranchDeleteTrackedOnlyOnHead(t *testing.T) {
 	}
 	// `other` points at the commit before the file existed.
 	testutil.GitRaw(t, dir, "branch", "other", "HEAD~1")
-	if _, ok := intakeEdgeShow(t, dir, "refs/heads/other", name); ok {
+	if _, ok := testutil.Show(t, dir, "refs/heads/other", name); ok {
 		t.Fatalf("setup: %s should not exist on other", name)
 	}
 	if err := os.Remove(filepath.Join(dir, name)); err != nil {
 		t.Fatal(err)
 	}
 
-	before := intakeEdgeTip(t, dir, "refs/heads/other")
+	before := testutil.RevTry(t, dir, "refs/heads/other")
 	_, stderr, code := runSafegit(t, dir, "commit", "--branch", "other", "-m", "delete on other", "--", name)
 
 	if code == 0 {
 		t.Errorf("deleting a path the target branch does not track succeeded (%d): %s", code, stderr)
 	}
-	if after := intakeEdgeTip(t, dir, "refs/heads/other"); after != before {
+	if after := testutil.RevTry(t, dir, "refs/heads/other"); after != before {
 		t.Errorf("target branch moved despite the failure: %s -> %s", before, after)
 	}
 	if strings.Contains(stderr, "git rm --cached") || strings.Contains(stderr, "did not match any files") {
@@ -453,7 +428,7 @@ func TestIntakeEdgeCrossBranchAmendDeleteTrackedOnlyOnTarget(t *testing.T) {
 	if code != 0 {
 		t.Errorf("amending away a path tracked on the target branch was refused (%d): %s", code, stderr)
 	}
-	if _, ok := intakeEdgeShow(t, dir, "refs/heads/other", name); ok {
+	if _, ok := testutil.Show(t, dir, "refs/heads/other", name); ok {
 		t.Errorf("%s still present on other after the amend", name)
 	}
 }
@@ -470,7 +445,7 @@ func TestIntakeEdgeCrossBranchAddControl(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("cross-branch add failed (%d): %s", code, stderr)
 	}
-	if _, ok := intakeEdgeShow(t, dir, "refs/heads/other", "fresh.txt"); !ok {
+	if _, ok := testutil.Show(t, dir, "refs/heads/other", "fresh.txt"); !ok {
 		t.Error("fresh.txt missing from other after cross-branch commit")
 	}
 }

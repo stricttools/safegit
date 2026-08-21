@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // newRepoWithSubmodule creates a parent repo with one submodule at "mysub".
@@ -365,8 +367,8 @@ func TestScrubFilePreservesGitlink(t *testing.T) {
 	}
 
 	// Verify the scrubbed file has the clean content
-	headSHA := revParseHEAD(t, parentDir)
-	content, ok := gitShow(t, parentDir, headSHA, "secret.txt")
+	headSHA := testutil.Rev(t, parentDir, "HEAD")
+	content, ok := testutil.Show(t, parentDir, headSHA, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in HEAD after scrub")
 	} else if content != "clean content\n" {
@@ -416,8 +418,8 @@ func TestScrubMatchPreservesGitlink(t *testing.T) {
 	}
 
 	// Verify the file content is now REDACTED
-	headSHA := revParseHEAD(t, parentDir)
-	content, ok := gitShow(t, parentDir, headSHA, "secret.txt")
+	headSHA := testutil.Rev(t, parentDir, "HEAD")
+	content, ok := testutil.Show(t, parentDir, headSHA, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in HEAD after scrub match")
 	} else if !strings.Contains(content, "REDACTED") {
@@ -470,7 +472,7 @@ func TestScrubFileGitlinkPath(t *testing.T) {
 
 	// Record tree state AFTER setup commits (before scrub)
 	subEntryBefore := lsTreeEntry(t, parentDir, "mysub")
-	headBefore := revParseHEAD(t, parentDir)
+	headBefore := testutil.Rev(t, parentDir, "HEAD")
 
 	// Run scrub file targeting a path inside the submodule
 	_, stderr, code := runSafegitEnv(t, parentDir, submoduleEnv, "--approve-consequential", "scrub", "file", "--from", firstSHA, "--reason", "test gitlink path", "mysub/somefile.txt")
@@ -493,7 +495,7 @@ func TestScrubFileGitlinkPath(t *testing.T) {
 
 	// If exit code was 0 (no-op), HEAD should be unchanged
 	if code == 0 {
-		headAfter := revParseHEAD(t, parentDir)
+		headAfter := testutil.Rev(t, parentDir, "HEAD")
 		if headAfter != headBefore {
 			t.Errorf("HEAD changed despite no-op scrub: %s -> %s", headBefore, headAfter)
 		}
@@ -696,7 +698,7 @@ func TestSubmoduleUndo(t *testing.T) {
 	env := []string{"CLAUDE_CODE_SESSION_ID=submodule-undo-test"}
 
 	parentSubPointerBefore := lsTreeSHA(t, lsTreeEntry(t, parentDir, "mysub"))
-	subHEADBefore := revParseHEAD(t, subDir)
+	subHEADBefore := testutil.Rev(t, subDir, "HEAD")
 
 	// Create a file and commit inside the submodule.
 	if err := os.WriteFile(filepath.Join(subDir, "undo_me.txt"), []byte("will undo\n"), 0644); err != nil {
@@ -707,7 +709,7 @@ func TestSubmoduleUndo(t *testing.T) {
 		t.Fatalf("safegit commit in submodule failed (code %d): %s", code, stderr)
 	}
 
-	subHEADAfterCommit := revParseHEAD(t, subDir)
+	subHEADAfterCommit := testutil.Rev(t, subDir, "HEAD")
 	if subHEADAfterCommit == subHEADBefore {
 		t.Fatal("submodule HEAD did not advance after commit")
 	}
@@ -719,7 +721,7 @@ func TestSubmoduleUndo(t *testing.T) {
 	}
 
 	// Verify: submodule HEAD is back to pre-commit SHA.
-	subHEADAfterUndo := revParseHEAD(t, subDir)
+	subHEADAfterUndo := testutil.Rev(t, subDir, "HEAD")
 	if subHEADAfterUndo != subHEADBefore {
 		t.Errorf("after undo, submodule HEAD = %s, want %s", subHEADAfterUndo, subHEADBefore)
 	}
@@ -1362,8 +1364,8 @@ func TestScrubMatchRecursesIntoSubmodule(t *testing.T) {
 	}
 
 	// Verify: submodule HEAD no longer contains the secret
-	subHEAD := revParseHEAD(t, subDir)
-	content, ok := gitShow(t, subDir, subHEAD, "secret.txt")
+	subHEAD := testutil.Rev(t, subDir, "HEAD")
+	content, ok := testutil.Show(t, subDir, subHEAD, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in submodule HEAD after scrub")
 	} else {
@@ -1417,8 +1419,8 @@ func TestScrubMatchBothParentAndSubmodule(t *testing.T) {
 	}
 
 	// Verify: parent file is clean
-	parentHEAD := revParseHEAD(t, parentDir)
-	content, ok := gitShow(t, parentDir, parentHEAD, "parentfile.txt")
+	parentHEAD := testutil.Rev(t, parentDir, "HEAD")
+	content, ok := testutil.Show(t, parentDir, parentHEAD, "parentfile.txt")
 	if !ok {
 		t.Error("parentfile.txt not found in parent HEAD after scrub")
 	} else {
@@ -1431,8 +1433,8 @@ func TestScrubMatchBothParentAndSubmodule(t *testing.T) {
 	}
 
 	// Verify: submodule file is clean
-	subHEAD := revParseHEAD(t, subDir)
-	content, ok = gitShow(t, subDir, subHEAD, "secret.txt")
+	subHEAD := testutil.Rev(t, subDir, "HEAD")
+	content, ok = testutil.Show(t, subDir, subHEAD, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in submodule HEAD after scrub")
 	} else {
@@ -1472,8 +1474,8 @@ func TestScrubMatchTwoSubmodules(t *testing.T) {
 	}
 
 	// Verify: sub1 is clean
-	sub1HEAD := revParseHEAD(t, sub1Dir)
-	content, ok := gitShow(t, sub1Dir, sub1HEAD, "secret.txt")
+	sub1HEAD := testutil.Rev(t, sub1Dir, "HEAD")
+	content, ok := testutil.Show(t, sub1Dir, sub1HEAD, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in sub1 HEAD after scrub")
 	} else if strings.Contains(content, "TOPSECRET_MULTI") {
@@ -1481,8 +1483,8 @@ func TestScrubMatchTwoSubmodules(t *testing.T) {
 	}
 
 	// Verify: sub2 is clean
-	sub2HEAD := revParseHEAD(t, sub2Dir)
-	content, ok = gitShow(t, sub2Dir, sub2HEAD, "secret.txt")
+	sub2HEAD := testutil.Rev(t, sub2Dir, "HEAD")
+	content, ok = testutil.Show(t, sub2Dir, sub2HEAD, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in sub2 HEAD after scrub")
 	} else if strings.Contains(content, "TOPSECRET_MULTI") {
@@ -1553,7 +1555,7 @@ func TestScrubFileInSubmodule(t *testing.T) {
 	// Verify: the file in submodule history is replaced
 	newSubSHAs := revListReverse(t, subDir)
 	for i, sha := range newSubSHAs {
-		content, ok := gitShow(t, subDir, sha, "secret.txt")
+		content, ok := testutil.Show(t, subDir, sha, "secret.txt")
 		if !ok {
 			continue
 		}
@@ -1605,8 +1607,8 @@ func TestScrubMatchScopeSubmodule(t *testing.T) {
 	}
 
 	// Verify: sub1 is scrubbed (secret removed)
-	sub1HEAD := revParseHEAD(t, sub1Dir)
-	content, ok := gitShow(t, sub1Dir, sub1HEAD, "secret.txt")
+	sub1HEAD := testutil.Rev(t, sub1Dir, "HEAD")
+	content, ok := testutil.Show(t, sub1Dir, sub1HEAD, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in sub1 HEAD after scrub")
 	} else {
@@ -1619,8 +1621,8 @@ func TestScrubMatchScopeSubmodule(t *testing.T) {
 	}
 
 	// Verify: sub2 is NOT scrubbed (secret still present)
-	sub2HEAD := revParseHEAD(t, sub2Dir)
-	content, ok = gitShow(t, sub2Dir, sub2HEAD, "secret.txt")
+	sub2HEAD := testutil.Rev(t, sub2Dir, "HEAD")
+	content, ok = testutil.Show(t, sub2Dir, sub2HEAD, "secret.txt")
 	if !ok {
 		t.Error("secret.txt not found in sub2 HEAD")
 	} else if !strings.Contains(content, "SECRET_SCOPED") {
@@ -1628,8 +1630,8 @@ func TestScrubMatchScopeSubmodule(t *testing.T) {
 	}
 
 	// Verify: parent blobs outside sub1/ are not scrubbed
-	parentHEAD := revParseHEAD(t, parentDir)
-	content, ok = gitShow(t, parentDir, parentHEAD, "parentfile.txt")
+	parentHEAD := testutil.Rev(t, parentDir, "HEAD")
+	content, ok = testutil.Show(t, parentDir, parentHEAD, "parentfile.txt")
 	if !ok {
 		t.Error("parentfile.txt not found in parent HEAD")
 	} else if !strings.Contains(content, "SECRET_SCOPED") {
@@ -1642,7 +1644,7 @@ func TestScrubMatchDryRunWithSubmodules(t *testing.T) {
 	parentDir, _, _ := newRepoWithSubmoduleSecret(t, "SECRET_DRYRUN", "secret.txt")
 
 	// Record state before dry-run
-	headBefore := revParseHEAD(t, parentDir)
+	headBefore := testutil.Rev(t, parentDir, "HEAD")
 	gitlinkBefore := lsTreeEntry(t, parentDir, "mysub")
 
 	// Run with --dry-run
@@ -1664,7 +1666,7 @@ func TestScrubMatchDryRunWithSubmodules(t *testing.T) {
 	}
 
 	// Verify: no changes were made (HEAD unchanged)
-	headAfter := revParseHEAD(t, parentDir)
+	headAfter := testutil.Rev(t, parentDir, "HEAD")
 	if headAfter != headBefore {
 		t.Errorf("HEAD changed during dry run: %s -> %s", headBefore[:12], headAfter[:12])
 	}
@@ -1809,7 +1811,7 @@ func TestAutoBumpOnCommit(t *testing.T) {
 	}
 
 	// Verify: parent's gitlink points to the submodule's new SHA
-	subHEAD := revParseHEAD(t, subDir)
+	subHEAD := testutil.Rev(t, subDir, "HEAD")
 	parentGitlink := lsTreeSHA(t, lsTreeEntry(t, parentDir, "mysub"))
 	if parentGitlink != subHEAD {
 		t.Errorf("parent gitlink = %s, want submodule HEAD = %s", parentGitlink, subHEAD)
@@ -2016,7 +2018,7 @@ func TestAutoBumpAmend(t *testing.T) {
 	}
 
 	// Verify: parent gitlink points to the amended commit SHA
-	subHEAD := revParseHEAD(t, subDir)
+	subHEAD := testutil.Rev(t, subDir, "HEAD")
 	parentGitlink := lsTreeSHA(t, lsTreeEntry(t, parentDir, "mysub"))
 	if parentGitlink != subHEAD {
 		t.Errorf("parent gitlink = %s, want amended submodule HEAD = %s", parentGitlink, subHEAD)
@@ -2075,8 +2077,8 @@ func TestAutoBumpConcurrentDifferentSubs(t *testing.T) {
 	}
 
 	// Verify: both gitlinks are updated
-	sub1HEAD := revParseHEAD(t, sub1Dir)
-	sub2HEAD := revParseHEAD(t, sub2Dir)
+	sub1HEAD := testutil.Rev(t, sub1Dir, "HEAD")
+	sub2HEAD := testutil.Rev(t, sub2Dir, "HEAD")
 	gitlink1 := lsTreeSHA(t, lsTreeEntry(t, parentDir, "sub1"))
 	gitlink2 := lsTreeSHA(t, lsTreeEntry(t, parentDir, "sub2"))
 	if gitlink1 != sub1HEAD {
@@ -2104,7 +2106,7 @@ func TestAutoBumpTrailers(t *testing.T) {
 
 	// Read parent's HEAD commit message
 	msg := commitMessage(t, parentDir, "HEAD")
-	subHEAD := revParseHEAD(t, subDir)
+	subHEAD := testutil.Rev(t, subDir, "HEAD")
 
 	// Verify: contains Triggered-by trailer with the sub's new SHA
 	if !strings.Contains(msg, "Triggered-by: "+subHEAD) {
@@ -2151,7 +2153,7 @@ func TestAutoBumpNoopWhenCurrent(t *testing.T) {
 	}
 
 	// Verify: gitlink updated to the second commit's SHA
-	subHEAD := revParseHEAD(t, subDir)
+	subHEAD := testutil.Rev(t, subDir, "HEAD")
 	gitlinkAfterSecond := lsTreeSHA(t, lsTreeEntry(t, parentDir, "mysub"))
 	if gitlinkAfterSecond == gitlinkAfterFirst {
 		t.Error("parent gitlink did not change after second commit")

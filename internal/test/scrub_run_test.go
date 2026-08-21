@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 var scrubRunEnv = []string{"CLAUDE_CODE_SESSION_ID=scrub-run-test"}
@@ -54,7 +56,7 @@ replace = "REDACTED"
 	shas := revListReverse(t, dir)
 	for i, sha := range shas {
 		for _, fname := range []string{"file1.txt", "file2.txt"} {
-			content, ok := gitShow(t, dir, sha, fname)
+			content, ok := testutil.Show(t, dir, sha, fname)
 			if !ok {
 				continue
 			}
@@ -121,7 +123,7 @@ replace = "REDACTED"
 	// Verify all commits have both secrets replaced
 	shas := revListReverse(t, dir)
 	for i, sha := range shas {
-		content, ok := gitShow(t, dir, sha, "config.txt")
+		content, ok := testutil.Show(t, dir, sha, "config.txt")
 		if !ok {
 			continue
 		}
@@ -172,7 +174,7 @@ depends_on = [0]
 	// Verify the final result is REDACTED (not HIDDEN or SECRET)
 	shas := revListReverse(t, dir)
 	for i, sha := range shas {
-		content, ok := gitShow(t, dir, sha, "data.txt")
+		content, ok := testutil.Show(t, dir, sha, "data.txt")
 		if !ok {
 			continue
 		}
@@ -230,7 +232,7 @@ func TestScrubRunDiffPreview(t *testing.T) {
 
 	commitFileEnv(t, dir, scrubRunEnv, "secret.txt", "password=SECRET_ABC here\n", "add secret")
 	commitFileEnv(t, dir, scrubRunEnv, "secret.txt", "password=SECRET_ABC updated\n", "update secret")
-	headBefore := revParseHEAD(t, dir)
+	headBefore := testutil.Rev(t, dir, "HEAD")
 
 	recipe := writeRecipe(t, "recipe.toml", `
 [[operations]]
@@ -250,7 +252,7 @@ replace = "REDACTED"
 	}
 
 	// HEAD should be unchanged
-	headAfter := revParseHEAD(t, dir)
+	headAfter := testutil.Rev(t, dir, "HEAD")
 	if headAfter != headBefore {
 		t.Errorf("HEAD changed during --diff preview: %s -> %s", headBefore[:12], headAfter[:12])
 	}
@@ -415,7 +417,7 @@ func TestScrubRunDryRun(t *testing.T) {
 	commitFileEnv(t, dir, scrubRunEnv, "config.txt", "api_key=secret123 db_pass=hunter2\n", "add config")
 	commitFileEnv(t, dir, scrubRunEnv, "config.txt", "api_key=secret456 db_pass=hunter3\n", "update config")
 
-	headBefore := revParseHEAD(t, dir)
+	headBefore := testutil.Rev(t, dir, "HEAD")
 	countBefore := countGitObjects(t, dir)
 
 	recipe := writeRecipe(t, "recipe.toml", `
@@ -439,7 +441,7 @@ replace = "REDACTED"
 	}
 
 	// HEAD should be unchanged.
-	headAfter := revParseHEAD(t, dir)
+	headAfter := testutil.Rev(t, dir, "HEAD")
 	if headAfter != headBefore {
 		t.Errorf("HEAD changed during --dry-run: %s -> %s", headBefore[:12], headAfter[:12])
 	}
@@ -640,7 +642,7 @@ scope = "*.yaml"
 	// have REDACTED_YAML. Neither original secret should remain.
 	shas := revListReverse(t, dir)
 	for i, sha := range shas {
-		envContent, envOk := gitShow(t, dir, sha, "config.env")
+		envContent, envOk := testutil.Show(t, dir, sha, "config.env")
 		if envOk {
 			if strings.Contains(envContent, "ENV_SECRET_1") {
 				t.Errorf("commit %d (%s): config.env still contains ENV_SECRET_1: %q", i, sha[:12], envContent)
@@ -655,7 +657,7 @@ scope = "*.yaml"
 			}
 		}
 
-		yamlContent, yamlOk := gitShow(t, dir, sha, "data.yaml")
+		yamlContent, yamlOk := testutil.Show(t, dir, sha, "data.yaml")
 		if yamlOk {
 			if strings.Contains(yamlContent, "YAML_SECRET_2") {
 				t.Errorf("commit %d (%s): data.yaml still contains YAML_SECRET_2: %q", i, sha[:12], yamlContent)

@@ -79,8 +79,8 @@ func TestSubmoduleCommitDryRunDoesNotBumpParent(t *testing.T) {
 	enableAutoBump(t, parentDir)
 
 	parentCountBefore := gitLog(t, parentDir, "HEAD")
-	parentHeadBefore := revParseHEAD(t, parentDir)
-	subHeadBefore := revParseHEAD(t, subDir)
+	parentHeadBefore := testutil.Rev(t, parentDir, "HEAD")
+	subHeadBefore := testutil.Rev(t, subDir, "HEAD")
 
 	if err := os.WriteFile(filepath.Join(subDir, "file.txt"), []byte("dry content\n"), 0644); err != nil {
 		t.Fatal(err)
@@ -90,13 +90,13 @@ func TestSubmoduleCommitDryRunDoesNotBumpParent(t *testing.T) {
 		t.Fatalf("dry-run commit in submodule failed (code %d): %s", code, stderr)
 	}
 
-	if got := revParseHEAD(t, parentDir); got != parentHeadBefore {
+	if got := testutil.Rev(t, parentDir, "HEAD"); got != parentHeadBefore {
 		t.Errorf("parent HEAD moved during a dry run: %s -> %s", parentHeadBefore[:12], got[:12])
 	}
 	if got := gitLog(t, parentDir, "HEAD"); got != parentCountBefore {
 		t.Errorf("parent commit count changed during a dry run: %d -> %d", parentCountBefore, got)
 	}
-	if got := revParseHEAD(t, subDir); got != subHeadBefore {
+	if got := testutil.Rev(t, subDir, "HEAD"); got != subHeadBefore {
 		t.Errorf("submodule HEAD moved during a dry run: %s -> %s", subHeadBefore[:12], got[:12])
 	}
 }
@@ -118,14 +118,14 @@ func TestSubmoduleRewordDryRunDoesNotBumpParent(t *testing.T) {
 	enableAutoBump(t, parentDir)
 
 	parentCountBefore := gitLog(t, parentDir, "HEAD")
-	parentHeadBefore := revParseHEAD(t, parentDir)
+	parentHeadBefore := testutil.Rev(t, parentDir, "HEAD")
 
 	_, stderr, code := runSafegit(t, subDir, "--dry-run", "commit", "--amend", "-m", "reworded in dry run")
 	if code != 0 {
 		t.Fatalf("dry-run reword in submodule failed (code %d): %s", code, stderr)
 	}
 
-	if got := revParseHEAD(t, parentDir); got != parentHeadBefore {
+	if got := testutil.Rev(t, parentDir, "HEAD"); got != parentHeadBefore {
 		t.Errorf("parent HEAD moved during a dry-run reword: %s -> %s", parentHeadBefore[:12], got[:12])
 	}
 	if got := gitLog(t, parentDir, "HEAD"); got != parentCountBefore {
@@ -311,7 +311,7 @@ func TestDryRunInUninitializedRepoStillPreviews(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dir, _ := newRawSecretRepo(t)
 			testutil.WriteFile(t, dir, "new.txt", "new content\n")
-			headBefore := revParseHEAD(t, dir)
+			headBefore := testutil.Rev(t, dir, "HEAD")
 
 			stdout, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv, tc.args...)
 			if code != 0 {
@@ -319,7 +319,7 @@ func TestDryRunInUninitializedRepoStillPreviews(t *testing.T) {
 					tc.name, code, stdout, stderr)
 			}
 			assertNoSafegitDir(t, dir, tc.name+" --dry-run")
-			if got := revParseHEAD(t, dir); got != headBefore {
+			if got := testutil.Rev(t, dir, "HEAD"); got != headBefore {
 				t.Errorf("HEAD moved during a dry run: %s -> %s", headBefore[:12], got[:12])
 			}
 		})
@@ -336,7 +336,7 @@ func TestDryRunInUninitializedRepoStillPreviews(t *testing.T) {
 func TestCommitDryRunLeavesNoSafegitDir(t *testing.T) {
 	dir, _ := newRawSecretRepo(t)
 	testutil.WriteFile(t, dir, "new.txt", "new content\n")
-	headBefore := revParseHEAD(t, dir)
+	headBefore := testutil.Rev(t, dir, "HEAD")
 
 	for _, pass := range []string{"first", "second"} {
 		stdout, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv,
@@ -348,7 +348,7 @@ func TestCommitDryRunLeavesNoSafegitDir(t *testing.T) {
 		assertNoSafegitDir(t, dir, pass+" --dry-run commit")
 	}
 
-	if got := revParseHEAD(t, dir); got != headBefore {
+	if got := testutil.Rev(t, dir, "HEAD"); got != headBefore {
 		t.Errorf("HEAD moved during a dry-run commit: %s -> %s", headBefore[:12], got[:12])
 	}
 }
@@ -373,7 +373,7 @@ func TestAmendDryRunLeavesNoSafegitDir(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			dir, _ := newRawSecretRepo(t)
 			testutil.WriteFile(t, dir, "new.txt", "new content\n")
-			headBefore := revParseHEAD(t, dir)
+			headBefore := testutil.Rev(t, dir, "HEAD")
 
 			// Two passes: a leftover .git/safegit without config.json is what
 			// makes the *next* invocation in the same repo die on the missing
@@ -387,7 +387,7 @@ func TestAmendDryRunLeavesNoSafegitDir(t *testing.T) {
 				assertNoSafegitDir(t, dir, pass+" --dry-run "+tc.name)
 			}
 
-			if got := revParseHEAD(t, dir); got != headBefore {
+			if got := testutil.Rev(t, dir, "HEAD"); got != headBefore {
 				t.Errorf("HEAD moved during a dry-run %s: %s -> %s", tc.name, headBefore[:12], got[:12])
 			}
 		})
@@ -488,7 +488,7 @@ func TestHalfInitializedSafegitDirIsRepaired(t *testing.T) {
 // it is most wanted (mid-edit, deciding whether to rewrite at all).
 func TestAuthorRewriteDryRunPreviewsDirtyTree(t *testing.T) {
 	dir := newRepo(t)
-	headBefore := revParseHEAD(t, dir)
+	headBefore := testutil.Rev(t, dir, "HEAD")
 
 	// Dirty the tree: one modified tracked file, one untracked file.
 	testutil.WriteFile(t, dir, "seed.txt", "seed modified\n")
@@ -520,7 +520,7 @@ func TestAuthorRewriteDryRunPreviewsDirtyTree(t *testing.T) {
 			t.Errorf("%s changed during a dry run: %q, want %q", path, got, want)
 		}
 	}
-	if got := revParseHEAD(t, dir); got != headBefore {
+	if got := testutil.Rev(t, dir, "HEAD"); got != headBefore {
 		t.Errorf("history was rewritten by a dry run: %s -> %s", headBefore[:12], got[:12])
 	}
 }
@@ -530,7 +530,7 @@ func TestAuthorRewriteDryRunPreviewsDirtyTree(t *testing.T) {
 // uncommitted work a rewrite would lose.
 func TestAuthorRewriteExecuteStillRequiresCleanTree(t *testing.T) {
 	dir := newRepo(t)
-	headBefore := revParseHEAD(t, dir)
+	headBefore := testutil.Rev(t, dir, "HEAD")
 	testutil.WriteFile(t, dir, "seed.txt", "seed modified\n")
 
 	_, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv,
@@ -541,7 +541,7 @@ func TestAuthorRewriteExecuteStillRequiresCleanTree(t *testing.T) {
 	if !strings.Contains(stderr, "working tree is dirty") {
 		t.Errorf("author rewrite must say the tree is dirty, got: %s", stderr)
 	}
-	if got := revParseHEAD(t, dir); got != headBefore {
+	if got := testutil.Rev(t, dir, "HEAD"); got != headBefore {
 		t.Errorf("history was rewritten despite the dirty tree: %s -> %s", headBefore[:12], got[:12])
 	}
 }
@@ -570,7 +570,7 @@ func TestScrubExecuteStillRequiresCleanTree(t *testing.T) {
 	for _, mode := range modes {
 		t.Run(mode.name, func(t *testing.T) {
 			dir, initialSHA := newSecretRepo(t)
-			headBefore := revParseHEAD(t, dir)
+			headBefore := testutil.Rev(t, dir, "HEAD")
 			testutil.WriteFile(t, dir, "seed.txt", "seed modified\n")
 
 			_, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv, mode.args(initialSHA, recipePath)...)
@@ -580,7 +580,7 @@ func TestScrubExecuteStillRequiresCleanTree(t *testing.T) {
 			if !strings.Contains(stderr, "working tree is dirty") {
 				t.Errorf("%s must say the tree is dirty, got: %s", mode.name, stderr)
 			}
-			if got := revParseHEAD(t, dir); got != headBefore {
+			if got := testutil.Rev(t, dir, "HEAD"); got != headBefore {
 				t.Errorf("history was rewritten despite the dirty tree: %s -> %s", headBefore[:12], got[:12])
 			}
 		})

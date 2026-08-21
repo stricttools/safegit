@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // TestUndoCount2 creates two commits and undoes both with --count 2.
@@ -13,7 +15,7 @@ func TestUndoCount2(t *testing.T) {
 	dir := newRepo(t)
 	env := []string{"CLAUDE_CODE_SESSION_ID=test-undo-count"}
 
-	initialSHA := revParseHEAD(t, dir)
+	initialSHA := testutil.Rev(t, dir, "HEAD")
 
 	// First commit
 	if err := os.WriteFile(filepath.Join(dir, "one.txt"), []byte("one\n"), 0644); err != nil {
@@ -40,7 +42,7 @@ func TestUndoCount2(t *testing.T) {
 	}
 
 	// HEAD should be back to initial
-	afterSHA := revParseHEAD(t, dir)
+	afterSHA := testutil.Rev(t, dir, "HEAD")
 	if afterSHA != initialSHA {
 		t.Errorf("after undo --count 2, HEAD = %s, want %s (initial)", afterSHA, initialSHA)
 	}
@@ -111,7 +113,7 @@ func TestUndoCountAfterPreviousUndo(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("commit A failed (code %d): %s", code, stderr)
 	}
-	shaA := revParseHEAD(t, dir)
+	shaA := testutil.Rev(t, dir, "HEAD")
 
 	// Commit B
 	if err := os.WriteFile(filepath.Join(dir, "b.txt"), []byte("b\n"), 0644); err != nil {
@@ -138,7 +140,7 @@ func TestUndoCountAfterPreviousUndo(t *testing.T) {
 	}
 
 	// Verify we're now at B
-	shaAfterFirstUndo := revParseHEAD(t, dir)
+	shaAfterFirstUndo := testutil.Rev(t, dir, "HEAD")
 	// B is the commit after A, check that c.txt is gone
 	treeCmd := exec.Command("git", "ls-tree", "-r", "--name-only", "HEAD")
 	treeCmd.Dir = dir
@@ -155,7 +157,7 @@ func TestUndoCountAfterPreviousUndo(t *testing.T) {
 	}
 
 	// HEAD should now be at A
-	shaAfterSecondUndo := revParseHEAD(t, dir)
+	shaAfterSecondUndo := testutil.Rev(t, dir, "HEAD")
 	if shaAfterSecondUndo != shaA {
 		t.Errorf("after second undo, HEAD = %s, want %s (commit A)", shaAfterSecondUndo, shaA)
 	}

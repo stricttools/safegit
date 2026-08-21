@@ -47,7 +47,7 @@ func TestScrubFileInRlsblManagedRepoProceeds(t *testing.T) {
 
 	shas := revListReverse(t, dir)
 	for i := 1; i < len(shas); i++ {
-		content, ok := gitShow(t, dir, shas[i], "secret.txt")
+		content, ok := testutil.Show(t, dir, shas[i], "secret.txt")
 		if ok && content != "REDACTED\n" {
 			t.Errorf("commit %d: secret.txt = %q, want REDACTED", i, content)
 		}

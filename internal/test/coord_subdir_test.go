@@ -302,7 +302,7 @@ func TestCoordSubdirScrubProtectsTrackedIgnoredFromRoot(t *testing.T) {
 	if tracked := coordSubdirTrackedPaths(t, dir); coordSubdirContains(tracked, "config.env") {
 		t.Errorf("config.env should have been untracked from the index; tracked: %v", tracked)
 	}
-	if content, ok := gitShow(t, dir, "HEAD", "config.env"); !ok || content != "SECRET=REDACTED\n" {
+	if content, ok := testutil.Show(t, dir, "HEAD", "config.env"); !ok || content != "SECRET=REDACTED\n" {
 		t.Errorf("HEAD:config.env = %q (found=%v), want the scrubbed content", content, ok)
 	}
 }
@@ -341,7 +341,7 @@ func TestCoordSubdirScrubProtectsTrackedIgnoredFromSubdir(t *testing.T) {
 	if tracked := coordSubdirTrackedPaths(t, dir); coordSubdirContains(tracked, "config.env") {
 		t.Errorf("config.env should have been untracked from the index; tracked: %v", tracked)
 	}
-	if content, ok := gitShow(t, dir, "HEAD", "config.env"); !ok || content != "SECRET=REDACTED\n" {
+	if content, ok := testutil.Show(t, dir, "HEAD", "config.env"); !ok || content != "SECRET=REDACTED\n" {
 		t.Errorf("HEAD:config.env = %q (found=%v), want the scrubbed content -- a scrub from a subdirectory must rewrite the whole repository", content, ok)
 	}
 }
@@ -395,7 +395,7 @@ func TestCoordSubdirScrubFromSubdirPreservesHistoryPaths(t *testing.T) {
 	}
 
 	// And the scrub must actually have done its job on the subtree file.
-	if content, ok := gitShow(t, dir, "HEAD", "sub/secret.txt"); !ok || content != "token=REDACTED\n" {
+	if content, ok := testutil.Show(t, dir, "HEAD", "sub/secret.txt"); !ok || content != "token=REDACTED\n" {
 		t.Errorf("HEAD:sub/secret.txt = %q (found=%v), want the scrubbed content", content, ok)
 	}
 }
