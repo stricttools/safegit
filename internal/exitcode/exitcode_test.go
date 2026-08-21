@@ -4,46 +4,77 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
 )
 
-// declaredConstants parses this package's own source and returns every
-// top-level untyped int constant it declares, by name. Reading the source
-// rather than a hand-kept list is what makes the completeness check real: a
-// constant added without a row in All() has nowhere to hide.
+// declaredConstants parses every non-test source file in this package and
+// returns every top-level int constant they declare, by name. Reading the
+// source rather than a hand-kept list is what makes the completeness check
+// real: a constant added without a row in All() has nowhere to hide.
+//
+// The sweep is package-wide rather than exitcode.go-only on purpose. A single
+// hardcoded filename would let a constant added in a second file escape the
+// check entirely, and the package already has a second file: docgen.go, which
+// carries the documentation markers. Non-int constants (the marker strings) are
+// skipped rather than fatal, which is what makes the widened sweep possible;
+// the every-const-is-an-int-literal shape is still enforced for the int block,
+// so All()'s completeness rests on the same reading of the source it always
+// did.
 func declaredConstants(t *testing.T) map[string]int {
 	t.Helper()
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, "exitcode.go", nil, parser.SkipObjectResolution)
+	entries, err := os.ReadDir(".")
 	if err != nil {
-		t.Fatalf("parsing exitcode.go: %v", err)
+		t.Fatalf("reading the package directory: %v", err)
 	}
 	out := map[string]int{}
-	for _, decl := range f.Decls {
-		gd, ok := decl.(*ast.GenDecl)
-		if !ok || gd.Tok != token.CONST {
+	files := 0
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			continue
 		}
-		for _, spec := range gd.Specs {
-			vs, ok := spec.(*ast.ValueSpec)
-			if !ok || len(vs.Names) != 1 || len(vs.Values) != 1 {
-				t.Fatalf("const spec is not one name = one value: %v", vs.Names)
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatalf("parsing %s: %v", name, err)
+		}
+		files++
+		for _, decl := range f.Decls {
+			gd, ok := decl.(*ast.GenDecl)
+			if !ok || gd.Tok != token.CONST {
+				continue
 			}
-			lit, ok := vs.Values[0].(*ast.BasicLit)
-			if !ok || lit.Kind != token.INT {
-				t.Fatalf("const %s is not an integer literal", vs.Names[0].Name)
+			for _, spec := range gd.Specs {
+				vs, ok := spec.(*ast.ValueSpec)
+				if !ok || len(vs.Names) != 1 || len(vs.Values) != 1 {
+					t.Fatalf("%s: const spec is not one name = one value: %v", name, vs.Names)
+				}
+				lit, ok := vs.Values[0].(*ast.BasicLit)
+				if !ok {
+					t.Fatalf("%s: const %s is not a literal", name, vs.Names[0].Name)
+				}
+				if lit.Kind != token.INT {
+					// A non-int constant in this package is documentation
+					// scaffolding (the doc markers in docgen.go), not an exit
+					// code, so it is not the completeness check's business.
+					continue
+				}
+				v, err := strconv.Atoi(lit.Value)
+				if err != nil {
+					t.Fatalf("%s: const %s: %v", name, vs.Names[0].Name, err)
+				}
+				out[vs.Names[0].Name] = v
 			}
-			v, err := strconv.Atoi(lit.Value)
-			if err != nil {
-				t.Fatalf("const %s: %v", vs.Names[0].Name, err)
-			}
-			out[vs.Names[0].Name] = v
 		}
 	}
+	if files == 0 {
+		t.Fatal("the sweep parsed no package source files, so it proved nothing")
+	}
 	if len(out) == 0 {
-		t.Fatal("parsed no constants from exitcode.go")
+		t.Fatalf("parsed no integer constants from the package's %d source file(s)", files)
 	}
 	return out
 }
@@ -74,7 +105,7 @@ func TestAllCoversEveryDeclaredConstant(t *testing.T) {
 	}
 	for name := range registered {
 		if _, ok := declared[name]; !ok {
-			t.Errorf("All() lists %s, which is not a constant declared in exitcode.go", name)
+			t.Errorf("All() lists %s, which is not an integer constant declared anywhere in this package", name)
 		}
 	}
 }
