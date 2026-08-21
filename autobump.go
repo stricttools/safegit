@@ -5,10 +5,10 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/oplog"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/submodule"
@@ -19,11 +19,19 @@ import (
 // autoBumpParent performs the actual parent bump: checks the current pointer,
 // builds a commit message, and runs safegit commit in the parent repo.
 // Returns the new commit SHA (or "" if no bump was needed) and any error.
-func autoBumpParent(flags globalFlags, parentWorkTree, subRelPath, newSubSHA, operation, firstLine string) (string, error) {
-	// Check current parent pointer via ls-tree
+func autoBumpParent(ctx context.Context, flags globalFlags, parentWorkTree, subRelPath, newSubSHA, operation, firstLine string) (string, error) {
+	// Check the current parent pointer via ls-tree, in the PARENT's work tree:
+	// the repository is an argument here, which is the declared
+	// explicit-directory exemption from the repository-root pin.
 	var lsOut, lsErr bytes.Buffer
-	lsCmd := exec.Command("git", "--no-optional-locks", "ls-tree", "HEAD", subRelPath)
-	lsCmd.Dir = parentWorkTree
+	lsCmd, err := gitexec.Command(ctx, gitexec.Spec{
+		Args:   []string{"ls-tree", "--full-tree", "HEAD", subRelPath},
+		Exempt: gitexec.ExemptAutoBumpParentPointer,
+		Dir:    parentWorkTree,
+	})
+	if err != nil {
+		return "", err
+	}
 	lsCmd.Stdout = &lsOut
 	lsCmd.Stderr = &lsErr
 	if err := lsCmd.Run(); err != nil {
@@ -157,7 +165,7 @@ func maybeAutoBumpParent(ctx context.Context, flags globalFlags, gitDir, newHead
 	parentWorkTree := filepath.Dir(parentGitDir)
 
 	// Perform the bump
-	sha, err := autoBumpParent(flags, parentWorkTree, subRelPath, newHeadSHA, operation, firstLineMsg)
+	sha, err := autoBumpParent(ctx, flags, parentWorkTree, subRelPath, newHeadSHA, operation, firstLineMsg)
 	if err != nil {
 		return err
 	}

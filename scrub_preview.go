@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 
@@ -45,22 +46,17 @@ func recordHistoryRewrite(ctx context.Context, flags globalFlags, oldHeadSHA str
 		oldHeadSHA = rewrittenPlaceholder
 	}
 	e := flags.effects()
-	_, _ = e.Run(
-		[]interface{}{"git", "update-ref", ref, rewrittenPlaceholder, oldHeadSHA},
-		strictcli.Resource("ref:"+ref),
-	)
-	_, _ = e.Run(
-		[]interface{}{"git", "reflog", "expire", "--expire=now", "--all"},
-		strictcli.Resource("reflog"),
-	)
-	_, _ = e.Run(
-		[]interface{}{"git", "repack", "-a", "-d", "--unpack-unreachable=now"},
-		strictcli.Resource("object-store"),
-	)
-	_, _ = e.Run(
-		[]interface{}{"git", "prune", "--expire=now"},
-		strictcli.Resource("object-store"),
-	)
+	record := func(resource string, args ...string) {
+		argv, err := gitexec.ArgvAny(gitexec.ExemptHistoryRewriteRecord, args...)
+		if err != nil {
+			return
+		}
+		_, _ = e.Run(argv, strictcli.Resource(resource))
+	}
+	record("ref:"+ref, "update-ref", ref, rewrittenPlaceholder, oldHeadSHA)
+	record("reflog", "reflog", "expire", "--expire=now", "--all")
+	record("object-store", "repack", "-a", "-d", "--unpack-unreachable=now")
+	record("object-store", "prune", "--expire=now")
 }
 
 // scrubRewritesSchema is the declared shape of an old-SHA-to-new-SHA map: a

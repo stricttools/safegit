@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
@@ -701,11 +700,11 @@ func runVersion(flags globalFlags) {
 }
 
 func gitVersion() string {
-	out, err := exec.Command("git", "--version").Output()
+	out, _, err := git.Run(context.Background(), "--version")
 	if err != nil {
 		return "unknown"
 	}
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(out)
 }
 
 // loadConfig loads the safegit config, using the override path if --config-file was set.

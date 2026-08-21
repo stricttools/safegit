@@ -13,37 +13,25 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/smm-h/safegit/internal/gitexec"
 )
-
-// gitDirKey is the context key for directory overrides set by WithDir.
-type gitDirKey struct{}
-
-// gitDirVal holds the git directory and work tree paths for context-scoped
-// git directory targeting. When present in a context, Run/RunWithEnv/
-// RunWithEnvStdin/RunPassthrough set GIT_DIR, GIT_WORK_TREE, and cmd.Dir
-// on the subprocess so all git commands target the specified repo without
-// needing os.Chdir.
-type gitDirVal struct{ GitDir, WorkTree string }
 
 // WithDir returns a context that carries git directory overrides. All git
 // functions that receive this context will automatically set GIT_DIR,
 // GIT_WORK_TREE, and cmd.Dir on the subprocess, targeting the specified
 // repo regardless of the process's current working directory.
+//
+// The override itself lives in internal/gitexec, the one place that builds a
+// git subprocess; this is the plumbing interface's spelling of it.
 func WithDir(ctx context.Context, gitDir, workTree string) context.Context {
-	return context.WithValue(ctx, gitDirKey{}, gitDirVal{gitDir, workTree})
+	return gitexec.WithDir(ctx, gitDir, workTree)
 }
 
-// applyDirOverride checks ctx for a WithDir override and applies it to cmd
-// by setting cmd.Dir and appending GIT_DIR/GIT_WORK_TREE to the env slice.
-// Returns the (possibly extended) env slice. Callers are responsible for
-// setting cmd.Env from os.Environ() + the returned env when non-empty.
-func applyDirOverride(ctx context.Context, cmd *exec.Cmd, env []string) []string {
-	val, ok := ctx.Value(gitDirKey{}).(gitDirVal)
-	if !ok {
-		return env
-	}
-	cmd.Dir = val.WorkTree
-	return append(env, "GIT_DIR="+val.GitDir, "GIT_WORK_TREE="+val.WorkTree)
+// WithRoot returns a context carrying the repository-root working-directory
+// pin. See gitexec.WithRoot for what the pin is for.
+func WithRoot(ctx context.Context, root string) context.Context {
+	return gitexec.WithRoot(ctx, root)
 }
 
 // Run executes a git command and returns stdout, stderr, and any error.
@@ -53,42 +41,28 @@ func Run(ctx context.Context, args ...string) (stdout, stderr string, err error)
 
 // RunWithEnv executes a git command with additional environment variables.
 func RunWithEnv(ctx context.Context, env []string, args ...string) (stdout, stderr string, err error) {
-	// Prepend --no-optional-locks to avoid contention on .git/index.lock
-	fullArgs := append([]string{"--no-optional-locks"}, args...)
-	cmd := exec.CommandContext(ctx, "git", fullArgs...)
-
-	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-
-	env = applyDirOverride(ctx, cmd, env)
-	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
-	}
-
-	err = cmd.Run()
-	stdout = outBuf.String()
-	stderr = errBuf.String()
-
-	if err != nil {
-		err = fmt.Errorf("git %s: %w\nstderr: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr))
-	}
-	return
+	return runCaptured(ctx, gitexec.Spec{Args: args, Env: env}, nil)
 }
 
 // RunWithEnvStdin executes a git command with environment variables and stdin data.
 func RunWithEnvStdin(ctx context.Context, env []string, stdin []byte, args ...string) (stdout, stderr string, err error) {
-	fullArgs := append([]string{"--no-optional-locks"}, args...)
-	cmd := exec.CommandContext(ctx, "git", fullArgs...)
+	return runCaptured(ctx, gitexec.Spec{Args: args, Env: env}, stdin)
+}
+
+// runCaptured builds one git subprocess through the execution boundary, runs it
+// with stdout and stderr captured, and wraps a failure with the argv and git's
+// own stderr. Every capturing git call in this package funnels through it.
+func runCaptured(ctx context.Context, spec gitexec.Spec, stdin []byte) (stdout, stderr string, err error) {
+	cmd, err := gitexec.Command(ctx, spec)
+	if err != nil {
+		return "", "", err
+	}
 
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
-	cmd.Stdin = bytes.NewReader(stdin)
-
-	env = applyDirOverride(ctx, cmd, env)
-	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
+	if stdin != nil {
+		cmd.Stdin = bytes.NewReader(stdin)
 	}
 
 	err = cmd.Run()
@@ -96,7 +70,7 @@ func RunWithEnvStdin(ctx context.Context, env []string, stdin []byte, args ...st
 	stderr = errBuf.String()
 
 	if err != nil {
-		err = fmt.Errorf("git %s: %w\nstderr: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr))
+		err = fmt.Errorf("git %s: %w\nstderr: %s", strings.Join(spec.Args, " "), err, strings.TrimSpace(stderr))
 	}
 	return
 }
@@ -171,6 +145,11 @@ func CommitTree(ctx context.Context, treeSHA, parentSHA, message string) (string
 	}
 	return strings.TrimSpace(out), nil
 }
+
+// ZeroSHA is git's "this object must not exist" convention: the all-zero object
+// name. Passed to update-ref as the expected old value it means "create only" --
+// git refuses with "reference already exists" when the ref is already there.
+const ZeroSHA = "0000000000000000000000000000000000000000"
 
 // UpdateRef atomically updates a ref using compare-and-swap.
 // oldSHA is the expected current value; if empty, the ref must not exist.
@@ -403,16 +382,22 @@ func SyncMainIndexWithWorktree(ctx context.Context, treeish string) ([]string, e
 // RunPassthrough executes a git command with stdin/stdout/stderr wired to
 // the terminal (os.Stdin, os.Stdout, os.Stderr). It prepends --no-optional-locks
 // like Run, but does not capture output -- suitable for interactive/pager commands.
+//
+// This is the route for argv the OPERATOR wrote (cherry-pick, revert), so it
+// carries the declared operator-cwd exemption from the repository-root pin:
+// git must resolve the operator's own pathspecs in the operator's own
+// directory. A context-carried WithDir override still applies.
 func RunPassthrough(ctx context.Context, args ...string) error {
-	fullArgs := append([]string{"--no-optional-locks"}, args...)
-	cmd := exec.CommandContext(ctx, "git", fullArgs...)
+	cmd, err := gitexec.Command(
+		gitexec.WithoutRootPin(ctx, gitexec.ExemptGuardedPassthrough),
+		gitexec.Spec{Args: args},
+	)
+	if err != nil {
+		return err
+	}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	env := applyDirOverride(ctx, cmd, nil)
-	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
-	}
 	return cmd.Run()
 }
 
@@ -732,10 +717,11 @@ type ObjectIterator struct {
 // and returns an ObjectIterator for streaming the results. The caller must call
 // Close() when done. Respects WithDir context overrides.
 func CatFileBatchAll(ctx context.Context) (*ObjectIterator, error) {
-	cmd := exec.CommandContext(ctx, "git", "--no-optional-locks", "cat-file", "--batch-all-objects", "--batch")
-	env := applyDirOverride(ctx, cmd, nil)
-	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
+	cmd, err := gitexec.Command(ctx, gitexec.Spec{
+		Args: []string{"cat-file", "--batch-all-objects", "--batch"},
+	})
+	if err != nil {
+		return nil, err
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -763,12 +749,11 @@ func CatFileBatchAll(ctx context.Context) (*ObjectIterator, error) {
 func CatFileBatchSHAs(ctx context.Context, shas []string) (*ObjectIterator, error) {
 	input := []byte(strings.Join(shas, "\n") + "\n")
 
-	cmd := exec.CommandContext(ctx, "git", "--no-optional-locks", "cat-file", "--batch")
-	cmd.Stdin = bytes.NewReader(input)
-	env := applyDirOverride(ctx, cmd, nil)
-	if len(env) > 0 {
-		cmd.Env = append(os.Environ(), env...)
+	cmd, err := gitexec.Command(ctx, gitexec.Spec{Args: []string{"cat-file", "--batch"}})
+	if err != nil {
+		return nil, err
 	}
+	cmd.Stdin = bytes.NewReader(input)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -857,33 +842,31 @@ func (it *ObjectIterator) Close() error {
 // work tree, rather than relying on cwd-based discovery. Sets GIT_DIR,
 // GIT_WORK_TREE, and cmd.Dir so both git and cwd-relative paths resolve
 // against the target repo.
+//
+// It is one of the declared explicit-directory exemptions from the
+// repository-root pin: the repository is an argument, not a discovery.
 func RunWithGitDir(ctx context.Context, gitDir string, workTree string, args ...string) (stdout, stderr string, err error) {
-	fullArgs := append([]string{"--no-optional-locks"}, args...)
-	cmd := exec.CommandContext(ctx, "git", fullArgs...)
-
-	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	cmd.Dir = workTree
-	cmd.Env = append(os.Environ(), "GIT_DIR="+gitDir, "GIT_WORK_TREE="+workTree)
-
-	err = cmd.Run()
-	stdout = outBuf.String()
-	stderr = errBuf.String()
-
-	if err != nil {
-		err = fmt.Errorf("git %s: %w\nstderr: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr))
-	}
-	return
+	return runCaptured(ctx, gitexec.Spec{
+		Args:     args,
+		Exempt:   gitexec.ExemptRunWithGitDir,
+		GitDir:   gitDir,
+		WorkTree: workTree,
+	}, nil)
 }
 
 // CatFileBatchAllWithDir starts a git cat-file --batch-all-objects --batch
 // subprocess targeting a specific git directory. Returns an ObjectIterator for
 // streaming the results. The caller must call Close() when done.
 func CatFileBatchAllWithDir(ctx context.Context, gitDir string) (*ObjectIterator, error) {
-	cmd := exec.CommandContext(ctx, "git", "--no-optional-locks", "cat-file", "--batch-all-objects", "--batch")
-	cmd.Env = append(os.Environ(), "GIT_DIR="+gitDir)
-	cmd.Dir = gitDir
+	cmd, err := gitexec.Command(ctx, gitexec.Spec{
+		Args:   []string{"cat-file", "--batch-all-objects", "--batch"},
+		Exempt: gitexec.ExemptCatFileBatchAllWithDir,
+		GitDir: gitDir,
+		Dir:    gitDir,
+	})
+	if err != nil {
+		return nil, err
+	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -908,9 +891,15 @@ func CatFileBatchAllWithDir(ctx context.Context, gitDir string) (*ObjectIterator
 func CatFileBatchSHAsWithDir(ctx context.Context, gitDir string, shas []string) (*ObjectIterator, error) {
 	input := []byte(strings.Join(shas, "\n") + "\n")
 
-	cmd := exec.CommandContext(ctx, "git", "--no-optional-locks", "cat-file", "--batch")
-	cmd.Env = append(os.Environ(), "GIT_DIR="+gitDir)
-	cmd.Dir = gitDir
+	cmd, err := gitexec.Command(ctx, gitexec.Spec{
+		Args:   []string{"cat-file", "--batch"},
+		Exempt: gitexec.ExemptCatFileBatchSHAsWithDir,
+		GitDir: gitDir,
+		Dir:    gitDir,
+	})
+	if err != nil {
+		return nil, err
+	}
 	cmd.Stdin = bytes.NewReader(input)
 
 	stdout, err := cmd.StdoutPipe()
