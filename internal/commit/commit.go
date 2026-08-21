@@ -320,8 +320,21 @@ func (p *Pipeline) tryCommit(
 		}
 	}
 
-	// Step 7: Update ref (CAS for normal commits; create for root commits)
-	if err := git.UpdateRef(ctx, ref, commitSHA, parentSHA); err != nil {
+	// Step 7: Update ref -- compare-and-swap for both cases.
+	//
+	// A root commit has no parent, and the empty parentSHA used to reach
+	// update-ref as an omitted old value, which is an UNCONDITIONAL write: the
+	// re-resolve above closed nothing, because a ref created in the window
+	// between it and this line was overwritten without complaint. ZeroSHA is
+	// git's "must not exist" expectation, so the create is now conditional too;
+	// git refuses with "reference already exists", which isTransientRefError
+	// already classifies as retryable, so the attempt loops and re-reads the ref
+	// exactly as a losing CAS on a normal commit does.
+	expected := parentSHA
+	if isRootCommit {
+		expected = git.ZeroSHA
+	}
+	if err := git.UpdateRef(ctx, ref, commitSHA, expected); err != nil {
 		if isTransientRefError(err) {
 			return nil, true, nil
 		}
