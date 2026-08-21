@@ -392,6 +392,15 @@ func queuedKind(gitDir string) (Kind, error) {
 // nil when the file does not exist. A line that is not an object name is an
 // error: the file is git's, and content git could not have written means
 // something else wrote it.
+//
+// A file that exists but yields no object name is that same error, whether it
+// is zero bytes or holds only whitespace. git writes neither -- it writes the
+// file with its object names or does not write it at all -- so both mean the
+// file was truncated by a crash or written by something other than git.
+// Reading a zero-byte marker as "no operation in progress" would be a guess,
+// and the guess is the dangerous direction: a caller would conclude the
+// working tree is free and commit over an operation git still considers in
+// flight.
 func readSHALines(path string) ([]string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -411,8 +420,12 @@ func readSHALines(path string) ([]string, error) {
 		}
 		shas = append(shas, line)
 	}
-	if len(shas) == 0 && len(data) > 0 {
-		return nil, fmt.Errorf("%s: holds no object name", path)
+	if len(shas) == 0 {
+		state := "holds no object name"
+		if len(data) == 0 {
+			state = "is empty and holds no object name"
+		}
+		return nil, fmt.Errorf("%s: %s", path, state)
 	}
 	return shas, nil
 }
