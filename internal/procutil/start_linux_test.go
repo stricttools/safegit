@@ -96,6 +96,42 @@ func TestStartTimeSelf(t *testing.T) {
 	}
 }
 
+// TestWallFromTicksSurvivesLongUptime pins the tick-to-wall-clock conversion
+// against int64 overflow. Multiplying the tick count by time.Second before
+// dividing by userHZ wraps once the count passes about 9.22e9 -- roughly 2.9
+// years of host uptime -- and reports an instant that is not merely imprecise
+// but wildly wrong, often before boot.
+func TestWallFromTicksSurvivesLongUptime(t *testing.T) {
+	boot := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	const year = 365 * 24 * 3600
+
+	cases := []struct {
+		name   string
+		ticks  uint64
+		uptime time.Duration
+	}{
+		{"zero", 0, 0},
+		{"one second", userHZ, time.Second},
+		{"sub-second remainder", 250, 2500 * time.Millisecond},
+		{"just under the overflow point", 9_000_000_000, 90_000_000 * time.Second},
+		{"three years of uptime", 3 * year * userHZ, 3 * year * time.Second},
+		{"ten years of uptime", 10 * year * userHZ, 10 * year * time.Second},
+		{"a century of uptime", 100 * year * userHZ, 100 * year * time.Second},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := wallFromTicks(boot, tc.ticks)
+			want := boot.Add(tc.uptime)
+			if !got.Equal(want) {
+				t.Errorf("wallFromTicks(boot, %d) = %v, want %v", tc.ticks, got, want)
+			}
+			if got.Before(boot) {
+				t.Errorf("wallFromTicks(boot, %d) = %v, which precedes boot %v -- the arithmetic wrapped", tc.ticks, got, boot)
+			}
+		})
+	}
+}
+
 func TestStartTimeMissingProcess(t *testing.T) {
 	_, err := StartTime(999999999)
 	if !errors.Is(err, ErrNoStartTime) {
