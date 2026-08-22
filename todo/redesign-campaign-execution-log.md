@@ -370,6 +370,32 @@ existing entries are never rewritten.
   before any push in the observation-failure arms) with the table
   regenerated.
 
+## Phase 4 remediation ratifications
+
+- Tier A scope is WalkedTips: refs whose object the SHA map covers,
+  plus annotated tags whose dereferenced target is in the map OR whose
+  tag object this plan rewrote (a freshly rewritten annotation body
+  must be Tier A verified — the ruling's necessary second clause).
+  Tier B's residue check now names the refs holding each surviving
+  match (one rev-list per ref, failure path only); an attribution
+  failure is stated, never read as "no ref holds it". scrub verify
+  shares the renderer without ref attribution (its question is
+  whole-store).
+- Rewrite locks: one acquireRewriteLock seam carries the ordering
+  declaration (parent first, submodule second); both held through
+  prepare and publish; the parent lock before submodule delegation is
+  behind !dryRun (a preview takes no lock — the main path's own rule).
+- foreignWorktreeState now refuses an empty baseline outright (the
+  structural half) AND the call site dies on the RevParse error.
+- sync_skipped is the disjunction over all published repos (no
+  per-submodule payload records exist; the exit code already behaves
+  this way). git.MkTree writes NUL-terminated records (mktree -z);
+  pathological paths round-trip.
+- Queued small item: scrub file into a submodule where no gitlink
+  moved returns before flags.payload — an envelope with an absent
+  payload under --json; same family as the companion-alone branch just
+  pinned on the match side. Next fixer window.
+
 ## Phase 4 closing-audit outcome
 
 - All four subphases PASS with independent hand-reproduction of the
