@@ -40,6 +40,12 @@ func mergeConclusionRoutes() []mergeConclusionRoute {
 	return []mergeConclusionRoute{
 		{"commit-no-pathspec", []string{"commit", "-m", "Merge branch 'feature'"}},
 		{"commit-with-pathspec", []string{"commit", "-m", "Merge branch 'feature'", "--", "conflicted.txt"}},
+		// The verb that actually concludes a merge. The fixture resolves
+		// conflicted.txt in the WORKING TREE and leaves the index unmerged --
+		// the state an agent reaches after editing every conflicted file -- so
+		// the route declares that path's resolution as `worktree`. Every
+		// conflicted path must be named; nothing else may be.
+		{"merge-continue", []string{"merge-continue", "-m", "Merge branch 'feature'", "--resolve", "conflicted.txt=worktree"}},
 	}
 }
 
