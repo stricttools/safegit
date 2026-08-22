@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
@@ -136,6 +137,67 @@ func TestPushPayloadReportsThePinnedLease(t *testing.T) {
 	}
 	if payload := jsonPayload(t, stdout); !strings.Contains(payload, `"lease":"`+observed+`"`) {
 		t.Errorf("the lease must be pinned to the observed remote SHA %s; got:\n%s", observed, payload)
+	}
+}
+
+// Discovery is not execution. RUNNING a hook is a mutation a preview may not
+// perform; FINDING which hooks a push would run reads the filesystem and
+// nothing else -- and the two refusals discovery can produce are verdicts about
+// the checkout, true whether or not anything is pushed. A preview that skipped
+// discovery reported success for a push that cannot happen, which is the one
+// thing a preview may never do.
+
+// TestPushDryRunRefusesUnmigratedHooks: hooks left in git's own directory are
+// exit 24 in a preview exactly as in the real push.
+func TestPushDryRunRefusesUnmigratedHooks(t *testing.T) {
+	dir, _ := newRepoWithRemote(t)
+	marker := filepath.Join(t.TempDir(), "ran")
+	appendingHook(t, filepath.Join(legacyHookDir(dir), "pre-pre-push"), marker, "legacy")
+
+	_, stderr, code := runSafegit(t, dir, "--dry-run", "push", "--refs", "head", "origin")
+	if code != exitcode.HooksNotMigrated {
+		t.Errorf("a preview over unmigrated hooks exited %d, want %d (HooksNotMigrated): %s",
+			code, exitcode.HooksNotMigrated, stderr)
+	}
+	if !strings.Contains(stderr, "hook migrate") {
+		t.Errorf("the preview's refusal must name the remedy, got: %s", stderr)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("the preview ran the legacy hook; discovery reads, it does not execute")
+	}
+
+	// The control: the executed push refuses the same way, which is what makes
+	// the preview's answer the truth about the real push.
+	if _, _, code := runSafegit(t, dir, "push", "--refs", "head", "origin"); code != exitcode.HooksNotMigrated {
+		t.Errorf("the executed push exited %d, so the preview is not being compared against anything", code)
+	}
+}
+
+// TestPushDryRunRefusesANonExecutableTrackedHook: the same for exit 25, whose
+// condition is a mode in the checkout rather than a location.
+func TestPushDryRunRefusesANonExecutableTrackedHook(t *testing.T) {
+	dir, _ := newRepoWithRemote(t)
+
+	hookPath := filepath.Join(trackedHookDir(dir), "pre-pre-push")
+	if err := os.MkdirAll(filepath.Dir(hookPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\nexit 0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	safegitCommit(t, dir, "add a committed hook without its mode", filepath.Join(".safegit", "hooks", "pre-pre-push"))
+
+	_, stderr, code := runSafegit(t, dir, "--dry-run", "push", "--refs", "head", "origin")
+	if code != exitcode.TrackedHookNotExecutable {
+		t.Errorf("a preview over a non-executable committed hook exited %d, want %d (TrackedHookNotExecutable): %s",
+			code, exitcode.TrackedHookNotExecutable, stderr)
+	}
+	if !strings.Contains(stderr, "chmod +x") {
+		t.Errorf("the preview's refusal must state the remedy, got: %s", stderr)
+	}
+
+	if _, _, code := runSafegit(t, dir, "push", "--refs", "head", "origin"); code != exitcode.TrackedHookNotExecutable {
+		t.Errorf("the executed push exited %d, so the preview is not being compared against anything", code)
 	}
 }
 
