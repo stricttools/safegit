@@ -33,6 +33,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
@@ -300,10 +301,26 @@ func TestIntakeEdgeSameArgvHasOneMeaningFromEveryDirectory(t *testing.T) {
 		t.Error("the literal file notes:1 was not committed from the repo root")
 	}
 
-	// --hunks, from the repo root: the path "notes", which is not there.
+	// --hunks, from the repo root: the path "notes", which is not there. The
+	// refusal has to be that one -- a path that is neither on disk nor tracked
+	// -- and not, say, a parse failure of the element or a refusal of the
+	// literal file "notes:1" that IS there. So the code, the argument named and
+	// the reason are all asserted, and so is the absence of any staging of
+	// sub/notes, which is the file a probe-based reading would have found.
+	rootTip := testutil.Rev(t, dir, "HEAD")
 	_, stderr, code = runSafegit(t, dir, "commit", "-m", "hunks from root", "--hunks", "notes:1")
-	if code == 0 {
-		t.Errorf("--hunks naming a file absent from the caller's directory was accepted; stderr: %s", stderr)
+	if code != exitcode.PathMatchedNothing {
+		t.Errorf("--hunks naming a file absent from the caller's directory exited %d, want %d (PathMatchedNothing); stderr: %s",
+			code, exitcode.PathMatchedNothing, stderr)
+	}
+	if !strings.Contains(stderr, "notes") || !strings.Contains(stderr, "does not exist and is not tracked") {
+		t.Errorf("the refusal must name the path the --hunks element addressed and say why; stderr: %s", stderr)
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != rootTip {
+		t.Errorf("HEAD moved despite the refusal: %s -> %s", rootTip, after)
+	}
+	if got, ok := testutil.Show(t, dir, "HEAD", "sub/notes"); ok && strings.Contains(got, "FIRST-CHANGE") {
+		t.Error("--hunks from the repo root reached sub/notes, so the element's path was resolved against something other than the caller's directory")
 	}
 
 	// --hunks, from sub/: hunk 1 of sub/notes, and only hunk 1.
