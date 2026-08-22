@@ -3,61 +3,143 @@ package main
 import (
 	"fmt"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 
 	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/scan"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 
-// ScrubVerifyPolicyResult is the per-policy result for JSON output.
-type ScrubVerifyPolicyResult struct {
-	Pattern string   `json:"pattern"`
+// Where a verified pattern came from. The two spellings are the two input
+// members of the command's required input selection.
+const (
+	scrubVerifySourceFlag   = "flag"
+	scrubVerifySourceRecipe = "recipe"
+)
+
+// ScrubVerifyPatternResult is the per-pattern result for JSON output.
+type ScrubVerifyPatternResult struct {
+	Pattern string `json:"pattern"`
+	// Source says which input carried this pattern: "flag" for a --pattern,
+	// "recipe" for an operation read out of the recipe file.
+	Source  string   `json:"source"`
 	Scope   string   `json:"scope,omitempty"`
-	Reason  string   `json:"reason"`
 	Pass    bool     `json:"pass"`
 	Details []string `json:"details,omitempty"` // failure details
 }
 
 // ScrubVerifyResult is the top-level JSON output for `scrub verify`.
 type ScrubVerifyResult struct {
-	Version  int                       `json:"version"`
-	Policies int                       `json:"policies"`
-	Passed   int                       `json:"passed"`
-	Failed   int                       `json:"failed"`
-	Results  []ScrubVerifyPolicyResult `json:"results"`
+	Version  int                        `json:"version"`
+	Patterns int                        `json:"patterns"`
+	Passed   int                        `json:"passed"`
+	Failed   int                        `json:"failed"`
+	Results  []ScrubVerifyPatternResult `json:"results"`
 }
 
 // scrubVerifyPayloadSchema declares what `scrub verify` puts in the envelope's
-// payload. scope and details are omitempty on the per-policy record (an
-// unscoped policy has no scope; a passing one has no details), so they are
+// payload. scope and details are omitempty on the per-pattern record (an
+// unscoped pattern has no scope; a passing one has no details), so they are
 // declared without being required.
 var scrubVerifyPayloadSchema = strictcli.SchemaObject(
 	map[string]interface{}{
 		"version":  strictcli.SchemaType("integer"),
-		"policies": strictcli.SchemaType("integer"),
+		"patterns": strictcli.SchemaType("integer"),
 		"passed":   strictcli.SchemaType("integer"),
 		"failed":   strictcli.SchemaType("integer"),
 		"results": strictcli.SchemaArray(strictcli.SchemaObject(
 			map[string]interface{}{
 				"pattern": strictcli.SchemaType("string"),
+				"source":  strictcli.SchemaEnum(scrubVerifySourceFlag, scrubVerifySourceRecipe),
 				"scope":   strictcli.SchemaType("string"),
-				"reason":  strictcli.SchemaType("string"),
 				"pass":    strictcli.SchemaType("boolean"),
 				"details": strictcli.SchemaArray(strictcli.SchemaType("string")),
 			},
-			[]string{"pattern", "reason", "pass"},
+			[]string{"pattern", "source", "pass"},
 			false,
 		)),
 	},
-	[]string{"version", "policies", "passed", "failed", "results"},
+	[]string{"version", "patterns", "passed", "failed", "results"},
 	false,
 )
 
-func runScrubVerify(flags globalFlags) int {
-	const cmd = "scrub verify"
+// verifyTarget is one pattern the command was asked to check, with the scope
+// that pattern is checked under. It is the only thing verification consumes:
+// the command holds no state of its own between runs and reads no file safegit
+// wrote, so what is verified is exactly what the invocation named.
+type verifyTarget struct {
+	pattern  string
+	source   string
+	scope    string
+	compiled *regexp.Regexp
+}
+
+// collectVerifyTargets turns the command's inputs into the patterns to check.
+//
+// Both inputs may be given at once -- the input selection is at-least-one, not
+// exactly-one -- and the two are simply concatenated in the order the command
+// line states them: every --pattern first, then every recipe operation.
+//
+// The recipe is the EXISTING `scrub run` recipe format, read unchanged.
+// `replace`, `mangle` and `depends_on` describe how a rewrite substitutes text
+// and in what order, which verification never does, so they are read (the
+// parser still validates them) and then ignored. `scope` is the one field
+// verification does consume, because it says which paths a match at all counts
+// against.
+func collectVerifyTargets(patterns []string, scope string, recipePath string) []verifyTarget {
+	var targets []verifyTarget
+
+	for _, p := range patterns {
+		compiled, err := regexp.Compile(p)
+		if err != nil {
+			die(exitcode.Usage, fmt.Sprintf("invalid --pattern %q: %v", p, err))
+		}
+		targets = append(targets, verifyTarget{
+			pattern:  p,
+			source:   scrubVerifySourceFlag,
+			scope:    scope,
+			compiled: compiled,
+		})
+	}
+
+	if recipePath != "" {
+		recipe, err := parseRecipe(recipePath)
+		if err != nil {
+			die(exitcode.Usage, fmt.Sprintf("reading recipe %q: %v", recipePath, err))
+		}
+		for i, op := range recipe.Operations {
+			t := verifyTarget{
+				pattern:  op.Pattern,
+				source:   scrubVerifySourceRecipe,
+				compiled: recipe.Patterns[i],
+			}
+			if op.Scope != nil {
+				t.scope = *op.Scope
+			}
+			targets = append(targets, t)
+		}
+	}
+
+	return targets
+}
+
+func runScrubVerify(flags globalFlags, kwargs map[string]interface{}) int {
+	patterns := kwargsStrSlice(kwargs["pattern"])
+
+	var scope string
+	if v := kwargs["scope"]; v != nil {
+		scope = v.(string)
+		if _, err := path.Match(scope, ""); err != nil {
+			die(exitcode.Usage, fmt.Sprintf("invalid --scope glob: %v", err))
+		}
+	}
+
+	var recipePath string
+	if v := kwargs["recipe"]; v != nil {
+		recipePath = v.(string)
+	}
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
@@ -66,226 +148,137 @@ func runScrubVerify(flags globalFlags) int {
 
 	ctx := flags.ctx()
 
-	sgDir := repo.SafegitDir(gitDir)
+	// The input selection is declared (at-least-one over --pattern and the
+	// recipe positional), so an invocation naming neither never reaches here.
+	// A recipe that parses to no operations does, and it is the same error: a
+	// verification with nothing to verify must never read as a clean bill of
+	// health.
+	targets := collectVerifyTargets(patterns, scope, recipePath)
+	if len(targets) == 0 {
+		die(exitcode.Usage, "nothing to verify: no patterns were given and the recipe declared no operations")
+	}
 
-	policies, err := readScrubPolicies(sgDir)
+	compiled := make([]*regexp.Regexp, len(targets))
+	for i, t := range targets {
+		compiled[i] = t.compiled
+	}
+
+	// One pass over the whole object store for every pattern at once. The
+	// question verify answers is "is this content anywhere in this repository",
+	// which is why the scan is deliberately not restricted to a commit set: an
+	// unreachable object still holds the secret.
+	allScanResults, err := scan.ScanObjectsMulti(ctx, compiled, scan.ScanOpts{EntireHistory: true})
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("reading scrub policies: %v", err))
+		die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
 	}
 
-	if len(policies) == 0 {
-		flags.payload(ScrubVerifyResult{
-			Version:  1,
-			Policies: 0,
-			Passed:   0,
-			Failed:   0,
-			Results:  []ScrubVerifyPolicyResult{},
-		})
-		infof(flags, "No scrub policies found. Policies are stored at .git/safegit/scrub-policies.jsonl and are local to the machine where the scrub was performed. To verify patterns on this machine, run a scrub first.\n")
-		return 0
+	// Attribution (blob SHA -> path) is only needed when some scoped pattern
+	// actually matched something, so it is computed once, over the merged match
+	// set, and only then.
+	needsAttribution := false
+	for i, t := range targets {
+		if t.scope != "" && len(allScanResults[i].Matches) > 0 {
+			needsAttribution = true
+			break
+		}
+	}
+	if needsAttribution {
+		type matchRange struct{ start, end int }
+		var combined scan.ScanResults
+		ranges := make([]matchRange, len(targets))
+		for i := range targets {
+			start := len(combined.Matches)
+			combined.Matches = append(combined.Matches, allScanResults[i].Matches...)
+			ranges[i] = matchRange{start: start, end: len(combined.Matches)}
+		}
+		if err := scan.AddAttribution(ctx, &combined, scan.ScanOpts{}); err != nil {
+			die(exitcode.General, fmt.Sprintf("adding attribution: %v", err))
+		}
+		for i := range targets {
+			r := ranges[i]
+			allScanResults[i].Matches = combined.Matches[r.start:r.end]
+		}
 	}
 
-	var results []ScrubVerifyPolicyResult
+	// Scoped blob sets are built at most once per distinct scope.
+	scopedBlobSets := make(map[string]map[string]bool)
+
+	results := make([]ScrubVerifyPatternResult, 0, len(targets))
 	passed := 0
 	failed := 0
 
-	// Phase 1: Compile all policy patterns upfront and identify valid "match"
-	// policies. Invalid patterns are recorded as failures immediately.
-	type validPolicy struct {
-		index    int // index into original policies slice (for display as 1-based)
-		policy   ScrubPolicy
-		compiled *regexp.Regexp
-	}
-	var valid []validPolicy
-	for i, policy := range policies {
-		if policy.Type != "match" {
+	for i, t := range targets {
+		matches := allScanResults[i].Matches
+
+		if t.scope != "" && len(matches) > 0 {
+			scopedBlobs, ok := scopedBlobSets[t.scope]
+			if !ok {
+				scopedBlobs, err = buildScopedBlobSet(ctx, t.scope)
+				if err != nil {
+					die(exitcode.General, fmt.Sprintf("building scoped blob set for %q: %v", t.scope, err))
+				}
+				scopedBlobSets[t.scope] = scopedBlobs
+			}
+			var inScope []scan.Match
+			for _, m := range matches {
+				switch m.ObjectType {
+				case "blob":
+					if matchScope(t.scope, m.Path) || scopedBlobs[m.SHA] {
+						inScope = append(inScope, m)
+					}
+				default:
+					// Commit messages and tag annotations carry no path, so a
+					// scope cannot exclude them: they are always checked.
+					inScope = append(inScope, m)
+				}
+			}
+			matches = inScope
+		}
+
+		record := ScrubVerifyPatternResult{
+			Pattern: t.pattern,
+			Source:  t.source,
+			Scope:   t.scope,
+		}
+		if len(matches) == 0 {
+			record.Pass = true
+			results = append(results, record)
+			passed++
+			infof(flags, "  PASS [%d] %s\n", i+1, verifyTargetLabel(t))
 			continue
 		}
-		compiled, err := regexp.Compile(policy.Pattern)
-		if err != nil {
-			detail := fmt.Sprintf("invalid pattern %q: %v", policy.Pattern, err)
-			results = append(results, ScrubVerifyPolicyResult{
-				Pattern: policy.Pattern,
-				Scope:   policy.Scope,
-				Reason:  policy.Reason,
-				Pass:    false,
-				Details: []string{detail},
-			})
-			failed++
-			if !flags.silent() {
-				fmt.Fprintf(os.Stderr, "  FAIL [%d] %s: %s\n", i+1, policy.Pattern, detail)
-			}
-			continue
-		}
-		valid = append(valid, validPolicy{index: i, policy: policy, compiled: compiled})
-	}
-
-	// Phase 2: Single scan pass over all git objects for all valid patterns.
-	if len(valid) > 0 {
-		patterns := make([]*regexp.Regexp, len(valid))
-		for i, vp := range valid {
-			patterns[i] = vp.compiled
-		}
-
-		allScanResults, err := scan.ScanObjectsMulti(ctx, patterns, scan.ScanOpts{EntireHistory: true})
-		if err != nil {
-			die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
-		}
-
-		// Phase 3: For scoped policies, we need attribution. Run AddAttribution
-		// once on a combined result set, then build scoped blob sets per unique scope.
-		//
-		// Determine which scan results need attribution (those with scoped policies).
-		needsAttribution := false
-		for i, vp := range valid {
-			if vp.policy.Scope != "" && len(allScanResults[i].Matches) > 0 {
-				needsAttribution = true
-				break
-			}
-		}
-
-		if needsAttribution {
-			// Merge all matches into a single ScanResults for one AddAttribution call,
-			// then distribute the attributed matches back.
-			//
-			// Track match offsets so we can distribute back.
-			type matchRange struct {
-				start int
-				end   int
-			}
-			var combined scan.ScanResults
-			ranges := make([]matchRange, len(valid))
-			for i := range valid {
-				start := len(combined.Matches)
-				combined.Matches = append(combined.Matches, allScanResults[i].Matches...)
-				ranges[i] = matchRange{start: start, end: len(combined.Matches)}
-			}
-
-			if err := scan.AddAttribution(ctx, &combined, scan.ScanOpts{}); err != nil {
-				die(exitcode.General, fmt.Sprintf("adding attribution: %v", err))
-			}
-
-			// Distribute attributed matches back to per-pattern results.
-			for i := range valid {
-				r := ranges[i]
-				allScanResults[i].Matches = combined.Matches[r.start:r.end]
-			}
-		}
-
-		// Build scoped blob sets per unique scope (cache to avoid duplicate work).
-		scopedBlobSets := make(map[string]map[string]bool)
-
-		// Phase 4: Aggregate results per policy.
-		for i, vp := range valid {
-			scanResult := allScanResults[i]
-			displayIdx := vp.index + 1
-
-			if vp.policy.Scope == "" {
-				// Unscoped: any match is a failure.
-				if len(scanResult.Matches) == 0 {
-					results = append(results, ScrubVerifyPolicyResult{
-						Pattern: vp.policy.Pattern,
-						Reason:  vp.policy.Reason,
-						Pass:    true,
-					})
-					passed++
-					infof(flags, "  PASS [%d] pattern=%q\n", displayIdx, vp.policy.Pattern)
-				} else {
-					detail := formatMatchFailure(scanResult.Matches)
-					results = append(results, ScrubVerifyPolicyResult{
-						Pattern: vp.policy.Pattern,
-						Reason:  vp.policy.Reason,
-						Pass:    false,
-						Details: []string{detail},
-					})
-					failed++
-					if !flags.silent() {
-						fmt.Fprintf(os.Stderr, "  FAIL [%d] pattern=%q: %s\n", displayIdx, vp.policy.Pattern, detail)
-					}
-				}
-			} else {
-				// Scoped: only in-scope blob matches and all non-blob matches are failures.
-				if len(scanResult.Matches) == 0 {
-					results = append(results, ScrubVerifyPolicyResult{
-						Pattern: vp.policy.Pattern,
-						Scope:   vp.policy.Scope,
-						Reason:  vp.policy.Reason,
-						Pass:    true,
-					})
-					passed++
-					infof(flags, "  PASS [%d] pattern=%q scope=%q\n", displayIdx, vp.policy.Pattern, vp.policy.Scope)
-					continue
-				}
-
-				// Get or build scoped blob set for this scope.
-				scopedBlobs, ok := scopedBlobSets[vp.policy.Scope]
-				if !ok {
-					scopedBlobs, err = buildScopedBlobSet(ctx, vp.policy.Scope)
-					if err != nil {
-						die(exitcode.General, fmt.Sprintf("building scoped blob set for %q: %v", vp.policy.Scope, err))
-					}
-					scopedBlobSets[vp.policy.Scope] = scopedBlobs
-				}
-
-				var failures []scan.Match
-				for _, m := range scanResult.Matches {
-					switch m.ObjectType {
-					case "blob":
-						if matchScope(vp.policy.Scope, m.Path) || scopedBlobs[m.SHA] {
-							failures = append(failures, m)
-						}
-					default:
-						// Commit messages and tags are always checked.
-						failures = append(failures, m)
-					}
-				}
-
-				if len(failures) == 0 {
-					results = append(results, ScrubVerifyPolicyResult{
-						Pattern: vp.policy.Pattern,
-						Scope:   vp.policy.Scope,
-						Reason:  vp.policy.Reason,
-						Pass:    true,
-					})
-					passed++
-					infof(flags, "  PASS [%d] pattern=%q scope=%q\n", displayIdx, vp.policy.Pattern, vp.policy.Scope)
-				} else {
-					detail := formatMatchFailure(failures)
-					results = append(results, ScrubVerifyPolicyResult{
-						Pattern: vp.policy.Pattern,
-						Scope:   vp.policy.Scope,
-						Reason:  vp.policy.Reason,
-						Pass:    false,
-						Details: []string{detail},
-					})
-					failed++
-					if !flags.silent() {
-						fmt.Fprintf(os.Stderr, "  FAIL [%d] pattern=%q scope=%q: %s\n",
-							displayIdx, vp.policy.Pattern, vp.policy.Scope, detail)
-					}
-				}
-			}
+		detail := formatMatchFailure(matches)
+		record.Details = []string{detail}
+		results = append(results, record)
+		failed++
+		if !flags.silent() {
+			fmt.Fprintf(os.Stderr, "  FAIL [%d] %s: %s\n", i+1, verifyTargetLabel(t), detail)
 		}
 	}
 
-	if results == nil {
-		results = []ScrubVerifyPolicyResult{}
-	}
 	// One computation, two renderings: the counts below are the same three
 	// numbers the summary line prints.
 	flags.payload(ScrubVerifyResult{
 		Version:  1,
-		Policies: len(policies),
+		Patterns: len(targets),
 		Passed:   passed,
 		Failed:   failed,
 		Results:  results,
 	})
-	infof(flags, "\n%d policies checked: %d passed, %d failed\n", len(policies), passed, failed)
+	infof(flags, "\n%d pattern(s) checked: %d passed, %d failed\n", len(targets), passed, failed)
 
 	if failed > 0 {
 		return exitcode.General
 	}
 	return 0
+}
+
+// verifyTargetLabel spells one target for the human line.
+func verifyTargetLabel(t verifyTarget) string {
+	if t.scope == "" {
+		return fmt.Sprintf("pattern=%q", t.pattern)
+	}
+	return fmt.Sprintf("pattern=%q scope=%q", t.pattern, t.scope)
 }
 
 // formatMatchFailure formats scan matches into an error string matching the

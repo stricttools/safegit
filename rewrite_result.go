@@ -78,10 +78,6 @@ type RewriteResult struct {
 	OpName     string                 // operation name ("scrub-file", "scrub-match", "rewrite-author")
 	OplogExtra map[string]interface{} // command-specific oplog fields
 
-	// Policy: when non-nil, Finalize appends this scrub policy after
-	// the oplog entry. When nil, no policy is appended.
-	PolicyData *ScrubPolicy
-
 	// Post-Finalize outputs (populated by Finalize for callers to read)
 	NewHeadSHA        string            // HEAD after the rewrite
 	Ref               string            // current ref name (e.g. "refs/heads/main" or "HEAD (detached)")
@@ -376,13 +372,6 @@ func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd str
 		Op:    r.OpName,
 		Extra: extra,
 	})
-
-	// Append scrub policy when explicitly provided by the caller.
-	if r.PolicyData != nil {
-		if err := appendScrubPolicy(r.SgDir, *r.PolicyData); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to append scrub policy: %v\n", err)
-		}
-	}
 
 	// Push hint (rlsbl-aware).
 	hint := pushHintForRepo(ctx)

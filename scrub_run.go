@@ -294,26 +294,6 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	// Execute the recipe via the shared pipeline.
 	exitCode, result := executeScrubRecipe(ctx, flags, cmd, recipe, reason, fromSHA, entireHistory, nil, remapGlobs, gitDir, sgDir, nil, "scrub-run", nil, false)
 
-	// For multi-operation recipes, append scrub policies per-operation.
-	// Single-operation recipes have their policy appended by executeScrubRecipe
-	// via PolicyData on the RewriteResult.
-	if len(recipe.Operations) > 1 {
-		for _, op := range recipe.Operations {
-			policy := ScrubPolicy{
-				Type:        "match",
-				Pattern:     op.Pattern,
-				Reason:      reason,
-				CreatedByOp: "scrub-run",
-			}
-			if op.Scope != nil {
-				policy.Scope = *op.Scope
-			}
-			if err := appendScrubPolicy(sgDir, policy); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: failed to append scrub policy: %v\n", err)
-			}
-		}
-	}
-
 	// Emit JSON or text output.
 	if result != nil {
 		allTagRewrites := append(result.TagRewrites, result.AnnotationTagRewrites...)
@@ -353,6 +333,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 		infof(flags, "  %d tag annotations rewritten\n", result.TagsRewrittenCount)
 		infof(flags, "  Old HEAD: %s\n", result.OldHeadSHA[:12])
 		infof(flags, "  New HEAD: %s\n", result.NewHeadSHA[:12])
+		printRotationNotice(flags, recheckCommandForRecipe(recipePath))
 	}
 
 	return exitCode

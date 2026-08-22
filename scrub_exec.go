@@ -80,6 +80,58 @@ func scrubRangeSummary(fromSHA string, entireHistory bool) string {
 	return fromSHA + "..HEAD (inclusive)"
 }
 
+// printRotationNotice states the one thing a successful scrub does NOT do, and
+// the one thing the operator still has to do about it.
+//
+// Rewriting history removes the secret from THIS repository's objects. It does
+// nothing to a copy anyone already fetched, to a fork, to a CI cache, or to
+// whatever read the value while it was published -- so a secret that was ever
+// pushed is still leaked after a perfectly successful scrub, and the only fix
+// for that is rotating the credential.
+//
+// recheck is the exact command that re-asks whether the content has come back.
+// Verification keeps no state between runs, so the command has to carry what it
+// checks, and printing it here is what makes the check reachable later without
+// the operator reconstructing the invocation from memory.
+func printRotationNotice(flags globalFlags, recheck string) {
+	infof(flags, "\nRotate the credential. Rewriting history does not un-leak a secret that was\n")
+	infof(flags, "ever pushed: every clone, fork, fetch and cache that already has the old\n")
+	infof(flags, "history still holds it, and this command cannot reach any of them.\n")
+	infof(flags, "To re-check this repository later:\n")
+	infof(flags, "  %s\n", recheck)
+}
+
+// recheckCommandForPatterns builds the `scrub verify` invocation that re-checks
+// the given patterns.
+func recheckCommandForPatterns(patterns ...string) string {
+	var b strings.Builder
+	b.WriteString("safegit scrub verify")
+	for _, p := range patterns {
+		b.WriteString(" --pattern " + shellSingleQuote(p))
+	}
+	return b.String()
+}
+
+// recheckCommandForRecipe builds the `scrub verify` invocation that re-checks
+// every operation of a recipe file.
+func recheckCommandForRecipe(recipePath string) string {
+	return "safegit scrub verify " + shellSingleQuote(recipePath)
+}
+
+// recheckCommandForRemovedContent is the re-check command a `scrub file`
+// prints. A file scrub names a path, not a pattern, so there is no regex to
+// hand back: the command is spelled with the placeholder the operator fills in.
+func recheckCommandForRemovedContent() string {
+	return "safegit scrub verify --pattern '<a regex matching the content you removed>'"
+}
+
+// shellSingleQuote wraps s so a shell passes it through unchanged. The strings
+// it quotes are regexes and file paths an operator typed, both of which
+// routinely contain characters a bare word would not survive.
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
 // scrubFileCommitCount counts the commits the elected range covers, dying on a
 // failure: the count is a figure `scrub file` prints and puts in its payload,
 // and printing a wrong one is worse than refusing.
@@ -410,22 +462,6 @@ func executeScrubRecipe(
 		return fmt.Errorf("%s", strings.Join(findings, "\n  "))
 	}
 
-	// Build policy data for single-operation recipes.
-	var policyData *ScrubPolicy
-	if len(recipe.Operations) == 1 {
-		op := recipe.Operations[0]
-		policy := ScrubPolicy{
-			Type:        "match",
-			Pattern:     op.Pattern,
-			Reason:      reason,
-			CreatedByOp: opName,
-		}
-		if op.Scope != nil {
-			policy.Scope = *op.Scope
-		}
-		policyData = &policy
-	}
-
 	result := RewriteResult{
 		ShaMap:         shaMap,
 		RewrittenCount: rewrittenCount,
@@ -435,7 +471,6 @@ func executeScrubRecipe(
 		Reason:         reason,
 		OpName:         opName,
 		OplogExtra:     oplogExtra,
-		PolicyData:     policyData,
 	}
 	if err := result.Finalize(ctx, flags, cmd, RewriteHooks{
 		AnnotateTag: recipeTagBodyTransform(recipe),

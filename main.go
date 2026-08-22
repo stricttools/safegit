@@ -627,12 +627,27 @@ func newApp() *strictcli.App {
 			strictcli.NewArg("recipe", "path to the TOML recipe file containing scrub operations", strictcli.ArgRequired()),
 		),
 	)
-	sg.Command("verify", "check all scrub policies defined in the repository configuration to confirm that previously scrubbed secrets and sensitive patterns remain completely absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-policy pass or fail results with match locations for any violations found", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
-		return strictcli.Exit(runScrubVerify(globalsToFlags(ctx, kwargs)))
+	sg.Command("verify", "confirm that the patterns named on the command line -- repeatable --pattern regexes, the operations of a scrub recipe file, or both -- are absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-pattern pass or fail results with match locations for any violations found", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+		return strictcli.Exit(runScrubVerify(globalsToFlags(ctx, kwargs), kwargs))
 	},
 		strictcli.WithEffect(strictcli.EffectReadOnly),
 		strictcli.WithTags("json"),
 		strictcli.PayloadSchema(scrubVerifyPayloadSchema),
+		strictcli.WithFlags(
+			strictcli.StringFlag("pattern", "regular expression that must be absent from every object in the repository (repeatable)", strictcli.Repeatable(), strictcli.Unique(true), strictcli.Optional()),
+			strictcli.StringFlag("scope", "glob pattern limiting which blob file paths a --pattern match counts against (e.g. '*.env', 'config/**'); recipe operations carry their own scope in the recipe file", strictcli.Optional()),
+		),
+		strictcli.WithArgs(
+			strictcli.NewArg("recipe", "path to a scrub recipe TOML file whose operations' patterns are verified; the format is the one 'scrub run' takes, and its replace/mangle/depends_on fields are ignored here because verification substitutes nothing", strictcli.ArgOptional()),
+		),
+		// Verification is stateless: it reads no policy file and remembers
+		// nothing between runs, so an invocation that names no pattern has
+		// nothing to check and must not be representable. --scope is a
+		// modifier on --pattern, so it cannot be the only thing given.
+		strictcli.WithConstraints(
+			strictcli.AtLeastOne("verify-input", strictcli.Member("pattern"), strictcli.Member("recipe")),
+			strictcli.Requires("verify-scope", "scope", "pattern"),
+		),
 	)
 	app.Passthrough("cherry-pick", "cherry-pick one or more commits onto HEAD with safety guards", pt, strictcli.WithEffect(strictcli.EffectMutating))
 	app.Passthrough("revert", "revert one or more commits creating inverse patches, with safety guards", pt, strictcli.WithEffect(strictcli.EffectMutating))

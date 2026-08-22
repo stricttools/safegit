@@ -816,31 +816,15 @@ func scrubMatchExecute(
 
 		// Oplog extra for submodule (ref, oldHead, sha, rewritten are
 		// added by Finalize).
+		//
+		// The oplog records METADATA about the scrub and no content: no
+		// pattern, no replacement text. See the parent's extra below for why.
 		subOplogExtra := map[string]interface{}{
-			"pattern":          pattern,
 			"reason":           reason,
+			"mode":             scrubMatchMode(mangleMode),
 			"blobsReplaced":    len(sr.blobMap),
 			"messagesModified": sr.messagesModified,
 			"parentScrub":      true,
-		}
-		if mangleMode {
-			subOplogExtra["mode"] = "mangle"
-		} else {
-			subOplogExtra["replace"] = replace
-		}
-
-		// Build policy data for this submodule.
-		subPolicy := ScrubPolicy{
-			Type:        "match",
-			Pattern:     pattern,
-			Reason:      reason,
-			CreatedByOp: "scrub-match",
-		}
-		if scope != nil {
-			ss := scopeForSubmodule(*scope, sr.sub.RelativePath)
-			if ss != "" {
-				subPolicy.Scope = ss
-			}
 		}
 
 		subResult := RewriteResult{
@@ -852,7 +836,6 @@ func scrubMatchExecute(
 			Reason:         reason,
 			OpName:         "scrub-match",
 			OplogExtra:     subOplogExtra,
-			PolicyData:     &subPolicy,
 		}
 		if err := subResult.Finalize(subCtx, flags, cmd, RewriteHooks{
 			AnnotateTag: patternTagBodyTransform(compiledPattern, replace, mangleMode),
@@ -899,18 +882,21 @@ func scrubMatchExecute(
 	}
 
 	// Build oplog extra with scrub-match specific fields.
+	//
+	// The oplog keeps METADATA ONLY -- op, reason, scope, mode, counts -- and
+	// records no content: neither the pattern nor the replacement text is
+	// written. The pattern is the secret itself often enough that persisting it
+	// under .git would undo the scrub in the one file the scrub does not touch,
+	// and the replacement is both redundant with the rewritten history (it sits
+	// at every scrubbed location in the new commits) and sometimes sensitive in
+	// its own right, since operators do reach for a rotated value there.
 	parentOplogExtra := map[string]interface{}{
-		"pattern":    pattern,
 		"reason":     reason,
+		"mode":       scrubMatchMode(mangleMode),
 		"submodules": len(subScrubResults),
 	}
 	if scope != nil {
 		parentOplogExtra["scope"] = *scope
-	}
-	if mangleMode {
-		parentOplogExtra["mode"] = "mangle"
-	} else {
-		parentOplogExtra["replace"] = replace
 	}
 
 	// Skip confirmation in executeScrubRecipe (already confirmed above).
@@ -1033,8 +1019,19 @@ func scrubMatchExecute(
 	}
 	infof(flags, "  Old HEAD: %s\n", result.OldHeadSHA[:12])
 	infof(flags, "  New HEAD: %s\n", result.NewHeadSHA[:12])
+	printRotationNotice(flags, recheckCommandForPatterns(pattern))
 
 	return exitCode
+}
+
+// scrubMatchMode names which substitution a `scrub match` elected, for the
+// oplog. It is the metadata half of the elected `substitution` selector: which
+// KIND of replacement happened, never the text that was written.
+func scrubMatchMode(mangleMode bool) string {
+	if mangleMode {
+		return "mangle"
+	}
+	return "replace"
 }
 
 // verifyGitlinksAfterScrub checks that every gitlink in the parent's rewritten
