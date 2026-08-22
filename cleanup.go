@@ -19,7 +19,15 @@ import (
 // the returned cleanupErrors slice so callers can report cleanup status
 // machine-readably. Orchestrators depend on old objects being pruned, so a
 // non-empty cleanupErrors means "do not assume old SHAs are unresolvable."
-func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, shaMap map[string]string, tagRewrites []TagRewrite, sgDir string) (cleanupErrors []string, err error) {
+//
+// residue is the one finding that is more than a warning: pre-rewrite objects
+// that survived the prune and that NO surviving ref reaches. The content the
+// operator asked to remove is still readable by SHA, so the caller records it
+// as a Tier B finding -- the rewrite stands and the command exits nonzero
+// naming what is left. It is returned separately rather than fished back out of
+// cleanupErrors, where it also appears so the payload's cleanup_ok keeps saying
+// what it always said.
+func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, shaMap map[string]string, tagRewrites []TagRewrite, sgDir string) (cleanupErrors []string, residue string, err error) {
 	// Build the set of old SHAs that were actually remapped (old != new).
 	// Tag rewrites count too: the annotation pass can rewrite tag objects
 	// even when every commit maps to itself, and the old tag object (which
@@ -36,7 +44,7 @@ func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, sha
 		}
 	}
 	if len(oldSHAs) == 0 {
-		return nil, nil // nothing was rewritten
+		return nil, "", nil // nothing was rewritten
 	}
 
 	// Step 1+2: Identify and delete tainted reflog entries.
@@ -79,11 +87,26 @@ func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, sha
 	checkReplaceRefsForOldSHAs(ctx, oldSHAs)
 
 	// Step 5: Verify old objects are gone.
-	if surviving := verifyOldObjectsGone(ctx, flags, oldSHAs); surviving > 0 {
-		cleanupErrors = append(cleanupErrors, fmt.Sprintf("%d pre-rewrite objects survived cleanup", surviving))
+	surviving, sErr := verifyOldObjectsGone(ctx, flags, oldSHAs)
+	switch {
+	case sErr != nil:
+		// Not knowing is not the same as knowing there is nothing: without the
+		// reachable set the question cannot be answered, and answering it
+		// wrongly in either direction is worse than saying so.
+		residue = fmt.Sprintf("could not check whether pre-rewrite objects survived cleanup: %v", sErr)
+	case len(surviving) > 0:
+		short := make([]string, 0, len(surviving))
+		for _, sha := range surviving {
+			short = append(short, shortSHA(sha))
+		}
+		residue = fmt.Sprintf("%d pre-rewrite object(s) survived cleanup and no surviving ref reaches them: %s",
+			len(surviving), strings.Join(short, ", "))
+	}
+	if residue != "" {
+		cleanupErrors = append(cleanupErrors, residue)
 	}
 
-	return cleanupErrors, nil
+	return cleanupErrors, residue, nil
 }
 
 // reflogEntry holds a parsed reflog line.
@@ -277,21 +300,37 @@ func checkReplaceRefsForOldSHAs(ctx context.Context, oldSHAs map[string]bool) {
 	}
 }
 
-// verifyOldObjectsGone checks that old (pre-rewrite) commit objects have been
-// pruned from the object store. Returns the number of surviving objects.
-func verifyOldObjectsGone(ctx context.Context, flags globalFlags, oldSHAs map[string]bool) int {
-	surviving := 0
+// verifyOldObjectsGone returns the pre-rewrite objects that are STILL in the
+// object store and that no surviving ref reaches, sorted.
+//
+// The reachability half is what keeps the answer honest on an ordinary
+// repository. A branch outside the walked range keeps its own history alive,
+// and every commit of it the rewrite mapped to a new SHA on the walked branch
+// is a pre-rewrite object that prune is right to leave in place. Asking only
+// "does the object still exist" reports that branch's history as residue, which
+// is why this check could never be wired to an exit code before.
+//
+// A failure to read the reachable set is returned as an error rather than
+// swallowed: an unanswerable question is not a clean bill of health.
+func verifyOldObjectsGone(ctx context.Context, flags globalFlags, oldSHAs map[string]bool) ([]string, error) {
+	reachable, err := buildReachableObjectSet(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var surviving []string
 	for sha := range oldSHAs {
+		if reachable[sha] {
+			continue
+		}
 		// git cat-file -e exits 0 if the object exists, non-zero if gone.
-		if _, _, err := git.Run(ctx, "cat-file", "-e", sha); err == nil {
-			surviving++
+		if _, _, cerr := git.Run(ctx, "cat-file", "-e", sha); cerr == nil {
+			surviving = append(surviving, sha)
 			if flags.verbose {
-				fmt.Fprintf(os.Stderr, "  warning: pre-rewrite object %s still exists after cleanup\n", shortSHA(sha))
+				fmt.Fprintf(os.Stderr, "  pre-rewrite object %s still exists after cleanup and no ref reaches it\n", shortSHA(sha))
 			}
 		}
 	}
-	if surviving > 0 && !flags.verbose {
-		fmt.Fprintf(os.Stderr, "warning: %d pre-rewrite objects survived cleanup (run with --verbose for details)\n", surviving)
-	}
-	return surviving
+	sort.Strings(surviving)
+	return surviving, nil
 }
