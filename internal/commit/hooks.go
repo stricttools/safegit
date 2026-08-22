@@ -1,5 +1,11 @@
 // Native git hook execution for the commit family: pre-commit, commit-msg and
-// post-commit, run from .git/hooks exactly as git runs them.
+// post-commit, run exactly as git runs them, out of the directory git itself
+// resolves (git.HooksDir -- core.hooksPath moves it, and a linked worktree uses
+// the common git dir's), never a path joined onto the git dir.
+//
+// These are GIT's hooks. safegit's own pre-pre-push hooks are a different
+// subsystem in a different place (internal/hooks, .git/safegit/hooks and the
+// checkout's .safegit/hooks).
 package commit
 
 import (
