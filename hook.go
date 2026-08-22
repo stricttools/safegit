@@ -271,7 +271,11 @@ func hookRemove(flags globalFlags, name string) int {
 		}
 	}
 
-	if len(tracked) > 0 {
+	// A committed hook is only the answer when nothing in the live store
+	// carries that name: the command removes from the live store, and a name
+	// present in both stores names one hook this command can remove and one it
+	// cannot. The one it cannot is stated rather than silently left behind.
+	if len(local) == 0 && len(tracked) > 0 {
 		die(exitcode.General, fmt.Sprintf(
 			"%s is a COMMITTED hook (%s); it is part of the repository's content, so removing it means committing the deletion: "+
 				"delete the file and commit that change with `safegit commit`",
@@ -306,6 +310,10 @@ func hookRemove(flags globalFlags, name string) int {
 	}
 	if !flags.silent() && !flags.dryRun {
 		fmt.Printf("removed hook: %s\n", target.Rel)
+	}
+	if len(tracked) > 0 {
+		fmt.Fprintf(os.Stderr, "note: %s also names a COMMITTED hook (%s), which still runs; removing that one means committing its deletion\n",
+			name, tracked[0].Path)
 	}
 	return 0
 }
