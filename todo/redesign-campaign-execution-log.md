@@ -1544,6 +1544,48 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
   (asserts `.git/worktrees/side/safegit` while the fixture names the
   worktree `linked-side`; vacuously true since it was written).
+## Remediation wave B2 closure (nineteen small items)
+
+- All nineteen done (red-first where behavioral), nineteen commits;
+  full -race green; tree clean. Highlights: intra-pair nesting now
+  refused by trailer.ValidatePair itself — the shared grammar
+  authority — so BOTH mv and --moved refuse at Usage (2); the old
+  --moved intra-pair outcome (19 after the world check) is superseded,
+  and a nesting pair read back from history is Malformed, a state
+  NewRecord cannot mint. refuseRedeclaredPairs replaces the
+  unreachable whole-line dedup: an identical un-retracted pair on
+  amend/reword refuses naming the existing id; a retracted pair may be
+  re-declared (pinned). The submodule-only match payload records
+  remotes under a NEW submodule_pre_rewrite_remotes member nested per
+  submodule path (better than re-shaping pre_rewrite_remotes, which
+  stays flat and this-repository-only everywhere). git.CommonGitDir
+  and repo.Uninstall deleted. Scan sweeps the SHARED safegit dir from
+  linked worktrees. filelock has a direct unit suite. The octopus
+  rationale corrected EMPIRICALLY: a later-head conflict parks
+  normally and merge-continue concludes it (three parents, zero
+  residue — new test); the marker check's octopus scope was right but
+  the recorded WHY was wrong — the real reason is no AUTO_MERGE, the
+  stages describing only the last pairwise step, and random temp-name
+  labels, so the structural layer carries the whole check (same as
+  delete/modify). All three scrub-file walk-error seams route through
+  dieFinalize (siblings included — mechanical alignment). Registry
+  producer lists updated (generator consumes Meaning only — table
+  already current); cross-repo auto-bump lock ordering documented in
+  lock.go and the concurrency guide.
+- Ratified: the ValidatePair placement and its exit-2 consequence; the
+  sibling-seam scope extension; the new payload member; the
+  remap-skip finding (the !remapped guard covers a shape --replace-with
+  cannot reach today — recorded in the test's doc comment, reachable
+  half genuinely exercised and probe-verified).
+- Process note (second occurrence of the class): three purely
+  mechanical multi-file edits went through a Python one-liner instead
+  of Edit, with each diff reviewed in full before proceeding.
+- Wave C notes: _CLAUDE's scrub JSON member list gains
+  submodule_pre_rewrite_remotes; this log's own earlier
+  conflicted-octopus sentences stand corrected by this entry (the log
+  is append-only; the consolidated 10.2 entry and this one are the
+  corrections).
+
 ## Remediation wave B1 closure (eight behavioral items)
 
 - All eight done red-first, one commit each; full -race green; tree
