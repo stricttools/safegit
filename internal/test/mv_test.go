@@ -222,6 +222,46 @@ func TestMvRefusesPairsThatSpeakForEachOther(t *testing.T) {
 	assertNoCommitHappened(t, dir, "seed")
 }
 
+// The nesting rule applies WITHIN one pair as well as between two. A pair whose
+// own two paths nest -- a directory moving into itself, a file moving onto the
+// directory that holds it -- is the same contradiction the between-pairs
+// refusal names, stated by one argument instead of two, so it is refused where
+// that one is: at validation, as Usage, before any filesystem mutation.
+//
+// Before this rule the argument checks let it through and os.Rename refused it
+// with EINVAL, which rolled back and exited General -- a repository verdict for
+// an argument that never made sense.
+func TestMvRefusesAPairWhoseOwnPathsNest(t *testing.T) {
+	dir := mvSeed(t)
+
+	for _, pair := range []string{
+		"src/ -> src/sub/",     // a directory into itself
+		"src/deep/ -> src/",    // a directory onto its own ancestor
+		"src/one.txt -> src",   // a file onto the directory that holds it
+		"a.txt -> a.txt/inner", // a file onto a path underneath itself
+	} {
+		_, stderr, code := runSafegit(t, dir, "mv", "-m", "move", pair)
+		if code != exitcode.Usage {
+			t.Errorf("mv %q exited %d, want %d (Usage): %s", pair, code, exitcode.Usage, stderr)
+		}
+		if !strings.Contains(stderr, "nest") {
+			t.Errorf("mv %q refusal does not name the nesting: %s", pair, stderr)
+		}
+	}
+
+	// Nothing was moved and nothing was committed: the refusal is an argument
+	// verdict reached before the first rename.
+	for _, rel := range []string{"a.txt", "src/one.txt", "src/deep/two.txt"} {
+		if !mvExists(t, dir, rel) {
+			t.Errorf("%s left its original path during a refused invocation", rel)
+		}
+	}
+	if mvExists(t, dir, "src/sub") {
+		t.Error("a refused invocation created the nested destination")
+	}
+	assertNoCommitHappened(t, dir, "seed")
+}
+
 // TestMvRollsBackCompletedRenamesOnAMidSequenceFailure covers the one failure
 // validation cannot foresee: the filesystem refusing a rename the repository
 // had no objection to. What was already moved goes back.

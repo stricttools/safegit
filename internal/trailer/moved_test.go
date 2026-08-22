@@ -190,6 +190,10 @@ func TestParsePairRefusals(t *testing.T) {
 		{"a -> ", "leaves one of them empty"},
 		{"old/ -> new", "ends only one"},
 		{"a.txt -> a.txt", "names one path twice"},
+		// The nesting rule within one pair: a move into or out of itself.
+		{"src/ -> src/sub/", "nest"},
+		{"src/deep/ -> src/", "nest"},
+		{"src/one.txt -> src", "nest"},
 	}
 	for _, c := range cases {
 		_, _, err := ParsePair(c.in)
