@@ -177,7 +177,12 @@ func TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore(t *testin
 	wt := addLinkedWorktree(t, dir, "side")
 	// The precondition that makes this test what it is: nothing has ever run
 	// safegit in this worktree, so it has no state directory of its own.
-	perWorktree := filepath.Join(dir, ".git", "worktrees", "side", "safegit")
+	//
+	// git names the per-worktree directory after the CHECKOUT's basename, not
+	// after the branch, so it is derived from the worktree path rather than
+	// spelled out -- a hand-written "side" here named a directory that never
+	// exists, and the assertion held for the wrong reason.
+	perWorktree := filepath.Join(dir, ".git", "worktrees", filepath.Base(wt), "safegit")
 	if _, err := os.Stat(perWorktree); !os.IsNotExist(err) {
 		t.Fatalf("precondition: the linked worktree already has its own state directory %s (err=%v)", perWorktree, err)
 	}
