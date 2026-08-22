@@ -56,6 +56,33 @@ func TestPushForceWithLeaseDeclinedExitsNonzero(t *testing.T) {
 	}
 }
 
+// TestDeclinedForcePushSaysSoOnTheOrdinaryOutputChannel: the question goes to
+// stderr, but the ANSWER safegit acts on is ordinary human output and goes
+// through the one mechanism every other command's "Aborted." goes through --
+// the same one `doctor --action uninstall` and a declined backup use. A bare
+// write to stdout would say it in a channel --quiet cannot reach and machine
+// mode cannot keep out of its envelope.
+func TestDeclinedForcePushSaysSoOnTheOrdinaryOutputChannel(t *testing.T) {
+	dir := newRepo(t)
+	testutil.Git(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
+
+	stdout, stderr, code := runSafegit(t, dir, "push", "--refs", "head", "--force-with-lease", "cloudy")
+	if code == 0 {
+		t.Fatalf("a declined force-push must exit nonzero; stdout=%s stderr=%s", stdout, stderr)
+	}
+	if !strings.Contains(stdout, "Aborted.") {
+		t.Errorf("a declined force-push does not say it aborted; stdout=%s stderr=%s", stdout, stderr)
+	}
+
+	stdout, _, code = runSafegit(t, dir, "--quiet", "push", "--refs", "head", "--force-with-lease", "cloudy")
+	if code == 0 {
+		t.Fatal("a declined force-push must exit nonzero under --quiet too")
+	}
+	if strings.Contains(stdout, "Aborted.") {
+		t.Errorf("--quiet did not suppress the abort notice, so it is not going through the shared output mechanism: %s", stdout)
+	}
+}
+
 // TestPushWithoutForcePromptsNothing: the confirmation is conditional, so an
 // ordinary push must run straight through -- no prompt, no
 // --approve-consequential, no mention of forcing anywhere in its output.
