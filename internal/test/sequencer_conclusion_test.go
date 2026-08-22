@@ -146,10 +146,11 @@ func assertNoSequencerResidue(t *testing.T, dir, context string) {
 // MERGE_HEAD, so an octopus merge concludes as an octopus rather than losing
 // every side but the first.
 //
-// The fixture is a CLEAN octopus stopped with --no-commit, because git's
-// octopus strategy refuses to park a conflicted state at all ("Should not be
-// doing an octopus") -- it aborts instead, leaving no MERGE_HEAD. So the only
-// octopus a conclusion can ever see is a clean one.
+// The fixture is a CLEAN octopus stopped with --no-commit, which is the
+// simplest way to park one. A conflicted octopus is also a state a conclusion
+// can meet -- see TestConflictedOctopusOnALaterHeadConcludesAsAnOctopus below,
+// which builds one -- so this test is about the parent list rather than about
+// the only octopus that exists.
 func TestOctopusConclusionCarriesEveryMergeHead(t *testing.T) {
 	dir := newRepo(t)
 
@@ -208,6 +209,85 @@ func TestOctopusConclusionCarriesEveryMergeHead(t *testing.T) {
 		}
 	}
 	assertNoSequencerResidue(t, dir, "octopus merge")
+}
+
+// A conflicted octopus IS a state a conclusion can meet, and this is it.
+//
+// git's octopus strategy merges the heads one at a time. A conflict against the
+// FIRST head makes it give up before it has written any state ("Should not be
+// doing an octopus"), so that one never parks -- but once it is past the first
+// head it has a merge in progress, and a conflict against a LATER head parks
+// like any other: MERGE_HEAD holds every head, the index holds unmerged stages,
+// and the conclusion is a merge-continue.
+//
+// The fixture arranges exactly that: b1 touches the first line, main touches the
+// third, so the first pairwise step merges cleanly; b2 then touches the first
+// line again and collides with b1's result.
+func TestConflictedOctopusOnALaterHeadConcludesAsAnOctopus(t *testing.T) {
+	dir := newRepo(t)
+
+	testutil.WriteFile(t, dir, "f.txt", "l1\nl2\nl3\n")
+	safegitCommitEnv(t, dir, conclusionSession, "base", "f.txt")
+
+	testutil.Git(t, dir, "switch", "-q", "-c", "b1")
+	testutil.WriteFile(t, dir, "f.txt", "B1\nl2\nl3\n")
+	b1 := safegitCommitEnv(t, dir, conclusionSession, "b1", "f.txt")
+
+	testutil.Git(t, dir, "switch", "-q", "main")
+	testutil.Git(t, dir, "switch", "-q", "-c", "b2")
+	testutil.WriteFile(t, dir, "f.txt", "B2\nl2\nl3\n")
+	b2 := safegitCommitEnv(t, dir, conclusionSession, "b2", "f.txt")
+
+	testutil.Git(t, dir, "switch", "-q", "main")
+	testutil.WriteFile(t, dir, "f.txt", "l1\nl2\nMAIN\n")
+	mainSHA := safegitCommitEnv(t, dir, conclusionSession, "main", "f.txt")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, conclusionSession, "merge", "b1", "b2")
+	if code == 0 {
+		t.Fatalf("the octopus merge succeeded; this fixture needs a conflict\nstdout=%s stderr=%s", stdout, stderr)
+	}
+	if !strings.Contains(stdout+stderr, "conflict") && !strings.Contains(stdout+stderr, "CONFLICT") {
+		t.Fatalf("the octopus merge did not report a conflict (code %d)\nstdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	// It really parked, and it parked as an octopus: both heads, and unmerged
+	// stages in the index.
+	mergeHead, err := os.ReadFile(filepath.Join(dir, ".git", "MERGE_HEAD"))
+	if err != nil {
+		t.Fatalf("the conflicted octopus left no MERGE_HEAD: %v", err)
+	}
+	for _, side := range []string{b1, b2} {
+		if !strings.Contains(string(mergeHead), side) {
+			t.Fatalf("MERGE_HEAD does not name %s:\n%s", side, mergeHead)
+		}
+	}
+	if len(testutil.SplitLines(testutil.GitOut(t, dir, "ls-files", "-u"))) == 0 {
+		t.Fatal("the parked octopus holds no unmerged index entries")
+	}
+
+	// Resolve in the tree and conclude. The result is an octopus commit: HEAD
+	// plus every MERGE_HEAD line, in order.
+	testutil.WriteFile(t, dir, "f.txt", "resolved\nl2\nl3\n")
+	if _, stderr, code := runSafegitEnv(t, dir, conclusionSession,
+		"merge-continue", "--resolve", "f.txt=worktree"); code != 0 {
+		t.Fatalf("merge-continue on a conflicted octopus failed (code %d): %s", code, stderr)
+	}
+
+	head := testutil.Rev(t, dir, "HEAD")
+	parents := testutil.Parents(t, dir, head)
+	want := []string{mainSHA, b1, b2}
+	if len(parents) != len(want) {
+		t.Fatalf("the concluded octopus has %d parent(s), want %d: %v", len(parents), len(want), parents)
+	}
+	for i := range want {
+		if parents[i] != want[i] {
+			t.Errorf("parent %d = %s, want %s", i, parents[i], want[i])
+		}
+	}
+	if got := testutil.MustShow(t, dir, "HEAD", "f.txt"); got != "resolved\nl2\nl3\n" {
+		t.Errorf("the concluded tree holds %q, want the resolution from the working tree", got)
+	}
+	assertNoSequencerResidue(t, dir, "conflicted octopus")
 }
 
 // TestCherryPickConclusionPreservesTheSourceAuthor: a conclusion records the
