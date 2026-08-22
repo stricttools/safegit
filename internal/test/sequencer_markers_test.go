@@ -2,6 +2,8 @@ package test
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -134,6 +136,15 @@ func TestConclusionRefusesSurvivingMarkers(t *testing.T) {
 	fx.assertRefusedNothingMoved(t)
 	if onDisk := worktreeText(t, fx.dir, "f.txt"); !strings.Contains(onDisk, "<<<<<<<") {
 		t.Errorf("the refusal rewrote the working-tree file:\n%s", onDisk)
+	}
+
+	// A preview gives the same verdict: it would be worse than useless for
+	// --dry-run to report a conclusion that the real run refuses.
+	stdout, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession,
+		"merge-continue", "--dry-run", "--resolve", "f.txt=worktree")
+	if code != exitcode.ConclusionMarkerSurvived {
+		t.Errorf("the preview exited %d, want the same refusal %d:\nstdout=%s\nstderr=%s",
+			code, exitcode.ConclusionMarkerSurvived, stdout, stderr)
 	}
 
 	// Still concludable, both ways: by taking a side...
@@ -458,6 +469,34 @@ func TestConclusionChecksAPathTheOperatorStagedThemselves(t *testing.T) {
 	testutil.Git(t, fx.dir, "add", "f.txt")
 	if _, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession, "merge-continue"); code != 0 {
 		t.Fatalf("the resolved-and-staged path must conclude (code %d): %s", code, stderr)
+	}
+}
+
+// TestReconstructionSuppliesTheEmittedBlocksWhenAutoMergeIsGone exercises the
+// other source of git's emitted blocks, end to end and in production code.
+//
+// A cherry-pick labels its conflict markers from the commit being applied,
+// which its state file names, so its conflicted file can be reproduced from the
+// index stages with git's own merge engine. Removing the recorded AUTO_MERGE
+// leaves reproduction as the only way to know what git wrote, and the refusal
+// still says so exactly -- which it can only do if the reproduction is
+// byte-identical to what the operator has on disk.
+func TestReconstructionSuppliesTheEmittedBlocksWhenAutoMergeIsGone(t *testing.T) {
+	fx := newConflictedPickRepo(t, "cherry-pick")
+	if err := os.Remove(filepath.Join(fx.dir, ".git", "AUTO_MERGE")); err != nil {
+		t.Fatalf("removing the recorded conflicted file: %v", err)
+	}
+
+	_, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession,
+		"cherry-pick-continue", "--resolve", "c.txt=worktree")
+	if code != exitcode.ConclusionMarkerSurvived {
+		t.Fatalf("exit = %d, want %d:\n%s", code, exitcode.ConclusionMarkerSurvived, stderr)
+	}
+	if !strings.Contains(stderr, "the conflict git wrote here") {
+		t.Errorf("the refusal gave the merely structural sentence, so the reproduction did not match git's own block:\n%s", stderr)
+	}
+	if head := testutil.Rev(t, fx.dir, "HEAD"); head != fx.tip {
+		t.Errorf("HEAD moved to %s despite the refusal (was %s)", head, fx.tip)
 	}
 }
 
