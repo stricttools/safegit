@@ -241,7 +241,11 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	}
 	defer previewCleanup()
 
-	repoRoot, err := git.RepoRoot(ctx)
+	// AnchorRoot, not RepoRoot: everything below anchors filesystem work on this
+	// value -- staging, the intake, the declared moves, the native hooks -- and
+	// AnchorRoot is the declared authority for the directory a git-listed
+	// repo-relative path resolves against (see ApplyIndexEditsTo).
+	repoRoot, err := git.AnchorRoot(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolving repo root: %w", err)
 	}
