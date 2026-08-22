@@ -3,20 +3,22 @@ package test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// TestCommitFromSubdirRelativePathNoPendingChange reproduces the reported
-// failure: invoked from a repository subdirectory with two cwd-relative path
-// arguments, one of which has no pending change, safegit's move detection
-// resolves the unchanged relative path against the repository ROOT rather than
-// the invoking cwd. The mis-resolved path is absent from the index and the
-// underlying `git rm --cached` fails, so the whole commit dies with exit 128.
+// TestCommitFromSubdirRelativePathNoPendingChange: invoked from a repository
+// subdirectory with two cwd-relative path arguments, one of which has no
+// pending change.
 //
-// The path with the pending edit takes a different code path and is unaffected,
-// which is why the same command without the unchanged file succeeds.
+// Naming a path is a statement that it belongs in the commit, so the unchanged
+// one is refused -- by the name the caller typed, resolved against the INVOKING
+// directory and not against the repository root. What the refusal must never do
+// is act on the mis-resolved path: nothing is committed, and the unchanged file
+// keeps its tracked content.
 func TestCommitFromSubdirRelativePathNoPendingChange(t *testing.T) {
 	dir := newRepo(t)
 
@@ -42,24 +44,35 @@ func TestCommitFromSubdirRelativePathNoPendingChange(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	head := testutil.Rev(t, dir, "HEAD")
+
 	// Run from inside sub/ with cwd-relative paths for both files.
 	stdout, stderr, code := runSafegit(t, sub, "commit", "-m", "edit from subdir", "--", "edited.txt", "unchanged.txt")
-	if code != 0 {
-		t.Fatalf("commit from subdir with an unchanged relative path failed (code %d)\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	if code != exitcode.PathMatchedNothing {
+		t.Fatalf("commit from subdir with an unchanged relative path exited %d, want %d\nstdout:\n%s\nstderr:\n%s",
+			code, exitcode.PathMatchedNothing, stdout, stderr)
+	}
+	// The refusal names the argument as typed, which is what proves the path
+	// was resolved against sub/ and not against the repository root.
+	if !strings.Contains(stderr, "unchanged.txt") {
+		t.Errorf("the refusal does not name the argument it was decided about: %s", stderr)
 	}
 
-	// The edit must actually be in the new HEAD commit.
-	if got := testutil.MustShow(t, dir, "HEAD", "sub/edited.txt"); got != "after\n" {
-		t.Fatalf("sub/edited.txt at HEAD = %q, want %q", got, "after\n")
+	// Nothing was committed, and the unchanged file keeps its tracked content.
+	if now := testutil.Rev(t, dir, "HEAD"); now != head {
+		t.Errorf("HEAD moved despite the refusal: %s -> %s", head, now)
 	}
-
-	// sub/unchanged.txt must still be tracked with its original contents --
-	// naming a path with no pending change must never remove it from the tree.
 	if got := testutil.MustShow(t, dir, "HEAD", "sub/unchanged.txt"); got != "unchanged\n" {
 		t.Fatalf("sub/unchanged.txt at HEAD = %q, want %q", got, "unchanged\n")
 	}
 
-	// And the working tree must be clean afterwards.
+	// Naming only the changed path commits it, from the same directory.
+	if _, stderr, code := runSafegit(t, sub, "commit", "-m", "edit from subdir", "--", "edited.txt"); code != 0 {
+		t.Fatalf("commit of the changed path alone failed (code %d): %s", code, stderr)
+	}
+	if got := testutil.MustShow(t, dir, "HEAD", "sub/edited.txt"); got != "after\n" {
+		t.Fatalf("sub/edited.txt at HEAD = %q, want %q", got, "after\n")
+	}
 	if status := testutil.Git(t, dir, "status", "--porcelain"); status != "" {
 		t.Fatalf("expected clean working tree, got: %s", status)
 	}
@@ -104,9 +117,9 @@ func TestCommitFromSubdirRelativePathOnlyChanged(t *testing.T) {
 
 // TestCommitFromRepoRootUnchangedPath pins the same shape from the repository
 // root, where relative and repo-relative spellings coincide. It isolates
-// "a named path has no pending change" from "the path was mis-resolved": if
-// this passes while the subdirectory case fails, the defect is purely in
-// resolving relative paths against the invoking cwd.
+// "a named path has no pending change" from "the path was mis-resolved": both
+// directories must produce the same refusal, so a difference between the two is
+// a path-resolution defect rather than the refusal itself.
 func TestCommitFromRepoRootUnchangedPath(t *testing.T) {
 	dir := newRepo(t)
 
@@ -125,15 +138,28 @@ func TestCommitFromRepoRootUnchangedPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	head := testutil.Rev(t, dir, "HEAD")
+
 	stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "edit from root", "--", "edited.txt", "unchanged.txt")
-	if code != 0 {
-		t.Fatalf("commit from root with an unchanged path failed (code %d)\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	if code != exitcode.PathMatchedNothing {
+		t.Fatalf("commit from root with an unchanged path exited %d, want %d\nstdout:\n%s\nstderr:\n%s",
+			code, exitcode.PathMatchedNothing, stdout, stderr)
 	}
-	if got := testutil.MustShow(t, dir, "HEAD", "edited.txt"); got != "after\n" {
-		t.Fatalf("edited.txt at HEAD = %q, want %q", got, "after\n")
+	if !strings.Contains(stderr, "unchanged.txt") {
+		t.Errorf("the refusal does not name the argument it was decided about: %s", stderr)
+	}
+	if now := testutil.Rev(t, dir, "HEAD"); now != head {
+		t.Errorf("HEAD moved despite the refusal: %s -> %s", head, now)
 	}
 	if got := testutil.MustShow(t, dir, "HEAD", "unchanged.txt"); got != "unchanged\n" {
 		t.Fatalf("unchanged.txt at HEAD = %q, want %q", got, "unchanged\n")
+	}
+
+	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "edit from root", "--", "edited.txt"); code != 0 {
+		t.Fatalf("commit of the changed path alone failed (code %d): %s", code, stderr)
+	}
+	if got := testutil.MustShow(t, dir, "HEAD", "edited.txt"); got != "after\n" {
+		t.Fatalf("edited.txt at HEAD = %q, want %q", got, "after\n")
 	}
 	if status := testutil.Git(t, dir, "status", "--porcelain"); status != "" {
 		t.Fatalf("expected clean working tree, got: %s", status)

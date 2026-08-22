@@ -122,6 +122,15 @@ const (
 	// its --amend and reword forms.
 	CommitTree = 10
 
+	// PathMatchedNothing means a path or directory the caller named contributes
+	// nothing to the commit: it is absent from disk and untracked in the tree
+	// the commit is built on, it is a directory holding neither files on disk
+	// nor paths in that tree, or it is a file whose content the commit would
+	// not change. Naming a path is a statement that it belongs in the commit,
+	// so a path that cannot be in it is a refusal rather than a silent
+	// omission. Produced by commit, including --amend.
+	PathMatchedNothing = 11
+
 	// BinaryHunkSpec means a hunk spec (file:1,3) was given for a file git
 	// reports as binary, where only whole-file staging exists. Produced by
 	// commit, including --amend.
@@ -181,6 +190,7 @@ func All() []Entry {
 		{LockTimeout, "LockTimeout", "Timed out acquiring a lock a live holder still owns"},
 		{WriteTree, "WriteTree", "write-tree failed"},
 		{CommitTree, "CommitTree", "commit-tree failed"},
+		{PathMatchedNothing, "PathMatchedNothing", "A named path or directory contributes nothing to the commit"},
 		{BinaryHunkSpec, "BinaryHunkSpec", "Hunk spec given for a binary file"},
 		{PushHookFailed, "PushHookFailed", "Pre-pre-push hook failed"},
 		{PushHookTimeout, "PushHookTimeout", "Pre-pre-push hook timed out"},

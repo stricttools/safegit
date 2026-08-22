@@ -241,9 +241,10 @@ func TestAmendStagedDeletions_FilePathsWithMovedFile(t *testing.T) {
 
 // Invoked from a repository subdirectory with two cwd-relative arguments, one
 // of which has no pending change, `commit --amend` must resolve both against
-// the invoking cwd. Move detection resolves the unchanged relative path against
-// the repository ROOT instead, so the mis-resolved path is absent from the temp
-// index and the underlying `git rm --cached` fails.
+// the invoking cwd. The unchanged one changes nothing about the tip being
+// replaced, so it is refused by the name the caller typed -- and the amend does
+// not happen at all, leaving the tip and the unchanged file exactly as they
+// were.
 func TestAmendFromSubdirRelativePathNoPendingChange(t *testing.T) {
 	dir := newRepo(t)
 	sub := filepath.Join(dir, "sub")
@@ -260,11 +261,23 @@ func TestAmendFromSubdirRelativePathNoPendingChange(t *testing.T) {
 
 	stdout, stderr, code := runSafegit(t, sub, "commit", "--amend", "-m", "tip plus subdir edit", "--",
 		"edited.txt", "unchanged.txt")
-	if code != 0 {
-		t.Fatalf("amending from a subdirectory with an unchanged relative path failed (code %d)\nstdout:\n%s\nstderr:\n%s",
-			code, stdout, stderr)
+	if code != exitcode.PathMatchedNothing {
+		t.Fatalf("amending from a subdirectory with an unchanged relative path exited %d, want %d\nstdout:\n%s\nstderr:\n%s",
+			code, exitcode.PathMatchedNothing, stdout, stderr)
+	}
+	// Naming the argument as typed is what proves it was resolved against sub/
+	// rather than against the repository root.
+	if !strings.Contains(stderr, "unchanged.txt") {
+		t.Errorf("the refusal does not name the argument it was decided about: %s", stderr)
+	}
+	if got := testutil.Rev(t, dir, "HEAD"); got != tip {
+		t.Errorf("the tip moved despite the refusal: %s -> %s", tip, got)
 	}
 
+	// The same command without the unchanged argument amends normally.
+	if _, stderr, code := runSafegit(t, sub, "commit", "--amend", "-m", "tip plus subdir edit", "--", "edited.txt"); code != 0 {
+		t.Fatalf("amending the changed path alone failed (code %d): %s", code, stderr)
+	}
 	if got := testutil.Parents(t, dir, "HEAD"); strings.Join(got, ",") != strings.Join(tipParents, ",") {
 		t.Errorf("amended commit parents = %v, want %v", got, tipParents)
 	}
@@ -272,7 +285,7 @@ func TestAmendFromSubdirRelativePathNoPendingChange(t *testing.T) {
 		t.Errorf("sub/edited.txt at HEAD = %q (present=%t), want %q", got, ok, "after\n")
 	}
 	if got, ok := testutil.Show(t, dir, "HEAD", "sub/unchanged.txt"); !ok || got != "unchanged\n" {
-		t.Errorf("sub/unchanged.txt at HEAD = %q (present=%t): naming a path with no pending change must never remove it", got, ok)
+		t.Errorf("sub/unchanged.txt at HEAD = %q (present=%t): an amend must never remove a path it did not touch", got, ok)
 	}
 	if status := amendParStatus(t, dir); status != "" {
 		t.Errorf("expected a clean working tree after the amend, got: %s", status)
@@ -280,8 +293,8 @@ func TestAmendFromSubdirRelativePathNoPendingChange(t *testing.T) {
 }
 
 // The control from the repository root, where relative and repo-relative
-// spellings coincide. If this fails too, the defect is broader than relative
-// path resolution.
+// spellings coincide: the same refusal, so a difference between the two
+// directories is a path-resolution defect rather than the refusal itself.
 func TestAmendFromRepoRootUnchangedPath(t *testing.T) {
 	dir := newRepo(t)
 
@@ -290,15 +303,25 @@ func TestAmendFromRepoRootUnchangedPath(t *testing.T) {
 	safegitCommit(t, dir, "add root files", "unchanged.txt", "edited.txt")
 
 	testutil.WriteFile(t, dir, "tip.txt", "tip\n")
-	safegitCommit(t, dir, "tip", "tip.txt")
+	tip := safegitCommit(t, dir, "tip", "tip.txt")
 
 	testutil.WriteFile(t, dir, "edited.txt", "after\n")
 
 	stdout, stderr, code := runSafegit(t, dir, "commit", "--amend", "-m", "tip plus root edit", "--",
 		"edited.txt", "unchanged.txt")
-	if code != 0 {
-		t.Fatalf("amending from the repo root with an unchanged path failed (code %d)\nstdout:\n%s\nstderr:\n%s",
-			code, stdout, stderr)
+	if code != exitcode.PathMatchedNothing {
+		t.Fatalf("amending from the repo root with an unchanged path exited %d, want %d\nstdout:\n%s\nstderr:\n%s",
+			code, exitcode.PathMatchedNothing, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "unchanged.txt") {
+		t.Errorf("the refusal does not name the argument it was decided about: %s", stderr)
+	}
+	if got := testutil.Rev(t, dir, "HEAD"); got != tip {
+		t.Errorf("the tip moved despite the refusal: %s -> %s", tip, got)
+	}
+
+	if _, stderr, code := runSafegit(t, dir, "commit", "--amend", "-m", "tip plus root edit", "--", "edited.txt"); code != 0 {
+		t.Fatalf("amending the changed path alone failed (code %d): %s", code, stderr)
 	}
 	if got, ok := testutil.Show(t, dir, "HEAD", "edited.txt"); !ok || got != "after\n" {
 		t.Errorf("edited.txt at HEAD = %q (present=%t), want %q", got, ok, "after\n")

@@ -14,7 +14,6 @@ import (
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/oplog"
 	"github.com/smm-h/safegit/internal/repo"
-	"github.com/smm-h/safegit/internal/stage"
 	"github.com/smm-h/safegit/internal/trailer"
 )
 
@@ -41,10 +40,9 @@ type AmendResult struct {
 	OldSHA   string `json:"oldSha"`
 	Attempts int    `json:"attempts"`
 
-	// AutoStagedDeletions lists repo-relative paths of files that were
-	// automatically staged as deletions (e.g., by move detection). Nil
-	// when no auto-staged deletions occurred.
-	AutoStagedDeletions []string `json:"autoStagedDeletions,omitempty"`
+	// SkippedIgnored lists the gitignored repo-relative paths a directory
+	// expansion passed over. Nil when nothing was skipped.
+	SkippedIgnored []string `json:"skippedIgnored,omitempty"`
 }
 
 // Amend rewrites the tip of the current branch with new files staged.
@@ -82,13 +80,10 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 		return nil, fmt.Errorf("no files specified for amend")
 	}
 
-	// Extract paths for validation
-	filePaths := make([]string, len(req.FileSpecs))
-	for i, fs := range req.FileSpecs {
-		filePaths[i] = fs.Path
-	}
-
-	absFiles, err := p.resolveFiles(ctx, repoRoot, filePaths)
+	// An amend's temporary index is seeded from the tip it REPLACES, so that
+	// tip -- not HEAD -- is the tree its arguments are judged and expanded
+	// against. The two differ on every cross-branch amend.
+	files, err := p.resolveFiles(ctx, repoRoot, baseRev(ctx, ref), req.FileSpecs)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +94,7 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryAmend(ctx, ref, repoRoot, absFiles, req, attempt)
+		result, retry, err := p.tryAmend(ctx, ref, repoRoot, files, req, attempt)
 		if err != nil {
 			return nil, err
 		}
@@ -118,7 +113,7 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 func (p *Pipeline) tryAmend(
 	ctx context.Context,
 	ref, repoRoot string,
-	absFiles []string,
+	files *intake,
 	req AmendRequest,
 	attempt int,
 ) (*AmendResult, bool, error) {
@@ -163,30 +158,30 @@ func (p *Pipeline) tryAmend(
 	}
 	defer tmpIdx.Cleanup()
 
-	for i, absPath := range absFiles {
-		hunks := req.FileSpecs[i].Hunks
-		if hunks != nil {
-			if err := stage.StageHunks(ctx, tmpIdx.IndexPath, absPath, hunks); err != nil {
-				return nil, false, stagingHunksError(absPath, err)
-			}
-		} else {
-			if err := p.stageFile(ctx, tmpIdx.IndexPath, absPath); err != nil {
-				return nil, false, fmt.Errorf("staging %s: %w", absPath, err)
-			}
-		}
-	}
-
-	// Detect moves: compare against headSHA (the commit being replaced),
-	// since the user's changes are relative to that tree.
-	autoStaged, err := detectMoves(ctx, headSHA, tmpIdx.IndexPath, absFiles, req.FileSpecs, repoRoot)
-	if err != nil {
-		return nil, false, fmt.Errorf("detect moves: %w", err)
+	if err := p.stageAll(ctx, tmpIdx.IndexPath, repoRoot, files); err != nil {
+		return nil, false, err
 	}
 
 	// Build new tree
 	treeSHA, err := git.WriteTree(ctx, tmpIdx.IndexPath)
 	if err != nil {
 		return nil, false, &CommitError{Code: exitcode.WriteTree, Message: fmt.Sprintf("write-tree failed: %v", err)}
+	}
+
+	// What this amend actually changes, read off the objects: the new tree
+	// against the tree of the tip being REPLACED. That is the delta the caller
+	// asked for -- comparing against the parent instead would report the whole
+	// content of the amended commit, most of which the amend did not touch.
+	oldTree, err := p.parentTreeSHA(ctx, headSHA)
+	if err != nil {
+		return nil, false, fmt.Errorf("resolving the tree of %s: %w", headSHA, err)
+	}
+	changed, err := git.DiffTree(ctx, oldTree, treeSHA)
+	if err != nil {
+		return nil, false, fmt.Errorf("comparing the amended tree against %s: %w", ref, err)
+	}
+	if src, unmatched := files.unmatchedSource(changed); unmatched {
+		return nil, false, unmatchedSourceError(src, ref)
 	}
 
 	// Create new commit with parent = HEAD^ (replacing HEAD),
@@ -199,13 +194,13 @@ func (p *Pipeline) tryAmend(
 
 	if req.DryRun {
 		return &AmendResult{
-			SHA:                 commitSHA,
-			Ref:                 ref,
-			Parent:              parentSHA,
-			Tree:                treeSHA,
-			OldSHA:              headSHA,
-			Attempts:            attempt,
-			AutoStagedDeletions: autoStaged,
+			SHA:            commitSHA,
+			Ref:            ref,
+			Parent:         parentSHA,
+			Tree:           treeSHA,
+			OldSHA:         headSHA,
+			Attempts:       attempt,
+			SkippedIgnored: files.skipped,
 		}, false, nil
 	}
 
@@ -261,13 +256,13 @@ func (p *Pipeline) tryAmend(
 	}
 
 	return &AmendResult{
-		SHA:                 commitSHA,
-		Ref:                 ref,
-		Parent:              parentSHA,
-		Tree:                treeSHA,
-		OldSHA:              headSHA,
-		Attempts:            attempt,
-		AutoStagedDeletions: autoStaged,
+		SHA:            commitSHA,
+		Ref:            ref,
+		Parent:         parentSHA,
+		Tree:           treeSHA,
+		OldSHA:         headSHA,
+		Attempts:       attempt,
+		SkippedIgnored: files.skipped,
 	}, false, nil
 }
 

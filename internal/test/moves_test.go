@@ -9,7 +9,39 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-func TestMoveDetection_BasicRename(t *testing.T) {
+// safegit used to guess. When a commit added a file whose blob already existed
+// in the parent tree at a path that was gone from disk, it read the pair as a
+// rename and staged that other path's DELETION into the commit -- a path the
+// caller never named. The guess is deleted, and these tests are what keeps it
+// deleted: same fixtures as before, opposite expectations.
+//
+// The rule now is the whole of it: a commit contains the paths the caller
+// named, and nothing else. Committing the new half of a move records an
+// addition; the old half stays a pending deletion in the working tree until
+// someone commits it, which is what naming both paths in one command does.
+
+// assertNoRenameNotice fails when a run announced a rename it should no longer
+// be detecting.
+func assertNoRenameNotice(t *testing.T, stderr string) {
+	t.Helper()
+	if strings.Contains(stderr, "rename detected") || strings.Contains(stderr, "auto-staged deletion") {
+		t.Errorf("a commit announced a rename; move detection is deleted: %s", stderr)
+	}
+}
+
+// assertUnstagedDeletion fails unless the path is still present in HEAD and
+// reported by git status as a deletion nobody has committed yet.
+func assertUnstagedDeletion(t *testing.T, dir, path string) {
+	t.Helper()
+	if _, ok := testutil.Show(t, dir, "HEAD", path); !ok {
+		t.Errorf("%s was removed from HEAD by a commit that never named it", path)
+	}
+	if status := testutil.Git(t, dir, "status", "--porcelain"); !strings.Contains(status, "D "+path) {
+		t.Errorf("expected %s to remain a pending deletion in the working tree, got status:\n%s", path, status)
+	}
+}
+
+func TestNoMoveDetection_BasicRename(t *testing.T) {
 	dir := newRepo(t)
 
 	// Write foo.txt and commit it
@@ -30,28 +62,19 @@ func TestMoveDetection_BasicRename(t *testing.T) {
 		t.Fatalf("rename commit failed (code %d): %s", code, stderr)
 	}
 
-	// stderr should mention auto-staged deletion with rename detected
-	if !strings.Contains(stderr, "auto-staged deletion: foo.txt (rename detected)") {
-		t.Fatalf("expected stderr to contain auto-staged deletion message, got: %s", stderr)
+	assertNoRenameNotice(t, stderr)
+
+	// The commit adds bar.txt and nothing else.
+	diffTree := testutil.GitRaw(t, dir, "diff-tree", "--no-commit-id", "--no-renames", "-r", "--name-status", "HEAD")
+	if strings.TrimSpace(diffTree) != "A\tbar.txt" {
+		t.Errorf("expected the commit to contain exactly the added bar.txt, got:\n%s", diffTree)
 	}
 
-	// git diff-tree should show a rename
-	diffTree := testutil.GitRaw(t, dir, "diff-tree", "--no-commit-id", "-r", "-M", "HEAD")
-	if !strings.Contains(diffTree, "foo.txt") || !strings.Contains(diffTree, "bar.txt") {
-		t.Fatalf("expected diff-tree to mention both foo.txt and bar.txt, got: %s", diffTree)
-	}
-	if !strings.Contains(diffTree, "R") {
-		t.Fatalf("expected diff-tree to show rename (R), got: %s", diffTree)
-	}
-
-	// Working tree should be clean
-	status := testutil.Git(t, dir, "status", "--porcelain")
-	if status != "" {
-		t.Fatalf("expected clean working tree, got: %s", status)
-	}
+	// foo.txt is still the caller's to delete.
+	assertUnstagedDeletion(t, dir, "foo.txt")
 }
 
-func TestMoveDetection_MoveAndEdit(t *testing.T) {
+func TestNoMoveDetection_MoveAndEdit(t *testing.T) {
 	dir := newRepo(t)
 
 	// Write foo.txt and commit
@@ -73,19 +96,11 @@ func TestMoveDetection_MoveAndEdit(t *testing.T) {
 		t.Fatalf("move-and-edit commit failed (code %d): %s", code, stderr)
 	}
 
-	// No rename detection when content differs
-	if strings.Contains(stderr, "rename detected") {
-		t.Fatalf("expected no rename detection when content changed, got: %s", stderr)
-	}
-
-	// foo.txt deletion should NOT be auto-staged
-	status := testutil.Git(t, dir, "status", "--porcelain")
-	if !strings.Contains(status, "D foo.txt") {
-		t.Fatalf("expected 'D foo.txt' in status, got: %s", status)
-	}
+	assertNoRenameNotice(t, stderr)
+	assertUnstagedDeletion(t, dir, "foo.txt")
 }
 
-func TestMoveDetection_ExplicitBothPaths(t *testing.T) {
+func TestNoMoveDetection_ExplicitBothPaths(t *testing.T) {
 	dir := newRepo(t)
 
 	// Write foo.txt and commit
@@ -100,25 +115,25 @@ func TestMoveDetection_ExplicitBothPaths(t *testing.T) {
 		t.Fatalf("rename failed: %v", err)
 	}
 
-	// Commit both paths explicitly
+	// Commit both paths explicitly -- the supported way to record a move.
 	_, stderr, code = runSafegit(t, dir, "commit", "-m", "rename", "--", "bar.txt", "foo.txt")
 	if code != 0 {
 		t.Fatalf("explicit-both-paths commit failed (code %d): %s", code, stderr)
 	}
 
-	// No auto-staging needed when user lists both paths
-	if strings.Contains(stderr, "rename detected") {
-		t.Fatalf("expected no rename detection when both paths explicit, got: %s", stderr)
-	}
+	assertNoRenameNotice(t, stderr)
 
-	// Working tree should be clean
+	// Working tree should be clean: both halves of the move were named.
 	status := testutil.Git(t, dir, "status", "--porcelain")
 	if status != "" {
 		t.Fatalf("expected clean working tree, got: %s", status)
 	}
+	if _, ok := testutil.Show(t, dir, "HEAD", "foo.txt"); ok {
+		t.Error("foo.txt should be gone from HEAD: its deletion was named")
+	}
 }
 
-func TestMoveDetection_UnrelatedDeletion(t *testing.T) {
+func TestNoMoveDetection_UnrelatedDeletion(t *testing.T) {
 	dir := newRepo(t)
 
 	// Write a.txt and b.txt, commit both
@@ -143,24 +158,15 @@ func TestMoveDetection_UnrelatedDeletion(t *testing.T) {
 		t.Fatalf("rename commit failed (code %d): %s", code, stderr)
 	}
 
-	// Should auto-stage b.txt deletion
-	if !strings.Contains(stderr, "auto-staged deletion: b.txt (rename detected)") {
-		t.Fatalf("expected auto-staged deletion of b.txt, got: %s", stderr)
-	}
+	assertNoRenameNotice(t, stderr)
 
-	// Should NOT mention a.txt (unrelated deletion)
-	if strings.Contains(stderr, "a.txt") {
-		t.Fatalf("expected no mention of a.txt in stderr, got: %s", stderr)
-	}
-
-	// a.txt should still show as deleted in status
-	status := testutil.Git(t, dir, "status", "--porcelain")
-	if !strings.Contains(status, "D a.txt") {
-		t.Fatalf("expected 'D a.txt' in status, got: %s", status)
-	}
+	// Neither deletion was swept into the commit: not the blob-matching one,
+	// and not the unrelated one.
+	assertUnstagedDeletion(t, dir, "b.txt")
+	assertUnstagedDeletion(t, dir, "a.txt")
 }
 
-func TestMoveDetection_Amend(t *testing.T) {
+func TestNoMoveDetection_Amend(t *testing.T) {
 	dir := newRepo(t)
 
 	// Write foo.txt and commit
@@ -181,19 +187,11 @@ func TestMoveDetection_Amend(t *testing.T) {
 		t.Fatalf("amend commit failed (code %d): %s", code, stderr)
 	}
 
-	// Should detect the rename
-	if !strings.Contains(stderr, "auto-staged deletion: foo.txt (rename detected)") {
-		t.Fatalf("expected auto-staged deletion message for amend, got: %s", stderr)
-	}
-
-	// Working tree should be clean
-	status := testutil.Git(t, dir, "status", "--porcelain")
-	if status != "" {
-		t.Fatalf("expected clean working tree, got: %s", status)
-	}
+	assertNoRenameNotice(t, stderr)
+	assertUnstagedDeletion(t, dir, "foo.txt")
 }
 
-func TestMoveDetection_QuietSuppresses(t *testing.T) {
+func TestNoMoveDetection_QuietIsNotASilentGuess(t *testing.T) {
 	dir := newRepo(t)
 
 	// Write foo.txt and commit
@@ -208,25 +206,19 @@ func TestMoveDetection_QuietSuppresses(t *testing.T) {
 		t.Fatalf("rename failed: %v", err)
 	}
 
-	// Commit with --quiet
+	// Commit with --quiet. There is nothing to suppress any more: the notice
+	// existed to disclose a guess, and with the guess gone the quiet run and
+	// the loud one produce the same commit.
 	_, stderr, code = runSafegit(t, dir, "--quiet", "commit", "-m", "rename", "--", "bar.txt")
 	if code != 0 {
 		t.Fatalf("quiet commit failed (code %d): %s", code, stderr)
 	}
 
-	// Should NOT mention rename in output (suppressed by --quiet)
-	if strings.Contains(stderr, "rename detected") {
-		t.Fatalf("expected no rename message with --quiet, got: %s", stderr)
-	}
-
-	// But move detection should still have run -- working tree should be clean
-	status := testutil.Git(t, dir, "status", "--porcelain")
-	if status != "" {
-		t.Fatalf("expected clean working tree (move detection should still run), got: %s", status)
-	}
+	assertNoRenameNotice(t, stderr)
+	assertUnstagedDeletion(t, dir, "foo.txt")
 }
 
-func TestMoveDetection_MoveToSubdirectory(t *testing.T) {
+func TestNoMoveDetection_MoveToSubdirectory(t *testing.T) {
 	dir := newRepo(t)
 
 	// Create and commit foo.txt
@@ -250,28 +242,16 @@ func TestMoveDetection_MoveToSubdirectory(t *testing.T) {
 		t.Fatalf("move commit failed (code %d): %s", code, stderr)
 	}
 
-	// Should auto-stage deletion of foo.txt
-	if !strings.Contains(stderr, "auto-staged deletion: foo.txt (rename detected)") {
-		t.Fatalf("expected auto-staged deletion message for foo.txt, got: %s", stderr)
-	}
+	assertNoRenameNotice(t, stderr)
+	assertUnstagedDeletion(t, dir, "foo.txt")
 
-	// Working tree should be clean
-	status := testutil.Git(t, dir, "status", "--porcelain")
-	if status != "" {
-		t.Fatalf("expected clean working tree, got: %s", status)
-	}
-
-	// git diff-tree should show a rename
-	diffTree := testutil.GitRaw(t, dir, "diff-tree", "--no-commit-id", "-r", "-M", "HEAD")
-	if !strings.Contains(diffTree, "R") {
-		t.Fatalf("expected diff-tree to show rename (R), got: %s", diffTree)
-	}
-	if !strings.Contains(diffTree, "foo.txt") || !strings.Contains(diffTree, "subdir/foo.txt") {
-		t.Fatalf("expected diff-tree to mention both paths, got: %s", diffTree)
+	diffTree := testutil.GitRaw(t, dir, "diff-tree", "--no-commit-id", "--no-renames", "-r", "--name-status", "HEAD")
+	if strings.TrimSpace(diffTree) != "A\tsubdir/foo.txt" {
+		t.Errorf("expected the commit to contain exactly the added subdir/foo.txt, got:\n%s", diffTree)
 	}
 }
 
-func TestMoveDetection_MultipleMoves(t *testing.T) {
+func TestNoMoveDetection_MultipleMoves(t *testing.T) {
 	dir := newRepo(t)
 
 	// Create and commit two files
@@ -296,22 +276,12 @@ func TestMoveDetection_MultipleMoves(t *testing.T) {
 		t.Fatalf("multi-move commit failed (code %d): %s", code, stderr)
 	}
 
-	// Should auto-stage deletion of both a.txt and b.txt
-	if !strings.Contains(stderr, "auto-staged deletion: a.txt (rename detected)") {
-		t.Fatalf("expected stderr to mention a.txt deletion, got: %s", stderr)
-	}
-	if !strings.Contains(stderr, "auto-staged deletion: b.txt (rename detected)") {
-		t.Fatalf("expected stderr to mention b.txt deletion, got: %s", stderr)
-	}
-
-	// Working tree should be clean
-	status := testutil.Git(t, dir, "status", "--porcelain")
-	if status != "" {
-		t.Fatalf("expected clean working tree, got: %s", status)
-	}
+	assertNoRenameNotice(t, stderr)
+	assertUnstagedDeletion(t, dir, "a.txt")
+	assertUnstagedDeletion(t, dir, "b.txt")
 }
 
-func TestMoveDetection_PathSimilarityTiebreak(t *testing.T) {
+func TestNoMoveDetection_PathSimilarityIsNotConsulted(t *testing.T) {
 	dir := newRepo(t)
 
 	// Create two files with identical content in different directories
@@ -337,25 +307,19 @@ func TestMoveDetection_PathSimilarityTiebreak(t *testing.T) {
 	}
 	testutil.WriteFile(t, dir, "src/util/renamed.txt", "shared helper content")
 
-	// Commit only the new file
+	// Commit only the new file. There is no tie to break: neither deletion is
+	// a candidate for anything, because the commit contains what was named.
 	_, stderr, code = runSafegit(t, dir, "commit", "-m", "rename helper", "--", "src/util/renamed.txt")
 	if code != 0 {
-		t.Fatalf("tiebreak commit failed (code %d): %s", code, stderr)
+		t.Fatalf("commit failed (code %d): %s", code, stderr)
 	}
 
-	// Should auto-stage deletion of src/util/helper.txt (same directory = higher similarity)
-	if !strings.Contains(stderr, "auto-staged deletion: src/util/helper.txt (rename detected)") {
-		t.Fatalf("expected auto-staged deletion of src/util/helper.txt, got: %s", stderr)
-	}
-
-	// lib/helper.txt should still be deleted in working tree (unstaged)
-	status := testutil.Git(t, dir, "status", "--porcelain")
-	if !strings.Contains(status, "D lib/helper.txt") {
-		t.Fatalf("expected lib/helper.txt to remain as unstaged deletion, got: %s", status)
-	}
+	assertNoRenameNotice(t, stderr)
+	assertUnstagedDeletion(t, dir, "src/util/helper.txt")
+	assertUnstagedDeletion(t, dir, "lib/helper.txt")
 }
 
-func TestMoveDetection_OriginalPathRecreated(t *testing.T) {
+func TestNoMoveDetection_OriginalPathRecreated(t *testing.T) {
 	dir := newRepo(t)
 
 	// Create and commit config.txt
@@ -377,10 +341,7 @@ func TestMoveDetection_OriginalPathRecreated(t *testing.T) {
 		t.Fatalf("commit failed (code %d): %s", code, stderr)
 	}
 
-	// No auto-staged deletion: old path config.txt still exists on disk with different content
-	if strings.Contains(stderr, "auto-staged deletion:") {
-		t.Fatalf("expected no auto-staged deletion when original path recreated, got: %s", stderr)
-	}
+	assertNoRenameNotice(t, stderr)
 
 	// Working tree should be clean (both files explicitly listed)
 	status := testutil.Git(t, dir, "status", "--porcelain")
@@ -389,10 +350,11 @@ func TestMoveDetection_OriginalPathRecreated(t *testing.T) {
 	}
 }
 
-func TestMoveDetection_EmptyFile(t *testing.T) {
+func TestNoMoveDetection_EmptyFile(t *testing.T) {
 	dir := newRepo(t)
 
-	// Create and commit an empty file
+	// Create and commit an empty file. Every empty file in a repository shares
+	// one blob, which is what made the old guess fire on unrelated paths.
 	testutil.WriteFile(t, dir, "empty.txt", "")
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add empty", "--", "empty.txt")
 	if code != 0 {
@@ -410,20 +372,6 @@ func TestMoveDetection_EmptyFile(t *testing.T) {
 		t.Fatalf("empty file rename commit failed (code %d): %s", code, stderr)
 	}
 
-	// Should auto-stage deletion of empty.txt
-	if !strings.Contains(stderr, "auto-staged deletion: empty.txt (rename detected)") {
-		t.Fatalf("expected auto-staged deletion message for empty.txt, got: %s", stderr)
-	}
-
-	// Working tree should be clean
-	status := testutil.Git(t, dir, "status", "--porcelain")
-	if status != "" {
-		t.Fatalf("expected clean working tree, got: %s", status)
-	}
-
-	// git diff-tree should show a rename
-	diffTree := testutil.GitRaw(t, dir, "diff-tree", "--no-commit-id", "-r", "-M", "HEAD")
-	if !strings.Contains(diffTree, "R") {
-		t.Fatalf("expected diff-tree to show rename (R), got: %s", diffTree)
-	}
+	assertNoRenameNotice(t, stderr)
+	assertUnstagedDeletion(t, dir, "empty.txt")
 }

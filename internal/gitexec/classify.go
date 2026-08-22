@@ -135,6 +135,7 @@ var verbs = []Verb{
 	},
 	{Name: "commit-tree", Base: MutatesObjects},
 	{Name: "diff", Base: ObserveOnly},
+	{Name: "diff-tree", Base: ObserveOnly},
 	{Name: "fetch", Base: MutatesObjects | MutatesRefs | Network},
 	{Name: "for-each-ref", Base: ObserveOnly},
 	{

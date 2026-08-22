@@ -1174,6 +1174,7 @@ coordination guard, an uninitialized repository, a rejected argument).
 | 8 | Timed out acquiring a lock a live holder still owns |
 | 9 | write-tree failed |
 | 10 | commit-tree failed |
+| 11 | A named path or directory contributes nothing to the commit |
 | 14 | Hunk spec given for a binary file |
 | 20 | Pre-pre-push hook failed |
 | 21 | Pre-pre-push hook timed out |
