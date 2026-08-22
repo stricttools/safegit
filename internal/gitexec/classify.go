@@ -170,6 +170,11 @@ var verbs = []Verb{
 	},
 	{Name: "merge-base", Base: ObserveOnly},
 	{
+		Name: "merge-tree",
+		Base: MutatesObjects,
+		Note: "safegit runs it with --write-tree to compute a merge, a cherry-pick or a revert for a --dry-run preview; it writes the resulting tree (and, for a conflicted merge, the marker-carrying blobs) into the object store, which is why a preview must run it under an object quarantine. It touches no ref, no index and no working-tree file",
+	},
+	{
 		Name: "merge-file",
 		Base: MutatesWorktree,
 		Note: "safegit only ever runs it with -p, which writes the three-way merge result to stdout; without -p merge-file OVERWRITES its first file argument, and no conditional token can be trusted to tell the two apart (the absence of an option is not a token), so the base set stays the wider one. It writes no objects in either spelling",

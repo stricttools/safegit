@@ -163,9 +163,7 @@ func runRestructuredRevert(flags globalFlags, args []string) int {
 	}
 
 	if flags.dryRun {
-		// No git ran: the invocation is recorded in the would-do log, exactly as
-		// the unrestructured passthrough records it.
-		return runGitMutation(flags, append([]string{"revert"}, args...)...)
+		return previewSequencerOperation(flags, "revert", args)
 	}
 
 	// The compute step. --no-commit is what makes the two halves separable: git

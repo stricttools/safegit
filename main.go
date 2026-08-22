@@ -113,7 +113,7 @@ func repoRootOrEmpty() string {
 // an object quarantine. The mark is set here, for every command at once,
 // because every command's dry run makes the same promise; installing the
 // quarantine itself stays with the commands that actually write objects in a
-// preview (see internal/commit's beginPreview), since only they know when the
+// preview (see internal/commit's BeginPreview), since only they know when the
 // throwaway store can be created and cleaned up.
 func (g globalFlags) ctx() context.Context {
 	ctx := gitexec.WithRoot(context.Background(), g.root.resolve())
@@ -151,6 +151,16 @@ func (g globalFlags) payload(value interface{}) {
 // document. Machine mode therefore suppresses them here -- it does NOT set
 // quiet: ctx.Quiet() keeps reporting exactly what the operator passed.
 func (g globalFlags) silent() bool { return g.quiet || g.json }
+
+// printf writes one line of human output, suppressed in the two modes where
+// safegit's stdout is not the operator's to read. Handlers that print several
+// lines of a report use it instead of repeating the silent() check per line.
+func (g globalFlags) printf(format string, a ...interface{}) {
+	if g.silent() {
+		return
+	}
+	fmt.Printf(format, a...)
+}
 
 func main() {
 	newApp().Run()

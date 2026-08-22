@@ -12,8 +12,16 @@ import (
 	"github.com/smm-h/safegit/internal/gitexec"
 )
 
-// beginPreview opens the throwaway area a dry run works in, and returns the
+// BeginPreview opens the throwaway area a dry run works in, and returns the
 // context every git call of that run must be made with.
+//
+// It is the SINGLE preview-area constructor for the whole tool. It lives here
+// because the commit pipeline was the first command family to write objects in
+// a preview, and it is exported because it is no longer the only one: the
+// honest --dry-run of merge, cherry-pick and revert computes its answer with
+// `git merge-tree --write-tree`, which writes real tree and blob objects and
+// therefore needs exactly this quarantine. Two constructors would be two
+// answers to "where does a preview put the objects it makes".
 //
 // A preview computes real answers: it stages into an index, writes a tree and
 // (for a commit or an amend) builds the commit object, because that is the only
@@ -35,7 +43,7 @@ import (
 // would multiply directories for no gain. Not a dry run returns the context
 // unchanged and an empty area, which is the signal to stage under the safegit
 // directory as an executing run does.
-func beginPreview(ctx context.Context, dryRun bool) (previewCtx context.Context, area string, cleanup func(), err error) {
+func BeginPreview(ctx context.Context, dryRun bool) (previewCtx context.Context, area string, cleanup func(), err error) {
 	if !dryRun {
 		return ctx, "", func() {}, nil
 	}

@@ -277,12 +277,14 @@ func runMerge(flags globalFlags, args []string) int {
 	}
 
 	ctx := flags.ctx()
+	if flags.dryRun {
+		// No git merge runs: the invocation is recorded, and the outcome it
+		// would have is COMPUTED with git's own merge engine instead of guessed.
+		return previewSequencerOperation(flags, "merge", args)
+	}
 	if code := runGitMutation(flags, append([]string{"merge"}, args...)...); code != 0 {
 		announceWayOut(flags, gitDir)
 		return code
-	}
-	if flags.dryRun {
-		return 0
 	}
 
 	resultSHA, _ := git.RevParse(ctx, "HEAD")
@@ -481,12 +483,9 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 	}
 
 	if flags.dryRun {
-		// No git ran: the invocation was recorded, so there is no foreign exit
-		// code to propagate and only a framework failure can be nonzero.
-		if code := runGitMutation(flags, append([]string{gitCmd}, args...)...); code != 0 {
-			return code
-		}
-		return 0
+		// No git ran: the invocation is recorded, and the outcome it would have
+		// is COMPUTED with git's own merge engine rather than left unsaid.
+		return previewSequencerOperation(flags, gitCmd, args)
 	}
 
 	code = runPassthrough(flags, gitCmd, args)

@@ -88,7 +88,7 @@ func TestQuarantineAppliesToExplicitDirectorySites(t *testing.T) {
 // a quarantine, that repository's own objects are unreachable for the duration.
 //
 // Why this is currently safe: the only quarantine safegit ever installs is the
-// commit pipeline's preview area (commit.beginPreview), and internal/commit
+// commit pipeline's preview area (commit.BeginPreview), and internal/commit
 // builds no directory-targeting spec and imports neither internal/submodule nor
 // main. The two live Dir-only sites -- internal/submodule.runGit and
 // main.autoBumpParent's parent-pointer ls-tree -- both run on contexts that
