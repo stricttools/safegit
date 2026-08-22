@@ -523,6 +523,13 @@ func CommonGitDirOf(ctx context.Context, gitDir string) (string, error) {
 }
 
 // IsIgnored checks whether a file matches a gitignore rule.
+//
+// This is git's own question, index included: a path that is in the index is
+// TRACKED, and check-ignore answers "not ignored" for it whatever the ignore
+// rules say. That is the right answer for "may this path be added", which is
+// what the callers of this function ask -- a tracked file matching an ignore
+// pattern must stay committable. A caller asking the other question, whether
+// the ignore rules cover a path at all, wants MatchesIgnoreRules.
 func IsIgnored(ctx context.Context, filePath string) (bool, error) {
 	_, _, err := Run(ctx, "check-ignore", "-q", "--", filePath)
 	if err != nil {
@@ -530,6 +537,30 @@ func IsIgnored(ctx context.Context, filePath string) (bool, error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+// MatchesIgnoreRules reports whether the ignore rules cover a path, with the
+// index left out of the question entirely.
+//
+// `--no-index` is the whole difference from IsIgnored, and it inverts the
+// answer for exactly the paths that make the question worth asking: one that is
+// still in the index. Plain check-ignore calls such a path not ignored because
+// it is tracked, so asking it "is this path gitignored" about a path that is
+// about to STOP being tracked yields the opposite of the truth. With
+// --no-index only the patterns decide.
+//
+// Exit 1 with nothing on stderr is check-ignore's "no pattern matches", which
+// is an answer; any other failure is a real one and is returned.
+func MatchesIgnoreRules(ctx context.Context, filePath string) (bool, error) {
+	_, stderr, err := Run(ctx, "check-ignore", "--no-index", "-q", "--", filePath)
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && strings.TrimSpace(stderr) == "" {
+		return false, nil
+	}
+	return false, err
 }
 
 // IsAncestorOf checks whether commitSHA is an ancestor of (or equal to)

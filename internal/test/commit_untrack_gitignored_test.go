@@ -24,12 +24,12 @@ import (
 // the whole cleanup in one commit, and the fallback that commits only
 // .gitignore, which still has to preserve a pre-staged removal.
 
-// seedTrackedThenIgnoredFile builds the exact starting state of the report: a
-// repo where dir/junk.txt is tracked and committed, .gitignore has just grown a
-// `dir/` pattern (committed nowhere yet), and the operator has already run
-// `git rm -r --cached dir` so the removal is staged while the file stays on
-// disk.
-func seedTrackedThenIgnoredFile(t *testing.T) string {
+// seedTrackedThenIgnored builds the state --untrack exists to act on: a repo
+// where dir/junk.txt is tracked, committed AND still in the index, and
+// .gitignore has just grown a `dir/` pattern (committed nowhere yet). Nothing
+// has been unstaged -- removing the index entry is the operation under test,
+// not part of its fixture.
+func seedTrackedThenIgnored(t *testing.T) string {
 	t.Helper()
 	dir := newRepo(t)
 
@@ -40,6 +40,17 @@ func seedTrackedThenIgnoredFile(t *testing.T) string {
 
 	// The pattern that makes the tracked file ignored from now on.
 	testutil.WriteFile(t, dir, ".gitignore", "dir/\n")
+	return dir
+}
+
+// seedTrackedThenIgnoredFile is the state above plus the operator's own
+// `git rm -r --cached dir`: the removal staged, the file left on disk. That is
+// the OLD workflow's midpoint, and it is still the fixture for the tests about
+// preserving a pre-staged removal -- but not for the --untrack tests, which
+// must reach the index entry themselves.
+func seedTrackedThenIgnoredFile(t *testing.T) string {
+	t.Helper()
+	dir := seedTrackedThenIgnored(t)
 
 	// The operator's own step 2: stage the removal, keep the file on disk.
 	testutil.GitRaw(t, dir, "rm", "-r", "--cached", "dir")
@@ -54,8 +65,13 @@ func seedTrackedThenIgnoredFile(t *testing.T) string {
 // records both the new .gitignore pattern and the removal of the now-ignored
 // file from tracking. The file is gitignored on purpose -- that is the point of
 // the operation, not a mistake -- and it must stay on disk afterwards.
+//
+// The fixture leaves the index entry in place: --untrack removes it. Seeding
+// with `git rm --cached` first would be the workflow this flag replaces, and it
+// would also hide the notice's decision, since the not-gitignored question has
+// the opposite index-aware answer for a path that is still in the index.
 func TestCommitUntrackGitignoredPath(t *testing.T) {
-	dir := seedTrackedThenIgnoredFile(t)
+	dir := seedTrackedThenIgnored(t)
 
 	stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "untrack",
 		"--untrack", "dir/junk.txt", "--", ".gitignore")
@@ -90,7 +106,7 @@ func TestCommitUntrackGitignoredPath(t *testing.T) {
 // tree change like any other, so it is in the payload's `files` -- which is the
 // changed-path list read off the objects, never a copy of the argument list.
 func TestCommitUntrackGitignoredPathAppearsInThePayload(t *testing.T) {
-	dir := seedTrackedThenIgnoredFile(t)
+	dir := seedTrackedThenIgnored(t)
 
 	stdout, stderr, code := runSafegit(t, dir, "--json", "commit", "-m", "untrack",
 		"--untrack", "dir/junk.txt", "--", ".gitignore")
