@@ -310,8 +310,17 @@ const previewCommitPlaceholder = "<new-commit>"
 type effectsRefUpdate struct{ flags globalFlags }
 
 func (u effectsRefUpdate) Update(_ context.Context, ref, newSHA, expected string) error {
+	// The same contract git.UpdateRef holds, held at the port too. An empty
+	// expected old value is git's spelling for an UNCONDITIONAL write, which is
+	// the opposite of what every ref move in safegit is; a caller that means
+	// "this ref must not exist yet" passes git.ZeroSHA.
+	//
+	// It used to substitute ZeroSHA here, silently turning "I do not know what
+	// is there" into "I assert nothing is there". The pipeline always decides
+	// explicitly, so nothing reached it -- which is exactly why it could not be
+	// left sitting there.
 	if expected == "" {
-		expected = git.ZeroSHA
+		return git.ErrNoExpectedValue
 	}
 	// A preview cannot name the commit it would create, so the record carries
 	// the placeholder; the ref and the expected value are real.
