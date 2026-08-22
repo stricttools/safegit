@@ -370,6 +370,34 @@ existing entries are never rewritten.
   before any push in the observation-failure arms) with the table
   regenerated.
 
+## Phase 4 closing-audit outcome
+
+- All four subphases PASS with independent hand-reproduction of the
+  headline scenarios; the published silent-destruction class is
+  structurally blocked (undeclared changes are unrepresentable past
+  Tier A's intent validation).
+- ORCHESTRATOR RULING (F1, HIGH): Tier A's pattern-absence check scans
+  ONLY the tips the walk actually produced (rewritten tips plus refs in
+  the SHA map) — the plan's "new commit set". A secret surviving on an
+  off-walk ref (another branch, a stale remote-tracking ref) is Tier
+  B's whole-store finding: the rewrite stands, exit 31, and the message
+  names the off-walk refs. The as-audited behavior (hard exit-30
+  refusal naming unwalked objects "of the rewritten history") was
+  implementation overreach past the plan text; no test covered the
+  scenario, which is how it survived. Test added with the fix.
+- Dispatched to the fixer alongside: the submodule-path scrub file
+  acquiring NO rewrite lock (parent lock before delegation plus the
+  submodule's own inside, ordering documented); the discarded
+  RevParse error that silently disables the submodule cleanliness check
+  and journals an empty old_head (die like the siblings); the
+  submodule-side skipped sync invisible to the payload; verify's
+  AddAttribution routing around the scan selection authority; mktree
+  fed non -z input (a path starting with a double quote would
+  mis-parse — Tier A refuses rather than corrupts, but fix the
+  encoding); the untested publishCompanionsAlone branch; two stale
+  comments (rewrite_maps' old Finalize-order narrative; a cited test
+  name that does not exist).
+
 ## Ratified Phase 4 (P4b: 4.3/4.4) decisions
 
 - Stateless verify: input requirement is a PARSER-declared constraint
