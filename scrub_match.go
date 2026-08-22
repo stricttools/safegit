@@ -912,8 +912,14 @@ func scrubMatchExecute(
 
 	// A submodule whose own post-rewrite verification found something is the
 	// same verdict as a parent-side finding: the rewrite stands and the exit
-	// code says so.
+	// code says so. A submodule that skipped its working-tree sync is reported
+	// the same way -- one command, one outcome, whichever repository left its
+	// working tree alone.
+	subSyncSkipped := false
 	for _, sr := range subResults {
+		if sr.SyncSkipped {
+			subSyncSkipped = true
+		}
 		if len(sr.TierBFailures) > 0 {
 			subTierBFailed = true
 		}
@@ -1012,7 +1018,7 @@ func scrubMatchExecute(
 		PreRewriteRemotes: nonNilStringMap(result.PreRewriteRemotes),
 		CleanupOK:         boolPtr(result.CleanupOK),
 		CleanupErrors:     nonNilStrings(result.CleanupErrors),
-		SyncSkipped:       result.SyncSkipped,
+		SyncSkipped:       result.SyncSkipped || subSyncSkipped,
 	})
 
 	// Summary (push hint already printed by Finalize inside executeScrubRecipe)
