@@ -586,3 +586,60 @@ func TestScrubExecuteStillRequiresCleanTree(t *testing.T) {
 		})
 	}
 }
+
+// A preview mutates nothing, so it has nothing to serialize against and must
+// take neither the worktree operation lock nor the per-ref CAS lock. Two
+// properties, pinned together because each alone would miss half of it:
+//
+//   - Nothing is left behind. Every lock file under the safegit directory
+//     after the dry run was already there before it, so a preview cannot
+//     strand a lock for the next contender to wait out or for doctor to
+//     report.
+//   - Nothing was taken DURING the run either. Both locks a real commit takes
+//     are held by this (live) test process for the whole subtest, so a dry run
+//     that tried to acquire either one would wait out the one-second timeout
+//     and exit LockTimeout instead of previewing. A file scan alone could not
+//     see that: a lock taken and released cleanly leaves no trace.
+//
+// The third consequence is the operator-visible one: a preview stays possible
+// while another safegit process owns the worktree.
+func TestDryRunCommitFamilyTakesNoLocks(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{"commit", []string{"--dry-run", "commit", "-m", "previewed", "--", "preview.txt"}},
+		{"amend with files", []string{"--dry-run", "commit", "--amend", "-m", "previewed", "--", "preview.txt"}},
+		{"reword", []string{"--dry-run", "commit", "--amend", "-m", "previewed"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := newRepo(t)
+			// A real commit first: it creates the locks subtree and removes its
+			// own locks again, so the assertion below is about what the dry run
+			// adds rather than about a directory that never existed.
+			testutil.WriteFile(t, dir, "committed.txt", "content\n")
+			safegitCommit(t, dir, "a real commit", "committed.txt")
+			testutil.WriteFile(t, dir, "preview.txt", "to be previewed\n")
+
+			sgDir := filepath.Join(dir, ".git", "safegit")
+			shortLockTimeout(t, dir)
+			holdLock(t, dir, "refs/heads/main", "test-holder")
+			holdLock(t, dir, "safegit/operation", "test-holder")
+			planted := heldLockFiles(t, sgDir)
+			if len(planted) != 2 {
+				t.Fatalf("fixture: expected the two planted locks, got %v", planted)
+			}
+
+			stdout, stderr, code := runSafegit(t, dir, tc.args...)
+			if code != 0 {
+				t.Fatalf("the preview did not run (code %d); a dry run must not contend for a lock.\n  stdout: %s\n  stderr: %s",
+					code, oneLine(stdout), oneLine(stderr))
+			}
+
+			after := heldLockFiles(t, sgDir)
+			if strings.Join(after, "\n") != strings.Join(planted, "\n") {
+				t.Errorf("the dry run changed the set of lock files.\n  before: %v\n  after:  %v", planted, after)
+			}
+		})
+	}
+}
