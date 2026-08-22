@@ -108,6 +108,11 @@
     [
       "git",
       "--no-optional-locks",
+      "diff-index"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
       "diff-tree"
     ],
     [
@@ -368,10 +373,83 @@
       "name": "push",
       "help": "push refs to remote with pre-pre-push hooks and automatic retry",
       "effect": "mutating",
+      "payload_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "atomic": {
+            "type": "boolean"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "force_with_lease": {
+            "type": "boolean"
+          },
+          "pre_pre_push_hooks_run": {
+            "type": "integer"
+          },
+          "pre_pre_push_hooks_skipped": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "refs": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "lease": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "local_ref": {
+                  "type": "string"
+                },
+                "local_sha": {
+                  "type": "string"
+                },
+                "remote_ref": {
+                  "type": "string"
+                },
+                "remote_sha": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "local_ref",
+                "local_sha",
+                "remote_ref",
+                "remote_sha",
+                "lease"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "remote": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "remote",
+          "refs",
+          "force_with_lease",
+          "atomic",
+          "pre_pre_push_hooks_run",
+          "pre_pre_push_hooks_skipped",
+          "dry_run"
+        ],
+        "type": "object"
+      },
       "flags": [
         {
           "name": "pre-push-hook",
-          "help": "run pre-pre-push hook scripts before pushing to remote; omitted means the hooks run",
+          "help": "run pre-pre-push hook scripts before pushing to remote; omitted means the hooks run. Under --dry-run they are never run whatever this says -- a hook is an arbitrary script, so running one is a mutation a preview may not perform -- and the preview says so on stderr and in the payload's pre_pre_push_hooks_skipped member",
           "value_schema": {
             "type": "boolean"
           },
@@ -380,7 +458,7 @@
         },
         {
           "name": "force-with-lease",
-          "help": "force push using --force-with-lease to prevent overwriting others' work; omitted means an ordinary push",
+          "help": "force push, pinning each ref to the SHA safegit just observed on the remote (--force-with-lease=<remoteRef>:<sha>, or the empty expectation for a ref the remote does not have yet), so a ref somebody else moved in the meantime is refused rather than overwritten; forcing is consequential, so it is confirmed at the terminal and --approve-consequential answers it in advance; omitted means an ordinary push",
           "value_schema": {
             "type": "boolean"
           },
@@ -1240,6 +1318,9 @@
                 },
                 "type": "object"
               },
+              "sync_skipped": {
+                "type": "boolean"
+              },
               "tags": {
                 "items": {
                   "additionalProperties": false,
@@ -1422,11 +1503,20 @@
                 },
                 "type": "object"
               },
+              "range": {
+                "enum": [
+                  "range",
+                  "entire_history"
+                ]
+              },
               "rewrites": {
                 "additionalProperties": {
                   "type": "string"
                 },
                 "type": "object"
+              },
+              "sync_skipped": {
+                "type": "boolean"
               },
               "tags": {
                 "items": {
@@ -1464,6 +1554,7 @@
               "dry_run",
               "file",
               "mode",
+              "range",
               "from",
               "commit_count",
               "old_head"
@@ -1471,14 +1562,6 @@
             "type": "object"
           },
           "flags": [
-            {
-              "name": "from",
-              "help": "first commit hash to include when rewriting history",
-              "value_schema": {
-                "type": "string"
-              },
-              "presence": "required"
-            },
             {
               "name": "reason",
               "help": "mandatory audit trail message explaining why this scrub operation is needed",
@@ -1498,6 +1581,58 @@
               },
               "presence": "optional",
               "unique": true
+            },
+            {
+              "name": "mode",
+              "help": "what happens to the file at every commit in range",
+              "presence": "required",
+              "choices": [
+                {
+                  "name": "delete",
+                  "help": "delete the file from every commit in range"
+                },
+                {
+                  "name": "replace-with",
+                  "help": "replace the file's contents with those of a sanitized file",
+                  "flags": [
+                    {
+                      "name": "value",
+                      "help": "path to the file whose contents replace the target in every commit; resolved against YOUR current directory, unlike the target argument, which is repository-relative",
+                      "value_schema": {
+                        "type": "string"
+                      },
+                      "presence": "required"
+                    }
+                  ]
+                }
+              ],
+              "elect_by": "member-flags"
+            },
+            {
+              "name": "range",
+              "help": "how much of the history is rewritten",
+              "presence": "required",
+              "choices": [
+                {
+                  "name": "from",
+                  "help": "rewrite the commits from a given commit forward",
+                  "flags": [
+                    {
+                      "name": "value",
+                      "help": "first commit hash to include when rewriting history",
+                      "value_schema": {
+                        "type": "string"
+                      },
+                      "presence": "required"
+                    }
+                  ]
+                },
+                {
+                  "name": "entire-history",
+                  "help": "rewrite every commit from the root of the repository to HEAD"
+                }
+              ],
+              "elect_by": "member-flags"
             }
           ],
           "args": [
@@ -1593,6 +1728,9 @@
               },
               "scope_filter": {
                 "type": "string"
+              },
+              "sync_skipped": {
+                "type": "boolean"
               },
               "tag_matches": {
                 "type": "integer"
@@ -1889,6 +2027,9 @@
               },
               "shown": {
                 "type": "integer"
+              },
+              "sync_skipped": {
+                "type": "boolean"
               },
               "tags": {
                 "items": {
