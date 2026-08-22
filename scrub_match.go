@@ -1361,6 +1361,28 @@ func isBinaryContent(content []byte) bool {
 // scope glob are considered failures; out-of-scope blobs are expected to still
 // contain the pattern. Non-blob matches (commit messages, tags) are always
 // checked regardless of scope.
+//
+// This is TIER B, and its scope filter is WIDER than Tier A's on purpose --
+// verifyPatternAbsentFromTips filters by the attributed path alone, while this
+// one also consults the scoped-blob set built from every ref. Both halves of
+// that difference are forced:
+//
+//   - attribution records ONE path per blob, and a blob really can sit at
+//     several. Tier A has only that one path to judge by, so a blob whose
+//     recorded path is out of scope while another of its paths is in scope
+//     reads as out of scope there;
+//   - the scoped-blob set cannot be built at Tier A time. It enumerates
+//     `rev-list --all --objects`, which reads the refs as they stand BEFORE the
+//     rewrite is published -- pre-move paths, not the ones the rewrite produced
+//     -- so at Tier A it would answer about the wrong history entirely. Tier B
+//     runs after the refs have moved, where the same enumeration is about the
+//     history that now exists.
+//
+// The asymmetry errs PERMISSIVE at Tier A and strict here, which is the safe
+// direction: a dual-path blob that Tier A lets through is caught by this check
+// instead, so the outcome escalates from a Tier A refusal (exit 30, nothing
+// happened) to a Tier B finding (exit 31, the rewrite stands and is reported
+// incomplete). It never slips through unreported.
 func verifySecretRemovedScoped(ctx context.Context, pattern *regexp.Regexp, scope *string) error {
 	if scope == nil {
 		return verifySecretRemoved(ctx, pattern)
