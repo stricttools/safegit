@@ -450,6 +450,12 @@ func prepareAll(flags globalFlags, rewrites []*pendingRewrite) (string, error) {
 // rather than a parent pointing into a submodule that has not moved yet.
 func publishAll(flags globalFlags, cmd string, rewrites []*pendingRewrite) (string, error) {
 	for _, pr := range rewrites {
+		// Publishing prints the same lines for every repository, so a
+		// multi-repository operation says which one it is about to publish.
+		// The primary rewrite carries no label and needs no heading.
+		if pr.Label != "" {
+			infof(flags, "Publishing the %s rewrite...\n", pr.Label)
+		}
 		if err := pr.Result.publish(pr.Ctx, flags, cmd, pr.Hooks, pr.plan); err != nil {
 			return pr.Label, err
 		}
