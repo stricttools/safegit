@@ -426,7 +426,7 @@
       "args": [
         {
           "name": "ref",
-          "help": "the ref name (e.g. refs/heads/main) whose stale .lock file to remove",
+          "help": "which lock to release: a branch name (main), a full ref (refs/tags/v1), or a tool-owned lock -- safegit/rewrite for the repository-wide history-rewrite lock, safegit/operation for this worktree's operation lock",
           "value_schema": {
             "type": "string"
           },
