@@ -22,11 +22,14 @@ teammates, CI, and code review tools see nothing unusual.
 
 ## Install
 
-From source (requires Go 1.24+):
+From source (requires the Go version `go.mod` declares -- currently 1.25.7):
 
 ```
-go install github.com/smm-h/safegit@latest
+go install github.com/smm-h/safegit@v0
 ```
+
+`@v0`, not `@latest`: safegit issues no 1.x tags, so `@latest` cannot resolve to
+a real release. Pin an exact version (`@v0.28.0`) when you need one.
 
 Pre-built binaries are available on
 [GitHub Releases](https://github.com/smm-h/safegit/releases) via goreleaser.
@@ -39,26 +42,34 @@ safegit commit -m "add feature X" -- src/foo.go src/bar.go
 safegit push --refs head
 ```
 
-safegit auto-initializes on first use (creates `.git/safegit/`).
-Use `safegit doctor --action uninstall` to remove safegit from a repo.
+safegit auto-initializes on first use (creates `.git/safegit/`); a `--dry-run`
+deliberately does not, so previewing in a fresh repository writes nothing at
+all. Use `safegit doctor --action uninstall` to remove safegit from a
+repository -- a repository-wide operation that lists every path it will remove,
+including the state of worktrees other than the one you are standing in, before
+asking you to confirm.
 
 ## Commands
 
 | Command | Description |
 | --- | --- |
 | `commit` | stage and commit specified files in a single atomic operation |
-| `checkout` | checkout a branch or ref with working-tree safety guards |
-| `merge` | merge a branch into HEAD with working-tree safety guards |
-| `rebase` | rebase current branch onto upstream with safety guards |
-| `reset` | reset HEAD with guards that prevent accidental --hard data loss |
-| `bisect` | binary search through commits to find a bug, with safety guards |
+| `mv` | move tracked paths and commit the moves with their records in one operation |
+| `merge-continue` | conclude a merge git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file), and safegit writes the merge commit itself: HEAD plus EVERY MERGE_HEAD line as parents, an octopus merge included; the merge's whole staged result as its tree, so a path the merge staged cleanly is never dropped; git's own message draft with its comment block stripped, or -m; the repository's commit-msg hook run and safegit's trailers injected; and the merge's whole state-file set removed afterwards, so a later commit is not refused. An empty merge needs no flag -- a merge commit records its parents whether or not the tree changed |
+| `cherry-pick-continue` | conclude a cherry-pick git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file). For a SINGLE cherry-pick safegit writes the commit itself: one parent, the AUTHOR preserved from the commit being applied while the committer is you, git's own message draft with its comment block stripped or -m, the repository's commit-msg hook run, and the cherry-pick's state files removed afterwards. A QUEUED sequence -- git cherry-pick with more than one commit -- is DELEGATED instead: safegit stages the same declared resolutions into a copy of the index, runs the same completeness and conflict-marker checks, and then hands the rest of the queue to git's own 'cherry-pick --continue' with that copy as its index, because concluding one step natively would strand the rest of the queue. git authors those commits, so they carry no safegit trailers and 'safegit undo' does not reverse them; -m, --trailer and --dry-run are refused for a queued sequence rather than silently ignored |
+| `revert-continue` | conclude a revert git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file). For a SINGLE revert safegit writes the commit itself: one parent, the AUTHOR preserved from the commit being reverted while the committer is you, git's own message draft with its comment block stripped or -m, the repository's commit-msg hook run, and the revert's state files removed afterwards. Note the stage keywords: a revert applies an INVERSE patch, so theirs is what the reverted commit's parent held -- resolving to theirs keeps the revert, resolving to ours keeps the commit being reverted. A QUEUED sequence -- git revert with more than one commit -- is DELEGATED to git's own 'revert --continue' with safegit's index copy as its index, after the same completeness and conflict-marker checks; git authors those commits, so they carry no safegit trailers and 'safegit undo' does not reverse them, and -m, --trailer and --dry-run are refused for a queued sequence rather than silently ignored |
+| `checkout` | checkout a branch or ref, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work |
+| `merge` | merge a branch into HEAD, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work. A merge git stops on a conflict is concluded by safegit, not by git: 'safegit merge --continue' is refused and names 'safegit merge-continue', which commits the merge's whole staged result with safegit's trailers on it |
+| `rebase` | rebase the current branch onto upstream, guarded twice before git runs: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- and then a check for uncommitted work. A rebase's own --continue and --abort stay git's: safegit has no verb that finishes one |
+| `reset` | reset HEAD with guards that prevent accidental --hard data loss. The worktree operation lock is taken for EVERY reset, because every reset moves HEAD; the uncommitted-work check applies to --hard alone, since only --hard mutates the working tree |
+| `bisect` | binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the tree-moving subcommands (good, bad, old, new, reset, start) |
 | `push` | push refs to remote with pre-pre-push hooks and automatic retry |
-| `pull` | fetch from remote and merge, defaulting to fast-forward-only mode |
+| `pull` | fetch from a remote and merge, with the merge strategy stated explicitly: --merge-strategy is required and has no default, so a pull never depends on git's own configuration to decide whether it may create a merge commit |
 | `doctor` | run diagnostic health checks on the repository and optionally repair issues |
-| `cherry-pick` | cherry-pick one or more commits onto HEAD with safety guards |
-| `revert` | revert one or more commits creating inverse patches, with safety guards |
+| `cherry-pick` | cherry-pick one or more commits onto HEAD, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work. A pick git stops on a conflict is concluded by safegit, not by git: 'safegit cherry-pick --continue' is refused and names 'safegit cherry-pick-continue', which declares each conflicted path with --resolve and then commits -- natively for a single pick, and by delegating the rest of the queue to git for a sequence of them |
+| `revert` | revert one or more commits creating inverse patches, with safety guards. Reverting a SINGLE commit produces a safegit commit: git computes the inverse patch and safegit writes the commit, so it carries safegit's trailers and, when the reverted commit declared moves, the INVERSE of each of those move records. Reverting MORE THAN ONE commit is git's own sequencer and git authors those commits, so they carry no trailers and no records at all -- the asymmetry is deliberate, and it is the same one that governs whether 'safegit undo' can reverse the result |
 | `undo` | reverse the last commit, amend, or reword operation using the oplog |
-| `unlock` | release a stale .lock file left behind by a crashed git process |
+| `unlock` | release one of SAFEGIT'S OWN lock files -- a per-ref lock, this worktree's operation lock, or the repository-wide rewrite lock -- left behind by a safegit process that was killed while holding it. It has nothing to do with git's .git/index.lock or any other lock git takes for itself. A lock whose holder is still alive is refused; ordinarily nothing needs this command, because a stale lock is reclaimed automatically by the next contender and 'safegit doctor --action fix' sweeps them, so it is the last-resort path for a filesystem where that reclamation cannot work |
 | `scan` | search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection |
 | `version` | print safegit version, Go runtime version, and git version |
 | **backup** | push, list, and restore per-branch history backups held in the tool-owned refs/backups namespace on a remote, so uncommitted-to-the-world work survives a lost machine without ever touching refs/heads |
@@ -70,49 +81,73 @@ Use `safegit doctor --action uninstall` to remove safegit from a repo.
 | `config get` | get the current value of a single configuration key from the .git/safegit/config.json file, printing the raw value to stdout so it can be captured by scripts or used in automation pipelines |
 | `config set` | set a configuration key to a new value in the .git/safegit/config.json file, creating the file if it does not exist yet, and persisting the change for all future safegit invocations in this repository |
 | **hook** | manage pre-pre-push hook scripts that run before every push |
-| `hook list` | list all pre-pre-push hooks currently installed in the .git/safegit/hooks directory, showing each hook name, file path, and whether it is executable, so you can audit which checks run before every push |
+| `hook list` | list every pre-pre-push hook location safegit knows about, with its origin, its path and whether it is executable, so you can audit which checks run before every push. Three origins are shown: local, the tool-owned live store under the repository's common .git/safegit/hooks that hook install writes to and every worktree shares; tracked, the hooks the CHECKOUT provides in .safegit/hooks, which run because they are in that directory whether or not git tracks them, so cloning a repository and pushing from that checkout runs the repository's scripts; and legacy, the pre-migration location in git's own .git/hooks, which nothing runs any more and safegit hook migrate relocates. Non-executable and non-hook entries are listed too, because the hook an operator is asking about is usually the one that is NOT running |
 | `hook run` | run all installed pre-pre-push hooks (or a single named hook) immediately without performing an actual push, so you can verify that all configured hooks pass before committing to a real push operation |
-| `hook install` | install a pre-pre-push hook by copying a script file into the .git/safegit/hooks directory, making it executable, and registering it so that safegit push will run it before any network I/O occurs |
+| `hook install` | install a pre-pre-push hook by copying a script file into the live store under the repository's common .git/safegit/hooks directory and making it executable, so that safegit push runs it before any network I/O occurs. The store is keyed on the common git dir, so a hook installed from a linked worktree is the same hook every worktree of the repository runs. An existing destination is refused rather than overwritten |
+| `hook remove` | remove one hook from the tool-owned live store under the repository's common .git/safegit/hooks directory by name, naming either the store-relative path such as pre-pre-push.d/20-lint or just the base name, so a hook can be retired or replaced without deleting files by hand; a name that resolves only to a hook the checkout provides in .safegit/hooks is refused, because removing that one means deleting the file and committing that, and a name carried by both stores removes the live one and says the other still runs |
+| `hook migrate` | move safegit's hooks out of git's own .git/hooks directory into the tool-owned .git/safegit/hooks store, relocating the pre-pre-push file and the pre-pre-push.d directory unconditionally because those two names are the only ones safegit ever wrote there, and reporting success with an explanation when there is nothing to move. Both ends are under the repository's COMMON git dir, which is git's own hook directory in every worktree, so migration run from a linked worktree relocates the repository's hooks |
 | **author** | audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history |
 | `author list` | list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite |
 | `author check` | check that all commits use the expected author and committer identity by scanning every commit in the repository history, reporting any deviations with the exact commit hashes and mismatched fields, and suggesting the corresponding safegit author rewrite command to fix each deviation found |
 | `author rewrite` | rewrite author and committer name or email across all commit history using git filter-branch style rewriting, replacing every occurrence of the old identity with the new one in both author and committer fields while preserving timestamps, commit messages, tree contents, and parent relationships so the rewritten history is otherwise identical to the original |
-| **scrub** | surgically rewrite git history to remove or replace sensitive content using 4 subcommands (file, match, run, verify) that operate on all commits, trees, and blobs in the repository |
-| `scrub file` | replace or remove a specific file across all commits in the repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized version or delete the file entirely from every historical snapshot |
-| `scrub match` | replace all occurrences of a regex pattern across every blob in the repository history, rewriting commit trees to substitute matched text with a replacement string so that sensitive values like secrets and credentials are permanently removed from all historical snapshots |
+| **scrub** | surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store |
+| `scrub file` | replace or remove a specific file across every commit in a SELECTED RANGE of history -- --from <commit> or --entire-history, one of which is required -- rewriting each affected commit tree to either substitute the file's contents with those of a sanitized file or delete it entirely from every snapshot in that range. A --delete also removes the move records naming that path, whole, since the path they refer to is being erased; a --replace-with edits no message, because the path still exists and a record naming it is still true |
+| `scrub match` | replace every occurrence of a regex pattern in the blobs, commit messages and tag annotations of a SELECTED RANGE of history -- --from <sha> or --entire-history, one of which is required -- rewriting commit trees so that sensitive values like secrets and credentials are removed from every snapshot in that range. A move record is rewritten as a record rather than as text: the substitution applies to the decoded paths and the pair is re-encoded, so the output always parses, a pattern written against the escaped spelling matches nothing, and a substitution whose result would no longer be a move is refused before any ref moves |
 | `scrub run` | execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite |
-| `scrub verify` | check all scrub policies defined in the repository configuration to confirm that previously scrubbed secrets and sensitive patterns remain completely absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-policy pass or fail results with match locations for any violations found |
+| `scrub verify` | confirm that the patterns named on the command line -- repeatable --pattern regexes, the operations of a scrub recipe file, or both -- are absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-pattern pass or fail results with match locations for any violations found |
 
 Tree-mutating commands (`checkout`, `pull`, `merge`, `rebase`, `reset`,
 `bisect`, `cherry-pick`, `revert`) are passed through with coordination guards.
+Reverting a single commit is the exception: git computes the inverse patch and
+safegit commits it, so it carries safegit's trailers and `safegit undo` reverses
+it.
+
+When git parks a merge, cherry-pick or revert on a conflict, safegit finishes it
+rather than git: `merge-continue`, `cherry-pick-continue` and `revert-continue`
+take one `--resolve 'path=ours|theirs|worktree|delete'` per conflicted path and
+write the commit themselves, refusing a declaration that does not match the
+conflict or content that still holds a conflict block.
 
 ## How it works
 
-The commit pipeline has two phases. Phase A (parallel-safe) creates a temporary
-index, stages the requested files into it, and builds the tree object -- all
-without touching the shared `.git/index`. Phase B acquires a per-ref lock,
-reads the current tip, creates the commit with that parent, and updates the ref
-using CAS. If the ref moved between read and write, Phase B retries from the
-new tip (re-parenting the commit) with random jitter to avoid thundering-herd
-stampedes under heavy concurrency.
+The commit pipeline has two phases. Phase A (parallel-safe) resolves the tip of
+the target branch, creates a temporary index seeded from it, stages the
+requested files, and builds the tree and commit objects -- all without touching
+the shared `.git/index`. Phase B acquires a per-ref lock, re-reads the tip to
+confirm it has not moved, and updates the ref with a compare-and-swap. If it
+did move, the pipeline retries from Phase A against the new tip (re-parenting
+the commit) with random jitter to avoid thundering-herd stampedes under heavy
+concurrency.
+
+The parent is resolved BEFORE the index rather than after the tree: the other
+order lets another session's commit land in between and produces a commit whose
+tree is based on the old tip but whose parent is the new one, silently dropping
+that session's files.
 
 See [docs/architecture.md](docs/architecture.md) for the full architecture specification.
 
 ## Configuration
 
-Run `safegit config` to view all settings, or `safegit config <key> <value>`
-to change one.
+Run `safegit config show` to view every setting, `safegit config get <key>` to
+read one, and `safegit config set <key> <value>` to change one.
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `commit.casMaxAttempts` | 5 | Max CAS retry attempts for ref updates |
-| `lock.acquireTimeoutSeconds` | 30 | Timeout waiting for a per-ref lock |
+| `commit.autoBumpParent` | (unset, and an unset one is a refusal) | Whether a commit in a submodule also commits the parent's moved gitlink |
+| `lock.acquireTimeoutSeconds` | 30 | Timeout waiting for a lock |
 | `hooks.preprepush.timeoutSeconds` | 1800 | Timeout for pre-pre-push hook execution |
 | `push.retryAttempts` | 3 | Number of push retry attempts |
-| `log.maxSizeMB` | 100 | Max operation log size before rotation |
+
+Those five are the whole key set: anything else is an unknown-key error. There
+is no oplog size or rotation setting -- the operation log is append-only and
+complete by design, and nothing truncates it.
 
 Configuration is stored in `.git/safegit/config.json`. Remove the entire
-`.git/safegit/` directory to return to vanilla git.
+`.git/safegit/` directory to return to vanilla git -- or run `safegit doctor
+--action uninstall`, which does it for the whole repository (every worktree's
+state directory plus the shared store) and enumerates every path before it asks
+for confirmation.
 
 ## Known limitations
 
@@ -120,17 +155,25 @@ Configuration is stored in `.git/safegit/config.json`. Remove the entire
   checks and hostname comparison. On network filesystems (NFS, CIFS), `safegit
   doctor` warns about reduced lock atomicity guarantees. Cross-machine lock
   reclaim is refused when the hostname doesn't match.
-- **PID reuse.** On Linux, safegit records the holder's process start time from
-  `/proc` in the lock file and compares it against the current start time of
-  whatever holds that PID, so a recycled PID is detected and a live holder is
-  never mistaken for one. On other platforms, a reused
-  PID keeps an orphan lock looking alive, and `safegit unlock <ref>` refuses to
-  clear a lock whose holder is alive, so such a lock has to be removed by hand
-  from `.git/safegit/locks/`. Where the holder really is gone, `safegit unlock
-  refs/heads/main` clears the lock.
-- **Linux and macOS only.** Windows is not supported (Unix-only syscalls for
-  locking, signals, process management). WSL (Windows Subsystem for Linux) works
-  since it runs the Linux binary natively.
+- **The filesystem must support hard links and `flock(2)`.** A lock is published
+  by writing its record to a temporary sibling and `link(2)`-ing it into place,
+  so the published file is complete the instant it exists; and a stale lock is
+  reclaimed only under an exclusive `flock` on the lock file, with an inode
+  identity re-check, so two contenders can never both "reclaim" the same lock.
+  Where `flock` does not work, nothing is reclaimed at all: contenders time out
+  and `safegit unlock <name>` is the recovery path.
+- **PID reuse.** On Linux, safegit records the holder's process start identity
+  from `/proc` in the lock file and compares it against the current start time
+  of whatever holds that PID, so a recycled PID is detected and a live holder is
+  never mistaken for one. On other platforms the comparison is unavailable and
+  fails closed: a reused PID keeps an orphan lock looking alive, and `safegit
+  unlock` refuses to clear a lock whose holder appears alive, so such a lock has
+  to be removed by hand from `.git/safegit/locks/`. Where the holder really is
+  gone, `safegit unlock refs/heads/main` clears it.
+- **Linux and macOS only.** Windows is not supported and is not built: the
+  release binaries cover linux and darwin on amd64 and arm64, and safegit uses
+  Unix-only syscalls for locking, signals and process management. WSL (Windows
+  Subsystem for Linux) works, since it runs the Linux binary natively.
 
 ## License
 

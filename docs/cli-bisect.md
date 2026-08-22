@@ -9,6 +9,6 @@ nav_order: 3
 
 # safegit bisect
 
-binary search through commits to find a bug, with safety guards
+binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the tree-moving subcommands (good, bad, old, new, reset, start)
 
 **Effect:** mutating

@@ -9,6 +9,6 @@ nav_order: 5
 
 # safegit cherry-pick
 
-cherry-pick one or more commits onto HEAD with safety guards
+cherry-pick one or more commits onto HEAD, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work. A pick git stops on a conflict is concluded by safegit, not by git: 'safegit cherry-pick --continue' is refused and names 'safegit cherry-pick-continue', which declares each conflicted path with --resolve and then commits -- natively for a single pick, and by delegating the rest of the queue to git for a sequence of them
 
 **Effect:** mutating

@@ -10,25 +10,29 @@ order: 91
 
 # safegit CLI Reference
 
-concurrency-safe git wrapper providing 31 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting
+concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting
 
 Version: :-: var key="project.version"
 
 ## Commands
 
 - [commit](../cli-commit/) -- stage and commit specified files in a single atomic operation
-- [checkout](../cli-checkout/) -- checkout a branch or ref with working-tree safety guards
-- [merge](../cli-merge/) -- merge a branch into HEAD with working-tree safety guards
-- [rebase](../cli-rebase/) -- rebase current branch onto upstream with safety guards
-- [reset](../cli-reset/) -- reset HEAD with guards that prevent accidental --hard data loss
-- [bisect](../cli-bisect/) -- binary search through commits to find a bug, with safety guards
+- [mv](../cli-mv/) -- move tracked paths and commit the moves with their records in one operation
+- [merge-continue](../cli-merge-continue/) -- conclude a merge git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file), and safegit writes the merge commit itself: HEAD plus EVERY MERGE_HEAD line as parents, an octopus merge included; the merge's whole staged result as its tree, so a path the merge staged cleanly is never dropped; git's own message draft with its comment block stripped, or -m; the repository's commit-msg hook run and safegit's trailers injected; and the merge's whole state-file set removed afterwards, so a later commit is not refused. An empty merge needs no flag -- a merge commit records its parents whether or not the tree changed
+- [cherry-pick-continue](../cli-cherry-pick-continue/) -- conclude a cherry-pick git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file). For a SINGLE cherry-pick safegit writes the commit itself: one parent, the AUTHOR preserved from the commit being applied while the committer is you, git's own message draft with its comment block stripped or -m, the repository's commit-msg hook run, and the cherry-pick's state files removed afterwards. A QUEUED sequence -- git cherry-pick with more than one commit -- is DELEGATED instead: safegit stages the same declared resolutions into a copy of the index, runs the same completeness and conflict-marker checks, and then hands the rest of the queue to git's own 'cherry-pick --continue' with that copy as its index, because concluding one step natively would strand the rest of the queue. git authors those commits, so they carry no safegit trailers and 'safegit undo' does not reverse them; -m, --trailer and --dry-run are refused for a queued sequence rather than silently ignored
+- [revert-continue](../cli-revert-continue/) -- conclude a revert git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file). For a SINGLE revert safegit writes the commit itself: one parent, the AUTHOR preserved from the commit being reverted while the committer is you, git's own message draft with its comment block stripped or -m, the repository's commit-msg hook run, and the revert's state files removed afterwards. Note the stage keywords: a revert applies an INVERSE patch, so theirs is what the reverted commit's parent held -- resolving to theirs keeps the revert, resolving to ours keeps the commit being reverted. A QUEUED sequence -- git revert with more than one commit -- is DELEGATED to git's own 'revert --continue' with safegit's index copy as its index, after the same completeness and conflict-marker checks; git authors those commits, so they carry no safegit trailers and 'safegit undo' does not reverse them, and -m, --trailer and --dry-run are refused for a queued sequence rather than silently ignored
+- [checkout](../cli-checkout/) -- checkout a branch or ref, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work
+- [merge](../cli-merge/) -- merge a branch into HEAD, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work. A merge git stops on a conflict is concluded by safegit, not by git: 'safegit merge --continue' is refused and names 'safegit merge-continue', which commits the merge's whole staged result with safegit's trailers on it
+- [rebase](../cli-rebase/) -- rebase the current branch onto upstream, guarded twice before git runs: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- and then a check for uncommitted work. A rebase's own --continue and --abort stay git's: safegit has no verb that finishes one
+- [reset](../cli-reset/) -- reset HEAD with guards that prevent accidental --hard data loss. The worktree operation lock is taken for EVERY reset, because every reset moves HEAD; the uncommitted-work check applies to --hard alone, since only --hard mutates the working tree
+- [bisect](../cli-bisect/) -- binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the tree-moving subcommands (good, bad, old, new, reset, start)
 - [push](../cli-push/) -- push refs to remote with pre-pre-push hooks and automatic retry
-- [pull](../cli-pull/) -- fetch from remote and merge, defaulting to fast-forward-only mode
+- [pull](../cli-pull/) -- fetch from a remote and merge, with the merge strategy stated explicitly: --merge-strategy is required and has no default, so a pull never depends on git's own configuration to decide whether it may create a merge commit
 - [doctor](../cli-doctor/) -- run diagnostic health checks on the repository and optionally repair issues
-- [cherry-pick](../cli-cherry-pick/) -- cherry-pick one or more commits onto HEAD with safety guards
-- [revert](../cli-revert/) -- revert one or more commits creating inverse patches, with safety guards
+- [cherry-pick](../cli-cherry-pick/) -- cherry-pick one or more commits onto HEAD, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work. A pick git stops on a conflict is concluded by safegit, not by git: 'safegit cherry-pick --continue' is refused and names 'safegit cherry-pick-continue', which declares each conflicted path with --resolve and then commits -- natively for a single pick, and by delegating the rest of the queue to git for a sequence of them
+- [revert](../cli-revert/) -- revert one or more commits creating inverse patches, with safety guards. Reverting a SINGLE commit produces a safegit commit: git computes the inverse patch and safegit writes the commit, so it carries safegit's trailers and, when the reverted commit declared moves, the INVERSE of each of those move records. Reverting MORE THAN ONE commit is git's own sequencer and git authors those commits, so they carry no trailers and no records at all -- the asymmetry is deliberate, and it is the same one that governs whether 'safegit undo' can reverse the result
 - [undo](../cli-undo/) -- reverse the last commit, amend, or reword operation using the oplog
-- [unlock](../cli-unlock/) -- release a stale .lock file left behind by a crashed git process
+- [unlock](../cli-unlock/) -- release one of SAFEGIT'S OWN lock files -- a per-ref lock, this worktree's operation lock, or the repository-wide rewrite lock -- left behind by a safegit process that was killed while holding it. It has nothing to do with git's .git/index.lock or any other lock git takes for itself. A lock whose holder is still alive is refused; ordinarily nothing needs this command, because a stale lock is reclaimed automatically by the next contender and 'safegit doctor --action fix' sweeps them, so it is the last-resort path for a filesystem where that reclamation cannot work
 - [scan](../cli-scan/) -- search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection
 - [version](../cli-version/) -- print safegit version, Go runtime version, and git version
 
@@ -38,7 +42,7 @@ Version: :-: var key="project.version"
 - [config](../cli-config/) -- show, get, or set safegit configuration key-value pairs
 - [hook](../cli-hook/) -- manage pre-pre-push hook scripts that run before every push
 - [author](../cli-author/) -- audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history
-- [scrub](../cli-scrub/) -- surgically rewrite git history to remove or replace sensitive content using 4 subcommands (file, match, run, verify) that operate on all commits, trees, and blobs in the repository
+- [scrub](../cli-scrub/) -- surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store
 
 ## Global flags
 

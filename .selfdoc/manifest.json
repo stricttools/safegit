@@ -34,6 +34,11 @@
         },
         {
           "level": 3,
+          "text": "The two hook stores",
+          "anchor": "the-two-hook-stores"
+        },
+        {
+          "level": 3,
           "text": "Per-invocation tmp index",
           "anchor": "per-invocation-tmp-index"
         },
@@ -54,8 +59,13 @@
         },
         {
           "level": 3,
-          "text": "Phase A -- parallel-safe (no locks)",
-          "anchor": "phase-a-parallel-safe-no-locks"
+          "text": "Before either phase (once per invocation)",
+          "anchor": "before-either-phase-once-per-invocation"
+        },
+        {
+          "level": 3,
+          "text": "Phase A -- parallel-safe (no locks), per attempt",
+          "anchor": "phase-a-parallel-safe-no-locks-per-attempt"
         },
         {
           "level": 3,
@@ -74,8 +84,23 @@
         },
         {
           "level": 3,
+          "text": "Stale lock reclamation",
+          "anchor": "stale-lock-reclamation"
+        },
+        {
+          "level": 3,
           "text": "Retry policy",
           "anchor": "retry-policy"
+        },
+        {
+          "level": 3,
+          "text": "Concluding an operation git stopped",
+          "anchor": "concluding-an-operation-git-stopped"
+        },
+        {
+          "level": 2,
+          "text": "Declared moves and their records",
+          "anchor": "declared-moves-and-their-records"
         },
         {
           "level": 2,
@@ -101,11 +126,6 @@
           "level": 3,
           "text": "Edge cases",
           "anchor": "edge-cases"
-        },
-        {
-          "level": 3,
-          "text": "Inverse: unstage",
-          "anchor": "inverse-unstage"
         },
         {
           "level": 2,
@@ -318,6 +338,28 @@
       ]
     },
     {
+      "path": "cli-cherry-pick-continue.md",
+      "title": "safegit cherry-pick-continue",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit cherry-pick-continue",
+          "anchor": "safegit-cherry-pick-continue"
+        },
+        {
+          "level": 2,
+          "text": "Flags",
+          "anchor": "flags"
+        },
+        {
+          "level": 2,
+          "text": "Grants",
+          "anchor": "grants"
+        }
+      ]
+    },
+    {
       "path": "cli-cherry-pick.md",
       "title": "safegit cherry-pick",
       "type": "doc",
@@ -444,6 +486,21 @@
           "level": 3,
           "text": "Arguments",
           "anchor": "arguments-1"
+        },
+        {
+          "level": 2,
+          "text": "hook remove",
+          "anchor": "hook-remove"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-2"
+        },
+        {
+          "level": 2,
+          "text": "hook migrate",
+          "anchor": "hook-migrate"
         }
       ]
     },
@@ -495,6 +552,28 @@
       ]
     },
     {
+      "path": "cli-merge-continue.md",
+      "title": "safegit merge-continue",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit merge-continue",
+          "anchor": "safegit-merge-continue"
+        },
+        {
+          "level": 2,
+          "text": "Flags",
+          "anchor": "flags"
+        },
+        {
+          "level": 2,
+          "text": "Grants",
+          "anchor": "grants"
+        }
+      ]
+    },
+    {
       "path": "cli-merge.md",
       "title": "safegit merge",
       "type": "doc",
@@ -503,6 +582,33 @@
           "level": 1,
           "text": "safegit merge",
           "anchor": "safegit-merge"
+        }
+      ]
+    },
+    {
+      "path": "cli-mv.md",
+      "title": "safegit mv",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit mv",
+          "anchor": "safegit-mv"
+        },
+        {
+          "level": 2,
+          "text": "Flags",
+          "anchor": "flags"
+        },
+        {
+          "level": 2,
+          "text": "Arguments",
+          "anchor": "arguments"
+        },
+        {
+          "level": 2,
+          "text": "Grants",
+          "anchor": "grants"
         }
       ]
     },
@@ -576,6 +682,28 @@
           "level": 1,
           "text": "safegit reset",
           "anchor": "safegit-reset"
+        }
+      ]
+    },
+    {
+      "path": "cli-revert-continue.md",
+      "title": "safegit revert-continue",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit revert-continue",
+          "anchor": "safegit-revert-continue"
+        },
+        {
+          "level": 2,
+          "text": "Flags",
+          "anchor": "flags"
+        },
+        {
+          "level": 2,
+          "text": "Grants",
+          "anchor": "grants"
         }
       ]
     },
@@ -662,6 +790,21 @@
           "level": 2,
           "text": "scrub verify",
           "anchor": "scrub-verify"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-3"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-2"
+        },
+        {
+          "level": 3,
+          "text": "Constraints",
+          "anchor": "constraints"
         }
       ]
     },
@@ -763,8 +906,8 @@
         },
         {
           "level": 2,
-          "text": "undo",
-          "anchor": "undo"
+          "text": "mv",
+          "anchor": "mv"
         },
         {
           "level": 3,
@@ -778,6 +921,21 @@
         },
         {
           "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-1"
+        },
+        {
+          "level": 3,
+          "text": "The three steps: validate, rename, commit",
+          "anchor": "the-three-steps-validate-rename-commit"
+        },
+        {
+          "level": 3,
+          "text": "The commit is the rename and nothing else",
+          "anchor": "the-commit-is-the-rename-and-nothing-else"
+        },
+        {
+          "level": 3,
           "text": "Examples",
           "anchor": "examples-1"
         },
@@ -788,8 +946,53 @@
         },
         {
           "level": 2,
-          "text": "push",
-          "anchor": "push"
+          "text": "The three conclusion commands",
+          "anchor": "the-three-conclusion-commands"
+        },
+        {
+          "level": 3,
+          "text": "Declaring the resolutions",
+          "anchor": "declaring-the-resolutions"
+        },
+        {
+          "level": 3,
+          "text": "Completeness: exit 17",
+          "anchor": "completeness-exit-17"
+        },
+        {
+          "level": 3,
+          "text": "Marker verification: exit 18",
+          "anchor": "marker-verification-exit-18"
+        },
+        {
+          "level": 3,
+          "text": "The message",
+          "anchor": "the-message"
+        },
+        {
+          "level": 3,
+          "text": "Shared flags",
+          "anchor": "shared-flags"
+        },
+        {
+          "level": 3,
+          "text": "Shared refusals",
+          "anchor": "shared-refusals"
+        },
+        {
+          "level": 3,
+          "text": "What a conclusion leaves behind",
+          "anchor": "what-a-conclusion-leaves-behind"
+        },
+        {
+          "level": 3,
+          "text": "`--dry-run`",
+          "anchor": "dry-run"
+        },
+        {
+          "level": 2,
+          "text": "merge-continue",
+          "anchor": "merge-continue"
         },
         {
           "level": 3,
@@ -798,8 +1001,98 @@
         },
         {
           "level": 3,
+          "text": "What the commit is",
+          "anchor": "what-the-commit-is"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-2"
+        },
+        {
+          "level": 2,
+          "text": "cherry-pick-continue",
+          "anchor": "cherry-pick-continue"
+        },
+        {
+          "level": 3,
+          "text": "What the commit is (a SINGLE cherry-pick)",
+          "anchor": "what-the-commit-is-a-single-cherry-pick"
+        },
+        {
+          "level": 3,
+          "text": "A QUEUED sequence is delegated to git",
+          "anchor": "a-queued-sequence-is-delegated-to-git"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-3"
+        },
+        {
+          "level": 2,
+          "text": "revert-continue",
+          "anchor": "revert-continue"
+        },
+        {
+          "level": 3,
+          "text": "What the commit is (a SINGLE revert)",
+          "anchor": "what-the-commit-is-a-single-revert"
+        },
+        {
+          "level": 3,
+          "text": "A QUEUED sequence is delegated to git",
+          "anchor": "a-queued-sequence-is-delegated-to-git-1"
+        },
+        {
+          "level": 3,
+          "text": "Relationship to `safegit revert`",
+          "anchor": "relationship-to-safegit-revert"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-4"
+        },
+        {
+          "level": 2,
+          "text": "undo",
+          "anchor": "undo"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-3"
+        },
+        {
+          "level": 3,
           "text": "Flags",
           "anchor": "flags-2"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-5"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-2"
+        },
+        {
+          "level": 2,
+          "text": "push",
+          "anchor": "push"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-4"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-3"
         },
         {
           "level": 3,
@@ -809,17 +1102,17 @@
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-1"
+          "anchor": "arguments-2"
         },
         {
           "level": 3,
           "text": "Examples",
-          "anchor": "examples-2"
+          "anchor": "examples-6"
         },
         {
           "level": 3,
           "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-2"
+          "anchor": "safety-guarantees-3"
         },
         {
           "level": 3,
@@ -834,27 +1127,27 @@
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-3"
+          "anchor": "when-to-use-5"
         },
         {
           "level": 3,
           "text": "Flags",
-          "anchor": "flags-3"
+          "anchor": "flags-4"
         },
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-2"
+          "anchor": "arguments-3"
         },
         {
           "level": 3,
           "text": "Examples",
-          "anchor": "examples-3"
+          "anchor": "examples-7"
         },
         {
           "level": 3,
           "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-3"
+          "anchor": "safety-guarantees-4"
         },
         {
           "level": 2,
@@ -864,22 +1157,22 @@
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-4"
+          "anchor": "when-to-use-6"
         },
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-3"
+          "anchor": "arguments-4"
         },
         {
           "level": 3,
           "text": "Flags",
-          "anchor": "flags-4"
+          "anchor": "flags-5"
         },
         {
           "level": 3,
           "text": "Examples",
-          "anchor": "examples-4"
+          "anchor": "examples-8"
         },
         {
           "level": 3,
@@ -889,7 +1182,7 @@
         {
           "level": 3,
           "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-4"
+          "anchor": "safety-guarantees-5"
         },
         {
           "level": 3,
@@ -904,22 +1197,22 @@
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-5"
+          "anchor": "when-to-use-7"
         },
         {
           "level": 3,
           "text": "Flags",
-          "anchor": "flags-5"
+          "anchor": "flags-6"
         },
         {
           "level": 3,
           "text": "Examples",
-          "anchor": "examples-5"
+          "anchor": "examples-9"
         },
         {
           "level": 3,
           "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-5"
+          "anchor": "safety-guarantees-6"
         },
         {
           "level": 2,
@@ -929,27 +1222,27 @@
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-6"
+          "anchor": "when-to-use-8"
         },
         {
           "level": 3,
           "text": "Flags",
-          "anchor": "flags-6"
+          "anchor": "flags-7"
         },
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-4"
+          "anchor": "arguments-5"
         },
         {
           "level": 3,
           "text": "Examples",
-          "anchor": "examples-6"
+          "anchor": "examples-10"
         },
         {
           "level": 3,
           "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-6"
+          "anchor": "safety-guarantees-7"
         },
         {
           "level": 2,
@@ -959,12 +1252,12 @@
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-7"
+          "anchor": "when-to-use-9"
         },
         {
           "level": 3,
           "text": "Flags",
-          "anchor": "flags-7"
+          "anchor": "flags-8"
         },
         {
           "level": 3,
@@ -979,12 +1272,12 @@
         {
           "level": 3,
           "text": "Examples",
-          "anchor": "examples-7"
+          "anchor": "examples-11"
         },
         {
           "level": 3,
           "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-7"
+          "anchor": "safety-guarantees-8"
         },
         {
           "level": 2,
@@ -994,12 +1287,12 @@
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-8"
+          "anchor": "when-to-use-10"
         },
         {
           "level": 3,
           "text": "Flags",
-          "anchor": "flags-8"
+          "anchor": "flags-9"
         },
         {
           "level": 3,
@@ -1009,7 +1302,7 @@
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-5"
+          "anchor": "arguments-6"
         },
         {
           "level": 3,
@@ -1019,12 +1312,12 @@
         {
           "level": 3,
           "text": "Examples",
-          "anchor": "examples-8"
+          "anchor": "examples-12"
         },
         {
           "level": 3,
           "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-8"
+          "anchor": "safety-guarantees-9"
         },
         {
           "level": 2,
@@ -1034,22 +1327,27 @@
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-9"
+          "anchor": "when-to-use-11"
         },
         {
           "level": 3,
-          "text": "Flags",
-          "anchor": "flags-9"
+          "text": "Flags and Arguments",
+          "anchor": "flags-and-arguments"
         },
         {
           "level": 3,
           "text": "Examples",
-          "anchor": "examples-9"
+          "anchor": "examples-13"
+        },
+        {
+          "level": 3,
+          "text": "Exit Codes",
+          "anchor": "exit-codes-2"
         },
         {
           "level": 3,
           "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-9"
+          "anchor": "safety-guarantees-10"
         },
         {
           "level": 2,
@@ -1059,7 +1357,7 @@
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-10"
+          "anchor": "when-to-use-12"
         },
         {
           "level": 3,
@@ -1073,8 +1371,13 @@
         },
         {
           "level": 3,
+          "text": "Uninstall is repository-wide",
+          "anchor": "uninstall-is-repository-wide"
+        },
+        {
+          "level": 3,
           "text": "Examples",
-          "anchor": "examples-10"
+          "anchor": "examples-14"
         },
         {
           "level": 3,
@@ -1089,102 +1392,7 @@
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-11"
-        },
-        {
-          "level": 3,
-          "text": "Arguments",
-          "anchor": "arguments-6"
-        },
-        {
-          "level": 3,
-          "text": "Examples",
-          "anchor": "examples-11"
-        },
-        {
-          "level": 3,
-          "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-10"
-        },
-        {
-          "level": 2,
-          "text": "author list",
-          "anchor": "author-list"
-        },
-        {
-          "level": 3,
-          "text": "When to Use",
-          "anchor": "when-to-use-12"
-        },
-        {
-          "level": 3,
-          "text": "Examples",
-          "anchor": "examples-12"
-        },
-        {
-          "level": 3,
-          "text": "Output Format",
-          "anchor": "output-format"
-        },
-        {
-          "level": 2,
-          "text": "author check",
-          "anchor": "author-check"
-        },
-        {
-          "level": 3,
-          "text": "When to Use",
           "anchor": "when-to-use-13"
-        },
-        {
-          "level": 3,
-          "text": "Flags",
-          "anchor": "flags-10"
-        },
-        {
-          "level": 3,
-          "text": "Examples",
-          "anchor": "examples-13"
-        },
-        {
-          "level": 2,
-          "text": "author rewrite",
-          "anchor": "author-rewrite"
-        },
-        {
-          "level": 3,
-          "text": "When to Use",
-          "anchor": "when-to-use-14"
-        },
-        {
-          "level": 3,
-          "text": "Flags",
-          "anchor": "flags-11"
-        },
-        {
-          "level": 3,
-          "text": "Constraints",
-          "anchor": "constraints"
-        },
-        {
-          "level": 3,
-          "text": "Examples",
-          "anchor": "examples-14"
-        },
-        {
-          "level": 3,
-          "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-11"
-        },
-        {
-          "level": 2,
-          "text": "checkout",
-          "anchor": "checkout"
-        },
-        {
-          "level": 3,
-          "text": "When to Use",
-          "anchor": "when-to-use-15"
         },
         {
           "level": 3,
@@ -1199,22 +1407,17 @@
         {
           "level": 3,
           "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-12"
+          "anchor": "safety-guarantees-11"
         },
         {
           "level": 2,
-          "text": "merge",
-          "anchor": "merge"
+          "text": "author list",
+          "anchor": "author-list"
         },
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-16"
-        },
-        {
-          "level": 3,
-          "text": "Arguments",
-          "anchor": "arguments-8"
+          "anchor": "when-to-use-14"
         },
         {
           "level": 3,
@@ -1223,23 +1426,23 @@
         },
         {
           "level": 3,
-          "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-13"
+          "text": "Output Format",
+          "anchor": "output-format"
         },
         {
           "level": 2,
-          "text": "rebase",
-          "anchor": "rebase"
+          "text": "author check",
+          "anchor": "author-check"
         },
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-17"
+          "anchor": "when-to-use-15"
         },
         {
           "level": 3,
-          "text": "Arguments",
-          "anchor": "arguments-9"
+          "text": "Flags",
+          "anchor": "flags-10"
         },
         {
           "level": 3,
@@ -1247,24 +1450,24 @@
           "anchor": "examples-17"
         },
         {
-          "level": 3,
-          "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-14"
-        },
-        {
           "level": 2,
-          "text": "reset",
-          "anchor": "reset"
+          "text": "author rewrite",
+          "anchor": "author-rewrite"
         },
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-18"
+          "anchor": "when-to-use-16"
         },
         {
           "level": 3,
-          "text": "Arguments",
-          "anchor": "arguments-10"
+          "text": "Flags",
+          "anchor": "flags-11"
+        },
+        {
+          "level": 3,
+          "text": "Constraints",
+          "anchor": "constraints"
         },
         {
           "level": 3,
@@ -1274,22 +1477,27 @@
         {
           "level": 3,
           "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-15"
+          "anchor": "safety-guarantees-12"
         },
         {
           "level": 2,
-          "text": "bisect",
-          "anchor": "bisect"
+          "text": "The guarded passthroughs and their two coordination layers",
+          "anchor": "the-guarded-passthroughs-and-their-two-coordination-layers"
+        },
+        {
+          "level": 2,
+          "text": "checkout",
+          "anchor": "checkout"
         },
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-19"
+          "anchor": "when-to-use-17"
         },
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-11"
+          "anchor": "arguments-8"
         },
         {
           "level": 3,
@@ -1299,22 +1507,22 @@
         {
           "level": 3,
           "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-16"
+          "anchor": "safety-guarantees-13"
         },
         {
           "level": 2,
-          "text": "cherry-pick",
-          "anchor": "cherry-pick"
+          "text": "merge",
+          "anchor": "merge"
         },
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-20"
+          "anchor": "when-to-use-18"
         },
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-12"
+          "anchor": "arguments-9"
         },
         {
           "level": 3,
@@ -1324,22 +1532,22 @@
         {
           "level": 3,
           "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-17"
+          "anchor": "safety-guarantees-14"
         },
         {
           "level": 2,
-          "text": "revert",
-          "anchor": "revert"
+          "text": "rebase",
+          "anchor": "rebase"
         },
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-21"
+          "anchor": "when-to-use-19"
         },
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-13"
+          "anchor": "arguments-10"
         },
         {
           "level": 3,
@@ -1349,12 +1557,22 @@
         {
           "level": 3,
           "text": "Safety Guarantees",
-          "anchor": "safety-guarantees-18"
+          "anchor": "safety-guarantees-15"
         },
         {
           "level": 2,
-          "text": "config show",
-          "anchor": "config-show"
+          "text": "reset",
+          "anchor": "reset"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-20"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-11"
         },
         {
           "level": 3,
@@ -1362,9 +1580,69 @@
           "anchor": "examples-22"
         },
         {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-16"
+        },
+        {
           "level": 2,
-          "text": "config get",
-          "anchor": "config-get"
+          "text": "bisect",
+          "anchor": "bisect"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-21"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-12"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-23"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-17"
+        },
+        {
+          "level": 2,
+          "text": "cherry-pick",
+          "anchor": "cherry-pick"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-22"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-13"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-24"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-18"
+        },
+        {
+          "level": 2,
+          "text": "revert",
+          "anchor": "revert"
+        },
+        {
+          "level": 3,
+          "text": "When to Use",
+          "anchor": "when-to-use-23"
         },
         {
           "level": 3,
@@ -1374,12 +1652,32 @@
         {
           "level": 3,
           "text": "Examples",
-          "anchor": "examples-23"
+          "anchor": "examples-25"
+        },
+        {
+          "level": 3,
+          "text": "One commit is safegit's; more than one is git's",
+          "anchor": "one-commit-is-safegits-more-than-one-is-gits"
+        },
+        {
+          "level": 3,
+          "text": "Safety Guarantees",
+          "anchor": "safety-guarantees-19"
         },
         {
           "level": 2,
-          "text": "config set",
-          "anchor": "config-set"
+          "text": "config show",
+          "anchor": "config-show"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-26"
+        },
+        {
+          "level": 2,
+          "text": "config get",
+          "anchor": "config-get"
         },
         {
           "level": 3,
@@ -1389,22 +1687,12 @@
         {
           "level": 3,
           "text": "Examples",
-          "anchor": "examples-24"
+          "anchor": "examples-27"
         },
         {
           "level": 2,
-          "text": "hook list",
-          "anchor": "hook-list"
-        },
-        {
-          "level": 3,
-          "text": "Examples",
-          "anchor": "examples-25"
-        },
-        {
-          "level": 2,
-          "text": "hook run",
-          "anchor": "hook-run"
+          "text": "config set",
+          "anchor": "config-set"
         },
         {
           "level": 3,
@@ -1414,7 +1702,37 @@
         {
           "level": 3,
           "text": "Examples",
-          "anchor": "examples-26"
+          "anchor": "examples-28"
+        },
+        {
+          "level": 2,
+          "text": "hook list",
+          "anchor": "hook-list"
+        },
+        {
+          "level": 3,
+          "text": "The three origins",
+          "anchor": "the-three-origins"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-29"
+        },
+        {
+          "level": 2,
+          "text": "hook run",
+          "anchor": "hook-run"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-17"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-30"
         },
         {
           "level": 3,
@@ -1429,12 +1747,42 @@
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-17"
+          "anchor": "arguments-18"
         },
         {
           "level": 3,
           "text": "Examples",
-          "anchor": "examples-27"
+          "anchor": "examples-31"
+        },
+        {
+          "level": 2,
+          "text": "hook remove",
+          "anchor": "hook-remove"
+        },
+        {
+          "level": 3,
+          "text": "Arguments",
+          "anchor": "arguments-19"
+        },
+        {
+          "level": 3,
+          "text": "The two stores are not symmetric here",
+          "anchor": "the-two-stores-are-not-symmetric-here"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-32"
+        },
+        {
+          "level": 2,
+          "text": "hook migrate",
+          "anchor": "hook-migrate"
+        },
+        {
+          "level": 3,
+          "text": "Examples",
+          "anchor": "examples-33"
         },
         {
           "level": 2,
@@ -1444,7 +1792,7 @@
         {
           "level": 3,
           "text": "Examples",
-          "anchor": "examples-28"
+          "anchor": "examples-34"
         },
         {
           "level": 2,
@@ -1485,18 +1833,33 @@
         },
         {
           "level": 3,
-          "text": "`ExitCASExhausted`",
-          "anchor": "exitcasexhausted"
+          "text": "`IndexBaseParentTree`",
+          "anchor": "indexbaseparenttree"
         },
         {
           "level": 3,
-          "text": "`ExitWriteTree`",
-          "anchor": "exitwritetree"
+          "text": "`IndexBaseSharedIndex`",
+          "anchor": "indexbasesharedindex"
         },
         {
           "level": 3,
-          "text": "`ExitCommitTree`",
-          "anchor": "exitcommittree"
+          "text": "`IndexEditBlob`",
+          "anchor": "indexeditblob"
+        },
+        {
+          "level": 3,
+          "text": "`IndexEditWorktree`",
+          "anchor": "indexeditworktree"
+        },
+        {
+          "level": 3,
+          "text": "`IndexEditRemove`",
+          "anchor": "indexeditremove"
+        },
+        {
+          "level": 3,
+          "text": "`ErrTreeUnchanged`",
+          "anchor": "errtreeunchanged"
         },
         {
           "level": 3,
@@ -1540,8 +1903,48 @@
         },
         {
           "level": 3,
+          "text": "`IndexBase`",
+          "anchor": "indexbase"
+        },
+        {
+          "level": 3,
           "text": "`CommitResult`",
           "anchor": "commitresult"
+        },
+        {
+          "level": 3,
+          "text": "`IndexEditKind`",
+          "anchor": "indexeditkind"
+        },
+        {
+          "level": 3,
+          "text": "`IndexEdit`",
+          "anchor": "indexedit"
+        },
+        {
+          "level": 3,
+          "text": "`RefUpdate`",
+          "anchor": "refupdate"
+        },
+        {
+          "level": 3,
+          "text": "`NativeHooks`",
+          "anchor": "nativehooks"
+        },
+        {
+          "level": 3,
+          "text": "`ApplyIndexEditsTo`",
+          "anchor": "applyindexeditsto"
+        },
+        {
+          "level": 3,
+          "text": "`CanonicalRel`",
+          "anchor": "canonicalrel"
+        },
+        {
+          "level": 3,
+          "text": "`BeginPreview`",
+          "anchor": "beginpreview"
         },
         {
           "level": 3,
@@ -1557,6 +1960,11 @@
           "level": 3,
           "text": "`CommitError.Error`",
           "anchor": "commiterrorerror"
+        },
+        {
+          "level": 3,
+          "text": "`CommitError.Unwrap`",
+          "anchor": "commiterrorunwrap"
         },
         {
           "level": 3,
@@ -1590,6 +1998,11 @@
         },
         {
           "level": 3,
+          "text": "`NewFromFile`",
+          "anchor": "newfromfile"
+        },
+        {
+          "level": 3,
           "text": "`GarbageCollect`",
           "anchor": "garbagecollect"
         },
@@ -1615,13 +2028,58 @@
         },
         {
           "level": 3,
+          "text": "`RewriteRef`",
+          "anchor": "rewriteref"
+        },
+        {
+          "level": 3,
+          "text": "`OperationRef`",
+          "anchor": "operationref"
+        },
+        {
+          "level": 3,
           "text": "`RefLock`",
           "anchor": "reflock"
         },
         {
           "level": 3,
+          "text": "`TimeoutError`",
+          "anchor": "timeouterror"
+        },
+        {
+          "level": 3,
+          "text": "`ReleasePending`",
+          "anchor": "releasepending"
+        },
+        {
+          "level": 3,
+          "text": "`IsTimeout`",
+          "anchor": "istimeout"
+        },
+        {
+          "level": 3,
+          "text": "`Path`",
+          "anchor": "path"
+        },
+        {
+          "level": 3,
+          "text": "`NameFromPath`",
+          "anchor": "namefrompath"
+        },
+        {
+          "level": 3,
           "text": "`Acquire`",
           "anchor": "acquire"
+        },
+        {
+          "level": 3,
+          "text": "`IsLockFile`",
+          "anchor": "islockfile"
+        },
+        {
+          "level": 3,
+          "text": "`IsPublicationTemp`",
+          "anchor": "ispublicationtemp"
         },
         {
           "level": 3,
@@ -1637,6 +2095,16 @@
           "level": 3,
           "text": "`ParsePID`",
           "anchor": "parsepid"
+        },
+        {
+          "level": 3,
+          "text": "`ReclaimIfStale`",
+          "anchor": "reclaimifstale"
+        },
+        {
+          "level": 3,
+          "text": "`TimeoutError.Error`",
+          "anchor": "timeouterrorerror"
         },
         {
           "level": 3,
@@ -1660,8 +2128,18 @@
         },
         {
           "level": 3,
-          "text": "Stale lock recovery",
-          "anchor": "stale-lock-recovery"
+          "text": "Atomic publication",
+          "anchor": "atomic-publication"
+        },
+        {
+          "level": 3,
+          "text": "Stale lock reclamation",
+          "anchor": "stale-lock-reclamation"
+        },
+        {
+          "level": 3,
+          "text": "Release is identity-checked too",
+          "anchor": "release-is-identity-checked-too"
         },
         {
           "level": 3,
@@ -1690,6 +2168,26 @@
         },
         {
           "level": 3,
+          "text": "`AttrUnspecified`",
+          "anchor": "attrunspecified"
+        },
+        {
+          "level": 3,
+          "text": "`StyleMerge`",
+          "anchor": "stylemerge"
+        },
+        {
+          "level": 3,
+          "text": "`StyleDiff3`",
+          "anchor": "stylediff3"
+        },
+        {
+          "level": 3,
+          "text": "`StyleZdiff3`",
+          "anchor": "stylezdiff3"
+        },
+        {
+          "level": 3,
           "text": "`ZeroSHA`",
           "anchor": "zerosha"
         },
@@ -1702,6 +2200,26 @@
           "level": 3,
           "text": "`ErrNoExpectedValue`",
           "anchor": "errnoexpectedvalue"
+        },
+        {
+          "level": 3,
+          "text": "`UnmergedEntry`",
+          "anchor": "unmergedentry"
+        },
+        {
+          "level": 3,
+          "text": "`ConflictStyle`",
+          "anchor": "conflictstyle"
+        },
+        {
+          "level": 3,
+          "text": "`MergeFileOptions`",
+          "anchor": "mergefileoptions"
+        },
+        {
+          "level": 3,
+          "text": "`CommitIdentity`",
+          "anchor": "commitidentity"
         },
         {
           "level": 3,
@@ -1720,6 +2238,11 @@
         },
         {
           "level": 3,
+          "text": "`ChangedPath`",
+          "anchor": "changedpath"
+        },
+        {
+          "level": 3,
           "text": "`ObjectEntry`",
           "anchor": "objectentry"
         },
@@ -1730,6 +2253,66 @@
         },
         {
           "level": 3,
+          "text": "`CommitMessage`",
+          "anchor": "commitmessage"
+        },
+        {
+          "level": 3,
+          "text": "`IndexStage0`",
+          "anchor": "indexstage0"
+        },
+        {
+          "level": 3,
+          "text": "`MergeTreeResult`",
+          "anchor": "mergetreeresult"
+        },
+        {
+          "level": 3,
+          "text": "`UnmergedStages`",
+          "anchor": "unmergedstages"
+        },
+        {
+          "level": 3,
+          "text": "`IndexEntries`",
+          "anchor": "indexentries"
+        },
+        {
+          "level": 3,
+          "text": "`IndexPathsChangedFrom`",
+          "anchor": "indexpathschangedfrom"
+        },
+        {
+          "level": 3,
+          "text": "`AbbrevSHA`",
+          "anchor": "abbrevsha"
+        },
+        {
+          "level": 3,
+          "text": "`CheckAttr`",
+          "anchor": "checkattr"
+        },
+        {
+          "level": 3,
+          "text": "`ParseConflictStyle`",
+          "anchor": "parseconflictstyle"
+        },
+        {
+          "level": 3,
+          "text": "`MergeFile`",
+          "anchor": "mergefile"
+        },
+        {
+          "level": 3,
+          "text": "`StripComments`",
+          "anchor": "stripcomments"
+        },
+        {
+          "level": 3,
+          "text": "`ConfigGet`",
+          "anchor": "configget"
+        },
+        {
+          "level": 3,
           "text": "`WithDir`",
           "anchor": "withdir"
         },
@@ -1737,6 +2320,11 @@
           "level": 3,
           "text": "`WithRoot`",
           "anchor": "withroot"
+        },
+        {
+          "level": 3,
+          "text": "`Version`",
+          "anchor": "version"
         },
         {
           "level": 3,
@@ -1772,6 +2360,16 @@
           "level": 3,
           "text": "`GitDir`",
           "anchor": "gitdir"
+        },
+        {
+          "level": 3,
+          "text": "`ObjectsDir`",
+          "anchor": "objectsdir"
+        },
+        {
+          "level": 3,
+          "text": "`HooksDir`",
+          "anchor": "hooksdir"
         },
         {
           "level": 3,
@@ -1820,6 +2418,11 @@
         },
         {
           "level": 3,
+          "text": "`DropFromIndex`",
+          "anchor": "dropfromindex"
+        },
+        {
+          "level": 3,
           "text": "`IsTracked`",
           "anchor": "istracked"
         },
@@ -1835,11 +2438,6 @@
         },
         {
           "level": 3,
-          "text": "`SyncMainIndex`",
-          "anchor": "syncmainindex"
-        },
-        {
-          "level": 3,
           "text": "`SyncMainIndexWithWorktree`",
           "anchor": "syncmainindexwithworktree"
         },
@@ -1847,6 +2445,16 @@
           "level": 3,
           "text": "`RunPassthrough`",
           "anchor": "runpassthrough"
+        },
+        {
+          "level": 3,
+          "text": "`RunPassthroughWithEnv`",
+          "anchor": "runpassthroughwithenv"
+        },
+        {
+          "level": 3,
+          "text": "`RunPassthroughTo`",
+          "anchor": "runpassthroughto"
         },
         {
           "level": 3,
@@ -1865,13 +2473,23 @@
         },
         {
           "level": 3,
+          "text": "`MatchesIgnoreRules`",
+          "anchor": "matchesignorerules"
+        },
+        {
+          "level": 3,
           "text": "`IsAncestorOf`",
           "anchor": "isancestorof"
         },
         {
           "level": 3,
-          "text": "`CommitMessage`",
-          "anchor": "commitmessage"
+          "text": "`FirstParentRange`",
+          "anchor": "firstparentrange"
+        },
+        {
+          "level": 3,
+          "text": "`ConfiguredAuthor`",
+          "anchor": "configuredauthor"
         },
         {
           "level": 3,
@@ -1880,13 +2498,23 @@
         },
         {
           "level": 3,
-          "text": "`CommitTreeWithAuthor`",
-          "anchor": "committreewithauthor"
+          "text": "`LsTreeAll`",
+          "anchor": "lstreeall"
         },
         {
           "level": 3,
-          "text": "`LsTreeAll`",
-          "anchor": "lstreeall"
+          "text": "`LsTreeRecursive`",
+          "anchor": "lstreerecursive"
+        },
+        {
+          "level": 3,
+          "text": "`DiffTree`",
+          "anchor": "difftree"
+        },
+        {
+          "level": 3,
+          "text": "`FilterIgnored`",
+          "anchor": "filterignored"
         },
         {
           "level": 3,
@@ -1895,18 +2523,18 @@
         },
         {
           "level": 3,
-          "text": "`HashObject`",
-          "anchor": "hashobject"
-        },
-        {
-          "level": 3,
-          "text": "`HashObjectWrite`",
-          "anchor": "hashobjectwrite"
+          "text": "`HashObjectBytes`",
+          "anchor": "hashobjectbytes"
         },
         {
           "level": 3,
           "text": "`HashObjectWriteBytes`",
           "anchor": "hashobjectwritebytes"
+        },
+        {
+          "level": 3,
+          "text": "`HashObjectWriteTag`",
+          "anchor": "hashobjectwritetag"
         },
         {
           "level": 3,
@@ -1955,8 +2583,38 @@
         },
         {
           "level": 3,
+          "text": "`ReachableMessages`",
+          "anchor": "reachablemessages"
+        },
+        {
+          "level": 3,
           "text": "`LsRemoteBulk`",
           "anchor": "lsremotebulk"
+        },
+        {
+          "level": 3,
+          "text": "`AdoptIndexFrom`",
+          "anchor": "adoptindexfrom"
+        },
+        {
+          "level": 3,
+          "text": "`ReconcileMainIndex`",
+          "anchor": "reconcilemainindex"
+        },
+        {
+          "level": 3,
+          "text": "`SetIndexStage0`",
+          "anchor": "setindexstage0"
+        },
+        {
+          "level": 3,
+          "text": "`MergeTree`",
+          "anchor": "mergetree"
+        },
+        {
+          "level": 3,
+          "text": "`RequireFeature`",
+          "anchor": "requirefeature"
         },
         {
           "level": 3,
@@ -1986,7 +2644,7 @@
         {
           "level": 3,
           "text": "`Path`",
-          "anchor": "path"
+          "anchor": "path-1"
         },
         {
           "level": 3,
@@ -2002,11 +2660,6 @@
           "level": 3,
           "text": "`LastRefUpdate`",
           "anchor": "lastrefupdate"
-        },
-        {
-          "level": 3,
-          "text": "`LastRefUpdateForSession`",
-          "anchor": "lastrefupdateforsession"
         },
         {
           "level": 3,
@@ -2030,13 +2683,53 @@
         },
         {
           "level": 3,
+          "text": "`SequencerContext`",
+          "anchor": "sequencercontext"
+        },
+        {
+          "level": 3,
+          "text": "`WayOut`",
+          "anchor": "wayout"
+        },
+        {
+          "level": 3,
+          "text": "`InFlightError`",
+          "anchor": "inflighterror"
+        },
+        {
+          "level": 3,
           "text": "`Check`",
           "anchor": "check"
         },
         {
           "level": 3,
+          "text": "`WayOutOf`",
+          "anchor": "wayoutof"
+        },
+        {
+          "level": 3,
+          "text": "`RefuseInFlight`",
+          "anchor": "refuseinflight"
+        },
+        {
+          "level": 3,
+          "text": "`GuardInFlight`",
+          "anchor": "guardinflight"
+        },
+        {
+          "level": 3,
           "text": "`DirtyState.Refuse`",
           "anchor": "dirtystaterefuse"
+        },
+        {
+          "level": 3,
+          "text": "`InFlightError.Error`",
+          "anchor": "inflighterrorerror"
+        },
+        {
+          "level": 3,
+          "text": "The worktree operation lock",
+          "anchor": "the-worktree-operation-lock"
         },
         {
           "level": 2,
@@ -2050,8 +2743,188 @@
         },
         {
           "level": 3,
+          "text": "`MovedKey`",
+          "anchor": "movedkey"
+        },
+        {
+          "level": 3,
+          "text": "`MovedRetractKey`",
+          "anchor": "movedretractkey"
+        },
+        {
+          "level": 3,
+          "text": "`NoOverlap`",
+          "anchor": "nooverlap"
+        },
+        {
+          "level": 3,
+          "text": "`SameSource`",
+          "anchor": "samesource"
+        },
+        {
+          "level": 3,
+          "text": "`SameDestination`",
+          "anchor": "samedestination"
+        },
+        {
+          "level": 3,
+          "text": "`Chained`",
+          "anchor": "chained"
+        },
+        {
+          "level": 3,
           "text": "`SessionKey`",
           "anchor": "sessionkey"
+        },
+        {
+          "level": 3,
+          "text": "`Record`",
+          "anchor": "record"
+        },
+        {
+          "level": 3,
+          "text": "`Moves`",
+          "anchor": "moves"
+        },
+        {
+          "level": 3,
+          "text": "`KV`",
+          "anchor": "kv"
+        },
+        {
+          "level": 3,
+          "text": "`Tree`",
+          "anchor": "tree"
+        },
+        {
+          "level": 3,
+          "text": "`PathSet`",
+          "anchor": "pathset"
+        },
+        {
+          "level": 3,
+          "text": "`Commit`",
+          "anchor": "commit"
+        },
+        {
+          "level": 3,
+          "text": "`Hop`",
+          "anchor": "hop"
+        },
+        {
+          "level": 3,
+          "text": "`Projection`",
+          "anchor": "projection"
+        },
+        {
+          "level": 3,
+          "text": "`Pair`",
+          "anchor": "pair"
+        },
+        {
+          "level": 3,
+          "text": "`OverlapKind`",
+          "anchor": "overlapkind"
+        },
+        {
+          "level": 3,
+          "text": "`RecordTransformError`",
+          "anchor": "recordtransformerror"
+        },
+        {
+          "level": 3,
+          "text": "`EncodePair`",
+          "anchor": "encodepair"
+        },
+        {
+          "level": 3,
+          "text": "`ParsePair`",
+          "anchor": "parsepair"
+        },
+        {
+          "level": 3,
+          "text": "`ValidatePair`",
+          "anchor": "validatepair"
+        },
+        {
+          "level": 3,
+          "text": "`EncodeRecord`",
+          "anchor": "encoderecord"
+        },
+        {
+          "level": 3,
+          "text": "`RecordLine`",
+          "anchor": "recordline"
+        },
+        {
+          "level": 3,
+          "text": "`RetractLine`",
+          "anchor": "retractline"
+        },
+        {
+          "level": 3,
+          "text": "`ParseRecord`",
+          "anchor": "parserecord"
+        },
+        {
+          "level": 3,
+          "text": "`NewRecord`",
+          "anchor": "newrecord"
+        },
+        {
+          "level": 3,
+          "text": "`ReadMoves`",
+          "anchor": "readmoves"
+        },
+        {
+          "level": 3,
+          "text": "`MovedLines`",
+          "anchor": "movedlines"
+        },
+        {
+          "level": 3,
+          "text": "`Trailers`",
+          "anchor": "trailers"
+        },
+        {
+          "level": 3,
+          "text": "`ParseTrailerBlock`",
+          "anchor": "parsetrailerblock"
+        },
+        {
+          "level": 3,
+          "text": "`NewPathSet`",
+          "anchor": "newpathset"
+        },
+        {
+          "level": 3,
+          "text": "`Forward`",
+          "anchor": "forward"
+        },
+        {
+          "level": 3,
+          "text": "`RetractedIDs`",
+          "anchor": "retractedids"
+        },
+        {
+          "level": 3,
+          "text": "`Nests`",
+          "anchor": "nests"
+        },
+        {
+          "level": 3,
+          "text": "`Overlap`",
+          "anchor": "overlap"
+        },
+        {
+          "level": 3,
+          "text": "`RemoveMovedRecordsNaming`",
+          "anchor": "removemovedrecordsnaming"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteMessage`",
+          "anchor": "rewritemessage"
         },
         {
           "level": 3,
@@ -2072,6 +2945,56 @@
           "level": 3,
           "text": "`ReplaceIdentity`",
           "anchor": "replaceidentity"
+        },
+        {
+          "level": 3,
+          "text": "`NewID`",
+          "anchor": "newid"
+        },
+        {
+          "level": 3,
+          "text": "`ValidID`",
+          "anchor": "validid"
+        },
+        {
+          "level": 3,
+          "text": "`Record.Subtree`",
+          "anchor": "recordsubtree"
+        },
+        {
+          "level": 3,
+          "text": "`Record.OldPrefix`",
+          "anchor": "recordoldprefix"
+        },
+        {
+          "level": 3,
+          "text": "`Record.NewPrefix`",
+          "anchor": "recordnewprefix"
+        },
+        {
+          "level": 3,
+          "text": "`PathSet.Has`",
+          "anchor": "pathsethas"
+        },
+        {
+          "level": 3,
+          "text": "`PathSet.HasUnder`",
+          "anchor": "pathsethasunder"
+        },
+        {
+          "level": 3,
+          "text": "`Record.Names`",
+          "anchor": "recordnames"
+        },
+        {
+          "level": 3,
+          "text": "`RecordTransformError.Error`",
+          "anchor": "recordtransformerrorerror"
+        },
+        {
+          "level": 3,
+          "text": "`RecordTransformError.Unwrap`",
+          "anchor": "recordtransformerrorunwrap"
         },
         {
           "level": 2,
@@ -2115,6 +3038,11 @@
         },
         {
           "level": 3,
+          "text": "`UninstallTarget`",
+          "anchor": "uninstalltarget"
+        },
+        {
+          "level": 3,
           "text": "`DefaultConfig`",
           "anchor": "defaultconfig"
         },
@@ -2122,6 +3050,11 @@
           "level": 3,
           "text": "`SafegitDir`",
           "anchor": "safegitdir"
+        },
+        {
+          "level": 3,
+          "text": "`SharedGitDir`",
+          "anchor": "sharedgitdir"
         },
         {
           "level": 3,
@@ -2150,6 +3083,11 @@
         },
         {
           "level": 3,
+          "text": "`UninstallPlan`",
+          "anchor": "uninstallplan"
+        },
+        {
+          "level": 3,
           "text": "`LoadConfig`",
           "anchor": "loadconfig"
         },
@@ -2167,16 +3105,6 @@
           "level": 3,
           "text": "`ConfigPath`",
           "anchor": "configpath"
-        },
-        {
-          "level": 3,
-          "text": "`SaveConfigTo`",
-          "anchor": "saveconfigto"
-        },
-        {
-          "level": 3,
-          "text": "`SaveConfig`",
-          "anchor": "saveconfig"
         },
         {
           "level": 3,
@@ -2280,6 +3208,11 @@
         },
         {
           "level": 3,
+          "text": "`NewFromFile`",
+          "anchor": "newfromfile-1"
+        },
+        {
+          "level": 3,
           "text": "`GarbageCollect`",
           "anchor": "garbagecollect-1"
         },
@@ -2292,6 +3225,328 @@
           "level": 3,
           "text": "`TmpIndex.Cleanup`",
           "anchor": "tmpindexcleanup-1"
+        }
+      ]
+    },
+    {
+      "path": "divergences.md",
+      "title": "Where safegit follows git, and where it deliberately does not",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "Where safegit follows git, and where it deliberately does not",
+          "anchor": "where-safegit-follows-git-and-where-it-deliberately-does-not"
+        },
+        {
+          "level": 2,
+          "text": "What is in here",
+          "anchor": "what-is-in-here"
+        },
+        {
+          "level": 2,
+          "text": "Committing",
+          "anchor": "committing"
+        },
+        {
+          "level": 3,
+          "text": "The commit command names its files; there is no staging area",
+          "anchor": "the-commit-command-names-its-files-there-is-no-staging-area"
+        },
+        {
+          "level": 3,
+          "text": "An argument that changes nothing is a refusal",
+          "anchor": "an-argument-that-changes-nothing-is-a-refusal"
+        },
+        {
+          "level": 3,
+          "text": "An explicitly named gitignored path is refused, and there is no override",
+          "anchor": "an-explicitly-named-gitignored-path-is-refused-and-there-is-no-override"
+        },
+        {
+          "level": 3,
+          "text": "Directory expansion stops at a nested repository",
+          "anchor": "directory-expansion-stops-at-a-nested-repository"
+        },
+        {
+          "level": 3,
+          "text": "A symlink whose target leaves the repository is committed, with a notice",
+          "anchor": "a-symlink-whose-target-leaves-the-repository-is-committed-with-a-notice"
+        },
+        {
+          "level": 3,
+          "text": "`--untrack` removes the index entry and leaves the file on disk",
+          "anchor": "untrack-removes-the-index-entry-and-leaves-the-file-on-disk"
+        },
+        {
+          "level": 3,
+          "text": "Repeated `-m` values join with a blank line",
+          "anchor": "repeated-m-values-join-with-a-blank-line"
+        },
+        {
+          "level": 3,
+          "text": "No editor, anywhere",
+          "anchor": "no-editor-anywhere"
+        },
+        {
+          "level": 3,
+          "text": "Grammar is never decided by what is on disk",
+          "anchor": "grammar-is-never-decided-by-what-is-on-disk"
+        },
+        {
+          "level": 3,
+          "text": "Committing in a submodule refuses until the parent has decided about the gitlink",
+          "anchor": "committing-in-a-submodule-refuses-until-the-parent-has-decided-about-the-gitlink"
+        },
+        {
+          "level": 3,
+          "text": "An empty commit is refused; an empty merge is not",
+          "anchor": "an-empty-commit-is-refused-an-empty-merge-is-not"
+        },
+        {
+          "level": 2,
+          "text": "Where the working directory reaches",
+          "anchor": "where-the-working-directory-reaches"
+        },
+        {
+          "level": 3,
+          "text": "The working directory scopes arguments, never the operation",
+          "anchor": "the-working-directory-scopes-arguments-never-the-operation"
+        },
+        {
+          "level": 3,
+          "text": "`--resolve` paths are repository-relative while commit positionals are not",
+          "anchor": "resolve-paths-are-repository-relative-while-commit-positionals-are-not"
+        },
+        {
+          "level": 2,
+          "text": "Concluding an operation git stopped",
+          "anchor": "concluding-an-operation-git-stopped"
+        },
+        {
+          "level": 3,
+          "text": "safegit concludes a stopped merge, cherry-pick and revert; `git <verb> --continue` is refused",
+          "anchor": "safegit-concludes-a-stopped-merge-cherry-pick-and-revert-git-ltverbgt-continue-is-refused"
+        },
+        {
+          "level": 3,
+          "text": "A rebase's and a mailbox application's `--continue` stay git's",
+          "anchor": "a-rebases-and-a-mailbox-applications-continue-stay-gits"
+        },
+        {
+          "level": 3,
+          "text": "Conclusion commits are pipeline-authored; a queued sequence stays git-authored",
+          "anchor": "conclusion-commits-are-pipeline-authored-a-queued-sequence-stays-git-authored"
+        },
+        {
+          "level": 3,
+          "text": "A single `safegit revert` is split at git's own seam",
+          "anchor": "a-single-safegit-revert-is-split-at-gits-own-seam"
+        },
+        {
+          "level": 3,
+          "text": "Resolution keywords write the working tree",
+          "anchor": "resolution-keywords-write-the-working-tree"
+        },
+        {
+          "level": 3,
+          "text": "Every conflicted path must be declared, and nothing else may be",
+          "anchor": "every-conflicted-path-must-be-declared-and-nothing-else-may-be"
+        },
+        {
+          "level": 3,
+          "text": "Conflict markers are verified before the commit exists",
+          "anchor": "conflict-markers-are-verified-before-the-commit-exists"
+        },
+        {
+          "level": 3,
+          "text": "A revert authors as the operator; a cherry-pick preserves the source author",
+          "anchor": "a-revert-authors-as-the-operator-a-cherry-pick-preserves-the-source-author"
+        },
+        {
+          "level": 3,
+          "text": "A lone `AUTO_MERGE` file is residue, not evidence",
+          "anchor": "a-lone-auto_merge-file-is-residue-not-evidence"
+        },
+        {
+          "level": 3,
+          "text": "A detached HEAD is refused, with the exact way back",
+          "anchor": "a-detached-head-is-refused-with-the-exact-way-back"
+        },
+        {
+          "level": 2,
+          "text": "Moves and renames",
+          "anchor": "moves-and-renames"
+        },
+        {
+          "level": 3,
+          "text": "Moves are declared; blob equality never decides anything",
+          "anchor": "moves-are-declared-blob-equality-never-decides-anything"
+        },
+        {
+          "level": 3,
+          "text": "`safegit mv` commits the rename and nothing else",
+          "anchor": "safegit-mv-commits-the-rename-and-nothing-else"
+        },
+        {
+          "level": 3,
+          "text": "`safegit mv` creates a missing destination directory",
+          "anchor": "safegit-mv-creates-a-missing-destination-directory"
+        },
+        {
+          "level": 3,
+          "text": "`safegit undo` of a move reverses the commit, not the files",
+          "anchor": "safegit-undo-of-a-move-reverses-the-commit-not-the-files"
+        },
+        {
+          "level": 2,
+          "text": "Hooks",
+          "anchor": "hooks"
+        },
+        {
+          "level": 3,
+          "text": "git's commit hooks run, in git's order, once per operation",
+          "anchor": "gits-commit-hooks-run-in-gits-order-once-per-operation"
+        },
+        {
+          "level": 3,
+          "text": "`prepare-commit-msg` never runs, and `doctor` says so",
+          "anchor": "prepare-commit-msg-never-runs-and-doctor-says-so"
+        },
+        {
+          "level": 3,
+          "text": "The `commit-msg` hook sees the operator's message; safegit's trailer goes on after",
+          "anchor": "the-commit-msg-hook-sees-the-operators-message-safegits-trailer-goes-on-after"
+        },
+        {
+          "level": 3,
+          "text": "Each commit writes its own message file, never `.git/COMMIT_EDITMSG`",
+          "anchor": "each-commit-writes-its-own-message-file-never-gitcommit_editmsg"
+        },
+        {
+          "level": 3,
+          "text": "Hook output goes to stderr, whatever the hook wrote it to",
+          "anchor": "hook-output-goes-to-stderr-whatever-the-hook-wrote-it-to"
+        },
+        {
+          "level": 3,
+          "text": "Hooks the checkout provides are executed on push",
+          "anchor": "hooks-the-checkout-provides-are-executed-on-push"
+        },
+        {
+          "level": 3,
+          "text": "A non-executable hook: skipped when it is local, refused when the checkout provides it",
+          "anchor": "a-non-executable-hook-skipped-when-it-is-local-refused-when-the-checkout-provides-it"
+        },
+        {
+          "level": 3,
+          "text": "Hooks left in the pre-migration location are a refusal, not a fallback",
+          "anchor": "hooks-left-in-the-pre-migration-location-are-a-refusal-not-a-fallback"
+        },
+        {
+          "level": 2,
+          "text": "Output channels, exit codes and previews",
+          "anchor": "output-channels-exit-codes-and-previews"
+        },
+        {
+          "level": 3,
+          "text": "Passthrough commands exit with git's own exit code",
+          "anchor": "passthrough-commands-exit-with-gits-own-exit-code"
+        },
+        {
+          "level": 3,
+          "text": "Every other exit code comes from one registry",
+          "anchor": "every-other-exit-code-comes-from-one-registry"
+        },
+        {
+          "level": 3,
+          "text": "stdout is a structured channel",
+          "anchor": "stdout-is-a-structured-channel"
+        },
+        {
+          "level": 3,
+          "text": "`--dry-run` is uniform, and refused where it would lie",
+          "anchor": "dry-run-is-uniform-and-refused-where-it-would-lie"
+        },
+        {
+          "level": 2,
+          "text": "Safety and consent",
+          "anchor": "safety-and-consent"
+        },
+        {
+          "level": 3,
+          "text": "No bare `--force`, anywhere",
+          "anchor": "no-bare-force-anywhere"
+        },
+        {
+          "level": 3,
+          "text": "Consent is per-condition, and `--json` never grants it",
+          "anchor": "consent-is-per-condition-and-json-never-grants-it"
+        },
+        {
+          "level": 3,
+          "text": "Prompts go to stderr, and `--quiet` never hides one",
+          "anchor": "prompts-go-to-stderr-and-quiet-never-hides-one"
+        },
+        {
+          "level": 3,
+          "text": "A push declares which refs it pushes",
+          "anchor": "a-push-declares-which-refs-it-pushes"
+        },
+        {
+          "level": 3,
+          "text": "A pull declares its merge strategy",
+          "anchor": "a-pull-declares-its-merge-strategy"
+        },
+        {
+          "level": 2,
+          "text": "Publishing",
+          "anchor": "publishing"
+        },
+        {
+          "level": 3,
+          "text": "Leases are pinned per ref to a SHA safegit observed",
+          "anchor": "leases-are-pinned-per-ref-to-a-sha-safegit-observed"
+        },
+        {
+          "level": 3,
+          "text": "Every multi-ref push is atomic",
+          "anchor": "every-multi-ref-push-is-atomic"
+        },
+        {
+          "level": 3,
+          "text": "A push retries a transport failure, never a verdict",
+          "anchor": "a-push-retries-a-transport-failure-never-a-verdict"
+        },
+        {
+          "level": 3,
+          "text": "Backups live in a tool-owned namespace and are ancestry-checked",
+          "anchor": "backups-live-in-a-tool-owned-namespace-and-are-ancestry-checked"
+        },
+        {
+          "level": 2,
+          "text": "Rewriting history, undo, and searching",
+          "anchor": "rewriting-history-undo-and-searching"
+        },
+        {
+          "level": 3,
+          "text": "A rewrite range must be an ancestor of HEAD",
+          "anchor": "a-rewrite-range-must-be-an-ancestor-of-head"
+        },
+        {
+          "level": 3,
+          "text": "A rewrite is verified before any ref moves",
+          "anchor": "a-rewrite-is-verified-before-any-ref-moves"
+        },
+        {
+          "level": 3,
+          "text": "`undo` refuses to move a branch past a commit safegit did not create",
+          "anchor": "undo-refuses-to-move-a-branch-past-a-commit-safegit-did-not-create"
+        },
+        {
+          "level": 3,
+          "text": "`scan` reads what git's own search cannot reach",
+          "anchor": "scan-reads-what-gits-own-search-cannot-reach"
         }
       ]
     },
@@ -2329,8 +3584,23 @@
         },
         {
           "level": 3,
-          "text": "`ScrubVerifyPolicyResult`",
-          "anchor": "scrubverifypolicyresult"
+          "text": "`IntentUnset`",
+          "anchor": "intentunset"
+        },
+        {
+          "level": 3,
+          "text": "`IntentPerPath`",
+          "anchor": "intentperpath"
+        },
+        {
+          "level": 3,
+          "text": "`IntentIdentityOnly`",
+          "anchor": "intentidentityonly"
+        },
+        {
+          "level": 3,
+          "text": "`ScrubVerifyPatternResult`",
+          "anchor": "scrubverifypatternresult"
         },
         {
           "level": 3,
@@ -2354,8 +3624,28 @@
         },
         {
           "level": 3,
+          "text": "`RefUpdatePlan`",
+          "anchor": "refupdateplan"
+        },
+        {
+          "level": 3,
           "text": "`RewriteAuthorResult`",
           "anchor": "rewriteauthorresult"
+        },
+        {
+          "level": 3,
+          "text": "`IntendedChange`",
+          "anchor": "intendedchange"
+        },
+        {
+          "level": 3,
+          "text": "`IntentKind`",
+          "anchor": "intentkind"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteIntent`",
+          "anchor": "rewriteintent"
         },
         {
           "level": 3,
@@ -2374,13 +3664,18 @@
         },
         {
           "level": 3,
-          "text": "`AnnotationRewriteFunc`",
-          "anchor": "annotationrewritefunc"
+          "text": "`TierAFunc`",
+          "anchor": "tierafunc"
         },
         {
           "level": 3,
-          "text": "`VerifyFunc`",
-          "anchor": "verifyfunc"
+          "text": "`TierBFunc`",
+          "anchor": "tierbfunc"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteHooks`",
+          "anchor": "rewritehooks"
         },
         {
           "level": 3,
@@ -2411,11 +3706,6 @@
           "level": 3,
           "text": "`ScrubMatchResult`",
           "anchor": "scrubmatchresult"
-        },
-        {
-          "level": 3,
-          "text": "`ScrubPolicy`",
-          "anchor": "scrubpolicy"
         },
         {
           "level": 3,
@@ -2459,8 +3749,78 @@
         },
         {
           "level": 3,
+          "text": "`PerPathIntent`",
+          "anchor": "perpathintent"
+        },
+        {
+          "level": 3,
+          "text": "`IdentityIntent`",
+          "anchor": "identityintent"
+        },
+        {
+          "level": 3,
+          "text": "`effectsRefUpdate.Update`",
+          "anchor": "effectsrefupdateupdate"
+        },
+        {
+          "level": 3,
+          "text": "`remoteReadError.Error`",
+          "anchor": "remotereaderrorerror"
+        },
+        {
+          "level": 3,
+          "text": "`remoteReadError.Unwrap`",
+          "anchor": "remotereaderrorunwrap"
+        },
+        {
+          "level": 3,
+          "text": "`IntendedChange.Empty`",
+          "anchor": "intendedchangeempty"
+        },
+        {
+          "level": 3,
+          "text": "`IntendedChange.PathList`",
+          "anchor": "intendedchangepathlist"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteIntent.Declare`",
+          "anchor": "rewriteintentdeclare"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteIntent.ChangedCommits`",
+          "anchor": "rewriteintentchangedcommits"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteIntent.For`",
+          "anchor": "rewriteintentfor"
+        },
+        {
+          "level": 3,
+          "text": "`rewriteRefusal.Error`",
+          "anchor": "rewriterefusalerror"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteResult.TierBExit`",
+          "anchor": "rewriteresulttierbexit"
+        },
+        {
+          "level": 3,
           "text": "`RewriteResult.Finalize`",
           "anchor": "rewriteresultfinalize"
+        },
+        {
+          "level": 3,
+          "text": "`gitArgs.Has`",
+          "anchor": "gitargshas"
+        },
+        {
+          "level": 3,
+          "text": "`gitArgs.Find`",
+          "anchor": "gitargsfind"
         }
       ]
     },
@@ -2493,6 +3853,11 @@
           "level": 3,
           "text": "Restricted operations",
           "anchor": "restricted-operations"
+        },
+        {
+          "level": 3,
+          "text": "Concluding an operation git stopped",
+          "anchor": "concluding-an-operation-git-stopped"
         },
         {
           "level": 2,
@@ -2623,18 +3988,33 @@
         },
         {
           "level": 3,
-          "text": "`ExitCASExhausted`",
-          "anchor": "exitcasexhausted"
+          "text": "`IndexBaseParentTree`",
+          "anchor": "indexbaseparenttree"
         },
         {
           "level": 3,
-          "text": "`ExitWriteTree`",
-          "anchor": "exitwritetree"
+          "text": "`IndexBaseSharedIndex`",
+          "anchor": "indexbasesharedindex"
         },
         {
           "level": 3,
-          "text": "`ExitCommitTree`",
-          "anchor": "exitcommittree"
+          "text": "`IndexEditBlob`",
+          "anchor": "indexeditblob"
+        },
+        {
+          "level": 3,
+          "text": "`IndexEditWorktree`",
+          "anchor": "indexeditworktree"
+        },
+        {
+          "level": 3,
+          "text": "`IndexEditRemove`",
+          "anchor": "indexeditremove"
+        },
+        {
+          "level": 3,
+          "text": "`ErrTreeUnchanged`",
+          "anchor": "errtreeunchanged"
         },
         {
           "level": 3,
@@ -2678,8 +4058,48 @@
         },
         {
           "level": 3,
+          "text": "`IndexBase`",
+          "anchor": "indexbase"
+        },
+        {
+          "level": 3,
           "text": "`CommitResult`",
           "anchor": "commitresult"
+        },
+        {
+          "level": 3,
+          "text": "`IndexEditKind`",
+          "anchor": "indexeditkind"
+        },
+        {
+          "level": 3,
+          "text": "`IndexEdit`",
+          "anchor": "indexedit"
+        },
+        {
+          "level": 3,
+          "text": "`RefUpdate`",
+          "anchor": "refupdate"
+        },
+        {
+          "level": 3,
+          "text": "`NativeHooks`",
+          "anchor": "nativehooks"
+        },
+        {
+          "level": 3,
+          "text": "`ApplyIndexEditsTo`",
+          "anchor": "applyindexeditsto"
+        },
+        {
+          "level": 3,
+          "text": "`CanonicalRel`",
+          "anchor": "canonicalrel"
+        },
+        {
+          "level": 3,
+          "text": "`BeginPreview`",
+          "anchor": "beginpreview"
         },
         {
           "level": 3,
@@ -2698,8 +4118,135 @@
         },
         {
           "level": 3,
+          "text": "`CommitError.Unwrap`",
+          "anchor": "commiterrorunwrap"
+        },
+        {
+          "level": 3,
           "text": "`Pipeline.Execute`",
           "anchor": "pipelineexecute"
+        }
+      ]
+    },
+    {
+      "path": "internal-conflict.md",
+      "title": "internal/conflict",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/conflict",
+          "anchor": "internalconflict"
+        },
+        {
+          "level": 2,
+          "text": "`internal/conflict`",
+          "anchor": "internalconflict"
+        },
+        {
+          "level": 3,
+          "text": "`DefaultMarkerSize`",
+          "anchor": "defaultmarkersize"
+        },
+        {
+          "level": 3,
+          "text": "`MarkerSizeAttr`",
+          "anchor": "markersizeattr"
+        },
+        {
+          "level": 3,
+          "text": "`ConflictStyleKey`",
+          "anchor": "conflictstylekey"
+        },
+        {
+          "level": 3,
+          "text": "`AutoMergeRef`",
+          "anchor": "automergeref"
+        },
+        {
+          "level": 3,
+          "text": "`Attrs`",
+          "anchor": "attrs"
+        },
+        {
+          "level": 3,
+          "text": "`Sides`",
+          "anchor": "sides"
+        },
+        {
+          "level": 3,
+          "text": "`Labels`",
+          "anchor": "labels"
+        },
+        {
+          "level": 3,
+          "text": "`Region`",
+          "anchor": "region"
+        },
+        {
+          "level": 3,
+          "text": "`Resolve`",
+          "anchor": "resolve"
+        },
+        {
+          "level": 3,
+          "text": "`Style`",
+          "anchor": "style"
+        },
+        {
+          "level": 3,
+          "text": "`Stages`",
+          "anchor": "stages"
+        },
+        {
+          "level": 3,
+          "text": "`AutoMergeTree`",
+          "anchor": "automergetree"
+        },
+        {
+          "level": 3,
+          "text": "`AutoMergeBlob`",
+          "anchor": "automergeblob"
+        },
+        {
+          "level": 3,
+          "text": "`MergeLabels`",
+          "anchor": "mergelabels"
+        },
+        {
+          "level": 3,
+          "text": "`PickLabels`",
+          "anchor": "picklabels"
+        },
+        {
+          "level": 3,
+          "text": "`RevertLabels`",
+          "anchor": "revertlabels"
+        },
+        {
+          "level": 3,
+          "text": "`Describe`",
+          "anchor": "describe"
+        },
+        {
+          "level": 3,
+          "text": "`Reconstruct`",
+          "anchor": "reconstruct"
+        },
+        {
+          "level": 3,
+          "text": "`Regions`",
+          "anchor": "regions"
+        },
+        {
+          "level": 3,
+          "text": "`ContainsRegion`",
+          "anchor": "containsregion"
+        },
+        {
+          "level": 3,
+          "text": "`Sides.ContentConflict`",
+          "anchor": "sidescontentconflict"
         }
       ]
     },
@@ -2725,13 +4272,260 @@
         },
         {
           "level": 3,
+          "text": "`SequencerContext`",
+          "anchor": "sequencercontext"
+        },
+        {
+          "level": 3,
+          "text": "`WayOut`",
+          "anchor": "wayout"
+        },
+        {
+          "level": 3,
+          "text": "`InFlightError`",
+          "anchor": "inflighterror"
+        },
+        {
+          "level": 3,
           "text": "`Check`",
           "anchor": "check"
         },
         {
           "level": 3,
+          "text": "`WayOutOf`",
+          "anchor": "wayoutof"
+        },
+        {
+          "level": 3,
+          "text": "`RefuseInFlight`",
+          "anchor": "refuseinflight"
+        },
+        {
+          "level": 3,
+          "text": "`GuardInFlight`",
+          "anchor": "guardinflight"
+        },
+        {
+          "level": 3,
           "text": "`DirtyState.Refuse`",
           "anchor": "dirtystaterefuse"
+        },
+        {
+          "level": 3,
+          "text": "`InFlightError.Error`",
+          "anchor": "inflighterrorerror"
+        }
+      ]
+    },
+    {
+      "path": "internal-exitcode.md",
+      "title": "internal/exitcode",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/exitcode",
+          "anchor": "internalexitcode"
+        },
+        {
+          "level": 2,
+          "text": "`internal/exitcode`",
+          "anchor": "internalexitcode"
+        },
+        {
+          "level": 3,
+          "text": "Standing rule for the redesign campaign",
+          "anchor": "standing-rule-for-the-redesign-campaign"
+        },
+        {
+          "level": 3,
+          "text": "What the framework owns",
+          "anchor": "what-the-framework-owns"
+        },
+        {
+          "level": 3,
+          "text": "`DocBeginMarker`",
+          "anchor": "docbeginmarker"
+        },
+        {
+          "level": 3,
+          "text": "`DocEndMarker`",
+          "anchor": "docendmarker"
+        },
+        {
+          "level": 3,
+          "text": "`DocPath`",
+          "anchor": "docpath"
+        },
+        {
+          "level": 3,
+          "text": "`OK`",
+          "anchor": "ok"
+        },
+        {
+          "level": 3,
+          "text": "`General`",
+          "anchor": "general"
+        },
+        {
+          "level": 3,
+          "text": "`Usage`",
+          "anchor": "usage"
+        },
+        {
+          "level": 3,
+          "text": "`NoRepository`",
+          "anchor": "norepository"
+        },
+        {
+          "level": 3,
+          "text": "`NotInitialized`",
+          "anchor": "notinitialized"
+        },
+        {
+          "level": 3,
+          "text": "`CoordinationBusy`",
+          "anchor": "coordinationbusy"
+        },
+        {
+          "level": 3,
+          "text": "`CASExhausted`",
+          "anchor": "casexhausted"
+        },
+        {
+          "level": 3,
+          "text": "`LockTimeout`",
+          "anchor": "locktimeout"
+        },
+        {
+          "level": 3,
+          "text": "`WriteTree`",
+          "anchor": "writetree"
+        },
+        {
+          "level": 3,
+          "text": "`CommitTree`",
+          "anchor": "committree"
+        },
+        {
+          "level": 3,
+          "text": "`PathMatchedNothing`",
+          "anchor": "pathmatchednothing"
+        },
+        {
+          "level": 3,
+          "text": "`BinaryHunkSpec`",
+          "anchor": "binaryhunkspec"
+        },
+        {
+          "level": 3,
+          "text": "`SymlinkHunkSpec`",
+          "anchor": "symlinkhunkspec"
+        },
+        {
+          "level": 3,
+          "text": "`CommitHookRejected`",
+          "anchor": "commithookrejected"
+        },
+        {
+          "level": 3,
+          "text": "`ConclusionUnresolved`",
+          "anchor": "conclusionunresolved"
+        },
+        {
+          "level": 3,
+          "text": "`ConclusionMarkerSurvived`",
+          "anchor": "conclusionmarkersurvived"
+        },
+        {
+          "level": 3,
+          "text": "`MoveNotBorneOut`",
+          "anchor": "movenotborneout"
+        },
+        {
+          "level": 3,
+          "text": "`PushHookFailed`",
+          "anchor": "pushhookfailed"
+        },
+        {
+          "level": 3,
+          "text": "`PushHookTimeout`",
+          "anchor": "pushhooktimeout"
+        },
+        {
+          "level": 3,
+          "text": "`BackupDiverged`",
+          "anchor": "backupdiverged"
+        },
+        {
+          "level": 3,
+          "text": "`BackupNoSlot`",
+          "anchor": "backupnoslot"
+        },
+        {
+          "level": 3,
+          "text": "`HooksNotMigrated`",
+          "anchor": "hooksnotmigrated"
+        },
+        {
+          "level": 3,
+          "text": "`TrackedHookNotExecutable`",
+          "anchor": "trackedhooknotexecutable"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteRefused`",
+          "anchor": "rewriterefused"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteIncomplete`",
+          "anchor": "rewriteincomplete"
+        },
+        {
+          "level": 3,
+          "text": "`PushFailed`",
+          "anchor": "pushfailed"
+        },
+        {
+          "level": 3,
+          "text": "`PushLeaseRejected`",
+          "anchor": "pushleaserejected"
+        },
+        {
+          "level": 3,
+          "text": "`DoctorFindings`",
+          "anchor": "doctorfindings"
+        },
+        {
+          "level": 3,
+          "text": "`Internal`",
+          "anchor": "internal"
+        },
+        {
+          "level": 3,
+          "text": "`Entry`",
+          "anchor": "entry"
+        },
+        {
+          "level": 3,
+          "text": "`RenderDocument`",
+          "anchor": "renderdocument"
+        },
+        {
+          "level": 3,
+          "text": "`All`",
+          "anchor": "all"
+        },
+        {
+          "level": 3,
+          "text": "`Defined`",
+          "anchor": "defined"
+        },
+        {
+          "level": 3,
+          "text": "`MarkdownTable`",
+          "anchor": "markdowntable"
         }
       ]
     },
@@ -2774,6 +4568,26 @@
         },
         {
           "level": 3,
+          "text": "`AttrUnspecified`",
+          "anchor": "attrunspecified"
+        },
+        {
+          "level": 3,
+          "text": "`StyleMerge`",
+          "anchor": "stylemerge"
+        },
+        {
+          "level": 3,
+          "text": "`StyleDiff3`",
+          "anchor": "stylediff3"
+        },
+        {
+          "level": 3,
+          "text": "`StyleZdiff3`",
+          "anchor": "stylezdiff3"
+        },
+        {
+          "level": 3,
           "text": "`ZeroSHA`",
           "anchor": "zerosha"
         },
@@ -2786,6 +4600,26 @@
           "level": 3,
           "text": "`ErrNoExpectedValue`",
           "anchor": "errnoexpectedvalue"
+        },
+        {
+          "level": 3,
+          "text": "`UnmergedEntry`",
+          "anchor": "unmergedentry"
+        },
+        {
+          "level": 3,
+          "text": "`ConflictStyle`",
+          "anchor": "conflictstyle"
+        },
+        {
+          "level": 3,
+          "text": "`MergeFileOptions`",
+          "anchor": "mergefileoptions"
+        },
+        {
+          "level": 3,
+          "text": "`CommitIdentity`",
+          "anchor": "commitidentity"
         },
         {
           "level": 3,
@@ -2804,6 +4638,11 @@
         },
         {
           "level": 3,
+          "text": "`ChangedPath`",
+          "anchor": "changedpath"
+        },
+        {
+          "level": 3,
           "text": "`ObjectEntry`",
           "anchor": "objectentry"
         },
@@ -2814,6 +4653,66 @@
         },
         {
           "level": 3,
+          "text": "`CommitMessage`",
+          "anchor": "commitmessage"
+        },
+        {
+          "level": 3,
+          "text": "`IndexStage0`",
+          "anchor": "indexstage0"
+        },
+        {
+          "level": 3,
+          "text": "`MergeTreeResult`",
+          "anchor": "mergetreeresult"
+        },
+        {
+          "level": 3,
+          "text": "`UnmergedStages`",
+          "anchor": "unmergedstages"
+        },
+        {
+          "level": 3,
+          "text": "`IndexEntries`",
+          "anchor": "indexentries"
+        },
+        {
+          "level": 3,
+          "text": "`IndexPathsChangedFrom`",
+          "anchor": "indexpathschangedfrom"
+        },
+        {
+          "level": 3,
+          "text": "`AbbrevSHA`",
+          "anchor": "abbrevsha"
+        },
+        {
+          "level": 3,
+          "text": "`CheckAttr`",
+          "anchor": "checkattr"
+        },
+        {
+          "level": 3,
+          "text": "`ParseConflictStyle`",
+          "anchor": "parseconflictstyle"
+        },
+        {
+          "level": 3,
+          "text": "`MergeFile`",
+          "anchor": "mergefile"
+        },
+        {
+          "level": 3,
+          "text": "`StripComments`",
+          "anchor": "stripcomments"
+        },
+        {
+          "level": 3,
+          "text": "`ConfigGet`",
+          "anchor": "configget"
+        },
+        {
+          "level": 3,
           "text": "`WithDir`",
           "anchor": "withdir"
         },
@@ -2821,6 +4720,11 @@
           "level": 3,
           "text": "`WithRoot`",
           "anchor": "withroot"
+        },
+        {
+          "level": 3,
+          "text": "`Version`",
+          "anchor": "version"
         },
         {
           "level": 3,
@@ -2856,6 +4760,16 @@
           "level": 3,
           "text": "`GitDir`",
           "anchor": "gitdir"
+        },
+        {
+          "level": 3,
+          "text": "`ObjectsDir`",
+          "anchor": "objectsdir"
+        },
+        {
+          "level": 3,
+          "text": "`HooksDir`",
+          "anchor": "hooksdir"
         },
         {
           "level": 3,
@@ -2904,6 +4818,11 @@
         },
         {
           "level": 3,
+          "text": "`DropFromIndex`",
+          "anchor": "dropfromindex"
+        },
+        {
+          "level": 3,
           "text": "`IsTracked`",
           "anchor": "istracked"
         },
@@ -2919,11 +4838,6 @@
         },
         {
           "level": 3,
-          "text": "`SyncMainIndex`",
-          "anchor": "syncmainindex"
-        },
-        {
-          "level": 3,
           "text": "`SyncMainIndexWithWorktree`",
           "anchor": "syncmainindexwithworktree"
         },
@@ -2931,6 +4845,16 @@
           "level": 3,
           "text": "`RunPassthrough`",
           "anchor": "runpassthrough"
+        },
+        {
+          "level": 3,
+          "text": "`RunPassthroughWithEnv`",
+          "anchor": "runpassthroughwithenv"
+        },
+        {
+          "level": 3,
+          "text": "`RunPassthroughTo`",
+          "anchor": "runpassthroughto"
         },
         {
           "level": 3,
@@ -2949,13 +4873,23 @@
         },
         {
           "level": 3,
+          "text": "`MatchesIgnoreRules`",
+          "anchor": "matchesignorerules"
+        },
+        {
+          "level": 3,
           "text": "`IsAncestorOf`",
           "anchor": "isancestorof"
         },
         {
           "level": 3,
-          "text": "`CommitMessage`",
-          "anchor": "commitmessage"
+          "text": "`FirstParentRange`",
+          "anchor": "firstparentrange"
+        },
+        {
+          "level": 3,
+          "text": "`ConfiguredAuthor`",
+          "anchor": "configuredauthor"
         },
         {
           "level": 3,
@@ -2964,13 +4898,23 @@
         },
         {
           "level": 3,
-          "text": "`CommitTreeWithAuthor`",
-          "anchor": "committreewithauthor"
+          "text": "`LsTreeAll`",
+          "anchor": "lstreeall"
         },
         {
           "level": 3,
-          "text": "`LsTreeAll`",
-          "anchor": "lstreeall"
+          "text": "`LsTreeRecursive`",
+          "anchor": "lstreerecursive"
+        },
+        {
+          "level": 3,
+          "text": "`DiffTree`",
+          "anchor": "difftree"
+        },
+        {
+          "level": 3,
+          "text": "`FilterIgnored`",
+          "anchor": "filterignored"
         },
         {
           "level": 3,
@@ -2979,18 +4923,18 @@
         },
         {
           "level": 3,
-          "text": "`HashObject`",
-          "anchor": "hashobject"
-        },
-        {
-          "level": 3,
-          "text": "`HashObjectWrite`",
-          "anchor": "hashobjectwrite"
+          "text": "`HashObjectBytes`",
+          "anchor": "hashobjectbytes"
         },
         {
           "level": 3,
           "text": "`HashObjectWriteBytes`",
           "anchor": "hashobjectwritebytes"
+        },
+        {
+          "level": 3,
+          "text": "`HashObjectWriteTag`",
+          "anchor": "hashobjectwritetag"
         },
         {
           "level": 3,
@@ -3039,8 +4983,38 @@
         },
         {
           "level": 3,
+          "text": "`ReachableMessages`",
+          "anchor": "reachablemessages"
+        },
+        {
+          "level": 3,
           "text": "`LsRemoteBulk`",
           "anchor": "lsremotebulk"
+        },
+        {
+          "level": 3,
+          "text": "`AdoptIndexFrom`",
+          "anchor": "adoptindexfrom"
+        },
+        {
+          "level": 3,
+          "text": "`ReconcileMainIndex`",
+          "anchor": "reconcilemainindex"
+        },
+        {
+          "level": 3,
+          "text": "`SetIndexStage0`",
+          "anchor": "setindexstage0"
+        },
+        {
+          "level": 3,
+          "text": "`MergeTree`",
+          "anchor": "mergetree"
+        },
+        {
+          "level": 3,
+          "text": "`RequireFeature`",
+          "anchor": "requirefeature"
         },
         {
           "level": 3,
@@ -3161,8 +5135,8 @@
         },
         {
           "level": 3,
-          "text": "`ExemptCommitRefUpdateRecord`",
-          "anchor": "exemptcommitrefupdaterecord"
+          "text": "`ExemptCommitRefUpdate`",
+          "anchor": "exemptcommitrefupdate"
         },
         {
           "level": 3,
@@ -3251,6 +5225,11 @@
         },
         {
           "level": 3,
+          "text": "`ObservePrefixes`",
+          "anchor": "observeprefixes"
+        },
+        {
+          "level": 3,
           "text": "`DirPinExemptions`",
           "anchor": "dirpinexemptions"
         },
@@ -3288,6 +5267,26 @@
           "level": 3,
           "text": "`WithoutRootPin`",
           "anchor": "withoutrootpin"
+        },
+        {
+          "level": 3,
+          "text": "`WithPreview`",
+          "anchor": "withpreview"
+        },
+        {
+          "level": 3,
+          "text": "`InPreview`",
+          "anchor": "inpreview"
+        },
+        {
+          "level": 3,
+          "text": "`WithObjectQuarantine`",
+          "anchor": "withobjectquarantine"
+        },
+        {
+          "level": 3,
+          "text": "`ObjectQuarantine`",
+          "anchor": "objectquarantine"
         },
         {
           "level": 3,
@@ -3410,8 +5409,58 @@
         },
         {
           "level": 3,
+          "text": "`OriginTracked`",
+          "anchor": "origintracked"
+        },
+        {
+          "level": 3,
+          "text": "`OriginLocal`",
+          "anchor": "originlocal"
+        },
+        {
+          "level": 3,
+          "text": "`OriginLegacy`",
+          "anchor": "originlegacy"
+        },
+        {
+          "level": 3,
           "text": "`HookResult`",
           "anchor": "hookresult"
+        },
+        {
+          "level": 3,
+          "text": "`LegacyLocationError`",
+          "anchor": "legacylocationerror"
+        },
+        {
+          "level": 3,
+          "text": "`TrackedNotExecutableError`",
+          "anchor": "trackednotexecutableerror"
+        },
+        {
+          "level": 3,
+          "text": "`Origin`",
+          "anchor": "origin"
+        },
+        {
+          "level": 4,
+          "text": "Tracked membership is the directory, not git",
+          "anchor": "tracked-membership-is-the-directory-not-git"
+        },
+        {
+          "level": 4,
+          "text": "The execution boundary",
+          "anchor": "the-execution-boundary"
+        },
+        {
+          "level": 3,
+          "text": "`Store`",
+          "anchor": "store"
+        },
+        {
+          "level": 3,
+          "text": "`Location`",
+          "anchor": "location"
         },
         {
           "level": 3,
@@ -3450,13 +5499,48 @@
         },
         {
           "level": 3,
-          "text": "`Install`",
-          "anchor": "install"
+          "text": "`TrackedDir`",
+          "anchor": "trackeddir"
         },
         {
           "level": 3,
-          "text": "`InstallPlaceholder`",
-          "anchor": "installplaceholder"
+          "text": "`LocalDir`",
+          "anchor": "localdir"
+        },
+        {
+          "level": 3,
+          "text": "`LegacyFile`",
+          "anchor": "legacyfile"
+        },
+        {
+          "level": 3,
+          "text": "`LegacyDir`",
+          "anchor": "legacydir"
+        },
+        {
+          "level": 3,
+          "text": "`Enumerate`",
+          "anchor": "enumerate"
+        },
+        {
+          "level": 3,
+          "text": "`Legacy`",
+          "anchor": "legacy"
+        },
+        {
+          "level": 3,
+          "text": "`LegacyLocationError.Error`",
+          "anchor": "legacylocationerrorerror"
+        },
+        {
+          "level": 3,
+          "text": "`TrackedNotExecutableError.Error`",
+          "anchor": "trackednotexecutableerrorerror"
+        },
+        {
+          "level": 3,
+          "text": "`Location.IsHookName`",
+          "anchor": "locationishookname"
         }
       ]
     },
@@ -3492,6 +5576,11 @@
         },
         {
           "level": 3,
+          "text": "`NewFromFile`",
+          "anchor": "newfromfile"
+        },
+        {
+          "level": 3,
           "text": "`GarbageCollect`",
           "anchor": "garbagecollect"
         },
@@ -3524,13 +5613,58 @@
         },
         {
           "level": 3,
+          "text": "`RewriteRef`",
+          "anchor": "rewriteref"
+        },
+        {
+          "level": 3,
+          "text": "`OperationRef`",
+          "anchor": "operationref"
+        },
+        {
+          "level": 3,
           "text": "`RefLock`",
           "anchor": "reflock"
         },
         {
           "level": 3,
+          "text": "`TimeoutError`",
+          "anchor": "timeouterror"
+        },
+        {
+          "level": 3,
+          "text": "`ReleasePending`",
+          "anchor": "releasepending"
+        },
+        {
+          "level": 3,
+          "text": "`IsTimeout`",
+          "anchor": "istimeout"
+        },
+        {
+          "level": 3,
+          "text": "`Path`",
+          "anchor": "path"
+        },
+        {
+          "level": 3,
+          "text": "`NameFromPath`",
+          "anchor": "namefrompath"
+        },
+        {
+          "level": 3,
           "text": "`Acquire`",
           "anchor": "acquire"
+        },
+        {
+          "level": 3,
+          "text": "`IsLockFile`",
+          "anchor": "islockfile"
+        },
+        {
+          "level": 3,
+          "text": "`IsPublicationTemp`",
+          "anchor": "ispublicationtemp"
         },
         {
           "level": 3,
@@ -3546,6 +5680,16 @@
           "level": 3,
           "text": "`ParsePID`",
           "anchor": "parsepid"
+        },
+        {
+          "level": 3,
+          "text": "`ReclaimIfStale`",
+          "anchor": "reclaimifstale"
+        },
+        {
+          "level": 3,
+          "text": "`TimeoutError.Error`",
+          "anchor": "timeouterrorerror"
         },
         {
           "level": 3,
@@ -3593,11 +5737,6 @@
           "level": 3,
           "text": "`LastRefUpdate`",
           "anchor": "lastrefupdate"
-        },
-        {
-          "level": 3,
-          "text": "`LastRefUpdateForSession`",
-          "anchor": "lastrefupdateforsession"
         },
         {
           "level": 3,
@@ -3695,6 +5834,11 @@
         },
         {
           "level": 3,
+          "text": "`UninstallTarget`",
+          "anchor": "uninstalltarget"
+        },
+        {
+          "level": 3,
           "text": "`DefaultConfig`",
           "anchor": "defaultconfig"
         },
@@ -3702,6 +5846,11 @@
           "level": 3,
           "text": "`SafegitDir`",
           "anchor": "safegitdir"
+        },
+        {
+          "level": 3,
+          "text": "`SharedGitDir`",
+          "anchor": "sharedgitdir"
         },
         {
           "level": 3,
@@ -3730,6 +5879,11 @@
         },
         {
           "level": 3,
+          "text": "`UninstallPlan`",
+          "anchor": "uninstallplan"
+        },
+        {
+          "level": 3,
           "text": "`LoadConfig`",
           "anchor": "loadconfig"
         },
@@ -3747,16 +5901,6 @@
           "level": 3,
           "text": "`ConfigPath`",
           "anchor": "configpath"
-        },
-        {
-          "level": 3,
-          "text": "`SaveConfigTo`",
-          "anchor": "saveconfigto"
-        },
-        {
-          "level": 3,
-          "text": "`SaveConfig`",
-          "anchor": "saveconfig"
         },
         {
           "level": 3,
@@ -3833,6 +5977,173 @@
       ]
     },
     {
+      "path": "internal-sequencer.md",
+      "title": "internal/sequencer",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "internal/sequencer",
+          "anchor": "internalsequencer"
+        },
+        {
+          "level": 2,
+          "text": "`internal/sequencer`",
+          "anchor": "internalsequencer"
+        },
+        {
+          "level": 3,
+          "text": "`FileMergeHead`",
+          "anchor": "filemergehead"
+        },
+        {
+          "level": 3,
+          "text": "`FileMergeMode`",
+          "anchor": "filemergemode"
+        },
+        {
+          "level": 3,
+          "text": "`FileMergeMsg`",
+          "anchor": "filemergemsg"
+        },
+        {
+          "level": 3,
+          "text": "`FileCherryPickHead`",
+          "anchor": "filecherrypickhead"
+        },
+        {
+          "level": 3,
+          "text": "`FileRevertHead`",
+          "anchor": "filereverthead"
+        },
+        {
+          "level": 3,
+          "text": "`FileAutoMerge`",
+          "anchor": "fileautomerge"
+        },
+        {
+          "level": 3,
+          "text": "`DirSequencer`",
+          "anchor": "dirsequencer"
+        },
+        {
+          "level": 3,
+          "text": "`DirRebaseMerge`",
+          "anchor": "dirrebasemerge"
+        },
+        {
+          "level": 3,
+          "text": "`DirRebaseApply`",
+          "anchor": "dirrebaseapply"
+        },
+        {
+          "level": 3,
+          "text": "`KindNone`",
+          "anchor": "kindnone"
+        },
+        {
+          "level": 3,
+          "text": "`KindMerge`",
+          "anchor": "kindmerge"
+        },
+        {
+          "level": 3,
+          "text": "`KindCherryPick`",
+          "anchor": "kindcherrypick"
+        },
+        {
+          "level": 3,
+          "text": "`KindRevert`",
+          "anchor": "kindrevert"
+        },
+        {
+          "level": 3,
+          "text": "`KindRebase`",
+          "anchor": "kindrebase"
+        },
+        {
+          "level": 3,
+          "text": "`KindAM`",
+          "anchor": "kindam"
+        },
+        {
+          "level": 3,
+          "text": "`BackendNone`",
+          "anchor": "backendnone"
+        },
+        {
+          "level": 3,
+          "text": "`BackendMerge`",
+          "anchor": "backendmerge"
+        },
+        {
+          "level": 3,
+          "text": "`BackendApply`",
+          "anchor": "backendapply"
+        },
+        {
+          "level": 3,
+          "text": "`Kind`",
+          "anchor": "kind"
+        },
+        {
+          "level": 3,
+          "text": "`Backend`",
+          "anchor": "backend"
+        },
+        {
+          "level": 3,
+          "text": "`State`",
+          "anchor": "state"
+        },
+        {
+          "level": 3,
+          "text": "`SourceAuthor`",
+          "anchor": "sourceauthor"
+        },
+        {
+          "level": 3,
+          "text": "`Paths`",
+          "anchor": "paths"
+        },
+        {
+          "level": 3,
+          "text": "`Cleanup`",
+          "anchor": "cleanup"
+        },
+        {
+          "level": 3,
+          "text": "`Read`",
+          "anchor": "read"
+        },
+        {
+          "level": 3,
+          "text": "`Kind.String`",
+          "anchor": "kindstring"
+        },
+        {
+          "level": 3,
+          "text": "`Backend.String`",
+          "anchor": "backendstring"
+        },
+        {
+          "level": 3,
+          "text": "`Backend.Dir`",
+          "anchor": "backenddir"
+        },
+        {
+          "level": 3,
+          "text": "`State.InProgress`",
+          "anchor": "stateinprogress"
+        },
+        {
+          "level": 3,
+          "text": "`State.String`",
+          "anchor": "statestring"
+        }
+      ]
+    },
+    {
       "path": "internal-stage.md",
       "title": "internal/stage",
       "type": "doc",
@@ -3846,6 +6157,11 @@
           "level": 2,
           "text": "`internal/stage`",
           "anchor": "internalstage"
+        },
+        {
+          "level": 3,
+          "text": "`ErrBinaryFile`",
+          "anchor": "errbinaryfile"
         },
         {
           "level": 3,
@@ -3908,6 +6224,11 @@
           "level": 3,
           "text": "`SubmoduleInfo`",
           "anchor": "submoduleinfo"
+        },
+        {
+          "level": 3,
+          "text": "`Parent`",
+          "anchor": "parent"
         },
         {
           "level": 3,
@@ -4125,8 +6446,188 @@
         },
         {
           "level": 3,
+          "text": "`MovedKey`",
+          "anchor": "movedkey"
+        },
+        {
+          "level": 3,
+          "text": "`MovedRetractKey`",
+          "anchor": "movedretractkey"
+        },
+        {
+          "level": 3,
+          "text": "`NoOverlap`",
+          "anchor": "nooverlap"
+        },
+        {
+          "level": 3,
+          "text": "`SameSource`",
+          "anchor": "samesource"
+        },
+        {
+          "level": 3,
+          "text": "`SameDestination`",
+          "anchor": "samedestination"
+        },
+        {
+          "level": 3,
+          "text": "`Chained`",
+          "anchor": "chained"
+        },
+        {
+          "level": 3,
           "text": "`SessionKey`",
           "anchor": "sessionkey"
+        },
+        {
+          "level": 3,
+          "text": "`Record`",
+          "anchor": "record"
+        },
+        {
+          "level": 3,
+          "text": "`Moves`",
+          "anchor": "moves"
+        },
+        {
+          "level": 3,
+          "text": "`KV`",
+          "anchor": "kv"
+        },
+        {
+          "level": 3,
+          "text": "`Tree`",
+          "anchor": "tree"
+        },
+        {
+          "level": 3,
+          "text": "`PathSet`",
+          "anchor": "pathset"
+        },
+        {
+          "level": 3,
+          "text": "`Commit`",
+          "anchor": "commit"
+        },
+        {
+          "level": 3,
+          "text": "`Hop`",
+          "anchor": "hop"
+        },
+        {
+          "level": 3,
+          "text": "`Projection`",
+          "anchor": "projection"
+        },
+        {
+          "level": 3,
+          "text": "`Pair`",
+          "anchor": "pair"
+        },
+        {
+          "level": 3,
+          "text": "`OverlapKind`",
+          "anchor": "overlapkind"
+        },
+        {
+          "level": 3,
+          "text": "`RecordTransformError`",
+          "anchor": "recordtransformerror"
+        },
+        {
+          "level": 3,
+          "text": "`EncodePair`",
+          "anchor": "encodepair"
+        },
+        {
+          "level": 3,
+          "text": "`ParsePair`",
+          "anchor": "parsepair"
+        },
+        {
+          "level": 3,
+          "text": "`ValidatePair`",
+          "anchor": "validatepair"
+        },
+        {
+          "level": 3,
+          "text": "`EncodeRecord`",
+          "anchor": "encoderecord"
+        },
+        {
+          "level": 3,
+          "text": "`RecordLine`",
+          "anchor": "recordline"
+        },
+        {
+          "level": 3,
+          "text": "`RetractLine`",
+          "anchor": "retractline"
+        },
+        {
+          "level": 3,
+          "text": "`ParseRecord`",
+          "anchor": "parserecord"
+        },
+        {
+          "level": 3,
+          "text": "`NewRecord`",
+          "anchor": "newrecord"
+        },
+        {
+          "level": 3,
+          "text": "`ReadMoves`",
+          "anchor": "readmoves"
+        },
+        {
+          "level": 3,
+          "text": "`MovedLines`",
+          "anchor": "movedlines"
+        },
+        {
+          "level": 3,
+          "text": "`Trailers`",
+          "anchor": "trailers"
+        },
+        {
+          "level": 3,
+          "text": "`ParseTrailerBlock`",
+          "anchor": "parsetrailerblock"
+        },
+        {
+          "level": 3,
+          "text": "`NewPathSet`",
+          "anchor": "newpathset"
+        },
+        {
+          "level": 3,
+          "text": "`Forward`",
+          "anchor": "forward"
+        },
+        {
+          "level": 3,
+          "text": "`RetractedIDs`",
+          "anchor": "retractedids"
+        },
+        {
+          "level": 3,
+          "text": "`Nests`",
+          "anchor": "nests"
+        },
+        {
+          "level": 3,
+          "text": "`Overlap`",
+          "anchor": "overlap"
+        },
+        {
+          "level": 3,
+          "text": "`RemoveMovedRecordsNaming`",
+          "anchor": "removemovedrecordsnaming"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteMessage`",
+          "anchor": "rewritemessage"
         },
         {
           "level": 3,
@@ -4147,6 +6648,56 @@
           "level": 3,
           "text": "`ReplaceIdentity`",
           "anchor": "replaceidentity"
+        },
+        {
+          "level": 3,
+          "text": "`NewID`",
+          "anchor": "newid"
+        },
+        {
+          "level": 3,
+          "text": "`ValidID`",
+          "anchor": "validid"
+        },
+        {
+          "level": 3,
+          "text": "`Record.Subtree`",
+          "anchor": "recordsubtree"
+        },
+        {
+          "level": 3,
+          "text": "`Record.OldPrefix`",
+          "anchor": "recordoldprefix"
+        },
+        {
+          "level": 3,
+          "text": "`Record.NewPrefix`",
+          "anchor": "recordnewprefix"
+        },
+        {
+          "level": 3,
+          "text": "`PathSet.Has`",
+          "anchor": "pathsethas"
+        },
+        {
+          "level": 3,
+          "text": "`PathSet.HasUnder`",
+          "anchor": "pathsethasunder"
+        },
+        {
+          "level": 3,
+          "text": "`Record.Names`",
+          "anchor": "recordnames"
+        },
+        {
+          "level": 3,
+          "text": "`RecordTransformError.Error`",
+          "anchor": "recordtransformerrorerror"
+        },
+        {
+          "level": 3,
+          "text": "`RecordTransformError.Unwrap`",
+          "anchor": "recordtransformerrorunwrap"
         }
       ]
     },
@@ -4476,8 +7027,23 @@
         },
         {
           "level": 3,
-          "text": "`ScrubVerifyPolicyResult`",
-          "anchor": "scrubverifypolicyresult"
+          "text": "`IntentUnset`",
+          "anchor": "intentunset"
+        },
+        {
+          "level": 3,
+          "text": "`IntentPerPath`",
+          "anchor": "intentperpath"
+        },
+        {
+          "level": 3,
+          "text": "`IntentIdentityOnly`",
+          "anchor": "intentidentityonly"
+        },
+        {
+          "level": 3,
+          "text": "`ScrubVerifyPatternResult`",
+          "anchor": "scrubverifypatternresult"
         },
         {
           "level": 3,
@@ -4501,8 +7067,28 @@
         },
         {
           "level": 3,
+          "text": "`RefUpdatePlan`",
+          "anchor": "refupdateplan"
+        },
+        {
+          "level": 3,
           "text": "`RewriteAuthorResult`",
           "anchor": "rewriteauthorresult"
+        },
+        {
+          "level": 3,
+          "text": "`IntendedChange`",
+          "anchor": "intendedchange"
+        },
+        {
+          "level": 3,
+          "text": "`IntentKind`",
+          "anchor": "intentkind"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteIntent`",
+          "anchor": "rewriteintent"
         },
         {
           "level": 3,
@@ -4521,13 +7107,18 @@
         },
         {
           "level": 3,
-          "text": "`AnnotationRewriteFunc`",
-          "anchor": "annotationrewritefunc"
+          "text": "`TierAFunc`",
+          "anchor": "tierafunc"
         },
         {
           "level": 3,
-          "text": "`VerifyFunc`",
-          "anchor": "verifyfunc"
+          "text": "`TierBFunc`",
+          "anchor": "tierbfunc"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteHooks`",
+          "anchor": "rewritehooks"
         },
         {
           "level": 3,
@@ -4558,11 +7149,6 @@
           "level": 3,
           "text": "`ScrubMatchResult`",
           "anchor": "scrubmatchresult"
-        },
-        {
-          "level": 3,
-          "text": "`ScrubPolicy`",
-          "anchor": "scrubpolicy"
         },
         {
           "level": 3,
@@ -4606,13 +7192,100 @@
         },
         {
           "level": 3,
+          "text": "`PerPathIntent`",
+          "anchor": "perpathintent"
+        },
+        {
+          "level": 3,
+          "text": "`IdentityIntent`",
+          "anchor": "identityintent"
+        },
+        {
+          "level": 3,
+          "text": "`effectsRefUpdate.Update`",
+          "anchor": "effectsrefupdateupdate"
+        },
+        {
+          "level": 3,
+          "text": "`remoteReadError.Error`",
+          "anchor": "remotereaderrorerror"
+        },
+        {
+          "level": 3,
+          "text": "`remoteReadError.Unwrap`",
+          "anchor": "remotereaderrorunwrap"
+        },
+        {
+          "level": 3,
+          "text": "`IntendedChange.Empty`",
+          "anchor": "intendedchangeempty"
+        },
+        {
+          "level": 3,
+          "text": "`IntendedChange.PathList`",
+          "anchor": "intendedchangepathlist"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteIntent.Declare`",
+          "anchor": "rewriteintentdeclare"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteIntent.ChangedCommits`",
+          "anchor": "rewriteintentchangedcommits"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteIntent.For`",
+          "anchor": "rewriteintentfor"
+        },
+        {
+          "level": 3,
+          "text": "`rewriteRefusal.Error`",
+          "anchor": "rewriterefusalerror"
+        },
+        {
+          "level": 3,
+          "text": "`RewriteResult.TierBExit`",
+          "anchor": "rewriteresulttierbexit"
+        },
+        {
+          "level": 3,
           "text": "`RewriteResult.Finalize`",
           "anchor": "rewriteresultfinalize"
+        },
+        {
+          "level": 3,
+          "text": "`gitArgs.Has`",
+          "anchor": "gitargshas"
+        },
+        {
+          "level": 3,
+          "text": "`gitArgs.Find`",
+          "anchor": "gitargsfind"
+        }
+      ]
+    },
+    {
+      "path": "scripts.md",
+      "title": "scripts",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "scripts",
+          "anchor": "scripts"
+        },
+        {
+          "level": 2,
+          "text": "`scripts`",
+          "anchor": "scripts"
         }
       ]
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-21T21:46:33.210586+00:00",
+  "last_gen": "2026-08-22T18:52:00.280909+00:00",
   "theme": "minimal"
 }

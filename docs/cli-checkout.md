@@ -9,6 +9,6 @@ nav_order: 4
 
 # safegit checkout
 
-checkout a branch or ref with working-tree safety guards
+checkout a branch or ref, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work
 
 **Effect:** mutating
