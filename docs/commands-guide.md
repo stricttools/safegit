@@ -534,7 +534,8 @@ safegit scrub match --pattern "secret_value" --replace "REDACTED" \
 - **Mangle mode**: Uses crypto/rand for random character generation, preserving whitespace structure.
 - **Scope filtering**: When `--scope` is set, only blobs at matching paths are rewritten; out-of-scope blobs are untouched.
 - **Post-scrub verification**: Re-scans the entire object store to confirm no matches survive.
-- **Policy recording**: Appends a scrub policy entry to `.git/safegit/scrub-policies.jsonl` for future verification with `scrub verify`.
+- **Rotation notice**: The completion output states that rewriting history cannot un-leak a secret that was ever pushed, tells you to rotate the credential, and prints the `scrub verify --pattern` command that re-checks this repository later.
+- **No pattern retention**: Neither the pattern nor the replacement text is written anywhere under `.git/safegit`. The oplog entry keeps metadata only (operation, reason, scope, mode, counts).
 - **Submodule support**: Scans and rewrites submodule histories, then updates parent gitlinks.
 
 ## scrub run
@@ -614,36 +615,55 @@ safegit scrub run --diff --limit 20 --entire-history -- recipe.toml
 - **Topological ordering**: Operations are sorted by dependency graph (Kahn's algorithm). Independent operations are applied simultaneously against the original content; dependent operations match against post-dependency content.
 - **Overlap detection**: Overlapping byte ranges across independent operations are a hard error.
 - **Cycle detection**: Circular dependencies in the recipe's `depends_on` graph are detected and rejected at parse time.
-- **Per-operation policies**: Each operation's pattern is recorded as a separate scrub policy entry.
+- **Rotation notice**: The completion output prints the same rotation warning `scrub match` does, with `safegit scrub verify <recipe>` as the re-check command — the recipe file is the durable record of what was scrubbed.
 
 ## scrub verify
 
-Check all scrub policies recorded in the repository configuration to confirm that previously scrubbed secrets and sensitive patterns remain completely absent from every blob, commit message, and tag annotation in the git object store.
+Confirm that the patterns you name are absent from every blob, commit message, and tag annotation in the git object store.
+
+Verification is **stateless**: safegit records nothing about past scrubs and reads no policy file, so an invocation checks exactly what its command line says. The two ways to say it are a repeatable `--pattern` and a scrub recipe file; at least one is required, and both may be given at once.
 
 ### When to Use
 
-Run `safegit scrub verify` periodically or in CI to confirm that scrubbed secrets have not been reintroduced into the repository. Policies are created automatically by `scrub match` and `scrub run`, and verification scans all blobs, commit messages, and tag annotations using batched multi-pattern scanning for efficiency.
+Run `safegit scrub verify` periodically or in CI to confirm that scrubbed secrets have not been reintroduced. Keep the patterns wherever you keep the rest of your CI configuration — a checked-in scrub recipe is the natural home, and the same file drives `scrub run`.
 
-### Flags
+### Flags and Arguments
 
-No command-specific flags beyond the global flags described above. Use `--json` for machine-readable output that can be parsed by CI pipelines, and `--quiet` to suppress informational messages while still reporting verification failures.
+| Name | Description |
+|------|-------------|
+| `--pattern` | Regular expression that must be absent from every object. Repeatable. |
+| `--scope` | Glob limiting which blob paths a `--pattern` match counts against (e.g. `*.env`, `config/**`). Requires `--pattern`; recipe operations carry their own scope in the recipe file. |
+| `recipe` (positional) | Path to a scrub recipe TOML file. The format is the one `scrub run` takes, read unchanged; its `replace`, `mangle` and `depends_on` fields are ignored here because verification substitutes nothing. |
+
+Use `--json` for machine-readable output that can be parsed by CI pipelines, and `--quiet` to suppress informational messages while still reporting verification failures.
 
 ### Examples
 
 ```bash
-# Verify all scrub policies
-safegit scrub verify
+# Verify one pattern
+safegit scrub verify --pattern 'AKIA[0-9A-Z]{16}'
+
+# Verify several, one of them only inside a path scope
+safegit scrub verify --pattern 'sk_live_[a-z0-9]+' --pattern 'AKIA[0-9A-Z]{16}'
+
+# Verify every operation of a checked-in recipe
+safegit scrub verify .safegit/scrub-recipe.toml
 
 # JSON output
-safegit --json scrub verify
+safegit --json scrub verify --pattern 'sk_live_[a-z0-9]+'
 ```
+
+### Exit Codes
+
+`0` when every pattern is absent, `1` when any pattern is still present. Naming no pattern at all is a usage refusal, not a pass.
 
 ### Safety Guarantees
 
 - **Read-only**: Does not modify any objects.
-- **Full scan**: Scans all blobs, commit messages, and tag annotations for each policy pattern.
-- **Scope-aware**: Scoped policies only flag matches at paths within their scope.
-- **Batched scan**: Uses multi-pattern scanning to avoid iterating the object store once per policy.
+- **Full scan**: Scans every object in the store — including unreachable ones — for each pattern.
+- **Scope-aware**: A scoped pattern only flags blob matches at paths within its scope; commit messages and tag annotations carry no path and are always checked.
+- **Batched scan**: Uses multi-pattern scanning to avoid iterating the object store once per pattern.
+- **Nothing to go stale**: With no stored policies there is no local state that can silently disagree with what a fresh clone would check.
 
 ## doctor
 
