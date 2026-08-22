@@ -10,6 +10,7 @@ import (
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // holdLock takes a real safegit lock on ref, held by THIS process, and releases
@@ -213,5 +214,48 @@ func TestFrameworkRefusalsExitOne(t *testing.T) {
 	// other side of the split.
 	if _, stderr, code := runSafegit(t, dir, "commit"); code != exitcode.Usage {
 		t.Errorf("a commit with no message exited %d, want %d (Usage); stderr: %s", code, exitcode.Usage, stderr)
+	}
+}
+
+// TestCommitPipelineLockTimeoutIsTyped covers the commit family's own ref-lock
+// acquisition, which happens INSIDE the worktree operation lock and returns a
+// plain wrapped error rather than a *commit.CommitError.
+//
+// It used to surface as the undifferentiated General (1) while every other
+// contended lock in the tool exited LockTimeout (8) -- the same situation with
+// the same remedy, reported two different ways depending on which lock and how
+// deep in the command the acquisition sat. main.go's pipelineExitCode now reads
+// the typed error out of the pipeline's error chain, so all three entry points
+// (commit, amend, reword) report the contention as contention, with the real
+// lock error naming the ref and its holder.
+func TestCommitPipelineLockTimeoutIsTyped(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{"commit", []string{"commit", "-m", "blocked", "--", "later.txt"}},
+		{"amend with files", []string{"commit", "--amend", "-m", "blocked", "--", "later.txt"}},
+		{"reword", []string{"commit", "--amend", "-m", "blocked"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := newRepo(t)
+			commitFileEnv(t, dir, scrubEnv, "file.txt", "content\n", "add file")
+			before := testutil.Rev(t, dir, "HEAD")
+			testutil.WriteFile(t, dir, "later.txt", "to be committed\n")
+
+			shortLockTimeout(t, dir)
+			// The BRANCH lock, not the operation lock: the command must get
+			// past its outermost lock and time out on the pipeline's own.
+			holdLock(t, dir, "refs/heads/main", "test-holder")
+
+			_, stderr, code := runSafegitEnv(t, dir, scrubEnv, tc.args...)
+			assertLockTimeoutRefusal(t, strings.Join(tc.args, " "), code, stderr)
+			if !strings.Contains(stderr, "refs/heads/main") {
+				t.Errorf("the error must name the ref whose lock timed out; stderr: %s", stderr)
+			}
+			if head := testutil.Rev(t, dir, "HEAD"); head != before {
+				t.Errorf("HEAD moved to %s despite the refusal (was %s)", head, before)
+			}
+		})
 	}
 }
