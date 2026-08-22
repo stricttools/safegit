@@ -427,8 +427,11 @@ The atomic publication and flock-based reclamation invalidated every
 story), `docs/concurrency-guide.md` (~:45), `docs/_CLAUDE.md` lock
 convention line (and its generated CLAUDE.md copy), and the
 selfdoc-generated `docs/internal-lock.md` (heals on the next selfdoc
-gen; the in-code package doc is already correct). Phase 9 must also
-DOCUMENT two new environment constraints: lock acquisition now requires
+gen; the in-code package doc is already correct). Also stale after the
+Phase-1 fixes: docs/architecture.md (~:145, :163) describes lock release
+as a plain unlink(2); release is now identity-checked (SameFile against
+the publication-time identity; a force-released lock is skipped
+silently). Phase 9 must also DOCUMENT two new environment constraints: lock acquisition now requires
 hard-link support on the filesystem holding .git, and stale-lock
 reclamation requires working flock(2) (without it, contenders time out
 instead of reclaiming, and doctor is the recovery path).
