@@ -176,14 +176,21 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs) int {
 		return exitcode.OK
 	}
 
+	// --ff-only is decided BEFORE the merge, because that is where git decides
+	// it: the branches have diverged, so git aborts with "Not possible to
+	// fast-forward" and never runs its merge engine at all. Asking merge-tree
+	// first and reporting a conflict would answer a question this command line
+	// does not reach -- and would tell the operator to resolve conflicts in a
+	// merge that is not going to start.
+	if parsed.Has("--ff-only") {
+		flags.printf("would merge %s: REFUSED -- --ff-only was given and this is not a fast-forward\n", short(other, otherSHA))
+		return exitcode.OK
+	}
+
 	result, err := git.MergeTree(ctx, "", head, otherSHA)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
-	}
-	if !result.Conflicted && parsed.Has("--ff-only") {
-		flags.printf("would merge %s: REFUSED -- --ff-only was given and this is not a fast-forward\n", short(other, otherSHA))
-		return exitcode.OK
 	}
 	reportPreviewOutcome(flags, "merge", short(other, otherSHA), result)
 	return exitcode.OK
