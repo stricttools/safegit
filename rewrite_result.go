@@ -175,15 +175,35 @@ func (r *RewriteResult) TierBExit(prior int) int {
 //     nonzero via TierBExit.
 //  10. Resolve the new HEAD and ref, persist the "complete" record, append the
 //     oplog entry, print the push hint.
+//
+// Steps 1-2 are prepare; steps 3-10 are publish. The two halves are separate
+// methods because a rewrite that spans TWO repositories -- a submodule scrub,
+// which rewrites the submodule and then the parent gitlinks that point at it --
+// has to prepare BOTH before publishing EITHER. Finalize is the single-repository
+// spelling of prepare-then-publish, and it is what every other rewrite calls.
 func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd string, hooks RewriteHooks) error {
-	if err := r.Intent.validate(); err != nil {
+	plan, err := r.prepare(ctx, flags, hooks)
+	if err != nil {
 		return err
+	}
+	return r.publish(ctx, flags, cmd, hooks, plan)
+}
+
+// prepare is Finalize's pre-refs half: steps 1 and 2. When it returns, the
+// rewritten commits and any new tag objects exist as UNREACHABLE objects, every
+// refusable check has passed, and nothing in the repository has moved -- no ref,
+// no tag, and no rewrite-journal record. A returned error therefore means the
+// repository is exactly as it was, which is what lets a caller prepare several
+// repositories and only then publish them.
+func (r *RewriteResult) prepare(ctx context.Context, flags globalFlags, hooks RewriteHooks) (*RefUpdatePlan, error) {
+	if err := r.Intent.validate(); err != nil {
+		return nil, err
 	}
 
 	// 1. Plan the ref updates. Tag objects are written here; no ref moves.
 	plan, err := planRefUpdates(ctx, r.ShaMap, r.TaggerOldName, r.TaggerNewName, r.TaggerOldEmail, r.TaggerNewEmail, hooks.AnnotateTag, flags.verbose)
 	if err != nil {
-		return fmt.Errorf("planning ref updates: %w", err)
+		return nil, fmt.Errorf("planning ref updates: %w", err)
 	}
 	r.TagRewrites = plan.TagRewrites
 	r.AnnotationTagRewrites = plan.AnnotationTagRewrites
@@ -192,13 +212,13 @@ func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd str
 	// 2a. The preservation check.
 	infof(flags, "Verifying the rewrite before it is published...\n")
 	if failures := verifyIntendedChanges(ctx, r.ShaMap, r.Intent); len(failures) > 0 {
-		return refuse("the rewrite did not do what the operation declared it would:", failures)
+		return nil, refuse("the rewrite did not do what the operation declared it would:", failures)
 	}
 
 	// 2b. The command's own pre-refs verification.
 	if hooks.TierA != nil {
 		if err := hooks.TierA(ctx, plan); err != nil {
-			return refuse("the rewritten history failed verification:", []string{err.Error()})
+			return nil, refuse("the rewritten history failed verification:", []string{err.Error()})
 		}
 	}
 
@@ -206,12 +226,20 @@ func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd str
 	// to start on a dirty tree, so anything here appeared while it was running.
 	foreign, err := foreignWorktreeState(ctx, r.OldHeadSHA)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if len(foreign) > 0 {
-		return refuse("the working tree changed while the rewrite was running, so publishing it would overwrite work this command did not make:", foreign)
+		return nil, refuse("the working tree changed while the rewrite was running, so publishing it would overwrite work this command did not make:", foreign)
 	}
 
+	return plan, nil
+}
+
+// publish is Finalize's apply half: steps 3 to 10, against a plan `prepare`
+// produced. Everything it does is irreversible from the ref update onward, so it
+// is only ever called once every repository the operation touches has passed
+// prepare.
+func (r *RewriteResult) publish(ctx context.Context, flags globalFlags, cmd string, hooks RewriteHooks, plan *RefUpdatePlan) error {
 	// 3. Persist the rewrite-map "start" record before anything moves.
 	preRemotes, err := captureRemoteTrackingState(ctx)
 	if err != nil {
@@ -378,6 +406,55 @@ func (r *RewriteResult) Finalize(ctx context.Context, flags globalFlags, cmd str
 	infof(flags, "\n%s\n", hint)
 
 	return nil
+}
+
+// pendingRewrite is one repository's rewrite, carried between the prepare and
+// publish halves so that several repositories can be verified before any of them
+// is published.
+//
+// It exists for the submodule scrubs: rewriting a file inside a submodule
+// rewrites the submodule's commits AND the parent commits whose gitlinks point
+// at them, and a verification failure on either side has to leave both sides
+// untouched. Ctx is that repository's git context (the parent's plain context,
+// or git.WithDir for a submodule), and Label names the repository in a failure
+// message.
+type pendingRewrite struct {
+	Label  string
+	Ctx    context.Context
+	Result *RewriteResult
+	Hooks  RewriteHooks
+
+	plan *RefUpdatePlan
+}
+
+// prepareAll runs the pre-refs half over every rewrite, in order. Nothing has
+// moved in ANY of the repositories when it returns, whether it succeeds or
+// fails: that is the whole reason the halves are separate. On failure it returns
+// the label of the repository that refused, for the caller's error message.
+func prepareAll(flags globalFlags, rewrites []*pendingRewrite) (string, error) {
+	for _, pr := range rewrites {
+		plan, err := pr.Result.prepare(pr.Ctx, flags, pr.Hooks)
+		if err != nil {
+			return pr.Label, err
+		}
+		pr.plan = plan
+	}
+	return "", nil
+}
+
+// publishAll runs the apply half over every rewrite, in the order given.
+//
+// The order is the caller's declaration of which repository has to be readable
+// first: a submodule scrub publishes the SUBMODULE before the parent, so a crash
+// between the two leaves a parent whose gitlinks still name commits that exist,
+// rather than a parent pointing into a submodule that has not moved yet.
+func publishAll(flags globalFlags, cmd string, rewrites []*pendingRewrite) (string, error) {
+	for _, pr := range rewrites {
+		if err := pr.Result.publish(pr.Ctx, flags, cmd, pr.Hooks, pr.plan); err != nil {
+			return pr.Label, err
+		}
+	}
+	return "", nil
 }
 
 // recordTierB records one post-rewrite finding and prints it. Tier B findings

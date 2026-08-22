@@ -292,7 +292,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	defer lk.Release()
 
 	// Execute the recipe via the shared pipeline.
-	exitCode, result := executeScrubRecipe(ctx, flags, cmd, recipe, reason, fromSHA, entireHistory, nil, remapGlobs, gitDir, sgDir, nil, "scrub-run", nil, false)
+	exitCode, result := executeScrubRecipe(ctx, flags, cmd, recipe, reason, fromSHA, entireHistory, nil, remapGlobs, gitDir, sgDir, nil, "scrub-run", nil, false, nil)
 
 	// Emit JSON or text output.
 	if result != nil {
