@@ -35,12 +35,48 @@ type ScanResults struct {
 }
 
 // ScanOpts configures which objects to scan and where to find them.
+//
+// Exactly one of EntireHistory, FromSHA and Tips selects the object set;
+// declaring none, or more than one, is an error rather than a precedence rule.
 type ScanOpts struct {
 	GitDir        string // empty = use CWD's git dir
 	WorkTree      string // empty = use CWD's work tree
 	SubmodulePath string // set on all returned matches; empty for parent repo
-	FromSHA       string // empty with EntireHistory=false is an error
+	FromSHA       string // scan the objects rev-list reaches in FromSHA..HEAD
 	EntireHistory bool   // true = cat-file --batch-all-objects (includes unreachable)
+
+	// Tips scans exactly the objects reachable from the given commits or tag
+	// objects, whether or not any ref points at them. It is how a rewrite is
+	// checked BEFORE its refs move: the rewritten commits exist only as
+	// unreachable objects at that moment, so neither the reachable-set walk
+	// nor a FromSHA..HEAD range can see them, while `rev-list --objects` given
+	// their SHAs walks exactly the new history (a tag object listed here brings
+	// itself and everything it points at).
+	Tips []string
+}
+
+// selection reports which of the three object-set selectors this ScanOpts
+// elects, refusing an ambiguous or empty declaration.
+func (o ScanOpts) selection() (string, error) {
+	elected := ""
+	count := 0
+	if o.EntireHistory {
+		elected, count = "entire-history", count+1
+	}
+	if o.FromSHA != "" {
+		elected, count = "from-sha", count+1
+	}
+	if len(o.Tips) > 0 {
+		elected, count = "tips", count+1
+	}
+	switch count {
+	case 1:
+		return elected, nil
+	case 0:
+		return "", fmt.Errorf("ScanOpts: one of EntireHistory, FromSHA or Tips must be set")
+	default:
+		return "", fmt.Errorf("ScanOpts: EntireHistory, FromSHA and Tips are alternatives; %d were set", count)
+	}
 }
 
 // contextRadius is the number of characters to include before and after
@@ -165,23 +201,37 @@ func ScanObjectsMulti(ctx context.Context, patterns []*regexp.Regexp, opts ScanO
 // parameter controls which objects are scanned:
 //   - EntireHistory=true: uses cat-file --batch-all-objects (all objects including
 //     unreachable loose objects). Builds a reachable set to mark each match.
-//   - FromSHA set (EntireHistory=false): uses rev-list --objects FromSHA..HEAD
-//     (reachable only). All matches are marked reachable by construction.
-//   - Both empty/false: returns an error.
+//   - FromSHA set: uses rev-list --objects FromSHA..HEAD (reachable only). All
+//     matches are marked reachable by construction.
+//   - Tips set: uses rev-list --objects on those commits or tag objects, so an
+//     object set no ref points at yet can be scanned. All matches are marked
+//     reachable by construction (they are reachable from the given tips).
+//   - None set: returns an error.
 //
 // When GitDir is set, commands target that git directory instead of CWD.
 // SubmodulePath is set on every returned Match.
 func ScanObjects(ctx context.Context, pattern *regexp.Regexp, opts ScanOpts) (*ScanResults, error) {
-	if !opts.EntireHistory && opts.FromSHA == "" {
-		return nil, fmt.Errorf("ScanObjects: either EntireHistory or FromSHA must be set")
+	selection, err := opts.selection()
+	if err != nil {
+		return nil, err
 	}
 
 	hasDir := opts.GitDir != ""
 
-	if opts.EntireHistory {
+	if selection == "entire-history" {
 		return scanEntireHistory(ctx, pattern, opts, hasDir)
 	}
 	return scanRange(ctx, pattern, opts, hasDir)
+}
+
+// revListSelector renders the rev-list arguments for the elected object set.
+// It is the one place the three selectors become argv, so scanning and blob
+// attribution can never walk different object sets for the same opts.
+func revListSelector(opts ScanOpts) []string {
+	if len(opts.Tips) > 0 {
+		return append([]string{}, opts.Tips...)
+	}
+	return []string{opts.FromSHA + "..HEAD"}
 }
 
 // scanEntireHistory implements the cat-file --batch-all-objects path.
@@ -222,17 +272,21 @@ func scanEntireHistory(ctx context.Context, pattern *regexp.Regexp, opts ScanOpt
 	return results, nil
 }
 
-// scanRange implements the rev-list --objects range path.
+// scanRange implements the rev-list --objects path, for both the FromSHA range
+// and an explicit set of tips.
 func scanRange(ctx context.Context, pattern *regexp.Regexp, opts ScanOpts, hasDir bool) (*ScanResults, error) {
+	selector := revListSelector(opts)
+	args := append([]string{"rev-list", "--objects"}, selector...)
+
 	var stdout string
 	var err error
 	if hasDir {
-		stdout, _, err = git.RunWithGitDir(ctx, opts.GitDir, opts.WorkTree, "rev-list", "--objects", opts.FromSHA+"..HEAD")
+		stdout, _, err = git.RunWithGitDir(ctx, opts.GitDir, opts.WorkTree, args...)
 	} else {
-		stdout, _, err = git.Run(ctx, "rev-list", "--objects", opts.FromSHA+"..HEAD")
+		stdout, _, err = git.Run(ctx, args...)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("rev-list --objects %s..HEAD: %w", opts.FromSHA, err)
+		return nil, fmt.Errorf("rev-list --objects %s: %w", strings.Join(selector, " "), err)
 	}
 
 	shas := parseSHAs(stdout)
