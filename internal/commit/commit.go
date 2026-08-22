@@ -330,6 +330,17 @@ func (p *Pipeline) tryCommit(
 	// Step 2: Stage files into tmp index (with optional hunk selection).
 	// Paths are canonical repo-relative and become absolute only here, at the
 	// syscall boundary.
+	//
+	// Staging is NOT minted through the effects handle, and hunk staging could
+	// not be: it feeds the computed patch to `git apply --cached` on stdin, and
+	// the handle's Run takes an argv and nothing else -- there is no stdin to
+	// hand it. Nothing rests on that, because staging is not a mutation the
+	// preview has to withhold. It runs for real in both modes, and in dry mode it
+	// runs inside the object quarantine (see beginPreview) against a temp index
+	// under the preview area, so every object it writes is thrown away with the
+	// area and the repository's own store never sees it. The one mutation this
+	// pipeline must withhold in a preview is the ref update at Step 7, which is
+	// the single mint site.
 	if err := p.stageAll(ctx, tmpIdx.IndexPath, repoRoot, files); err != nil {
 		return nil, false, err
 	}
@@ -420,14 +431,15 @@ func (p *Pipeline) tryCommit(
 	if !req.DryRun {
 		// Step 5: Acquire ref lock.
 		//
-		// Not minted through the effects handle, and it is the one mutation here
-		// that is not. The handle's method set is closed and has no shape for an
-		// exclusive-create -- the lock's whole meaning is that creating it
-		// succeeds for exactly one process -- and a write() of the same path
-		// would be a different operation with none of that guarantee. The gap is
-		// recorded in todo/effects-handle-commit-pipeline-and-method-set.md's
-		// method-set item, and it costs a preview nothing: a preview takes no
-		// lock at all.
+		// Not minted through the effects handle. It is one of exactly two
+		// mutations on the executing path that are not: this lock, and the op-log
+		// append at Step 8. Both are off for the same reason -- the handle's
+		// method set is closed and has no shape for either. The lock's whole
+		// meaning is that creating it succeeds for exactly one process, and a
+		// write() of the same path would be a different operation with none of
+		// that guarantee. The gap is recorded in
+		// todo/effects-handle-closed-method-set.md, and it costs a preview
+		// nothing: a preview takes no lock at all.
 		lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second
 		if lockTimeout <= 0 {
 			lockTimeout = 30 * time.Second
