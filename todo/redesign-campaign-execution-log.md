@@ -347,6 +347,36 @@ existing entries are never rewritten.
 - testdata/exit-sites.txt needs one regeneration after Phase 8's
   commits (queued for the Phase 4 implementor's closeout).
 
+## Ratified Phase 4 (P4a: 4.1/4.2) decisions
+
+- Exit 30 RewriteRefused (Tier A, nothing moved) and 31
+  RewriteIncomplete (rewrite stands; residue or skipped sync). Tier B
+  never aborts: findings accumulate, print as CRITICAL, and map to 31.
+  TestScrubMatchStashWarning's exit changed 1 -> 31 (semantics
+  unchanged); TestFinalizeWritesStartRecordBeforeVerifyFailure's body
+  rewritten for the reorder (all three journal records now exist when
+  Tier B fails; the nothing-before-refs half moved to a Tier A test).
+- The Tier A cleanliness check compares against the PRE-REWRITE head
+  using git status's re-hashing (diff-index alone trusts a stat cache
+  the pipeline never writes and reported everything modified — recorded
+  so nobody re-derives it), plus cached diff against the baseline and
+  untracked files; submodule state excluded (--ignore-submodules=all; a
+  submodule scrub legitimately moves the gitlink mid-flight).
+- Tier A's exact-content check skips a target also covered by a
+  --remap-shas-in glob (the remap edits the file after replacement);
+  the no-old-blob half still applies.
+- The path-taking git.HashObject/HashObjectWrite are DELETED (they
+  resolve against the pinned root — the exact divergence hazard);
+  bytes-taking forms replace them. sync_skipped added to the four
+  rewrite payloads (was written, never readable). Submodule --from
+  resolution uses <rev>^{commit} (bare rev-parse echoes any 40-hex
+  string back).
+- The skipped-sync race window is tested deterministically via git's
+  reference-transaction hook (fires exactly between Tier A and the
+  sync).
+- 4.4 seam prepared: planRefUpdates / verifyIntendedChanges / Tier A
+  hook / applyRefUpdates are separate ctx-parameterized functions.
+
 ## Phase 8 audit outcome and dispatched fixes
 
 - Audit PASS on all three subphases; the adversarial sweep found no
