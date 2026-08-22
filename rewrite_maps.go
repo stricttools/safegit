@@ -23,15 +23,18 @@ const rewriteMapsFile = "rewrite-maps.jsonl"
 // Rewrite-map record phases. Each rewrite appends up to three lines sharing
 // one ID, in this order:
 //
-//	start    — written at Finalize entry, BEFORE any refs move. Contains the
-//	           full commit map and the pre-rewrite remote-tracking state, so a
-//	           crash at any later step leaves the mapping recoverable. When the
-//	           commit map is all-identity but tags were still rewritten (e.g.
-//	           the annotation pass scrubbed a tag body), the start record is
-//	           written right after the tag pass instead, with an empty commit
-//	           map — refs never move unrecorded. Pure no-ops write no records.
-//	refs     — written right after updateRefs and the tag-annotation pass.
-//	           Contains every tag rewrite (ref-level and annotation-pass).
+//	start    — written from ONE place, at the top of the publish half: after
+//	           every Tier A refusal has had its chance and before a single ref
+//	           moves. Contains the full commit map and the pre-rewrite
+//	           remote-tracking state, so a crash at any later step leaves the
+//	           mapping recoverable, while an aborted rewrite leaves no record at
+//	           all and can never read as a crashed one. It is written whenever
+//	           there is anything to move -- including an all-identity commit map
+//	           whose tag objects were still rewritten (the annotation pass
+//	           scrubbing a tag body), where the commit map is empty. Pure no-ops
+//	           (identity map AND no ref moves) write no records.
+//	refs     — written right after applyRefUpdates. Contains every tag rewrite:
+//	           the ref-level ones and the annotation pass's.
 //	complete — written after cleanup and HEAD resolution. Contains the new
 //	           HEAD and the machine-readable cleanup status.
 const (
@@ -128,10 +131,11 @@ func nonNilStrings(s []string) []string {
 }
 
 // captureRemoteTrackingState snapshots refs/remotes/* (refname -> SHA) before
-// updateRefs rewrites them. updateRefs moves remote-tracking refs to the new
-// SHAs, destroying the only local record of what the remote held; orchestrators
-// need the pre-rewrite state for --force-with-lease expectations. Symbolic
-// refs like refs/remotes/origin/HEAD are skipped (updateRefs skips them too).
+// applyRefUpdates rewrites them. Applying the plan moves remote-tracking refs
+// to the new SHAs, destroying the only local record of what the remote held;
+// orchestrators need the pre-rewrite state for --force-with-lease expectations.
+// Symbolic refs like refs/remotes/origin/HEAD are skipped (the ref plan skips
+// them too).
 func captureRemoteTrackingState(ctx context.Context) (map[string]string, error) {
 	out, _, err := git.Run(ctx, "for-each-ref", "--format=%(refname) %(objectname)", "refs/remotes/")
 	if err != nil {

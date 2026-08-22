@@ -116,8 +116,9 @@ func setupFinalizeRepo(t *testing.T) (string, context.Context, string, *RewriteR
 // records were persisted before anything could fail this late, so a crash at
 // any step after the refs move leaves the commit map recoverable. The
 // complementary property -- a TIER A failure writes NO record at all, because
-// it aborts before the start record -- is pinned by
-// TestFinalizeTierAFailureWritesNoRecords.
+// it aborts in the prepare half, before the start record -- is pinned by
+// TestFinalizeRefusesAnUndeclaredIntent here and, end to end, by
+// TestScrubFileMistypedTargetRefusesBeforeAnythingMoves in internal/test.
 func TestFinalizeWritesStartRecordBeforeVerifyFailure(t *testing.T) {
 	_, ctx, sgDir, result := setupFinalizeRepo(t)
 	oldHead := result.OldHeadSHA
