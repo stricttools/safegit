@@ -434,9 +434,9 @@ func TestSubmodulePushRunsParentHooksAfterMigration(t *testing.T) {
 	subDir := prepSubmoduleForCommit(t, parentDir)
 
 	bareRemote := filepath.Join(evalTempDir(t), "sub-bare")
-	runGitIn(t, "", "init", "--bare", "--initial-branch=main", bareRemote)
-	runGitIn(t, subDir, "remote", "set-url", "origin", bareRemote)
-	runGitIn(t, subDir, "push", "origin", "main")
+	testutil.Git(t, "", "init", "--bare", "--initial-branch=main", bareRemote)
+	testutil.Git(t, subDir, "remote", "set-url", "origin", bareRemote)
+	testutil.Git(t, subDir, "push", "origin", "main")
 
 	// The parent's hook is where safegit USED to keep it.
 	marker := filepath.Join(evalTempDir(t), "cascade-marker.txt")
