@@ -444,22 +444,6 @@ func (p *Pipeline) stageAll(ctx context.Context, indexPath, repoRoot string, fil
 	return nil
 }
 
-// resolveSymlinks resolves symlinks in a path to produce a canonical absolute
-// path. If the file doesn't exist, it resolves the parent directory instead
-// (for new files or deletions). If the parent doesn't exist either, the path
-// is returned unchanged (it will fail at the os.Lstat check later).
-func resolveSymlinks(absPath string) string {
-	if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
-		return resolved
-	}
-	// File may not exist yet; resolve parent directory instead
-	dir := filepath.Dir(absPath)
-	if resolvedDir, err := filepath.EvalSymlinks(dir); err == nil {
-		return filepath.Join(resolvedDir, filepath.Base(absPath))
-	}
-	return absPath
-}
-
 // stageFile stages a single file into the tmp index.
 // Existing files are added; missing-but-tracked files are removed.
 func (p *Pipeline) stageFile(ctx context.Context, indexPath, absPath string) error {

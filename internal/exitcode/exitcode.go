@@ -131,10 +131,19 @@ const (
 	// omission. Produced by commit, including --amend.
 	PathMatchedNothing = 11
 
-	// BinaryHunkSpec means a hunk spec (file:1,3) was given for a file git
-	// reports as binary, where only whole-file staging exists. Produced by
+	// BinaryHunkSpec means a hunk spec (--hunks file:1,3) was given for a file
+	// git reports as binary, where only whole-file staging exists. Produced by
 	// commit, including --amend.
 	BinaryHunkSpec = 14
+
+	// SymlinkHunkSpec means a hunk spec (--hunks link:1) named a symlink. A
+	// symlink's whole content is the path it points at -- one line the
+	// filesystem produces, with no hunks to choose between -- so the selection
+	// could only ever select nothing. It is a separate code from BinaryHunkSpec
+	// because the reason differs: a binary file HAS content git will not split,
+	// while a symlink has nothing to split at all. Produced by commit,
+	// including --amend.
+	SymlinkHunkSpec = 15
 
 	// PushHookFailed means a pre-pre-push hook exited nonzero, so no network
 	// I/O was attempted. Produced by push and by `hook run`.
@@ -192,6 +201,7 @@ func All() []Entry {
 		{CommitTree, "CommitTree", "commit-tree failed"},
 		{PathMatchedNothing, "PathMatchedNothing", "A named path or directory contributes nothing to the commit"},
 		{BinaryHunkSpec, "BinaryHunkSpec", "Hunk spec given for a binary file"},
+		{SymlinkHunkSpec, "SymlinkHunkSpec", "Hunk spec given for a symlink, which has no hunks to select"},
 		{PushHookFailed, "PushHookFailed", "Pre-pre-push hook failed"},
 		{PushHookTimeout, "PushHookTimeout", "Pre-pre-push hook timed out"},
 		{BackupDiverged, "BackupDiverged", "The remote backup slot holds work missing from the local history"},

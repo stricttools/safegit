@@ -1176,6 +1176,7 @@ coordination guard, an uninitialized repository, a rejected argument).
 | 10 | commit-tree failed |
 | 11 | A named path or directory contributes nothing to the commit |
 | 14 | Hunk spec given for a binary file |
+| 15 | Hunk spec given for a symlink, which has no hunks to select |
 | 20 | Pre-pre-push hook failed |
 | 21 | Pre-pre-push hook timed out |
 | 22 | The remote backup slot holds work missing from the local history |
