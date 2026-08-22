@@ -68,7 +68,11 @@ func movedRefusal(format string, args ...interface{}) error {
 // The ids are minted HERE, once, before the compare-and-swap loop: a retry must
 // not change the record a commit carries, and a declaration that will be
 // refused must be refused before anything is staged.
-func resolveMoved(ctx context.Context, repoRoot, parentRev string, moved []string) ([]string, error) {
+//
+// replacedMessage is the message of the commit an amend or a reword is
+// replacing, and is empty for a plain commit, which replaces nothing. It is
+// what the re-declaration refusal is asked of -- see refuseRedeclaredPairs.
+func resolveMoved(ctx context.Context, repoRoot, parentRev, replacedMessage string, moved []string) ([]string, error) {
 	if len(moved) == 0 {
 		return nil, nil
 	}
@@ -78,6 +82,9 @@ func resolveMoved(ctx context.Context, repoRoot, parentRev string, moved []strin
 		return nil, err
 	}
 	if err := refuseOverlappingDeclarations(declarations); err != nil {
+		return nil, err
+	}
+	if err := refuseRedeclaredPairs(replacedMessage, declarations); err != nil {
 		return nil, err
 	}
 
@@ -254,6 +261,59 @@ func refuseOverlappingDeclarations(declarations []movedDeclaration) error {
 	return nil
 }
 
+// refuseRedeclaredPairs rejects a declaration whose pair the commit being
+// amended or reworded ALREADY carries an un-retracted record for.
+//
+// An amend keeps its own message, and a reword's -m carries the replaced
+// message's records forward, so in both cases the record is still on the commit
+// when the new one would go on. Minting a second one produces two records with
+// two ids saying one thing, and nothing downstream can tell they are the same
+// statement -- the ids are what a reader and a retraction address a record by,
+// and there is no rule that says which of two claims about one move is the
+// live one.
+//
+// Retractions fold in, and they are read off the SAME message: a record the
+// commit declares and then retracts claims nothing, so the pair is free again
+// and declaring it is a caller stating it afresh. (Retractions elsewhere in
+// history cannot reach a record on this commit -- a retraction only ever
+// follows the record it names.)
+//
+// The refusal names the existing record's id, because that id is what the
+// caller needs either to see that the statement is already made or to retract
+// it and state a different one.
+func refuseRedeclaredPairs(replacedMessage string, declarations []movedDeclaration) error {
+	if replacedMessage == "" || len(declarations) == 0 {
+		return nil
+	}
+	moves := trailer.ReadMoves(replacedMessage)
+	retracted := make(map[string]bool, len(moves.Retractions))
+	for _, id := range moves.Retractions {
+		retracted[id] = true
+	}
+	byPair := make(map[trailer.Pair]string, len(moves.Records))
+	for _, r := range moves.Records {
+		if retracted[r.ID] {
+			continue
+		}
+		p := trailer.Pair{Old: r.Old, New: r.New}
+		if _, ok := byPair[p]; !ok {
+			byPair[p] = r.ID
+		}
+	}
+	for _, d := range declarations {
+		id, ok := byPair[d.pair()]
+		if !ok {
+			continue
+		}
+		return &CommitError{
+			Code: exitcode.Usage,
+			Message: fmt.Sprintf("--moved %s is already declared by record %s on the commit being replaced; "+
+				"drop the flag, or retract that record first if the move needs restating", d.arg, id),
+		}
+	}
+	return nil
+}
+
 // overlapSideName is how a nesting verdict is spelled in a --moved refusal.
 func overlapSideName(kind trailer.OverlapKind) string {
 	if kind == trailer.SameDestination {
@@ -380,22 +440,16 @@ func movedParentRev(parents []string) string {
 // caller wrote. safegit's session trailer is the one thing that goes on after
 // the hook, so a rewriting hook cannot strip the attribution.
 //
-// Preserved lines that the operation is re-declaring are dropped rather than
-// doubled: two identical records would be two claims where the caller made one.
+// Nothing is deduplicated here. This used to drop a preserved line the
+// operation was also declaring, which could never fire: a declared line is a
+// FRESHLY MINTED record, so its id -- and therefore the whole line -- differs
+// from every preserved one even when the two speak about the same pair. The
+// collision that branch was reaching for is a collision of PAIRS, and it is
+// refused outright by refuseRedeclaredPairs before any line is minted.
 func commitTrailers(userTrailers, preserved, declared []string) []string {
 	out := make([]string, 0, len(userTrailers)+len(preserved)+len(declared))
 	out = append(out, userTrailers...)
-	seen := make(map[string]bool, len(declared))
-	for _, line := range declared {
-		seen[line] = true
-	}
-	for _, line := range preserved {
-		if seen[line] {
-			continue
-		}
-		seen[line] = true
-		out = append(out, line)
-	}
+	out = append(out, preserved...)
 	return append(out, declared...)
 }
 

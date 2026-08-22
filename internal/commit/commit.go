@@ -297,7 +297,9 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	//
 	// The parent of an ordinary commit is the tip it is built on, which is the
 	// same revision intake judged the file arguments against.
-	movedTrailers, err := resolveMoved(ctx, repoRoot, baseRev(ctx, ref), req.Moved)
+	// No replaced message: a plain commit replaces nothing, so no record can be
+	// carried forward for a declaration to collide with.
+	movedTrailers, err := resolveMoved(ctx, repoRoot, baseRev(ctx, ref), "", req.Moved)
 	if err != nil {
 		return nil, err
 	}
