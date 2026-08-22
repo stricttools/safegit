@@ -167,15 +167,22 @@ func runMv(flags globalFlags, messages []string, args []string) int {
 		return exitcode.General
 	}
 
+	// Read ONCE, before validation, and used by both halves of the command: the
+	// check decides whether a case-only pair has a destination at all, and the
+	// rename decides whether it has to go out through a temporary name. Both
+	// questions are the same question, so they must not be able to get different
+	// answers within one invocation.
+	ignoreCase := gitIgnoreCase(ctx)
+
 	pairs, code := parseMvPairs(repoRoot, args)
 	if code != 0 {
 		return code
 	}
-	if code := checkMvWorld(ctx, repoRoot, pairs); code != 0 {
+	if code := checkMvWorld(ctx, repoRoot, ignoreCase, pairs); code != 0 {
 		return code
 	}
 
-	if err := performMvMoves(flags, repoRoot, pairs); err != nil {
+	if err := performMvMoves(flags, ignoreCase, repoRoot, pairs); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
 	}
@@ -272,7 +279,7 @@ func refuseMvOverlaps(pairs []mvPair) int {
 // made to discover them one command at a time -- and a set of moves that is
 // refused must leave the working tree exactly as it was, so there is no reason
 // to stop at the first.
-func checkMvWorld(ctx context.Context, repoRoot string, pairs []mvPair) int {
+func checkMvWorld(ctx context.Context, repoRoot string, ignoreCase bool, pairs []mvPair) int {
 	head, err := git.RevParse(ctx, "HEAD")
 	if err != nil || head == "" {
 		fmt.Fprintf(os.Stderr, "error: this branch has no commit yet, so nothing is tracked for a move to come out of\n")
@@ -293,7 +300,7 @@ func checkMvWorld(ctx context.Context, repoRoot string, pairs []mvPair) int {
 
 	var refusals []string
 	for i := range pairs {
-		if why := checkMvPair(repoRoot, tracked, sorted, &pairs[i]); why != "" {
+		if why := checkMvPair(repoRoot, ignoreCase, tracked, sorted, &pairs[i]); why != "" {
 			refusals = append(refusals, fmt.Sprintf("%s: %s", pairs[i].arg, why))
 		}
 	}
@@ -310,7 +317,7 @@ func checkMvWorld(ctx context.Context, repoRoot string, pairs []mvPair) int {
 
 // checkMvPair is the whole check one pair gets, and it fills in the entries the
 // move carries. An empty answer means the pair holds.
-func checkMvPair(repoRoot string, tracked map[string]git.TreeEntry, sorted []string, p *mvPair) string {
+func checkMvPair(repoRoot string, ignoreCase bool, tracked map[string]git.TreeEntry, sorted []string, p *mvPair) string {
 	absOld := git.Anchor(repoRoot, p.oldPrefix())
 	absNew := git.Anchor(repoRoot, p.newPrefix())
 
@@ -350,11 +357,17 @@ func checkMvPair(repoRoot string, tracked map[string]git.TreeEntry, sorted []str
 	}
 
 	// The destination has to be free. A case-only rename is the one pair whose
-	// destination LOOKS occupied on a case-insensitive filesystem -- by the
-	// source itself -- so the disk question is not asked of it; the tree
-	// question still is, because a tree distinguishes the two spellings
-	// wherever the filesystem does not.
-	if !p.caseOnly {
+	// destination LOOKS occupied -- by the source itself -- and that is true
+	// only where the filesystem folds case, i.e. where the two spellings really
+	// are one file. So the exemption is conditional on git's own
+	// core.ignorecase: where it is off, the two spellings are two files and an
+	// occupied destination is exactly what it appears to be. The tree question
+	// is asked either way, because a tree distinguishes the two spellings
+	// wherever the filesystem does not -- but it only ever sees paths tracked in
+	// HEAD, so it is no substitute for the disk question: an UNTRACKED file at
+	// the destination is content that exists nowhere else, and a rename over it
+	// destroys it.
+	if !p.caseOnly || !ignoreCase {
 		if _, err := os.Lstat(absNew); err == nil {
 			return fmt.Sprintf("%s is already on disk; a move never overwrites what is there", p.newPrefix())
 		}
@@ -389,6 +402,10 @@ func pathsUnder(sorted []string, prefix string) []string {
 // recorded can fail.
 type mvFilesystem struct {
 	flags globalFlags
+	// ignoreCase is git's own core.ignorecase answer for this repository, read
+	// once per invocation by the caller and shared with the validation that
+	// decided a case-only destination was free. See gitIgnoreCase.
+	ignoreCase bool
 	// undo is the inverse of every step taken so far, newest last.
 	undo []func() error
 	// ensured is the set of directories this invocation has already created (or
@@ -402,8 +419,8 @@ type mvFilesystem struct {
 
 // performMvMoves renames every pair, rolling back what it already did when one
 // of them fails.
-func performMvMoves(flags globalFlags, repoRoot string, pairs []mvPair) error {
-	fs := &mvFilesystem{flags: flags, ensured: map[string]bool{}}
+func performMvMoves(flags globalFlags, ignoreCase bool, repoRoot string, pairs []mvPair) error {
+	fs := &mvFilesystem{flags: flags, ignoreCase: ignoreCase, ensured: map[string]bool{}}
 	for _, p := range pairs {
 		if err := fs.move(repoRoot, p); err != nil {
 			fs.rollback()
@@ -423,7 +440,7 @@ func (fs *mvFilesystem) move(repoRoot string, p mvPair) error {
 	if err := fs.ensureParent(absNew); err != nil {
 		return err
 	}
-	if p.caseOnly && fs.ignoreCase() {
+	if p.caseOnly && fs.ignoreCase {
 		return fs.renameThroughTemp(absOld, absNew)
 	}
 	return fs.rename(absOld, absNew)
@@ -489,12 +506,18 @@ func (fs *mvFilesystem) renameThroughTemp(from, to string) error {
 	return fs.rename(tmp, to)
 }
 
-// ignoreCase reports git's own answer for this repository. It is the condition
-// the two-step rename exists for, and it is read from the repository rather
-// than probed from the filesystem so that safegit and git agree about which
-// world they are in.
-func (fs *mvFilesystem) ignoreCase() bool {
-	out, _, err := git.Run(fs.flags.ctx(), "config", "--get", "core.ignorecase")
+// gitIgnoreCase reports git's own core.ignorecase answer for this repository:
+// whether the filesystem folds case, i.e. whether two spellings of one name are
+// one file.
+//
+// It is read from the repository rather than probed from the filesystem so that
+// safegit and git agree about which world they are in, and it is the single
+// authority for that question in this command -- both the destination check and
+// the two-step rename divide on it, and an invocation in which they divided
+// differently would validate one world and act in another. An unset or
+// unreadable key is `false`, which is git's own default answer.
+func gitIgnoreCase(ctx context.Context) bool {
+	out, _, err := git.Run(ctx, "config", "--get", "core.ignorecase")
 	if err != nil {
 		return false
 	}

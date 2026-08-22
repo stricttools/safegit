@@ -41,6 +41,19 @@ func mvExists(t *testing.T, dir, rel string) bool {
 	return err == nil
 }
 
+// mvFoldsCase reports whether the filesystem holding dir treats two spellings of
+// one name as the same file. mvSeed's a.txt is the probe: where A.TXT resolves,
+// so does every other spelling.
+//
+// It is the condition the case-only branches divide on, asked of the filesystem
+// itself rather than of core.ignorecase, because a test that forces the config
+// key needs to know whether the world it is running in agrees with it.
+func mvFoldsCase(t *testing.T, dir string) bool {
+	t.Helper()
+	_, err := os.Lstat(filepath.Join(dir, "A.TXT"))
+	return err == nil
+}
+
 func TestMvMovesRecordsAndCommitsInOneInvocation(t *testing.T) {
 	dir := mvSeed(t)
 
@@ -337,6 +350,14 @@ func TestMvRenamesOnlyTheCase(t *testing.T) {
 	for _, ignorecase := range []string{"false", "true"} {
 		t.Run("ignorecase="+ignorecase, func(t *testing.T) {
 			dir := mvSeed(t)
+			if ignorecase == "false" && mvFoldsCase(t, dir) {
+				// The key would be a lie here, and the destination check it
+				// selects would then see the source itself sitting at the
+				// destination. A repository that declares core.ignorecase=false
+				// on a filesystem that folds case is misconfigured, and safegit
+				// takes the repository's own word for which world it is in.
+				t.Skip("the test filesystem folds case, so core.ignorecase=false does not describe it")
+			}
 			testutil.Git(t, dir, "config", "core.ignorecase", ignorecase)
 
 			if _, stderr, code := runSafegit(t, dir, "mv", "-m", "capitalize", "a.txt -> A.txt"); code != 0 {
@@ -376,7 +397,7 @@ func TestMvRenamesOnlyTheCase(t *testing.T) {
 // It is skipped where such a filesystem is not available to the suite.
 func TestMvOnACaseInsensitiveFilesystem(t *testing.T) {
 	dir := mvSeed(t)
-	if _, err := os.Lstat(filepath.Join(dir, "A.TXT")); err != nil {
+	if !mvFoldsCase(t, dir) {
 		t.Skip("the test filesystem is case-sensitive; no case-insensitive fixture is available")
 	}
 	testutil.Git(t, dir, "config", "core.ignorecase", "true")
@@ -387,6 +408,49 @@ func TestMvOnACaseInsensitiveFilesystem(t *testing.T) {
 	tree := testutil.Git(t, dir, "ls-tree", "--name-only", "HEAD")
 	if !strings.Contains(tree, "A.txt") || strings.Contains(tree, "a.txt") {
 		t.Errorf("the tree still holds the old spelling:\n%s", tree)
+	}
+}
+
+// TestMvCaseOnlyRefusesAnOccupiedDestination is the destination check on the one
+// pair that was exempt from it wholesale.
+//
+// The exemption exists because a case-only rename's destination LOOKS occupied
+// by its own source -- but only where the filesystem folds case, which is where
+// the two spellings really are one file. On a case-SENSITIVE filesystem they are
+// two files, and skipping the check let os.Rename overwrite an untracked file
+// holding content that exists nowhere else. The tree check below the disk check
+// never covered this: it only sees paths tracked in HEAD.
+func TestMvCaseOnlyRefusesAnOccupiedDestination(t *testing.T) {
+	dir := mvSeed(t)
+	if mvFoldsCase(t, dir) {
+		t.Skip("the test filesystem folds case, so a.txt and A.txt are one file and there is no separate destination to occupy")
+	}
+	testutil.Git(t, dir, "config", "core.ignorecase", "false")
+
+	const untracked = "work in progress, committed nowhere\n"
+	if err := os.WriteFile(filepath.Join(dir, "A.txt"), []byte(untracked), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before := testutil.Rev(t, dir, "HEAD")
+
+	stdout, stderr, code := runSafegit(t, dir, "mv", "-m", "capitalize", "a.txt -> A.txt")
+	if code != exitcode.MoveNotBorneOut {
+		t.Fatalf("case-only mv onto an occupied destination: exit %d, want %d\nstdout: %s\nstderr: %s",
+			code, exitcode.MoveNotBorneOut, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "A.txt") {
+		t.Errorf("the refusal should name the destination; stderr: %s", stderr)
+	}
+
+	got, err := os.ReadFile(filepath.Join(dir, "A.txt"))
+	if err != nil || string(got) != untracked {
+		t.Errorf("the untracked destination was destroyed: %q (err %v)", got, err)
+	}
+	if !mvExists(t, dir, "a.txt") {
+		t.Error("the source was moved despite the refusal")
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("a commit was made despite the refusal: %s -> %s", before, after)
 	}
 }
 
