@@ -557,3 +557,73 @@ func TestVerificationHoldsWithoutAnAutoMergeToReadFrom(t *testing.T) {
 		}
 	})
 }
+
+// TestRevertRestoringMarkerShapedContentIsNotRefused is the revert half of the
+// differential's incoming side.
+//
+// A merge records its incoming side as a PARENT, so marker-shaped content
+// arriving from it is attributed to that parent. A cherry-pick and a revert
+// have no such parent: the commit they produce has one parent, and its incoming
+// content comes from the operation's SOURCE instead. For a revert the incoming
+// content is the inverse patch, whose restored text is what the source's PARENT
+// held -- exactly what a revert of "delete the documented example" puts back.
+//
+// Without the source side in the base set, this clean revert is refused for
+// restoring content the repository itself committed two commits ago.
+func TestRevertRestoringMarkerShapedContentIsNotRefused(t *testing.T) {
+	dir := newRepo(t)
+
+	testutil.WriteFile(t, dir, "docs.md", "how a conflict looks:\n"+parentalBlock)
+	safegitCommitEnv(t, dir, conclusionSession, "document what a conflict looks like", "docs.md")
+
+	testutil.WriteFile(t, dir, "docs.md", "how a conflict looks:\nsee the manual\n")
+	target := safegitCommitEnv(t, dir, conclusionSession, "replace the example with a pointer", "docs.md")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, conclusionSession, "revert", "--no-edit", target)
+	if code != exitcode.OK {
+		t.Fatalf("a clean revert restoring marker-shaped documentation was refused (code %d)\nstdout=%s\nstderr=%s",
+			code, stdout, stderr)
+	}
+	if blob := testutil.MustShow(t, dir, "HEAD", "docs.md"); !strings.Contains(blob, parentalBlock) {
+		t.Errorf("the revert did not restore the documented block:\n%s", blob)
+	}
+	assertNoSequencerResidue(t, dir, "a revert restoring marker-shaped content")
+}
+
+// TestCherryPickConclusionAcceptsMarkerShapedContentFromTheSource is the
+// cherry-pick half: the picked commit adds a fixture whose content is
+// marker-shaped, and adds it CLEANLY, so it carries no stages and is measured
+// against the commit's parents -- none of which ever had it. The source commit
+// is where it came from, and attributing it there is what keeps the conclusion
+// possible.
+func TestCherryPickConclusionAcceptsMarkerShapedContentFromTheSource(t *testing.T) {
+	dir := newRepo(t)
+
+	testutil.WriteFile(t, dir, "c.txt", "l1\nbase\nl3\n")
+	safegitCommitEnv(t, dir, conclusionSession, "base", "c.txt")
+
+	testutil.Git(t, dir, "branch", "side")
+	testutil.Git(t, dir, "switch", "side")
+	testutil.WriteFile(t, dir, "c.txt", "l1\nside\nl3\n")
+	testutil.WriteFile(t, dir, "fixture.txt", "a stored fixture:\n"+parentalBlock)
+	source := safegitCommitEnv(t, dir, conclusionSession, "the side change plus a fixture", "c.txt", "fixture.txt")
+
+	testutil.Git(t, dir, "switch", "main")
+	testutil.WriteFile(t, dir, "c.txt", "l1\nmain\nl3\n")
+	safegitCommitEnv(t, dir, conclusionSession, "the main change", "c.txt")
+
+	if _, stderr, code := runSafegitEnv(t, dir, conclusionSession, "cherry-pick", source); code == 0 {
+		t.Fatalf("the fixture needs a conflict in c.txt: %s", stderr)
+	}
+
+	stdout, stderr, code := runSafegitEnv(t, dir, conclusionSession,
+		"cherry-pick-continue", "--resolve", "c.txt=ours")
+	if code != exitcode.OK {
+		t.Fatalf("the picked commit's own fixture was refused as a surviving conflict (code %d)\nstdout=%s\nstderr=%s",
+			code, stdout, stderr)
+	}
+	if blob := testutil.MustShow(t, dir, "HEAD", "fixture.txt"); !strings.Contains(blob, parentalBlock) {
+		t.Errorf("the picked commit's fixture did not survive the conclusion:\n%s", blob)
+	}
+	assertNoSequencerResidue(t, dir, "a cherry-pick carrying marker-shaped content")
+}
