@@ -949,22 +949,26 @@ func scrubMatchExecute(
 				}
 			}
 			subVerifyOpts := scan.ScanOpts{GitDir: sr.sub.GitDir, WorkTree: sr.sub.WorkTreePath, SubmodulePath: sr.sub.RelativePath, EntireHistory: true}
-			subResults, scanErr := scan.ScanObjects(ctx, compiledPattern, subVerifyOpts)
+			// scanResults, not subResults: the enclosing scope already binds
+			// subResults to the []*RewriteResult this verification is checking,
+			// and shadowing it here with the scan's findings made two unrelated
+			// values share one name inside the loop.
+			scanResults, scanErr := scan.ScanObjects(ctx, compiledPattern, subVerifyOpts)
 			if scanErr != nil {
 				fmt.Fprintf(os.Stderr, "CRITICAL: re-scan submodule %s failed: %v\n", sr.sub.RelativePath, scanErr)
 				subTierBFailed = true
 				continue
 			}
-			if len(subResults.Matches) > 0 {
+			if len(scanResults.Matches) > 0 {
 				var remaining []scan.Match
-				for _, m := range subResults.Matches {
+				for _, m := range scanResults.Matches {
 					if !m.Reachable {
 						continue
 					}
 					remaining = append(remaining, m)
 				}
 				if subScope != nil && len(remaining) > 0 {
-					if err := scan.AddAttribution(ctx, subResults, subVerifyOpts); err == nil {
+					if err := scan.AddAttribution(ctx, scanResults, subVerifyOpts); err == nil {
 						var filtered []scan.Match
 						for _, m := range remaining {
 							if m.ObjectType == "blob" && !matchScope(*subScope, m.Path) {
