@@ -9,22 +9,23 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// safegit keeps one invariant about the shared .git/index: it equals HEAD.
-// Every mutating path enforces it the same way -- git.SyncMainIndex, which is
-// `git read-tree <treeish>` (internal/git/git.go:265-300). read-tree overwrites
-// the whole index, so the invariant is enforced by destroying whatever the
-// index held that HEAD does not: another session's staged work.
+// safegit once kept one invariant about the shared .git/index: it equals HEAD.
+// Every mutating path enforced it the same way, with a plain
+// `git read-tree <treeish>` over the whole index -- which meant the invariant
+// was enforced by destroying whatever the index held that HEAD did not:
+// another session's staged work.
 //
-// `safegit commit` is the known instance (internal/commit/commit.go:335). The
-// tests here cover the paths that nothing else exercises:
+// It no longer holds. git.ReconcileMainIndex (internal/git/index_reconcile.go)
+// is the single index-reconciliation authority: it snapshots the shared index's
+// delta against the pre-operation tip, syncs, and replays that delta -- stage 0
+// and the unmerged stages alike -- with every failure hard. undo goes through
+// it, as do commit, amend and reword. The post-passthrough sync is gone
+// entirely: during a passthrough git owns the shared index, and the sync
+// repaired nothing while destroying the operation's own conflict stages.
 //
-//   - undo.go:207   -- `safegit undo` syncs to the rollback target
-//   - coord_cmd.go:50 -- the guarded passthroughs' sync helper, reached from
-//     runGuardedPassthrough (coord_cmd.go:373) after cherry-pick and revert
-//
-// Two of the three tests below are RED on purpose: they assert what safegit
-// must do, and fail against today's binary. The third is a GREEN pin recording
-// behavior that is correct and must not regress.
+// The tests here pin what that changed, on the paths nothing else exercises:
+// undo's rollback, and the guarded passthroughs. All four are green; each was
+// written against the defect it now forbids.
 
 // undoSyncRead returns a working-tree file's content, or "" plus a fail if it
 // is missing.
@@ -75,18 +76,15 @@ func undoSyncSession() []string {
 
 // A second session's staged index state must survive `safegit undo`.
 //
-// undo.go:207 calls git.SyncMainIndex with the rollback target, which is
-// `git read-tree <target>`: the whole shared index is replaced by that tree.
-// Any path another session had staged and not yet committed -- a modification,
-// a newly added file, a staged deletion -- is silently reverted to its HEAD
+// Undo used to read-tree the rollback target over the whole shared index, so
+// any path another session had staged and not yet committed -- a modification,
+// a newly added file, a staged deletion -- was silently reverted to its HEAD
 // state, with no warning, no record, and nothing in the oplog to recover from.
+// It now reconciles through git.ReconcileMainIndex, which replays that delta.
 //
-// The staging below happens AFTER the undone commit deliberately. `safegit
-// commit` performs the same destruction (internal/commit/commit.go:335), so
-// staging first would leave the failure ambiguous; staging afterwards
-// attributes it to undo alone.
-//
-// RED today: undo exits 0 and the staged delta comes back empty.
+// The staging below happens AFTER the undone commit deliberately: commit
+// reconciles the index too, so staging first would leave a failure ambiguous;
+// staging afterwards attributes it to undo alone.
 func TestUndoPreservesForeignStagedState(t *testing.T) {
 	dir := newRepo(t)
 	env := undoSyncSession()
@@ -139,8 +137,8 @@ func TestUndoPreservesForeignStagedState(t *testing.T) {
 			"  staged before undo: %v\n"+
 			"  staged after undo:  %v\n"+
 			"  git status: %s\n"+
-			"  cause: undo.go:207 calls git.SyncMainIndex (read-tree, internal/git/git.go:265-300),\n"+
-			"         which replaces the whole shared index with the rollback target's tree.",
+			"  cause: undo reconciles the shared index through git.ReconcileMainIndex\n"+
+			"         (internal/git/index_reconcile.go); a delta it fails to replay is lost work.",
 			strings.Join(lost, ", "), staged, after,
 			oneLine(testutil.Git(t, dir, "status", "--porcelain")))
 	}
@@ -151,19 +149,19 @@ func TestUndoPreservesForeignStagedState(t *testing.T) {
 // Mid-merge, MERGE_HEAD names the second parent and the index carries the
 // merge's staged result plus its unresolved conflict stages. Undoing the
 // pre-merge commit is incoherent on its face -- the merge in flight was
-// computed against a commit that would no longer be HEAD -- and undo.go has no
-// guard for it: there is no coord.Check call anywhere in undo.go, and nothing
-// reads MERGE_HEAD, CHERRY_PICK_HEAD, REVERT_HEAD or .git/rebase-merge.
+// computed against a commit that would no longer be HEAD -- and undo had no
+// guard for it: nothing in undo read MERGE_HEAD, CHERRY_PICK_HEAD, REVERT_HEAD
+// or .git/rebase-merge.
 //
-// What happens today is worse than an incoherent HEAD. undo.go:207 read-trees
-// the rollback target over the index, which erases the conflict stages, so git
-// stops reporting a conflict at all -- while MERGE_HEAD survives. The
-// repository is left looking clean and mid-merge at once, and concluding it
-// produces a commit built from the wrong tree. Verified by hand: after this
-// sequence a plain `git commit` succeeds and writes a commit whose tree has
-// lost every path the merge brought in.
+// What used to happen was worse than an incoherent HEAD: the index
+// reconciliation erased the conflict stages, so git stopped reporting a
+// conflict at all -- while MERGE_HEAD survived. The repository was left looking
+// clean and mid-merge at once, and concluding it produced a commit built from
+// the wrong tree. Verified by hand: after that sequence a plain `git commit`
+// succeeded and wrote a commit whose tree had lost every path the merge brought
+// in.
 //
-// RED today: undo exits 0, HEAD moves, and the stages are gone.
+// undo now refuses outright, through coord.GuardInFlight.
 func TestUndoRefusedMidMerge(t *testing.T) {
 	env := undoSyncSession()
 	// The conflict is deliberately left unresolved: the stages git wrote are
@@ -190,7 +188,7 @@ func TestUndoRefusedMidMerge(t *testing.T) {
 			"  HEAD: %s -> %s (rolled back past the commit the in-flight merge was computed against)\n"+
 			"  .git/MERGE_HEAD survives: %t\n"+
 			"  unmerged index stages after undo: %q (were %d line(s); empty means git no longer\n"+
-			"    reports the conflict, because undo.go:207 read-tree'd over them)\n"+
+			"    reports the conflict, because the rollback's index reconciliation ran over them)\n"+
 			"  git status: %s\n"+
 			"  stdout: %s",
 			mainSHA, testutil.Rev(t, dir, "HEAD"),
@@ -218,14 +216,13 @@ func TestUndoRefusedMidMerge(t *testing.T) {
 
 // GREEN pin: `safegit undo` must not touch the working tree.
 //
-// undo.go:207 uses git.SyncMainIndex, the plain read-tree with no -u, so the
-// undone commit's content stays on disk: a file the commit added remains as an
+// undo reconciles the index without touching the working tree, so the undone
+// commit's content stays on disk: a file the commit added remains as an
 // untracked file, and a file the commit modified remains modified relative to
 // the restored HEAD. That is the correct contract for undo -- it reverses the
-// commit, not the work -- and any fix for the staged-state destruction above
-// must keep it. Switching this call site to the -u variant
-// (SyncMainIndexWithWorktree, internal/git/git.go:320) would silently discard
-// the operator's edits, so this test exists to make that regression loud.
+// commit, not the work. Reconciling with a worktree-updating variant
+// (git.SyncMainIndexWithWorktree) would silently discard the operator's edits,
+// so this test exists to make that regression loud.
 func TestUndoLeavesWorkingTreeIntact(t *testing.T) {
 	dir := newRepo(t)
 	env := undoSyncSession()
@@ -266,21 +263,19 @@ func TestUndoLeavesWorkingTreeIntact(t *testing.T) {
 	}
 }
 
-// The same read-tree sync runs after every guarded passthrough
-// (coord_cmd.go:373 -> coord_cmd.go:50 -> git.SyncMainIndex(ctx, "HEAD")), and
-// there it destroys state that belongs to the operation safegit just ran.
+// The same read-tree sync used to run after every guarded passthrough, where it
+// destroyed state belonging to the operation safegit had just run. It is
+// deleted: during a passthrough git owns the shared index.
 //
 // A conflicted `git cherry-pick` leaves unmerged stages in the index; that is
 // how git records which paths still need resolving and how `git cherry-pick
-// --continue` knows the conflict was addressed. safegit runs cherry-pick, then
-// unconditionally read-trees HEAD over the index, erasing every stage. git
-// stops reporting `UU`, `git ls-files -u` comes back empty, and
-// CHERRY_PICK_HEAD is still there.
+// --continue` knows the conflict was addressed. safegit used to run
+// cherry-pick and then read-tree HEAD over the index, erasing every stage: git
+// stopped reporting `UU`, `git ls-files -u` came back empty, and
+// CHERRY_PICK_HEAD was still there.
 //
-// This test lives in this file because it is the same defect at another call
+// This test lives in this file because it was the same defect at another call
 // site: an index sync that assumes the index may be rebuilt from HEAD.
-//
-// RED today: the stages are gone.
 func TestGuardedPassthroughKeepsCherryPickConflictStages(t *testing.T) {
 	dir := newRepo(t)
 	env := undoSyncSession()
@@ -318,8 +313,8 @@ func TestGuardedPassthroughKeepsCherryPickConflictStages(t *testing.T) {
 			"  git status: %s (raw git reports `UU c.txt`)\n"+
 			"  CHERRY_PICK_HEAD is still present, so the repository claims a cherry-pick is in\n"+
 			"    flight while the index no longer records anything to resolve.\n"+
-			"  cause: coord_cmd.go:373 calls syncMainIndex (coord_cmd.go:50) after every guarded\n"+
-			"         passthrough, which is git.SyncMainIndex -> read-tree HEAD.",
+			"  cause: something read-tree'd HEAD over the shared index after the passthrough.\n"+
+			"         During a passthrough git owns that index; safegit must not touch it.",
 			oneLine(statusOut))
 	}
 }
