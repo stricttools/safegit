@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/hooks"
@@ -263,37 +264,118 @@ func EnsureInitialized(ctx context.Context, gitDir string) error {
 // everyone who cloned it, and removing it here would be an uncommitted deletion
 // of somebody else's file.
 func Uninstall(ctx context.Context, gitDir string) error {
-	sgDir := SafegitDir(gitDir)
-	shared := SharedGitDir(ctx, gitDir)
-	sharedDir := filepath.Join(shared, "safegit")
-
-	// Uninstalling is a REPOSITORY operation, not a per-checkout one: what it
-	// removes includes the shared store under the common git dir, which is
-	// where the hooks every push runs live. So "is there anything to remove" is
-	// asked of both directories. Asking it of this worktree's own directory
-	// alone refused from a linked worktree that had simply never been used --
-	// while the repository's shared state sat right there, with no way to remove
-	// it from where the operator was standing. For a normal repository the two
-	// directories are the same one and the question is unchanged.
-	_, ownErr := os.Stat(sgDir)
-	_, sharedErr := os.Stat(sharedDir)
-	if os.IsNotExist(ownErr) && os.IsNotExist(sharedErr) {
-		return errors.New("safegit is not initialized (nothing to remove)")
-	}
-	if err := os.RemoveAll(sgDir); err != nil {
+	targets, err := UninstallPlan(ctx, gitDir)
+	if err != nil {
 		return err
 	}
-	if sharedDir != sgDir {
-		for _, name := range []string{"locks", "hooks"} {
-			os.RemoveAll(filepath.Join(sharedDir, name))
-		}
-	}
-	for _, legacy := range []string{hooks.LegacyFile(shared), hooks.LegacyDir(shared)} {
-		if err := os.RemoveAll(legacy); err != nil {
+	for _, t := range targets {
+		if err := os.RemoveAll(t.Path); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// UninstallTarget is one path a repository-wide uninstall removes.
+type UninstallTarget struct {
+	// Path is what gets removed.
+	Path string
+	// Label says whose state this is, in terms the operator recognizes.
+	Label string
+	// Foreign marks state that does NOT belong to the worktree the command was
+	// invoked from. It is the part of a repository-wide uninstall an operator
+	// standing in one checkout has no reason to expect, so the caller prints it
+	// differently rather than letting it slide past in a list.
+	Foreign bool
+}
+
+// UninstallPlan enumerates every path a repository-wide uninstall removes,
+// without removing any of them. It returns an error when there is nothing to
+// remove, which is the "safegit is not initialized" refusal.
+//
+// Uninstalling is a REPOSITORY operation, not a per-checkout one. A repository
+// with linked worktrees holds safegit state in one directory per worktree git
+// dir, plus the shared store under the common git dir where the locks and the
+// hooks every push runs live. An uninstall that took only the invoking
+// worktree's directory left the rest of it in place while reporting the tool
+// uninstalled -- config, oplog and all.
+//
+// The set of state directories is read off disk rather than from `git worktree
+// list`. A worktree's git dir is always <common>/worktrees/<name>, so the
+// listing is exact, and it still finds the state of a worktree whose checkout
+// has been deleted but not yet pruned -- one git reports as prunable, and whose
+// state an uninstall driven by that list would leave behind.
+func UninstallPlan(ctx context.Context, gitDir string) ([]UninstallTarget, error) {
+	shared := SharedGitDir(ctx, gitDir)
+	ownDir := SafegitDir(gitDir)
+	sharedDir := SafegitDir(shared)
+
+	var targets []UninstallTarget
+	seen := make(map[string]bool)
+	add := func(path, label string, foreign bool) {
+		if seen[path] {
+			return
+		}
+		if _, err := os.Lstat(path); err != nil {
+			return
+		}
+		seen[path] = true
+		targets = append(targets, UninstallTarget{Path: path, Label: label, Foreign: foreign})
+	}
+
+	// The invoking worktree's own state comes first: it is what the operator
+	// was standing in when they asked. In a repository with no linked worktrees
+	// it IS the shared store, and the two collapse into the single entry below.
+	if ownDir != sharedDir {
+		add(ownDir, "this worktree", false)
+	}
+
+	sharedLabel := "the main worktree, plus the repository's shared locks and hook store"
+	if ownDir == sharedDir {
+		sharedLabel = "this worktree, plus the repository's shared locks and hook store"
+	}
+	add(sharedDir, sharedLabel, ownDir != sharedDir)
+
+	// Every other worktree's state.
+	entries, _ := os.ReadDir(filepath.Join(shared, "worktrees"))
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		wtGitDir := filepath.Join(shared, "worktrees", e.Name())
+		add(SafegitDir(wtGitDir), "worktree "+worktreeCheckout(wtGitDir, e.Name()), wtGitDir != gitDir)
+	}
+
+	// The pre-migration hook locations, which sit under the common git dir and
+	// keep running on every push until they are gone.
+	add(hooks.LegacyFile(shared), "the pre-migration hook location", false)
+	add(hooks.LegacyDir(shared), "the pre-migration hook directory", false)
+
+	if len(targets) == 0 {
+		return nil, errors.New("safegit is not initialized (nothing to remove)")
+	}
+	return targets, nil
+}
+
+// worktreeCheckout names the checkout a linked worktree's git dir belongs to.
+//
+// Git records it in the git dir's own `gitdir` marker file, which holds the
+// path of the checkout's .git file. The marker outlives a checkout that was
+// deleted without being pruned, in which case there is no directory left to
+// name and the worktree's internal name is the best answer there is.
+func worktreeCheckout(wtGitDir, name string) string {
+	data, err := os.ReadFile(filepath.Join(wtGitDir, "gitdir"))
+	if err != nil {
+		return name
+	}
+	p := strings.TrimSpace(string(data))
+	if filepath.Base(p) == ".git" {
+		p = filepath.Dir(p)
+	}
+	if p == "" || p == "." {
+		return name
+	}
+	return p
 }
 
 // LoadConfig reads and parses config.json from the safegit directory.
