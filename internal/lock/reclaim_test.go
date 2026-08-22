@@ -161,10 +161,10 @@ func TestOpenForReclaimYieldsToAnotherReclaimer(t *testing.T) {
 // contended acquire would abort instead of waiting.
 func TestTryCreateReportsExistAsErrExist(t *testing.T) {
 	lp := filepath.Join(t.TempDir(), "main.lock")
-	if err := tryCreate(lp, "commit"); err != nil {
+	if _, err := tryCreate(lp, "commit"); err != nil {
 		t.Fatalf("tryCreate: %v", err)
 	}
-	err := tryCreate(lp, "commit")
+	_, err := tryCreate(lp, "commit")
 	if err == nil {
 		t.Fatal("tryCreate overwrote an existing lock file")
 	}
@@ -179,10 +179,10 @@ func TestTryCreateLeavesNoTemporaryFiles(t *testing.T) {
 	dir := t.TempDir()
 	lp := filepath.Join(dir, "main.lock")
 
-	if err := tryCreate(lp, "commit"); err != nil {
+	if _, err := tryCreate(lp, "commit"); err != nil {
 		t.Fatalf("tryCreate: %v", err)
 	}
-	if err := tryCreate(lp, "commit"); !errors.Is(err, os.ErrExist) {
+	if _, err := tryCreate(lp, "commit"); !errors.Is(err, os.ErrExist) {
 		t.Fatalf("second tryCreate: err = %v, want os.ErrExist", err)
 	}
 
@@ -244,7 +244,7 @@ func TestTryCreatePublishesCompleteLockFile(t *testing.T) {
 	}()
 
 	for i := 0; i < 1000; i++ {
-		if err := tryCreate(lp, "commit"); err != nil {
+		if _, err := tryCreate(lp, "commit"); err != nil {
 			close(done)
 			reader.Wait()
 			t.Fatalf("tryCreate: %v", err)

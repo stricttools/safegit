@@ -138,3 +138,84 @@ func TestReleasePendingRemovesHeldLocks(t *testing.T) {
 	ReleasePending()
 	_ = first.Release()
 }
+
+// A holder releases the lock IT published, never whatever happens to sit at
+// the path by then.
+//
+// The situation is reachable: `safegit unlock <ref>` force-releases
+// unconditionally (it is the recovery path of last resort, and must work even
+// where flock does not), a third process then wins the freed path, and the
+// original holder finally finishes. Removing by path alone would delete the
+// newcomer's live lock and let two operations mutate the ref at once.
+//
+// Both removal paths are covered, because both used to remove by path: the
+// holder's own Release, and the ReleasePending sweep that die() runs on the
+// exit paths that never unwind.
+func TestReleaseLeavesAReplacedLockAlone(t *testing.T) {
+	// replaceOutOfBand force-releases a held lock and publishes a different
+	// file at the same path -- the operator-forced unlock plus a third party's
+	// fresh lock, compressed.
+	replaceOutOfBand := func(t *testing.T, base, ref string, held *RefLock) os.FileInfo {
+		t.Helper()
+		if err := ForceRelease(base, ref); err != nil {
+			t.Fatalf("force-releasing the held lock: %v", err)
+		}
+		newcomer, err := tryCreate(held.LockPath, "newcomer")
+		if err != nil {
+			t.Fatalf("publishing the newcomer's lock: %v", err)
+		}
+		return newcomer
+	}
+
+	assertNewcomerSurvives := func(t *testing.T, path string, newcomer os.FileInfo) {
+		t.Helper()
+		current, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("the newcomer's lock was removed by the previous holder: %v", err)
+		}
+		if !os.SameFile(newcomer, current) {
+			t.Error("the file at the lock path is no longer the newcomer's lock")
+		}
+		if err := os.Remove(path); err != nil {
+			t.Fatalf("cleaning up the newcomer's lock: %v", err)
+		}
+	}
+
+	t.Run("Release", func(t *testing.T) {
+		base := t.TempDir()
+		const ref = "refs/heads/contended"
+		held, err := Acquire(base, base, ref, "test", time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		newcomer := replaceOutOfBand(t, base, ref, held)
+
+		if err := held.Release(); err != nil {
+			t.Errorf("Release reported an error for a lock that was force-released out from under it: %v", err)
+		}
+		assertNewcomerSurvives(t, held.LockPath, newcomer)
+	})
+
+	t.Run("ReleasePending", func(t *testing.T) {
+		base := t.TempDir()
+		const ref = "refs/heads/contended"
+		held, err := Acquire(base, base, ref, "test", time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A second, untouched lock proves the sweep still does its job: it
+		// must remove this one while leaving the newcomer alone.
+		own, err := Acquire(base, base, OperationRef, "test", time.Second)
+		if err != nil {
+			t.Fatal(err)
+		}
+		newcomer := replaceOutOfBand(t, base, ref, held)
+
+		ReleasePending()
+
+		if _, err := os.Stat(own.LockPath); !os.IsNotExist(err) {
+			t.Errorf("ReleasePending did not remove this process's own lock (err=%v)", err)
+		}
+		assertNewcomerSurvives(t, held.LockPath, newcomer)
+	})
+}

@@ -74,6 +74,10 @@ const (
 type RefLock struct {
 	Ref      string
 	LockPath string
+	// published identifies the file this process linked into place. Release
+	// compares it against whatever is at LockPath before removing anything --
+	// see releaseIfOurs.
+	published os.FileInfo
 }
 
 // TimeoutError is what Acquire returns when the timeout expired with a live
@@ -178,10 +182,10 @@ func Acquire(locksBaseDir, safegitDir, ref, op string, timeout time.Duration) (*
 	var seenHolder holderIdentity
 
 	for {
-		err := tryCreate(lp, op)
+		published, err := tryCreate(lp, op)
 		if err == nil {
-			registerCleanup(lp)
-			return &RefLock{Ref: ref, LockPath: lp}, nil
+			registerCleanup(lp, published)
+			return &RefLock{Ref: ref, LockPath: lp, published: published}, nil
 		}
 
 		if !errors.Is(err, os.ErrExist) {
@@ -296,7 +300,16 @@ func (h holderIdentity) changedFrom(prev holderIdentity) bool {
 }
 
 // tryCreate creates the lock file with its owner record already in it, failing
-// with os.ErrExist when someone else holds the lock.
+// with os.ErrExist when someone else holds the lock. On success it returns the
+// FileInfo of the file it published, which -- the publication being a link(2)
+// of that exact file -- is the identity of whatever now sits at path. Release
+// compares against it rather than removing the path blind.
+//
+// The stat is taken from the temporary sibling BEFORE the link, not from the
+// path after it: a stat of the path could already be describing somebody
+// else's lock if this one were force-released in between, and recording that
+// identity would authorize removing THEIR lock later. Failing here costs
+// nothing, because nothing has been published yet.
 //
 // The record is written to a temporary sibling and published with link(2)
 // rather than written in place after an O_CREAT|O_EXCL open. Both give the same
@@ -314,10 +327,10 @@ func (h holderIdentity) changedFrom(prev holderIdentity) bool {
 // start time the field is omitted and reuse detection is simply absent (see
 // IsStale). started= is the same instant in human-readable form and carries no
 // decision.
-func tryCreate(path, op string) error {
+func tryCreate(path, op string) (os.FileInfo, error) {
 	tmp, err := os.CreateTemp(filepath.Dir(path), publicationTempPrefix(filepath.Base(path)))
 	if err != nil {
-		return fmt.Errorf("creating temporary lock file: %w", err)
+		return nil, fmt.Errorf("creating temporary lock file: %w", err)
 	}
 	tmpName := tmp.Name()
 	// The temp name is unlinked whichever way this goes: on success the lock
@@ -326,20 +339,28 @@ func tryCreate(path, op string) error {
 
 	if err := writeLockContent(tmp, op); err != nil {
 		tmp.Close()
-		return err
+		return nil, err
 	}
 	if err := tmp.Chmod(0644); err != nil {
 		tmp.Close()
-		return err
+		return nil, err
 	}
 	if err := tmp.Close(); err != nil {
-		return err
+		return nil, err
+	}
+
+	published, err := os.Stat(tmpName)
+	if err != nil {
+		return nil, fmt.Errorf("identifying the lock file before publishing it: %w", err)
 	}
 
 	// link(2) fails with EEXIST when path already exists, which is the same
 	// atomic "one winner" property O_CREAT|O_EXCL gives, and Acquire reads that
 	// error as "someone else holds it".
-	return os.Link(tmpName, path)
+	if err := os.Link(tmpName, path); err != nil {
+		return nil, err
+	}
+	return published, nil
 }
 
 // publicationTempInfix is what tryCreate appends to a lock's own base name to
@@ -390,10 +411,55 @@ func writeLockContent(f *os.File, op string) error {
 	return err
 }
 
-// Release removes the lock file.
+// Release removes the lock file this process published, and nothing else.
 func (l *RefLock) Release() error {
 	unregisterCleanup(l.LockPath)
-	return os.Remove(l.LockPath)
+	return releaseIfOurs(l.LockPath, l.published)
+}
+
+// releaseIfOurs removes path only while it still names the exact file
+// published identifies. It is the single removal path for a holder releasing
+// its OWN lock -- RefLock.Release and ReleasePending both go through it.
+//
+// Removing by path alone is wrong in one reachable situation: an operator runs
+// `safegit unlock <ref>` against a lock this process still holds (a
+// force-release is deliberately unconditional -- it is the recovery path of
+// last resort), a third process then wins the free path and publishes its own
+// live lock there, and this process finally finishes and removes the path. The
+// newcomer's lock is deleted while the newcomer is still working, and two
+// operations mutate the ref at once -- the exact failure the lock exists to
+// prevent.
+//
+// A mismatch therefore means our lock is already gone: someone force-released
+// it. There is nothing to remove and nothing to report -- the removal we would
+// have performed has already happened, and the file at the path belongs to
+// somebody else. Silence is the whole response.
+//
+// The residual window is between the stat and the remove: the force-release
+// plus the newcomer's publication would have to fall inside those two syscalls.
+// Closing it entirely would mean flock, and an flock that cannot be taken (a
+// filesystem without it, a contender mid-reclaim) would leave a holder unable
+// to release its own lock at all -- a worse failure, and a much likelier one,
+// than the window it removes.
+func releaseIfOurs(path string, published os.FileInfo) error {
+	if published == nil {
+		// Acquire is the only constructor of a held lock and always records
+		// this, so a nil here is a RefLock somebody built by hand. Refusing is
+		// the honest answer: removing blind is what this function exists to
+		// stop, and pretending the release happened would strand the lock.
+		return fmt.Errorf("releasing %s: the lock carries no published identity", path)
+	}
+	current, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if !os.SameFile(published, current) {
+		return nil
+	}
+	return os.Remove(path)
 }
 
 // IsStale reports whether the process that holds the lock file is dead, which
