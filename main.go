@@ -476,7 +476,7 @@ func newApp() *strictcli.App {
 	)
 
 	hg := app.Group("hook", "manage pre-pre-push hook scripts that run before every push")
-	hg.Command("list", "list all pre-pre-push hooks currently installed in the .git/safegit/hooks directory, showing each hook name, file path, and whether it is executable, so you can audit which checks run before every push", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+	hg.Command("list", "list every pre-pre-push hook location safegit knows about, with its origin, its path and whether it is executable, so you can audit which checks run before every push. Three origins are shown: local, the tool-owned live store under the repository's common .git/safegit/hooks that hook install writes to and every worktree shares; tracked, the hooks the CHECKOUT provides in .safegit/hooks, which run because they are in that directory whether or not git tracks them, so cloning a repository and pushing from that checkout runs the repository's scripts; and legacy, the pre-migration location in git's own .git/hooks, which nothing runs any more and safegit hook migrate relocates. Non-executable and non-hook entries are listed too, because the hook an operator is asking about is usually the one that is NOT running", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(hookList(globalsToFlags(ctx, kwargs)))
 	}, strictcli.WithEffect(strictcli.EffectReadOnly))
 	hg.Command("run", "run all installed pre-pre-push hooks (or a single named hook) immediately without performing an actual push, so you can verify that all configured hooks pass before committing to a real push operation", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
@@ -494,21 +494,21 @@ func newApp() *strictcli.App {
 		strictcli.WithDryRunUnsupported("running a hook executes an operator-supplied script whose effects safegit cannot know in advance, so there is nothing honest to preview; run 'safegit hook list' to see which scripts would run"),
 		strictcli.WithArgs(strictcli.NewArg("name", "name of a specific hook to run; omit to run all installed hooks", strictcli.ArgOptional())),
 	)
-	hg.Command("install", "install a pre-pre-push hook by copying a script file into the .git/safegit/hooks directory, making it executable, and registering it so that safegit push will run it before any network I/O occurs", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+	hg.Command("install", "install a pre-pre-push hook by copying a script file into the live store under the repository's common .git/safegit/hooks directory and making it executable, so that safegit push runs it before any network I/O occurs. The store is keyed on the common git dir, so a hook installed from a linked worktree is the same hook every worktree of the repository runs. An existing destination is refused rather than overwritten", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		path := kwargs["path"].(string)
 		return strictcli.Exit(hookInstall(globalsToFlags(ctx, kwargs), path))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
 		strictcli.WithArgs(strictcli.NewArg("path", "filesystem path to the hook script file to install into safegit", strictcli.ArgRequired())),
 	)
-	hg.Command("remove", "remove one installed hook from the tool-owned .git/safegit/hooks directory by name, naming either the store-relative path such as pre-pre-push.d/20-lint or just the base name, so a hook can be retired or replaced without deleting files by hand; a name that resolves to a hook committed to the repository is refused, because removing that one means committing its deletion", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+	hg.Command("remove", "remove one hook from the tool-owned live store under the repository's common .git/safegit/hooks directory by name, naming either the store-relative path such as pre-pre-push.d/20-lint or just the base name, so a hook can be retired or replaced without deleting files by hand; a name that resolves only to a hook the checkout provides in .safegit/hooks is refused, because removing that one means deleting the file and committing that, and a name carried by both stores removes the live one and says the other still runs", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		name := kwargs["name"].(string)
 		return strictcli.Exit(hookRemove(globalsToFlags(ctx, kwargs), name))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
 		strictcli.WithArgs(strictcli.NewArg("name", "name of the installed hook to remove, as shown by 'safegit hook list'", strictcli.ArgRequired())),
 	)
-	hg.Command("migrate", "move safegit's hooks out of git's own .git/hooks directory into the tool-owned .git/safegit/hooks store, relocating the pre-pre-push file and the pre-pre-push.d directory unconditionally because those two names are the only ones safegit ever wrote there, and reporting success with an explanation when there is nothing to move", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+	hg.Command("migrate", "move safegit's hooks out of git's own .git/hooks directory into the tool-owned .git/safegit/hooks store, relocating the pre-pre-push file and the pre-pre-push.d directory unconditionally because those two names are the only ones safegit ever wrote there, and reporting success with an explanation when there is nothing to move. Both ends are under the repository's COMMON git dir, which is git's own hook directory in every worktree, so migration run from a linked worktree relocates the repository's hooks", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(hookMigrate(globalsToFlags(ctx, kwargs)))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
