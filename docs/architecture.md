@@ -22,23 +22,34 @@ This section records the key design decisions behind safegit and why alternative
 
 ## Data Model
 
-All safegit-specific state lives under `.git/safegit/`. Nothing escapes that directory, so a `rm -rf .git/safegit` returns the repository to the equivalent of "vanilla git". safegit does NOT install enforcement git hooks (see the Pre-pre-push Hook Contract section for the rationale and the layered enforcement story).
+safegit's own state lives under `.git/safegit/`, so removing that directory returns the repository to the equivalent of "vanilla git" -- git itself never reads anything safegit writes, and safegit installs no enforcement git hooks (see the Pre-pre-push Hook Contract section for the rationale and the layered enforcement story).
+
+Two qualifications, both deliberate. A repository with linked worktrees has one such directory PER worktree plus the shared one in the common git dir, which is why `doctor --action uninstall` is a repository-wide operation that enumerates every path it removes. And the checkout-provided hook store, `.safegit/hooks/` in the work tree, is repository CONTENT rather than safegit state: it is versioned with the project, and removing safegit's state directory does not remove it (nothing runs it either, since only safegit ever does).
 
 ### Directory layout
 
 ```
-.git/
+<worktree>/
+  .safegit/
+    hooks/                   the CHECKOUT-PROVIDED hook store: repository content,
+                             versioned with the project, run on push by safegit only
+.git/                        (the COMMON git dir; a linked worktree's own git dir is
+                             .git/worktrees/<name> and holds its own safegit/)
   safegit/
-    config.json              global safegit config (schema version, defaults)
-    log                      append-only operation log (JSONL)
+    config.json              safegit config (schema version, defaults)
+    log                      append-only operation log (JSONL), flock-guarded appends
+    rewrite-maps.jsonl       crash-safe old-to-new SHA journal, one group per rewrite
     locks/
       refs/
-        heads/<branch>.lock  active ref lock (PID + ts + op_kind)
-      objects.lock           optional coarse lock for pack writes (rare; usually unused)
+        heads/<branch>.lock  per-ref lock (pid + ts + op + host + start identity)
+      safegit/
+        rewrite.lock         repository-wide history-rewrite lock (shared dir)
+        operation.lock       worktree operation lock (worktree-local dir)
+      .<name>.lock.tmp-*     publication temporary; never a lock, swept by doctor
     tmp/
-      <pid>-<random>/        per-invocation scratch (index file, synthetic patches)
+      <pid>-<random>/        per-invocation scratch (the temporary index),
                              deleted when the invocation exits
-    hooks/
+    hooks/                   the LIVE hook store, keyed on the COMMON git dir
       pre-pre-push           single-file hook (executable, optional)
       pre-pre-push.d/        directory of hooks (run in lexical order, optional)
   hooks/
@@ -59,15 +70,17 @@ Git's own `.git/hooks/` is the third location safegit knows about, and only as h
 
 ### Per-invocation tmp index
 
-Each safegit invocation creates an isolated temporary index file seeded from HEAD, performs all staging against that private index, and deletes it on exit. There are no persistent sessions, no session IDs, and no shared staging area between invocations. This isolation is the core mechanism that prevents concurrent agents from leaking files into each other's commits.
+Each safegit invocation creates an isolated temporary index file seeded from the tip of the branch it is committing to, performs all staging against that private index, and deletes it on exit. There are no persistent sessions, no session IDs, and no shared staging area between invocations. This isolation is the core mechanism that prevents concurrent agents from leaking files into each other's commits.
 
 1. Create `.git/safegit/tmp/<pid>-<random>/` where `<random>` is a short hex suffix (4 bytes) chosen to avoid PID-reuse races within the same second.
-2. Seed the tmp index from `HEAD`:
+2. Seed the tmp index from the resolved parent commit -- the tip of the TARGET ref, which is not `HEAD` when `--branch` names another branch, and the empty tree for a root commit:
 
     ```
     GIT_INDEX_FILE=.git/safegit/tmp/<pid>-<random>/index \
-      git --no-optional-locks read-tree HEAD
+      git --no-optional-locks read-tree <parent-sha>
     ```
+
+    A caller that must commit the whole staged result rather than a pathspec -- a conclusion of a merge, a cherry-pick or a revert -- asks for the SHARED index as the base instead. That choice is an explicit input, never inferred.
 
 3. Apply the requested staging operations against the tmp index (see the Hunk Staging section).
 4. Build the tree, the commit, and update the ref (see the Commit Pipeline section).
@@ -87,11 +100,20 @@ The operation log at `.git/safegit/log` is an append-only JSON-lines file record
 {"ts":"2026-04-26T11:39:45.900Z","pid":12348,"op":"push","extra":{"remote":"origin","refs":[{"localRef":"refs/heads/main","localSha":"<sha>","remoteRef":"refs/heads/main","remoteSha":"<sha>"}],"hooksRun":2}}
 ```
 
-Required fields: `ts`, `pid`, `op`. Other fields are op-specific. Writes use `O_APPEND` on Linux/macOS, which guarantees atomic append for writes <= `PIPE_BUF` (4096 bytes). Lines longer than 4096 bytes are rejected; commit messages are not logged, only their SHA.
+Required fields: `ts`, `pid`, `op`. Other fields are op-specific. Each append is made under an exclusive `flock(2)` held across the whole write, and THAT is what makes a concurrent append atomic -- not the 4096-byte `PIPE_BUF` guarantee `O_APPEND` gives. Entries therefore have no size limit: an oversized one is written whole rather than rejected. Commit messages are still not logged, only their SHA.
+
+The log is append-only and is never rotated or truncated. `oplog.Read` reports how many unparseable lines it skipped, and a consumer that needs a complete log -- `undo`, bypass detection -- fails closed on a nonzero count rather than acting on a partial reading; `safegit doctor` reports it as an error-severity finding.
 
 ### Lock file format
 
-Lock files at `locks/refs/heads/<branch>.lock` are short text files created atomically via `O_CREAT|O_EXCL` (exclusive create) to serialize ref updates on a per-branch basis. Each lock file records the holder's PID, hostname, timestamp, operation type, and process start time, providing the information needed for liveness checks, stale lock recovery, and diagnostic inspection by `safegit doctor`.
+Lock files at `locks/refs/heads/<branch>.lock` are short text files recording the holder's PID, hostname, timestamp, operation type, and process start identity -- the information needed for liveness checks, stale-lock reclamation, and diagnostic inspection by `safegit doctor`.
+
+**Publication is atomic in content, not only in existence.** The record is written into a temporary sibling (`.<name>.lock.tmp-<random>`, a dot-file so no scan mistakes it for a lock) and then published with `link(2)`. `link` fails with `EEXIST` when the path already exists, which gives exactly the one-winner property `O_CREAT|O_EXCL` gives -- and additionally means no reader ever sees a half-made lock. Writing the record in place after an exclusive create left the file existing-but-empty for an instant, and the staleness rule "corrupt or zero-length means stale" condemned a freshly created lock whose owner was very much alive.
+
+Two environment requirements follow from that design, and they are the two ways a repository can be unable to lock properly:
+
+- **Lock acquisition requires hard-link support** on the filesystem holding `.git`, because publication IS `link(2)`.
+- **Reclaiming a stale lock requires a working `flock(2)`** (see below). Where flock does not work, nothing is ever reclaimed on a guess: contenders wait out `lock.acquireTimeoutSeconds` and exit 8 instead, and `safegit unlock <name>` -- which removes one named lock unconditionally after its own staleness check -- is the recovery path.
 
 ```
 pid=12345
@@ -108,89 +130,105 @@ started=2026-04-26T11:39:42.120Z
 
 The full sequence for `safegit commit -m "msg" -- file1 file2 ...`. The pipeline is split into a parallel-safe phase (object construction) and a serialized phase (ref update). A complete file list is required (no implicit "stage everything").
 
-### Phase A -- parallel-safe (no locks)
+Four commands reach this pipeline and produce commits through it: `commit` (including `--amend` and reword), `mv`, the three conclusion commands (`merge-continue`, `cherry-pick-continue`, `revert-continue`), and a single-commit `revert`. They differ in what they put into the request -- index edits, extra parents, an author to pin, move records -- and share everything below.
 
-1. **Initialize tmp index.** Create `.git/safegit/tmp/<pid>-<random>/index` and seed from `HEAD`. Set `GIT_INDEX_FILE` to that path for all subsequent git invocations in this process.
-2. **Validate file arguments.** For each `<file>` after `--`:
-    - It must exist on disk OR be a known deletion.
-    - It must be inside the working tree (no `../` escape).
-3. **Stage files into tmp index.** Apply the staging logic from the Hunk Staging section to each file.
-4. **Build the tree.**
+### Before either phase (once per invocation)
 
-    ```
-    GIT_INDEX_FILE=.git/safegit/tmp/<pid>-<random>/index \
-      git --no-optional-locks write-tree
-    ```
+The commands that own a working tree take the **worktree operation lock** first, outside everything here (see the Concurrency Guide). Inside the pipeline, once and before the retry loop:
 
-    `write-tree` is content-addressed and parallel-safe -- multiple invocations writing the same tree converge on the same SHA and writes to the object DB are idempotent.
-5. **Snapshot the parent.** Resolve the current tip of the target branch:
+- **Refuse if git has an operation in flight**, unless the caller declared itself the conclusion path for exactly that operation -- and the declaration is verified, not trusted. A commit built mid-merge would hand `commit-tree` a single parent and silently drop the merge's second parent and staged result.
+- **Open the preview quarantine** when this is a dry run: a temporary directory outside the repository that every object-writing git subprocess writes into and that is deleted on exit.
+- **Resolve the target ref**, canonicalize and expand the file arguments against the tip that ref names (which is not HEAD when `--branch` names another branch), and resolve the declared moves and retractions into records -- so a refusal happens before anything is staged and every attempt writes the same record with the same id.
+- **Prepare the repository's own hooks**, so they run at most once each however many attempts the CAS loop takes.
 
-    ```
-    git rev-parse --verify refs/heads/<branch>
-    ```
+### Phase A -- parallel-safe (no locks), per attempt
 
-    Call this `<parent-sha>`. (For a detached `HEAD`, the target ref is `HEAD` and the parent is the resolved commit.)
-6. **Build the commit.**
+1. **Resolve the parent FIRST.** `git rev-parse <ref>`, before the index exists. Resolving it after building the tree is the ordering this pipeline deliberately rejects: another agent's commit landing in between would produce a commit whose tree is based on the old tip but whose parent is the new one, silently dropping that agent's files. A ref that does not resolve is a root commit.
+2. **Create the per-invocation tmp index** under `.git/safegit/tmp/<pid>-<random>/` (under the preview area in a dry run), seeded from the resolved parent -- or from the empty tree for a root commit, or from the shared index where the caller asked for that (a conclusion commits the operation's whole staged result).
+3. **Apply the caller's index edits**, if any: `mv`'s carried tree entries, a conclusion's declared resolutions. Inside the loop, because the index is created fresh on every attempt.
+4. **Stage the named files** into the tmp index, whole or by hunk selection.
+5. **Run `pre-commit`** against the tmp index, so the hook sees exactly what this commit stages. Skipped by a dry run; run only once across attempts.
+6. **Build the tree** with `git write-tree` against the tmp index. Content-addressed and parallel-safe: concurrent invocations writing the same tree converge on the same SHA.
+7. **Read what the commit actually contains** with `git diff-tree` against the parent's tree. Every count and path safegit reports comes from here, never from the arguments -- the arguments say what was asked for, the objects say what the commit holds. A named argument that contributed nothing is a refusal naming it (exit 11); an unchanged tree is the empty-commit refusal unless `--allow-empty`.
+8. **Run `commit-msg`** on the message carrying the user's own trailers and the move records, adopting whatever the hook leaves; safegit's session trailer goes on afterwards, so a rewriting hook cannot strip it. It comes after the refusals above, which is git's own order -- git stops at "nothing to commit" before it asks for a message.
+9. **Build the commit** with `git commit-tree`: the tip is parent 0 (and is what every CAS below is made against), a conclusion names the other side as extra parents, and an author is pinned where the operation calls for one.
 
-    ```
-    git commit-tree <tree-sha> -p <parent-sha> -m "msg"
-    ```
-
-    Produces `<new-commit-sha>`. Also parallel-safe.
-
-At this point we have a valid commit object in the object DB but no ref points to it. If the process dies right now, the commit is unreachable and will be GC'd by `git gc` eventually; nothing is broken.
+At this point a valid commit object exists in the object store but no ref points to it. If the process dies right now, the commit is unreachable and `git gc` collects it; nothing is broken.
 
 ### Phase B -- serialized (per-ref lock + CAS)
 
-7. **Acquire ref lock.** Attempt to atomically create `locks/refs/heads/<branch>.lock` via `O_CREAT|O_EXCL`. On success, we hold the lock.
-8. **On lock contention,** poll with exponential backoff (10ms, 20ms, 50ms, 100ms, 200ms, 500ms, capped at 1s) until the lock is released or the timeout expires. On each poll, check if the lock holder is dead via `kill(pid, 0)`; if so, remove the stale lock and retry creation.
-9. **Re-resolve parent.** Once we hold the lock, re-read `refs/heads/<branch>`. If it changed since step 5, we have a CAS miss.
-    - **If parent unchanged:** proceed to step 10.
-    - **If parent changed:** release the lock, GOTO step 5 (rebuild the commit with the new parent). After 5 attempts (configurable: `commit.casMaxAttempts`, default 5), exit with code 7 ("could not converge on branch tip; another writer is making faster progress; retry manually").
-10. **Update the ref.**
+A dry run takes NO lock and makes no re-read: there is nothing to protect, and a lock file written by a run that promises to change nothing would itself be a change. It joins the executing path at the ref update, which it records instead of performing.
 
-    ```
-    git update-ref refs/heads/<branch> <new-commit-sha> <parent-sha>
-    ```
-
-    `update-ref` itself takes the `<old-value>` argument so it performs an atomic CAS at the git level too. This is belt-and-suspenders: our lock prevents most contention, and `update-ref --old` catches any we missed.
-11. **Release the ref lock.** Atomic `unlink(2)` of the lock file. Waiters detect lock release via exponential-backoff polling.
-12. **Append to op log.** Write the `commit` JSONL line per the Operation log schema.
-13. **Cleanup.** Delete `.git/safegit/tmp/<pid>-<random>/`.
+10. **Acquire the ref lock** for the target ref by publishing `locks/refs/heads/<branch>.lock` (see Lock file format). On contention, poll with exponential backoff -- 10ms, 20ms, 50ms, 100ms, 200ms, 500ms, capped at 1s, and reset to the first step whenever the lock is observed to have changed hands, so a rapidly handed-over lock does not starve its queue. A lock whose holder is genuinely gone is reclaimed under the lock file's own `flock` (see Stale lock reclamation); past `lock.acquireTimeoutSeconds` safegit exits **8** naming the holder.
+11. **Re-resolve the parent (the CAS check).** With the lock held, re-read the ref. Unchanged: proceed. Changed: this attempt is a CAS miss -- release, jitter, and start Phase A again from step 1 with the new tip. After `commit.casMaxAttempts` (default 5) attempts, exit **7**.
+12. **Update the ref** with `git update-ref <ref> <new> <expected>`, which performs the compare-and-swap at the git level too -- belt and braces beside the lock. A root commit's expectation is the all-zero SHA ("this ref must not exist"), so creating one is conditional as well. This is the single point where the pipeline mints a mutation: in a preview it is recorded and nothing moves.
+13. **Append to the oplog** -- *while the lock is still held*, and before the index reconcile, so that a fatal reconcile still leaves a commit `safegit undo` can reverse.
+14. **Reconcile the shared index** with the new commit, preserving staged work the parent tip does not account for. Only when committing to the checked-out branch: a cross-branch commit must not touch this worktree's index at all.
+15. **Run `post-commit`**, once the commit is real and nothing can take it back.
+16. **Release the lock** (deferred, so it outlives every step above) and delete the tmp index directory.
 
 ### Sequence summary
 
-| Step | Phase | Holds lock? | Touches global state? |
+| Step | Phase | Holds ref lock? | Touches global state? |
 |---|---|---|---|
-| 1. Init tmp index | A | no | no (only tmp dir) |
-| 2. Validate args | A | no | reads only |
-| 3. Stage to tmp index | A | no | no |
-| 4. `git write-tree` | A | no | yes (writes objects, idempotent) |
-| 5. Resolve parent ref | A | no | reads only |
-| 6. `git commit-tree` | A | no | yes (writes one commit object) |
-| 7. Acquire ref lock | B | acquiring | yes (creates lock file) |
-| 8. Wait if held (polling) | B | waiting | no (read-only polling) |
-| 9. Re-resolve parent / CAS check | B | held | reads only |
-| 10. `git update-ref --old` | B | held | yes (writes ref) |
-| 11. Release ref lock | B | releasing | yes (unlink only) |
-| 12. Append op log | B | not held | yes (append-only line) |
-| 13. Cleanup | B | not held | tmp dir only |
+| 1. Resolve parent ref | A | no | reads only |
+| 2. Init tmp index | A | no | no (only its own tmp dir) |
+| 3. Apply index edits | A | no | writes objects (idempotent) |
+| 4. Stage to tmp index | A | no | writes objects (idempotent) |
+| 5. `pre-commit` hook | A | no | whatever the hook does |
+| 6. `git write-tree` | A | no | writes objects (idempotent) |
+| 7. `git diff-tree` / refusals | A | no | reads only |
+| 8. `commit-msg` hook | A | no | whatever the hook does |
+| 9. `git commit-tree` | A | no | writes one commit object |
+| 10. Acquire ref lock | B | acquiring | yes (publishes the lock file) |
+| 11. Re-resolve parent / CAS check | B | held | reads only |
+| 12. `git update-ref <old>` | B | held | yes (moves the ref) |
+| 13. Append oplog | B | **held** | yes (one appended line) |
+| 14. Reconcile shared index | B | held | yes (this worktree's index) |
+| 15. `post-commit` hook | B | held | whatever the hook does |
+| 16. Release lock, clean up | B | releasing | lock file and tmp dir |
+
+In a dry run, steps 10-16 do not happen at all: the recorded ref update ends the attempt.
 
 ### Wakeup mechanism
 
-Waiters use exponential-backoff polling (10ms, 20ms, 50ms, 100ms, 200ms, 500ms, capped at 1s). The poll loop is bounded by `lock.acquireTimeout` (default 30s); past that safegit exits with code 8 ("ref lock acquisition timed out").
+Waiters poll with exponential backoff (10ms, 20ms, 50ms, 100ms, 200ms, 500ms, capped at 1s), bounded by `lock.acquireTimeoutSeconds` (default 30). Past that safegit exits with code 8, and the message names the holder. There is no notification mechanism: a waiter learns the lock is free by looking.
 
-On each poll iteration, the lock file is checked for liveness: if the holder PID is dead, the stale lock is removed and the waiter acquires it.
+A waiter that observes a DIFFERENT lock file at the path than it saw on its previous poll -- a new inode, which every publication produces -- resets its backoff to the first step. Without that reset every waiter escalates to the 1s cap within six polls and stays there, so a lock held for 30ms at a time sits idle for most of every second and the queue drains at roughly one waiter per second however many are waiting. The escalation still does its job where it was meant to: a lock one process holds for minutes never changes hands, so its waiters keep polling once a second.
+
+### Stale lock reclamation
+
+A lock whose holder is genuinely gone is reclaimed automatically -- but the judgement that a lock is stale is not what authorizes removing it, because two contenders can reach that judgement about the same file and the second would then delete the fresh lock the first had already published. Reclamation therefore happens under the lock file's own exclusive `flock(2)`, with the path re-stat'd and compared against the held descriptor's inode before anything is unlinked, and staleness re-judged from the descriptor's own contents rather than a fresh read of the path. Any condition other than a clean verdict -- another contender mid-reclaim, a filesystem without flock, a permission error -- leaves the lock alone, which is the fail-closed direction.
+
+Staleness itself needs positive evidence:
+
+- the holder's PID must be dead (a `kill(pid, 0)` probe);
+- a lock recording a different `host=` is never judged stale, because a PID from another machine's namespace means nothing here;
+- PID reuse is decided by comparing the `start=` identity recorded at acquire time against the current start time of whatever holds that PID now -- and when either side is unavailable, the check fails closed;
+- an unreadable, corrupt or zero-length lock file is stale: that is what a crash mid-create leaves behind.
+
+**Release is identity-checked too.** A holder removes the path only while it still names the exact file it published (`SameFile` against the identity recorded at publication time). The reachable case that makes this necessary: an operator force-releases a lock this process still holds, a third process wins the free path and publishes its own live lock there, and the original process then finishes -- a blind `unlink` would delete the newcomer's lock while the newcomer is working. A mismatch means our lock is already gone, so there is nothing to remove and nothing to report.
 
 ### Retry policy
 
 | Failure | Retry? | Max attempts | Backoff |
 |---|---|---|---|
-| CAS miss (parent changed) | yes | `commit.casMaxAttempts` (default 5) | none -- retry immediately, lock will queue us |
-| Ref lock contention | yes (waiting) | unbounded under `lock.acquireTimeout` (30s) | exponential-backoff polling |
+| CAS miss (parent changed) | yes | `commit.casMaxAttempts` (default 5) | random jitter (1-10ms) between attempts |
+| Ref lock contention | yes (waiting) | unbounded under `lock.acquireTimeoutSeconds` (30s) | exponential-backoff polling, reset on a change of holder |
 | `git write-tree` fails | no | 0 | exit code 9 |
 | `git commit-tree` fails | no | 0 | exit code 10 |
-| `git update-ref` fails after lock held | yes | `commit.casMaxAttempts` (rare; usually means stale parent) | retry from step 5 |
+| `git update-ref` fails transiently after the lock is held | yes | `commit.casMaxAttempts` (rare; usually a stale parent) | retry the whole attempt |
+
+## Declared moves and their records
+
+safegit never infers a rename from file contents. A move is DECLARED, checked against the repository, and written into the commit message as a `Moved:` record carrying its own identifier and the two C-quoted paths.
+
+- **`safegit commit --moved 'old -> new'`** states that a move already happened: the old path must be tracked in the commit's parent and gone from disk, the new one must be present. A declaration the repository does not bear out exits **19** and commits nothing.
+- **`safegit mv 'old -> new'`** is the other half: it performs the rename, mints the record for what it renamed, and commits, in one invocation, so the move and its record cannot be out of step. It is the fourth commit-producing path through the pipeline, and its shape is validate -> rename -> commit: every pair is checked before the first filesystem mutation, the renames are minted through the effects handle (so a dry run records them), a failure part-way through puts back everything already moved, and the commit carries each moved path across as the exact blob the parent tree held -- the rename and nothing else.
+- **Both spellings share one grammar and one overlap check.** Two pairs may not nest and may not chain (`a -> b` beside `b -> c`), because the result would depend on the order they were performed in; both are argument-against-argument contradictions and exit 2.
+- **A record is never edited, only retracted.** `--moved-retract <id>` writes a `Moved-Retract:` trailer after verifying the id names a record that exists and is not already retracted in the history the commit is built on. A replacement is a retraction plus a new declaration in one commit.
+- **A single `safegit revert` mints the INVERSE of every record the reverted commit declared**, through both doors (a clean computed revert and one concluded after a conflict). A queued revert is git's own sequencer, so those commits carry no records at all.
+- **A rewrite treats records as records.** `scrub match` and `scrub run` substitute inside the DECODED paths and re-encode through the one encoder, so the output always parses; a substitution whose result is no longer a move is refused before any ref moves (exit 30). `scrub file --delete` removes the records naming the erased path, whole, in the same rewrite; `--replace-with` edits no message, because the path still exists and the record is still true.
 
 ## Hunk Staging
 
@@ -226,13 +264,17 @@ type Hunk struct {
 
 ### Staging API surface
 
-Hunk-level staging is exposed inline at commit time via `file:hunk-spec` syntax rather than through standalone `stage`/`unstage` commands. The caller appends a colon and comma-separated 1-based hunk indices or ranges to the filename. The underlying mechanism -- extracting hunks, building a synthetic patch, and applying it to the tmp index -- is identical for all syntax forms.
+Hunk-level staging lives in ONE flag, `--hunks`, and a positional path is always the literal name of a file. There are no standalone `stage`/`unstage` commands.
 
 | Operation | Selects |
 |---|---|
 | `safegit commit -- <file>` | Whole file (all hunks) |
-| `safegit commit -- <file>:1,3,5` | Specific 1-based hunks |
-| `safegit commit -- <file>:2-4` | Range (inclusive) |
+| `safegit commit --hunks '<file>:1,3,5'` | Specific 1-based hunks |
+| `safegit commit --hunks '<file>:2-4'` | Range (inclusive) |
+
+The split inside a `--hunks` element is on its LAST colon, so `--hunks 'sprint:1:2,3'` selects hunks 2 and 3 of the file named `sprint:1`. Naming one path both as a positional and in `--hunks`, or twice in `--hunks`, is a hard error decided on the canonical paths rather than on how they were spelled.
+
+It used to be the other way round: a positional argument was split into a path and a hunk selection when its tail looked numeric AND `os.Stat` could not see the whole string as a file. That made the grammar of a command line a function of disk state -- `notes:1` was a hunk selection from one directory and a filename from another -- and made a file whose name really ends in a colon plus digits impossible to delete, because once it was gone from disk the probe reparsed its own name. Nothing on disk is consulted to decide how to read a command line any more.
 
 ### Synthetic patch mechanism
 
@@ -241,32 +283,23 @@ When a commit specifies individual hunks rather than whole files, safegit constr
 1. Extract hunks as described above.
 2. Compute the selected-hunk subset.
 3. Build a synthetic patch: header lines from the source diff + headers/bodies of selected hunks only.
-4. `git apply --cached --index --whitespace=nowarn --recount` against `GIT_INDEX_FILE`.
+4. `git apply --cached --recount --whitespace=nowarn` against `GIT_INDEX_FILE`, with the patch fed on stdin.
     - `--cached` means apply to the index, not the working tree.
     - `--recount` makes `git apply` tolerant of slightly off line counts (caused by skipping intermediate hunks).
-    - `--index` sanity-checks against the working tree.
-5. On `git apply` failure, retry with `--3way` (uses blob sha info from the patch's `index` line). On second failure, exit code 12 with the apply stderr surfaced.
+5. On failure, retry once with `--3way` (which uses the blob SHAs from the patch's `index` line). A second failure is reported with git's own stderr surfaced.
 
 ### Edge cases
 
 | Case | Behavior |
 |---|---|
-| Hunk depends on earlier unselected hunk (line-number mismatch) | `git apply --recount` handles most cases; on failure, re-run with `--3way`; on second failure, exit 12 with `Hint: try staging earlier hunks first or use --patch`. |
-| Working tree changed since diff was taken | Re-extract hunks. If hunk count or content changed, abort with exit code 13 ("file changed under us; re-run") -- callers should retry. |
-| File is binary | Whole-file only; hunk spec rejected with exit 14. |
-| File is new (intent-to-add) | Whole-file only; map to `git update-index --add --cacheinfo`. |
-| File is deleted | Deletion is added to the index. |
-| Symlink | Treated as a special file; whole-file only. |
+| Hunk depends on an earlier unselected hunk (line-number mismatch) | `--recount` handles most cases; on failure the apply is retried with `--3way`, and a second failure reports git's stderr. |
+| File is binary | Whole-file only; a hunk selection is refused with exit 14. |
+| Symlink | Whole-file only; a hunk selection is refused with exit 15 -- a symlink has nothing to split. |
+| File is untracked | Staged whole, as an addition. |
+| File is deleted | The deletion is staged. |
+| Path named but contributing nothing | Refused with exit 11, naming the argument. |
 
-### Inverse: unstage
-
-Unstaging reverses the staging operation by building the same synthetic patch and applying it with the `--reverse` flag to the temporary index. The diff direction is inverted so that applying the patch in reverse removes previously staged changes. For whole-file unstaging, the simpler `git reset HEAD -- <file>` is used instead of patch reversal.
-
-```
-git apply --cached --index --reverse --recount <synthetic-patch>
-```
-
-Whole-file unstage is the simpler `git reset HEAD -- <file>` against the tmp index.
+There is no unstage. The temporary index is created fresh for every attempt of every invocation and thrown away with it, so there is no accumulated staging to take back: what a commit contains is exactly what its command line named. The cleanup half of `git rm --cached` -- dropping a path from the index while leaving it on disk -- is `safegit commit --untrack <path>`, which is a commit, not a staging operation.
 
 ## Pre-pre-push Hook Contract
 
@@ -289,7 +322,11 @@ Within each store the traditional two shapes are just names: `pre-pre-push` is t
 
 A hook must be executable (`chmod +x`). A non-executable hook in the LIVE store is skipped with a warning (`safegit doctor` reports it, and git takes the same stance for its own hooks). A non-executable hook in the CHECKOUT-PROVIDED store is a refusal instead (exit 25): such a hook is disabled by deleting it and committing that, so a lost mode bit -- a checkout on a filesystem without modes, a patch tool that dropped it -- must not silently stop the repository's checks.
 
-Standard git hooks live in `.git/hooks/` as usual. safegit builds commits from git plumbing rather than by invoking `git commit`, so it runs the commit family itself: `pre-commit` against the per-invocation index, `commit-msg` on the composed message before safegit's own session trailer is added (a rewrite by the hook is adopted), and `post-commit` after the ref has moved. Each runs once per commit, amend or reword, whatever the compare-and-swap loop does, and a `--dry-run` runs none of them and says so. `prepare-commit-msg` never runs: safegit never opens an editor, so there is no message-preparation step for it to act on.
+Standard git hooks live in `.git/hooks/` as usual -- resolved through `git rev-parse --git-path hooks`, so `core.hooksPath` and linked worktrees are honored. safegit builds commits from git plumbing rather than by invoking `git commit`, so it runs the commit family itself: `pre-commit` against the per-invocation index, `commit-msg` on the composed message before safegit's own session trailer is added (a rewrite by the hook is adopted), and `post-commit` after the ref has moved. Each runs once per commit, amend or reword, whatever the compare-and-swap loop does, and a `--dry-run` runs none of them and says so. A refusal from either of the first two exits **16**. `prepare-commit-msg` never runs: safegit never opens an editor, so there is no message-preparation step for it to act on.
+
+All hook output goes to stderr, because safegit's stdout is a structured channel -- the JSON envelope in machine mode, and a child's parsed result in the parent auto-bump.
+
+One consequence of running the hooks once rather than per attempt: a `pre-commit` hook that stages content DIFFERING from the working tree loses that staging on a CAS retry, because the hook does not re-run and disk is re-staged. Formatter hooks rewrite disk, so the real exposure is negligible.
 
 ### Stdin contract
 
@@ -317,16 +354,25 @@ Inherits all other env (PATH, etc.).
 ### Execution flow
 
 ```
-safegit push [<remote>] [<refspec>...]
-  -> resolve refs to push (local-sha, remote-sha)
-  -> build hook stdin
+safegit push [<remote>]
+  -> resolve the remote URL
+  -> IF --force-with-lease: confirm at the terminal, BEFORE any network contact
+       (--approve-consequential answers it in advance; a declined force
+        contacts nothing at all)
+  -> resolve the refs to push -- which READS the remote (git ls-remote), because
+     each lease is pinned to the SHA safegit itself observed there
+  -> build hook stdin from that exact ref set
   -> for each discovered hook in order:
-       run hook with stdin, captured stdout/stderr (streamed to user)
+       run hook with stdin, output to stderr
        enforce timeout: hooks.preprepush.timeoutSeconds (default 1800 = 30 min)
-       if exit != 0: print stderr, abort, exit code 20
-  -> ONLY NOW: open SSH/HTTPS transport via `git push <remote> <refspec>...`
-       (git's built-in pre-push still fires AFTER connection; see below)
+       if exit != 0: abort, exit code 20 (timeout: exit code 21)
+  -> git push, with git's output CAPTURED (classification needs its stderr)
+       retry on a transport error only: re-read the remote, re-pin every lease,
+       and refuse (exit 40) if a LOCAL ref moved since the hooks saw it
+  -> append ONE oplog entry, after the push succeeds
 ```
+
+Note what this does and does not promise. "Before any network I/O" is about the HOOKS: they run before `git push` opens a transport, which is the whole point of the phase. The ref resolution that decides what to push -- and what to pin each lease to -- is itself a read of the remote, and it necessarily comes first. A `--dry-run` push performs that read too, and then records the push instead of performing it.
 
 ### Compose with git's built-in pre-push
 
@@ -350,7 +396,9 @@ If both phases are needed, the user splits expensive checks (smoke tests) into `
 
 ### Bypass
 
-The `safegit push --no-pre-pre-push` flag skips the entire pre-pre-push hook phase and proceeds directly to the git push. This escape hatch exists for human operators who need to push urgently when a hook is broken or misconfigured. For AI agent environments, this flag should be disallowed via Claude Code permission settings to prevent agents from routinely bypassing validation checks.
+`safegit push --no-pre-push-hook` skips the entire pre-pre-push phase and goes straight to the git push. (The flag is `--pre-push-hook` / `--no-pre-push-hook`; omitted, the hooks run.) This escape hatch exists for human operators who need to push urgently when a hook is broken or misconfigured. For AI agent environments, the negated form should be disallowed via Claude Code permission settings to prevent agents from routinely bypassing validation checks.
+
+A `--dry-run` never runs the hooks whatever the flag says -- a hook is an arbitrary script, so running one is a mutation a preview may not perform -- and it says so on stderr and in the payload's `pre_pre_push_hooks_skipped` member. Where both hold, the payload reports `disabled` rather than `dry-run`: a preview of a run that turned the hooks off must report the operator's decision, because the real push will not run them either.
 
 ## Failure Modes
 
@@ -360,25 +408,28 @@ This section catalogs every known failure mode in safegit's operation, covering 
 
 - **Symptom:** orphan tmp directory at `.git/safegit/tmp/<pid>-<rand>/`.
 - **Detection:** `safegit doctor` and `safegit doctor --action fix` list tmp directories, parse the leading PID, and call `kill -0 pid`. Dead PID = orphan.
-- **Recovery:** `safegit doctor --action fix` removes the tmp directory. Object DB is unaffected (no orphan blobs from staging; staging only writes blobs for new tree contents and they're GC'd by `git gc` later if unreferenced).
+- **Recovery:** `safegit doctor --action fix` removes the tmp directory. The object store needs no repair: staging writes blobs, and any that no commit ended up referencing are ordinary unreachable objects that `git gc` collects. Nothing is corrupt and nothing is lost.
 
 ### Process crashes mid-commit (lock held)
 
 - **Symptom:** `locks/refs/heads/<branch>.lock` exists with a dead `pid`.
-- **Detection:** any commit acquisition attempt reads the lock, parses `pid` and `host`, calls `kill -0 pid` (Unix) or checks `/proc/<pid>` (Linux). If `host` differs from local `hostname`, treat as alive (cross-machine fence; see Cross-machine / NFS below).
-- **Recovery:** the stale lock file is removed via `os.Remove`, then a new lock is created with `O_CREAT|O_EXCL`. The new holder logs a `lock_recovered` op log entry. Corrupt or zero-length lock files (from crashes mid-create) are treated as stale.
+- **Detection:** an acquisition attempt reads the lock as a cheap pre-filter -- `pid`, `host`, and the recorded `start` identity (see Stale lock reclamation). A `host` that differs from the local hostname is never judged stale (cross-machine fence; see Cross-machine / NFS below).
+- **Recovery:** the pre-filter does not authorize anything. The contender opens the lock file, takes an exclusive `flock` on it, re-checks that the path still names that exact inode, re-judges staleness from the descriptor, and only then unlinks -- so two contenders facing the same stale lock cannot both "reclaim" it, with the second deleting the fresh lock the first just published. The winner then publishes its own lock and appends a `lock_recovered` oplog entry. Corrupt or zero-length lock files (a crash mid-create) count as stale. Where `flock(2)` does not work, nothing is reclaimed at all: contenders time out (exit 8) and `safegit unlock <name>` is the way out.
+- **Also swept:** an orphaned publication temporary (`.<name>.lock.tmp-*`) left by a kill between the write and the `link`. It is not a lock by name, so it blocks nothing; `safegit doctor --action fix` removes it.
 
 ### Two invocations commit to same branch simultaneously
 
-- **Symptom:** both reach step 7 of the Commit Pipeline around the same time.
-- **Detection:** `O_CREAT|O_EXCL` lock acquisition fails for the second; second waits via exponential-backoff polling.
-- **Recovery:** lock orders them. After the first commits and releases, the second wakes, re-resolves parent (now the first invocation's commit), detects CAS miss, rebuilds commit with new parent, then succeeds. End result: linear history, no corruption, both commits land.
+- **Symptom:** both reach Phase B of the Commit Pipeline around the same time.
+- **Detection:** publication (`link(2)`) fails with `EEXIST` for the second, which waits via exponential-backoff polling.
+- **Recovery:** the lock orders them. After the first commits and releases, the second wakes, re-resolves the parent (now the first invocation's commit), detects the CAS miss, rebuilds the commit on the new parent, and succeeds. End result: linear history, no corruption, both commits land.
+- **Same worktree, additionally:** the worktree operation lock serializes the two invocations even before this, since `commit` takes it around the whole operation.
 
 ### Network failure mid-push
 
 - **Symptom:** `git push` exits non-zero with a transport error after the pre-pre-push hooks have already run.
 - **Detection:** non-zero exit from inner `git push`.
-- **Recovery:** safegit retries the push up to `push.retryAttempts` (default 3) with exponential backoff (1s, 2s, 4s) for transient errors (DNS, connection reset, TLS handshake). NOT retried: HTTP 401/403, "non-fast-forward", "remote rejected". Pre-pre-push hooks are NOT re-run on retry (they already validated the local state). Op log records each attempt.
+- **Detection:** git's own captured stderr is classified against multi-word transport phrases; the framework's error string never carries it, which is why the retry loop was dead until it read the captured stream.
+- **Recovery:** safegit retries the push up to `push.retryAttempts` (default 3) with exponential backoff (1s, 2s, 4s) for transport errors (DNS, connection refused, connection reset, TLS handshake, broken pipe). NOT retried: HTTP 401/403, "non-fast-forward", "remote rejected" -- and above all a rejected `--force-with-lease`, which is TERMINAL (exit 41): retrying would re-observe the other session's ref, pin the lease to it, and perform exactly the overwrite the lease prevented. Every retry re-reads the remote and re-pins every lease, since an expectation describes the remote at a moment. Pre-pre-push hooks are NOT re-run, so a retry that finds a LOCAL ref has moved refuses (exit 40) rather than publishing on the strength of a hook run that never saw it. **The oplog records one entry, after the push succeeds** -- not one per attempt.
 
 ### Disk full during object write
 
@@ -391,14 +442,14 @@ This section catalogs every known failure mode in safegit's operation, covering 
 safegit supports same-machine concurrency only. Cross-machine concurrency on a shared filesystem (NFS, SSHFS, FUSE-over-network) is out of scope. Rationale: PID-based liveness is meaningless across hosts; `flock(2)` semantics on NFS are unreliable and silently break the safety guarantees.
 
 - **Detection:** `safegit doctor` reads the device of `.git/` via `statfs(2)` and warns if the filesystem type is in a denylist (`nfs`, `nfs4`, `fuse.sshfs`, `cifs`, `smbfs`).
-- **Detection at runtime:** lock files include `host`. If a lock holder's `host` differs from local `hostname`, we conservatively treat the lock as alive and wait. After `lock.acquireTimeout`, exit code 8. The user must run `safegit unlock` on the holder's host or accept that cross-machine use is unsupported.
+- **Detection at runtime:** lock files include `host`. If a lock holder's `host` differs from local `hostname`, we conservatively treat the lock as alive and wait. After `lock.acquireTimeoutSeconds`, exit code 8. The user must run `safegit unlock` on the holder's host or accept that cross-machine use is unsupported.
 - **Recovery:** documented as an explicit non-goal.
 
 ### Pre-pre-push hook hangs
 
 - **Symptom:** hook process doesn't exit within `hooks.preprepush.timeoutSeconds`.
 - **Detection:** Go context timeout fires.
-- **Recovery:** `SIGTERM`, 5s grace, `SIGKILL`. Push aborts with exit code 21. Op log records `hook_timeout`. No partial state -- we never opened the network connection.
+- **Recovery:** `SIGTERM`, 5s grace, `SIGKILL`. The push aborts with exit code 21, and no oplog entry is written at all -- the oplog records pushes that happened. No partial state: the transport was never opened.
 
 ### Raw-git bypass
 
