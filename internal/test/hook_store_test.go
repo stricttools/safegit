@@ -413,3 +413,32 @@ func TestSubmodulePushRunsParentHooksAfterMigration(t *testing.T) {
 		t.Errorf("the parent's migrated hook did not run on the submodule push: %v", got)
 	}
 }
+
+// TestHookRemoveTakesTheLiveHookWhenBothStoresShareAName: the command removes
+// from the live store, so a name present in both stores is not ambiguous -- it
+// names one hook this command can remove and one it cannot, and the one it
+// cannot is stated rather than silently left behind.
+func TestHookRemoveTakesTheLiveHookWhenBothStoresShareAName(t *testing.T) {
+	dir := newRepo(t)
+
+	committed := filepath.Join(trackedHookDir(dir), "pre-pre-push")
+	writeHookScript(t, committed, "true")
+	safegitCommit(t, dir, "add a committed hook", filepath.Join(".safegit", "hooks", "pre-pre-push"))
+
+	installed := filepath.Join(localHookDir(dir), "pre-pre-push")
+	writeHookScript(t, installed, "true")
+
+	_, stderr, code := runSafegit(t, dir, "hook", "remove", "pre-pre-push")
+	if code != 0 {
+		t.Fatalf("hook remove failed (%d): %s", code, stderr)
+	}
+	if _, err := os.Stat(installed); !os.IsNotExist(err) {
+		t.Errorf("the live hook survived the removal (err=%v)", err)
+	}
+	if _, err := os.Stat(committed); err != nil {
+		t.Errorf("hook remove deleted the committed hook: %v", err)
+	}
+	if !strings.Contains(stderr, "COMMITTED") {
+		t.Errorf("the removal must say the committed hook of that name still runs, got: %s", stderr)
+	}
+}

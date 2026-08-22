@@ -113,7 +113,10 @@ var doctorChecks = []doctorCheck{
 	{Name: "bypass_detect", Severity: "warn", RequiresInit: true, Fn: checkBypassDetect},
 	{Name: "filesystem", Severity: "warn", Fn: checkFilesystemRegistered},
 	{Name: "hook_perms", Severity: "warn", RequiresInit: true, Fn: checkHookPerms},
-	{Name: "hooks_migrated", Severity: "error", RequiresInit: true, Fn: checkHooksMigrated},
+	// Not RequiresInit: hooks can sit in the pre-migration location in a
+	// repository whose .git/safegit was later removed, and a push there
+	// re-creates the state directory and then refuses on exactly this.
+	{Name: "hooks_migrated", Severity: "error", Fn: checkHooksMigrated},
 	{Name: "native_hooks", Severity: "warn", Fn: checkUnusedNativeHooks},
 	{Name: "git_version", Severity: "warn", Fn: checkGitVersion},
 	{Name: "legacy_scrub_policies", Severity: "error", RequiresInit: true, Fn: checkLegacyScrubPolicies},
