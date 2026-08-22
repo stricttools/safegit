@@ -63,15 +63,6 @@ type intake struct {
 	skipped []string
 }
 
-// paths returns the canonical repo-relative path of every entry, in order.
-func (in *intake) paths() []string {
-	out := make([]string, len(in.entries))
-	for i, e := range in.entries {
-		out[i] = e.path
-	}
-	return out
-}
-
 // unmatchedSource returns the first argument that contributed nothing to the
 // given set of changed paths, if there is one.
 //
