@@ -264,7 +264,7 @@ func TestScrubSubdirRunRootLevelSecretIsLoud(t *testing.T) {
 // cwd-blind. Its object enumeration goes through cat-file
 // --batch-all-objects and rev-list --all --objects, neither of which is
 // prefix-relative, so a violating blob is reported from a subdirectory exactly
-// as it is from the root. Both an unscoped and a scoped policy are exercised,
+// as it is from the root. Both an unscoped and a scoped run are exercised,
 // since scoping is the only part of verify that consults paths.
 func TestScrubSubdirVerifyReportsViolation(t *testing.T) {
 	for _, tc := range []struct {
@@ -277,30 +277,18 @@ func TestScrubSubdirVerifyReportsViolation(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			root, sub := scrubSubdirRepoNestedSecret(t)
 
-			// Auto-initialize .git/safegit before writing the policy file.
-			runSafegit(t, root, "config", "show")
-
-			policy := `{"type":"match","pattern":"` + scrubSubdirSecret + `",`
+			args := []string{"scrub", "verify", "--pattern", scrubSubdirSecret}
 			if tc.scope != "" {
-				policy += `"scope":"` + tc.scope + `",`
-			}
-			policy += `"reason":"subdir verify test","created_at":"2026-01-01T00:00:00Z"}` + "\n"
-
-			policyPath := filepath.Join(root, ".git", "safegit", "scrub-policies.jsonl")
-			if err := os.MkdirAll(filepath.Dir(policyPath), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(policyPath, []byte(policy), 0o644); err != nil {
-				t.Fatal(err)
+				args = append(args, "--scope", tc.scope)
 			}
 
-			rootOut, rootErr, rootCode := runSafegit(t, root, "scrub", "verify")
+			rootOut, rootErr, rootCode := runSafegit(t, root, args...)
 			if rootCode == 0 {
 				t.Fatalf("scrub verify from the repo root passed while the secret is present\n"+
 					"stdout:\n%s\nstderr:\n%s", rootOut, rootErr)
 			}
 
-			subOut, subErr, subCode := runSafegit(t, sub, "scrub", "verify")
+			subOut, subErr, subCode := runSafegit(t, sub, args...)
 			if subCode == 0 {
 				t.Errorf("scrub verify from a subdirectory FALSELY PASSED while the secret is "+
 					"present (root run correctly failed)\nstdout:\n%s\nstderr:\n%s", subOut, subErr)
