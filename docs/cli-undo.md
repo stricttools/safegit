@@ -9,7 +9,7 @@ nav_order: 22
 
 # safegit undo
 
-reverse the last commit, amend, or reword operation using the oplog
+reverse the last safegit-authored operation using the oplog -- a commit, an mv, an amend, a reword, or a conclusion (merge-continue, cherry-pick-continue, revert-continue). It moves a REF and never the working tree
 
 **Effect:** mutating
 

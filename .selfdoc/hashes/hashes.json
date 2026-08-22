@@ -210,8 +210,7 @@
   },
   "en/internal-lock.md": {
     "content": "d749c3f348f98ce4e85a83fea843c1bef4e70f1c7d468931ca82ff1d31a0c1c2",
-    "description": "742a718b63178d343c8f7db611530cca3779656c63ed5cdfc444abf0a07e2f58",
-    "seed_hash": "742a718b63178d343c8f7db611530cca3779656c63ed5cdfc444abf0a07e2f58",
+    "description": "f962f13ae8703936ce73225daffd194ed31ed1e02fb70c199152e89f7cab87c9",
     "source_docstring": "7e52ac436749ba911a07b8ed81af3b2144b84cf2939d56acd85226e98719666c"
   },
   "en/internal-oplog.md": {
