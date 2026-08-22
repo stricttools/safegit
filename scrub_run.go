@@ -317,6 +317,22 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 		infof(flags, "  New HEAD: %s\n", result.NewHeadSHA[:12])
 		printScopeNotice(flags, result.Ref)
 		printRotationNotice(flags, recheckCommandForRecipe(recipePath))
+	} else {
+		// The recipe matched nothing, which is a successful ANSWER and not an
+		// absence of one. Machine mode has to be able to read it, so the payload
+		// states the zeroes rather than leaving the envelope's payload absent.
+		// new_head stays absent: nothing was rewritten.
+		oldHead, _ := git.RevParse(ctx, "HEAD")
+		flags.payload(ScrubRunResult{
+			Version:          1,
+			DryRun:           false,
+			OperationCount:   len(recipe.Operations),
+			CommitsRewritten: intPtr(0),
+			BlobsReplaced:    intPtr(0),
+			MessagesModified: intPtr(0),
+			TagsRewritten:    intPtr(0),
+			OldHead:          oldHead,
+		})
 	}
 
 	return exitCode
