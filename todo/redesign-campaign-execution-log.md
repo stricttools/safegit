@@ -109,6 +109,30 @@ existing entries are never rewritten.
   stdout-only (`testutil.GitOut` added), and SHA-feeding call sites in
   `root_commit_cas_test.go` re-pointed at stdout-only readers.
 
+## Phase 1 closing-audit outcome
+
+- Fully dynamic audit (quiescent tree): full -race suite green outside
+  the 39 campaign reds (strict subset of the frozen baseline; 28 baseline
+  reds healed by Phases 0-1), stress suite green post-backoff-fix,
+  darwin vet clean, exit table fresh.
+- Two bugs found and dispatched to a fixer: backup restore passed the
+  safegit dir where coordGuard needs the git dir (silent wrong advice
+  mid-sequencer); undo's auto-bump failure path os.Exit'd with both
+  locks held (the one surviving leak site). Plus pinning gaps (exit-5 on
+  amend/reword/undo refusals; dry-run-creates-no-lock-file; unlock's
+  refs/* arm) and three stale test comments.
+- Marked extensions dispatched with the same fixer: ref-lock timeouts
+  from the commit pipeline unify onto exit 8 (previously exit 1 with the
+  inconsistency honestly documented — the doc rewrites to the new
+  truth); Release/ReleasePending gain an identity check before removal
+  (path-based removal could delete a newcomer's lock after an
+  operator-forced unlock).
+- Known and accepted: the 1.4 refusal texts advise the Phase-6 continue
+  commands before they exist — plan-mandated; nothing releases before
+  Phase 6; TestMergeConflictTellsOperatorHowToConclude stays red until
+  6.2 for exactly this reason. coord.InFlightError's typed identity is
+  API for Phase 6.
+
 ## Ratified 1.4/1.5 decisions
 
 - The in-flight refusal exit code is exitcode.CoordinationBusy (5), whose
