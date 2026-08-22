@@ -7,7 +7,9 @@
 // from the AST; it is how the registry was derived and how a later reviewer
 // re-derives it.
 //
-// The one carve-out, and it is deliberate: the guarded passthroughs --
+// There are two carve-outs, both deliberate.
+//
+// The first: the guarded passthroughs --
 // checkout, pull, merge, rebase, reset, bisect, cherry-pick and revert -- exit
 // with the wrapped git command's OWN exit code once git has run. Those codes
 // are git's (1 for a conflicted merge, 128 or 129 for a fatal error), they are
@@ -17,6 +19,16 @@
 // those commands is safegit's own only when the failure happened before git ran
 // -- the coordination guard, an uninitialized repository, a rejected argument.
 // docs/commands-guide.md states the same split above the generated table.
+//
+// The second: a signal. When a SIGINT or a SIGTERM reaches a safegit process
+// that holds a lock, internal/lock's handler releases the lock and exits
+// 128 + the signal number -- 130 for SIGINT, 143 for SIGTERM -- which is the
+// Unix shell convention every shell, supervisor and CI runner already reads
+// that way. Those numbers are the convention's, not safegit's, and registering
+// them would claim ownership of a number safegit does not choose; the exit-site
+// guard does not see them either, because the status is computed rather than
+// written as a literal. A signal exit says nothing about what the command was
+// doing: it says the process was ended from outside, with its locks released.
 //
 // # Standing rule for the redesign campaign
 //
