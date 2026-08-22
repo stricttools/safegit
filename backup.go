@@ -290,9 +290,7 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 		},
 	})
 
-	if !flags.silent() {
-		fmt.Printf("  %s (%s) -> %s %s\n", branch, headSHA[:12], remote, slot)
-	}
+	infof(flags, "  %s (%s) -> %s %s\n", branch, headSHA[:12], remote, slot)
 	return 0
 }
 
@@ -414,8 +412,6 @@ func runBackupRestore(flags globalFlags, remote string) int {
 		},
 	})
 
-	if !flags.silent() {
-		fmt.Printf("  %s restored from %s %s (%s -> %s)\n", branch, remote, slot, oldHead[:12], fetched[:12])
-	}
+	infof(flags, "  %s restored from %s %s (%s -> %s)\n", branch, remote, slot, oldHead[:12], fetched[:12])
 	return 0
 }
