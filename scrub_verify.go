@@ -80,6 +80,21 @@ func verifyScrubbedFileContent(ctx context.Context, shaMap map[string]string, fi
 // When scope is set, blob matches outside it are expected to survive (the
 // operation never claimed to touch them); commit messages and tag annotations
 // are always in scope.
+//
+// The scope filter here is NARROWER than Tier B's (verifySecretRemovedScoped),
+// and the difference is forced rather than chosen. This one has only the
+// ATTRIBUTED path to judge a blob by, and attribution records one path per blob
+// even though a blob can sit at several. Tier B additionally consults a
+// scoped-blob set built from `rev-list --all --objects`, which cannot be built
+// here: at this point the rewritten commits are unreachable objects and the refs
+// still name the PRE-rewrite history, so that enumeration would answer about the
+// history this check exists to replace.
+//
+// The consequence is that the asymmetry errs PERMISSIVE here: a blob whose
+// recorded path is out of scope while another of its paths is in scope passes
+// this check and is caught by Tier B instead. That escalates the outcome from a
+// refusal (exit 30, nothing happened) to a finding (exit 31, the rewrite stands
+// and is reported incomplete) -- never to silence.
 func verifyPatternAbsentFromTips(ctx context.Context, pattern *regexp.Regexp, scope *string, tips []string) error {
 	if len(tips) == 0 {
 		return nil
