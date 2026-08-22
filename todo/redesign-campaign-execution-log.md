@@ -310,6 +310,43 @@ existing entries are never rewritten.
   `merge --autostash` would strand the autostash; 6.2 must either add
   them to the owned set (autostash needs APPLYING, not just deleting)
   or refuse autostash merges explicitly.
+## Ratified Phase 8 decisions
+
+- PushLeaseRejected = 41; a lease rejection (git's "(stale info)"
+  marker, empirically recorded) is terminal, never retried as transport;
+  the retry loop re-observes and re-pins per attempt, and a failed
+  re-observation is a hard error, never a stale-pin reuse.
+- execGitPush switched from streaming to capture (Check(false)) because
+  classification needs git's stderr, which the framework error never
+  carries. Consequences, accepted: push progress arrives at the end
+  rather than live (framework has no tee — added to the upstream filing
+  list), and git's stdout re-routes to stderr under --json so the
+  envelope stays the sole stdout document (previously corruptible).
+  backup backup shares the helper and inherits both.
+- FINDING: isTransportError had been matching against the framework's
+  error string, which cannot contain git's stderr — the push retry loop
+  was DEAD until this phase. Now reads the captured stderr; documented
+  in code.
+- Consent: the force-push confirmation sits after remote-URL resolution
+  and BEFORE ref observation (a declined force contacts nothing);
+  guarded by forceFlag && !dryRun; answered by --approve-consequential
+  (the condition is the flag the caller typed — the doctor-uninstall
+  precedent); push does NOT declare WithConsequential.
+- push gained a minimal payload schema (refs with per-ref lease values,
+  atomic, hook run/skip facts, dry_run) — the honest carrier for 8.3
+  since the envelope's preview member is framework-owned.
+- Phase 9 rows: the "two conditions the framework cannot see" sentence
+  in the _CLAUDE template (and generated CLAUDE.md) is now three
+  (push --force-with-lease joins doctor uninstall and backup's
+  public-remote check). Also: a --dry-run push still contacts the
+  remote to observe (the deferred strictcli network-observe question;
+  honest, pinned from real observations, stated in the doc row already
+  queued).
+- Upstream filing addition: strictcli Run streams or captures with no
+  tee (the reason push output is now buffered).
+- testdata/exit-sites.txt needs one regeneration after Phase 8's
+  commits (queued for the Phase 4 implementor's closeout).
+
 ## Ratified Phase 3 decisions
 
 - Quarantine INSTALLATION lives with the commands that write objects in
