@@ -109,6 +109,33 @@ existing entries are never rewritten.
   stdout-only (`testutil.GitOut` added), and SHA-feeding call sites in
   `root_commit_cas_test.go` re-pointed at stdout-only readers.
 
+## Ratified 1.3 decisions
+
+- `git.SyncMainIndex`/`syncMainIndexInner` are DELETED, not just
+  bypassed: after all four sites adopted ReconcileMainIndex they had zero
+  callers, and keeping an exported softer reconciliation path would have
+  contradicted the single-authority ruling. Scrub's
+  SyncMainIndexWithWorktree is untouched (Phase 4 refactors it).
+- `--index-info` probed facts (recorded so nobody re-derives them): git
+  rejects `-z` with --index-info, so replay paths are unconditionally
+  C-quoted with exactly-three-octal-digit escapes; the zero-mode removal
+  line precedes each path's unmerged stage lines; removal of an absent
+  path is a no-op, which makes staged-deletion lines safe; skip-worktree
+  can only be set on stage-0-present paths (git fatals otherwise), so the
+  restore is scoped to those — the scoping is forced, not softness.
+- Oplog append order: at commit/amend/reword the append now precedes the
+  index reconcile (a fatal reconcile leaves an undoable oplog entry); in
+  undo it deliberately does NOT (hoisting it past the auto-bump would
+  change when an undo entry exists on auto-bump failure). Asymmetry is
+  deliberate.
+- Semantics change: an index that is stale-EMPTY relative to the
+  pre-operation tip now reads as staged deletions of every tip path
+  (the faithful delta reading) where the old sync silently rebuilt it
+  from the tip. No safegit-managed path produces that state.
+- The pre-staged-removal change detector was rewritten AND renamed
+  (TestCommitGitignoreOnlyKeepsPreStagedRemoval) — the sanctioned
+  rewrite; protective intent inverted to guard the new behavior.
+
 ## Ratified 1.1 decisions
 
 - The effects-handle exit-code verification (a recorded task in the plan):
