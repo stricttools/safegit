@@ -422,6 +422,19 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 		src.dir = isDir
 		in.sources = append(in.sources, src)
 
+		// The two explicit-against-explicit contradictions, asked of EVERY
+		// argument rather than only of the ones that name a single file. A
+		// directory is as capable of contradicting an --untrack argument as a
+		// file is, and the answer -- which of the two the caller meant -- is
+		// exactly what has not been said either way.
+		if dropped[rel] {
+			return nil, &CommitError{
+				Code: exitcode.Usage,
+				Message: fmt.Sprintf("%s is named both as a path to commit and in --untrack; "+
+					"say one or the other", spec.Path),
+			}
+		}
+
 		if !isDir {
 			if prev, clash := named[rel]; clash && (prev.hunks || spec.Hunks != nil) {
 				// Two arguments naming one file, saying different things about
@@ -431,13 +444,6 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 				return nil, conflictingSpellings(rel, prev, spec.Path, spec.Hunks != nil)
 			}
 			named[rel] = namedPath{arg: spec.Path, hunks: spec.Hunks != nil}
-			if dropped[rel] {
-				return nil, &CommitError{
-					Code: exitcode.Usage,
-					Message: fmt.Sprintf("%s is named both as a file to commit and in --untrack; "+
-						"say one or the other", spec.Path),
-				}
-			}
 			if err := p.validateNamedPath(ctx, repoRoot, rel, baseRev, spec); err != nil {
 				return nil, err
 			}
@@ -546,6 +552,14 @@ func (p *Pipeline) resolveUntrack(
 
 		srcIdx := len(in.sources)
 		in.sources = append(in.sources, intakeSource{arg: arg, path: rel, dir: isDir})
+
+		// The argument's OWN path joins the set, not only the paths it resolved
+		// to. For a file the two are the same; for a directory the targets are
+		// the paths underneath it, and without this the directory itself is in
+		// no set at all -- which is how `--untrack dir -- dir` used to pass the
+		// contradiction check and resolve silently to the removal.
+		dropped[rel] = true
+
 		for _, target := range targets {
 			dropped[target] = true
 			if seen[target] {
