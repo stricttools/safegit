@@ -221,11 +221,21 @@ func checkTmpDirs(env doctorEnv) doctorFinding {
 	return findingOK("")
 }
 
-// checkStaleLocks scans the shared safegit dir so worktree locks are found.
+// checkStaleLocks scans BOTH lock trees -- the shared one holding ref and
+// rewrite locks, and this worktree's own holding its operation lock -- and
+// names what it found, so the finding tells the operator what to release rather
+// than only how many things are wrong.
 func checkStaleLocks(env doctorEnv) doctorFinding {
-	staleCount := countStaleLocks(repo.SharedSafegitDir(env.ctx, env.gitDir))
-	if staleCount > 0 {
-		return findingFail("%d stale lock(s) found", staleCount)
+	found := scanLocks(lockTrees(env.ctx, env.gitDir))
+	var parts []string
+	if len(found.Stale) > 0 {
+		parts = append(parts, fmt.Sprintf("%d stale lock(s): %s", len(found.Stale), strings.Join(found.Stale, ", ")))
+	}
+	if found.Temps > 0 {
+		parts = append(parts, fmt.Sprintf("%d orphaned lock-publication temp file(s)", found.Temps))
+	}
+	if len(parts) > 0 {
+		return findingFail("%s (run 'safegit doctor --action fix' to clean)", strings.Join(parts, "; "))
 	}
 	return findingOK("")
 }
@@ -370,17 +380,19 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 			hasLegacyQueue = true
 		}
 
-		// Count stale locks in the shared safegit dir (covers worktrees).
-		sharedDir := repo.SharedSafegitDir(ctx, gitDir)
-		staleLocks := countStaleLocks(sharedDir)
+		// Both lock trees: the shared one and this worktree's own.
+		found := scanLocks(lockTrees(ctx, gitDir))
 
 		if !flags.silent() {
 			fmt.Printf("would remove %d orphan tmp dir(s)\n", len(orphanDirs))
 			if hasLegacyQueue {
 				fmt.Println("would remove legacy queue directory")
 			}
-			if staleLocks > 0 {
-				fmt.Printf("would remove %d stale lock(s)\n", staleLocks)
+			if len(found.Stale) > 0 {
+				fmt.Printf("would remove %d stale lock(s): %s\n", len(found.Stale), strings.Join(found.Stale, ", "))
+			}
+			if found.Temps > 0 {
+				fmt.Printf("would remove %d orphaned lock-publication temp file(s)\n", found.Temps)
 			}
 		}
 	} else {
@@ -399,17 +411,19 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 			queueRemoved = true
 		}
 
-		// Clean stale locks in the shared safegit dir (covers worktrees).
-		sharedDir := repo.SharedSafegitDir(ctx, gitDir)
-		staleCleaned := removeStaleLocks(sharedDir)
+		// Both lock trees: the shared one and this worktree's own.
+		cleaned := cleanLocks(lockTrees(ctx, gitDir))
 
 		if !flags.silent() {
 			fmt.Printf("removed %d orphan tmp dir(s)\n", removed)
 			if queueRemoved {
 				fmt.Println("removed legacy queue directory")
 			}
-			if staleCleaned > 0 {
-				fmt.Printf("removed %d stale lock(s)\n", staleCleaned)
+			if len(cleaned.Stale) > 0 {
+				fmt.Printf("removed %d stale lock(s): %s\n", len(cleaned.Stale), strings.Join(cleaned.Stale, ", "))
+			}
+			if cleaned.Temps > 0 {
+				fmt.Printf("removed %d orphaned lock-publication temp file(s)\n", cleaned.Temps)
 			}
 		}
 	}
@@ -430,19 +444,28 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 
 // doctorFixSubmodule cleans orphan tmp dirs and stale locks in a submodule's
 // safegit directory.
+//
+// One directory rather than two: a submodule is enumerated by its own safegit
+// dir, and a submodule that is itself checked out into linked worktrees is
+// reached by running doctor inside it.
 func doctorFixSubmodule(flags globalFlags, name, sgDir string) {
+	dirs := []string{sgDir}
+
 	if flags.dryRun {
 		orphans, err := index.GarbageCollectDryRun(sgDir)
 		if err != nil && !flags.silent() {
 			fmt.Fprintf(os.Stderr, "warning: [%s] scanning orphan tmp dirs: %v\n", name, err)
 		}
-		staleLocks := countStaleLocks(sgDir)
+		found := scanLocks(dirs)
 		if !flags.silent() {
 			if len(orphans) > 0 {
 				fmt.Printf("[%s] would remove %d orphan tmp dir(s)\n", name, len(orphans))
 			}
-			if staleLocks > 0 {
-				fmt.Printf("[%s] would remove %d stale lock(s)\n", name, staleLocks)
+			if len(found.Stale) > 0 {
+				fmt.Printf("[%s] would remove %d stale lock(s): %s\n", name, len(found.Stale), strings.Join(found.Stale, ", "))
+			}
+			if found.Temps > 0 {
+				fmt.Printf("[%s] would remove %d orphaned lock-publication temp file(s)\n", name, found.Temps)
 			}
 		}
 		return
@@ -452,55 +475,142 @@ func doctorFixSubmodule(flags globalFlags, name, sgDir string) {
 	if err != nil && !flags.silent() {
 		fmt.Fprintf(os.Stderr, "warning: [%s] cleaning orphan tmp dirs: %v\n", name, err)
 	}
-	staleCleaned := removeStaleLocks(sgDir)
+	cleaned := cleanLocks(dirs)
 
 	if !flags.silent() {
 		if removed > 0 {
 			fmt.Printf("[%s] removed %d orphan tmp dir(s)\n", name, removed)
 		}
-		if staleCleaned > 0 {
-			fmt.Printf("[%s] removed %d stale lock(s)\n", name, staleCleaned)
+		if len(cleaned.Stale) > 0 {
+			fmt.Printf("[%s] removed %d stale lock(s): %s\n", name, len(cleaned.Stale), strings.Join(cleaned.Stale, ", "))
+		}
+		if cleaned.Temps > 0 {
+			fmt.Printf("[%s] removed %d orphaned lock-publication temp file(s)\n", name, cleaned.Temps)
 		}
 	}
 }
 
-// countStaleLocks counts stale lock files under sgDir/locks/.
-func countStaleLocks(sgDir string) int {
-	count := 0
-	locksRoot := filepath.Join(sgDir, "locks")
-	_ = filepath.Walk(locksRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(info.Name(), ".lock") {
-			return nil
-		}
-		if lock.IsStale(path) {
-			count++
-		}
-		return nil
-	})
-	return count
+// publicationTempGrace is how long a lock-publication temporary file must have
+// sat untouched before doctor calls it orphaned.
+//
+// Publication is create, write, chmod, close, link -- microseconds. A temp file
+// older than this was left by a process that died in the middle of it. The grace
+// exists only so that doctor can never delete a temp file another process is
+// publishing through RIGHT NOW, which would turn that process's link(2) into a
+// spurious hard failure. The staleness check is the primary evidence; this is
+// the belt to its braces.
+const publicationTempGrace = 5 * time.Minute
+
+// lockScan is what one walk of the lock trees found.
+type lockScan struct {
+	// Stale names the locks whose holder is gone, in the same vocabulary
+	// `safegit unlock` accepts, so the finding tells an operator what to type.
+	Stale []string
+	// Temps counts orphaned lock-publication temporary files: a kill between
+	// creating one and linking it into place leaves a file that no lock walk
+	// sees and that nothing ever cleans up.
+	Temps int
 }
 
-// removeStaleLocks removes stale lock files under sgDir/locks/ and returns the
-// count removed.
-func removeStaleLocks(sgDir string) int {
-	removed := 0
-	locksRoot := filepath.Join(sgDir, "locks")
-	_ = filepath.Walk(locksRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(info.Name(), ".lock") {
-			return nil
-		}
-		if lock.IsStale(path) {
-			if os.Remove(path) == nil {
-				removed++
+// lockTrees returns every safegit directory whose locks/ subtree belongs to this
+// repository, deduplicated.
+//
+// There are two, and outside a linked worktree they are the same directory: the
+// SHARED one, which holds ref locks and the repository-wide rewrite lock so
+// every worktree contends on one file, and the WORKTREE-LOCAL one, which holds
+// this worktree's operation lock. A scan of only the shared tree -- which is
+// what doctor did before the operation lock existed -- silently reports a
+// worktree with a crashed operation as healthy.
+func lockTrees(ctx context.Context, gitDir string) []string {
+	shared := repo.SharedSafegitDir(ctx, gitDir)
+	local := repo.SafegitDir(gitDir)
+	if local == shared {
+		return []string{shared}
+	}
+	return []string{shared, local}
+}
+
+// scanLocks walks every given lock tree and reports what it found. It removes
+// nothing.
+func scanLocks(dirs []string) lockScan {
+	var found lockScan
+	for _, sgDir := range dirs {
+		locksRoot := filepath.Join(sgDir, "locks")
+		_ = filepath.Walk(locksRoot, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() {
+				return nil
 			}
-		}
-		return nil
-	})
+			switch {
+			case lock.IsLockFile(info.Name()):
+				if lock.IsStale(path) {
+					name := lock.NameFromPath(sgDir, path)
+					if name == "" {
+						name = path
+					}
+					found.Stale = append(found.Stale, name)
+				}
+			case lock.IsPublicationTemp(info.Name()):
+				if isOrphanedPublicationTemp(path, info) {
+					found.Temps++
+				}
+			}
+			return nil
+		})
+	}
+	return found
+}
+
+// isOrphanedPublicationTemp reports whether a publication temporary file was
+// left behind by a process that is gone, rather than being one a live process is
+// publishing through at this moment.
+//
+// Both conditions must hold: the record in the file names no live holder (temps
+// carry the same owner record the lock will, because the record is written
+// before the link), and the file has sat untouched past the grace period.
+func isOrphanedPublicationTemp(path string, info os.FileInfo) bool {
+	if !lock.IsStale(path) {
+		return false
+	}
+	return time.Since(info.ModTime()) > publicationTempGrace
+}
+
+// cleanLocks removes what scanLocks found: stale locks through the reclamation
+// authority, orphaned publication temps directly.
+//
+// The stale locks go through lock.ReclaimIfStale rather than a bare os.Remove
+// because doctor sweeps unattended: between judging a lock stale and deleting
+// it, another process can reclaim that same lock and publish its own live one
+// at the path, and the bare remove would delete THAT -- leaving two processes
+// believing they hold the same ref. ReclaimIfStale re-judges under the lock
+// file's own flock and against the open descriptor's inode, so it can only ever
+// remove the exact stale file it judged.
+//
+// A temp file needs no such care: nothing acquires it, and the orphan test is
+// what keeps a live publication out of the sweep.
+func cleanLocks(dirs []string) lockScan {
+	var removed lockScan
+	for _, sgDir := range dirs {
+		locksRoot := filepath.Join(sgDir, "locks")
+		_ = filepath.Walk(locksRoot, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() {
+				return nil
+			}
+			switch {
+			case lock.IsLockFile(info.Name()):
+				if lock.ReclaimIfStale(path) {
+					name := lock.NameFromPath(sgDir, path)
+					if name == "" {
+						name = path
+					}
+					removed.Stale = append(removed.Stale, name)
+				}
+			case lock.IsPublicationTemp(info.Name()):
+				if isOrphanedPublicationTemp(path, info) && os.Remove(path) == nil {
+					removed.Temps++
+				}
+			}
+			return nil
+		})
+	}
 	return removed
 }
