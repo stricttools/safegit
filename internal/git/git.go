@@ -502,9 +502,29 @@ func SyncMainIndexWithWorktree(ctx context.Context, treeish string) ([]string, e
 // git must resolve the operator's own pathspecs in the operator's own
 // directory. A context-carried WithDir override still applies.
 func RunPassthrough(ctx context.Context, args ...string) error {
+	return RunPassthroughWithEnv(ctx, nil, args...)
+}
+
+// RunPassthroughWithEnv is RunPassthrough with extra environment entries, which
+// is what lets safegit hand git an operation to finish while keeping its
+// promise never to write the shared index: the conclusion flows delegate
+// `cherry-pick --continue` / `revert --continue` to git with GIT_INDEX_FILE
+// pointing at safegit's own per-invocation index copy, so git commits the
+// resolution staged there and the repository's .git/index is only ever read.
+//
+// GIT_INDEX_FILE is deliberately NOT among the environment entries the boundary
+// refuses (that list is GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR and
+// GIT_OBJECT_DIRECTORY): naming an index file does not retarget the repository,
+// and internal/git already reaches every temporary index this way.
+//
+// Streams, directory semantics and the declared exemption are identical to
+// RunPassthrough's -- both are the same site, and a caller that adds an
+// environment entry must not silently get different terminal or directory
+// behavior.
+func RunPassthroughWithEnv(ctx context.Context, env []string, args ...string) error {
 	cmd, err := gitexec.Command(
 		gitexec.WithoutRootPin(ctx, gitexec.ExemptGuardedPassthrough),
-		gitexec.Spec{Args: args},
+		gitexec.Spec{Args: args, Env: env},
 	)
 	if err != nil {
 		return err
