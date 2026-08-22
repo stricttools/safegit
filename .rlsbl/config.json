@@ -23,7 +23,152 @@
   "publish_mode": "ci",
   "push_timeout": 120,
   "batch_limits": {
-    "exclusions": []
+    "exclusions": [
+      {
+        "reason": "**Commit argument intake rebuilt.** Automatic move detection is gone, so a deletion is never staged unless you name it; paths are canonicalized against the repository root, a directory argument expands to the paths it holds, contradictory spellings of the same path are refused, and an argument that matches nothing is now a hard error naming every unmatched argument instead of committing whatever else was named.",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 1
+          }
+        ]
+      },
+      {
+        "reason": "**Three conclusion commands: `merge-continue`, `cherry-pick-continue` and `revert-continue`.** Each concludes an operation git left in flight: you pass your resolutions as keyword arguments, safegit writes them into the working tree the way git does, applies an autostash the interrupted merge set aside, and a failed passthrough now names the command that concludes what it left behind.",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 7
+          }
+        ]
+      },
+      {
+        "reason": "**Queued cherry-picks and reverts conclude through git's own `--continue`.** The remaining queue is replayed by git, a stop mid-queue reports the commits that were made, the delegation's cost is stated on stderr, a concluded revert is authored by the operator rather than by the reverted commit's author, and a submodule parent is bumped whenever the branch moved.",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 9
+          }
+        ]
+      },
+      {
+        "reason": "**Declared move records on `commit` and `amend`.** `--moved old:new` writes a checked record into the commit message and `--moved-retract <id>` withdraws one by id; a pair that nests inside itself, that duplicates a record the commit already declares, or that chains onto another declaration is refused, and every record carries its own id.",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 11
+          }
+        ]
+      },
+      {
+        "reason": "**Move records survive `revert` and `scrub`.** A single-commit revert declares the inverse of every move it undoes, `scrub file --delete` erases the records that name the path in the same rewrite, a `scrub match` substitution rewrites inside a record without crossing its quoting, and a substitution that would leave an unreadable record is refused.",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 12
+          }
+        ]
+      },
+      {
+        "reason": "**Rewrites are verified before any ref moves (exit 30 and exit 31).** A scrub or author rewrite checks the objects it just wrote for surviving matches and refuses to publish when it finds one (Tier A), then reports leftover pre-rewrite objects afterwards (Tier B); both histories of a submodule scrub are verified before either is published, and trees are written so every path round-trips literally.",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 14
+          }
+        ]
+      },
+      {
+        "reason": "**Every scrub says what it touched.** A completed scrub prints its rotation notice and the scope it rewrote, names each repository as it publishes it and each submodule history a match reached, reports a skipped index sync from whichever repository skipped it, answers a range's commit count one way, and emits its machine-readable payload on every successful exit.",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 16
+          }
+        ]
+      },
+      {
+        "reason": "**Documentation and help text corrected against the tool as built.** The commands guide, the architecture and concurrency guides, the integration guide, the README and every command's help were rewritten wherever they described behavior safegit no longer has, including the install instruction, the exit-code tables, the conclusion commands, the two hook stores, the scrub range selector and what a dry-run push still does.",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 36
+          }
+        ]
+      },
+      {
+        "reason": "campaign execution-log entries recording phase closures, audit outcomes and ratified rulings",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 37
+          }
+        ]
+      },
+      {
+        "reason": "campaign planning documents, ruling records and todo triage",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 38
+          }
+        ]
+      },
+      {
+        "reason": "red tests written before the campaign's fixes, each reproducing a defect",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 39
+          }
+        ]
+      },
+      {
+        "reason": "test-suite consolidation onto shared testutil runners and fixtures, plus opt-in stress scenarios",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 40
+          }
+        ]
+      },
+      {
+        "reason": "tests pinning the campaign's new behavior across every phase",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 41
+          }
+        ]
+      },
+      {
+        "reason": "internal single-authority extractions and refactors: the git-execution boundary, root anchoring, the sequencer state reader, scan object-set modes, and dead code removal",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 42
+          }
+        ]
+      },
+      {
+        "reason": "code comments, invariant pins and exit-code registry bookkeeping",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 43
+          }
+        ]
+      },
+      {
+        "reason": "regenerated exit-site inventory and schema dumps",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 44
+          }
+        ]
+      }
+    ]
   },
   "hooks": {
     "pre_release": [
