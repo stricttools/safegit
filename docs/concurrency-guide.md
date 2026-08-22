@@ -26,33 +26,37 @@ Every `safegit commit` invocation creates its own temporary index file in a uniq
 
 :-: ref path="internal/index" lang="go"
 
-1. **Create a private temporary index.** A directory is created at `.git/safegit/tmp/<pid>-<random>/` containing its own `index` file. The `<pid>` prefix enables garbage collection of leaked directories from crashed processes. The random suffix (4 bytes of `crypto/rand`) prevents collisions when the same PID is reused.
+0. **Resolve the parent first.** The tip of the target ref is read BEFORE the index exists, so the tree and the parent always describe the same starting point. Resolving it afterwards is the ordering safegit deliberately rejects: another agent's commit landing in between would produce a commit whose tree is based on the old tip but whose parent is the new one, silently dropping that agent's files.
 
-2. **Seed from the branch tip.** The temporary index is populated from the current branch tip via `git read-tree`, giving the invocation a snapshot of the committed state. All subsequent staging happens against this private copy.
+1. **Create a private temporary index.** A directory is created at `.git/safegit/tmp/<pid>-<random>/` containing its own `index` file. The `<pid>` prefix enables garbage collection of leaked directories from crashed processes. The random suffix (4 bytes of `crypto/rand`) prevents collisions when the same PID is reused. A dry run creates it inside a throwaway preview area outside the repository instead, so `.git/safegit` is never touched -- not even created.
+
+2. **Seed from the resolved parent.** The temporary index is populated from that commit via `git read-tree`, giving the invocation a snapshot of the committed state. All subsequent staging happens against this private copy. (A conclusion of a merge, cherry-pick or revert asks for the SHARED index as its base instead, because the thing being committed IS that staged result. The choice is an explicit input, never inferred.)
 
 3. **Stage only the specified files.** Files listed after `--` are staged into the temporary index. Untracked files are added; deleted files are removed. No other files can leak in because no other process writes to this index.
 
-4. **Build the tree and commit objects.** `git write-tree` produces a tree SHA from the temporary index, and `git commit-tree` creates a commit object pointing to that tree with the resolved parent. Both are content-addressed and idempotent -- multiple processes creating the same objects simultaneously is harmless.
+4. **Run the repository's `pre-commit` hook** against that index, so it sees exactly what this commit stages -- safegit builds commits from plumbing, so it runs the commit family itself rather than letting `git commit` do it. The hook runs once per operation, not once per CAS attempt.
+
+5. **Build the tree and commit objects.** `git write-tree` produces a tree SHA from the temporary index; `git diff-tree` against the parent's tree is then what safegit reports as the commit's contents (never the arguments); and after the refusals -- an argument that contributed nothing, an unchanged tree -- the `commit-msg` hook runs and `git commit-tree` creates the commit object. `write-tree` and `commit-tree` are content-addressed and idempotent, so multiple processes creating the same objects simultaneously is harmless.
 
 At the end of Phase A, a valid commit object exists in the object store, but no ref points to it. If the process crashes here, the commit is unreachable and will eventually be garbage collected. Nothing is corrupted.
 
 ### Phase B: serialized ref update
 
-Phase B acquires a per-branch lock file using atomic exclusive creation, verifies the branch tip has not moved since Phase A via compare-and-swap, and atomically updates the ref to point at the new commit object.
+Phase B acquires a per-branch lock file by atomic publication, verifies the branch tip has not moved since Phase A via compare-and-swap, and atomically updates the ref to point at the new commit object. A dry run does none of it: it takes no lock, makes no re-read, and records the ref update instead of performing it.
 
 :-: ref path="internal/lock" lang="go"
 
-5. **Acquire the ref lock.** An exclusive lock file is created at `.git/safegit/locks/refs/heads/<branch>.lock` using `O_CREAT|O_EXCL` (atomic exclusive creation). Only one process can hold this lock at a time.
+6. **Acquire the ref lock.** A lock file is published at `.git/safegit/locks/refs/heads/<branch>.lock` by writing the holder's record into a temporary sibling and `link(2)`-ing it into place. `link` fails with `EEXIST` when the path exists, so exactly one process wins -- the same one-winner property an exclusive create gives, plus one an exclusive create does not: the published file is already complete, so no contender can read a half-made lock and mistake it for a crashed holder's leftover.
 
-6. **CAS check.** With the lock held, the branch tip is re-resolved. If it matches the parent used in Phase A, the commit is valid. If it has moved (another session committed between Phase A and Phase B), the commit is stale -- this is a CAS (compare-and-swap) miss.
+7. **CAS check.** With the lock held, the branch tip is re-resolved. If it matches the parent used in Phase A, the commit is valid. If it has moved (another session committed between Phase A and Phase B), the commit is stale -- this is a CAS (compare-and-swap) miss.
 
-7. **Update the ref.** `git update-ref` advances the branch to the new commit, passing the expected old value for a git-level CAS as belt-and-suspenders protection.
+8. **Update the ref.** `git update-ref` advances the branch to the new commit, passing the expected old value for a git-level CAS as belt-and-braces protection. A root commit passes the all-zero SHA, so creating a branch is conditional too.
 
-8. **Release the lock and record the operation.** The lock file is removed, and the operation is appended to the oplog.
+9. **Record the operation, still holding the lock.** The oplog append happens under the lock and before the shared index is reconciled, so a failure of that reconcile still leaves a commit `safegit undo` can reverse. Then the shared index is reconciled (only when committing to the checked-out branch), `post-commit` runs, and the lock is released last.
 
 ### CAS retry on miss
 
-When the branch tip moves between Phase A and Phase B, the entire pipeline retries from Phase A: a new temporary index is seeded from the updated branch tip, files are re-staged, and new tree and commit objects are built. This retry loop runs up to `commit.casMaxAttempts` times (default 5, configurable up to 200). Random jitter (1-10ms) is injected between retries to break thundering-herd stampedes.
+When the branch tip moves between Phase A and Phase B, the entire pipeline retries from Phase A: a new temporary index is seeded from the updated branch tip, files are re-staged, and new tree and commit objects are built. This retry loop runs up to `commit.casMaxAttempts` times (default 5; any positive integer, with no upper bound). Random jitter (1-10ms) is injected between retries to break thundering-herd stampedes. The repository's hooks are NOT re-run per attempt, and the move records the commit declares keep the identifiers they were minted with, so every attempt writes the same commit message.
 
 The stress tests verify that 100 parallel commits to the same branch all succeed with linear history and no lost files.
 
@@ -75,27 +79,37 @@ started=2026-04-26T11:39:42.120Z
 
 The `pid`, `host` and `start` fields enable liveness checks. `start` is the holder's start time in clock ticks since boot, read from `/proc/<pid>/stat`; it distinguishes the holder from a later process that inherits the same PID. The `op` and `started` fields are informational for diagnostics (`started` is `start` rendered as wall-clock time and is never compared). On platforms that cannot report a process start time, `start` and `started` are absent.
 
-### Stale lock recovery
+### Atomic publication
 
-When a process crashes while holding a lock (killed by the OS, power failure, or OOM), the lock file persists on disk and blocks all other sessions from committing to that branch. safegit detects stale locks and recovers from them automatically using PID liveness checks, host verification, and PID reuse detection:
+A lock is not created empty and then filled in. The holder's record is written into a temporary sibling -- `.<name>.lock.tmp-<random>`, a dot-file, so no scan of the locks subtree mistakes it for a lock -- and that complete file is published with `link(2)`, which fails with `EEXIST` when the path already exists.
 
-1. **PID liveness check.** On each poll iteration, the lock holder's PID is checked via `kill(pid, 0)`. If the process is dead, the lock is stale.
+That gives the same one-winner guarantee an exclusive create gives, and one it does not: **no reader ever sees a half-made lock.** Creating the file first and writing the record afterwards left it existing-but-empty for an instant, and the rule "a zero-length lock file is stale" then condemned a lock whose owner was very much alive. This is why lock acquisition **requires hard-link support** on the filesystem holding `.git`.
 
-2. **Host check.** If the lock file contains a `host=` field that differs from the local hostname, the PID check is skipped -- the PID belongs to a different machine's namespace (relevant for NFS/shared filesystems).
+### Stale lock reclamation
 
-3. **PID reuse detection (Linux).** The `start` value recorded when the lock was taken is compared against the current start time of whatever process now holds that PID. A mismatch means the kernel recycled the PID and the lock is stale despite the PID appearing alive. A match means the original holder is still running, whatever the file timestamps say. When either side of the comparison is unavailable -- an old lock file with no `start` field, or a platform without `/proc` -- the check fails closed and the lock is left alone.
+When a process crashes while holding a lock (killed by the OS, power failure, or OOM), the lock file persists on disk and blocks other sessions. safegit reclaims such a lock automatically -- but judging a lock stale is not what authorizes removing it:
 
-4. **Corrupt lock files.** A zero-length or unparseable lock file (from a crash mid-write) is treated as stale.
+1. **The judgement.** A lock is stale when its holder's PID is dead (`kill(pid, 0)`), or when its file is zero-length, corrupt or unreadable. Two conditions withhold that verdict rather than granting it: a `host=` that differs from the local hostname (the PID belongs to another machine's namespace) means the lock is never judged stale, and PID reuse is decided ONLY by comparing the `start` identity recorded at acquire time against the current start time of whatever holds that PID now -- a mismatch means the kernel recycled the PID, a match means the original holder is still running whatever the file timestamps say. When either side is unavailable (no `start` field, or a platform that cannot report start times) the check fails closed and the lock is left alone.
 
-Stale lock recovery is logged to the oplog as a `lock_recovered` event.
+2. **The authorization.** The judgement above is a cheap pre-filter that keeps the common contended case off the slow path. Removal happens only after the contender opens the lock file, takes an exclusive `flock(2)` on it, re-stats the path and confirms it still names the exact inode it holds, and re-judges staleness from that descriptor rather than from a fresh read of the path. Without that, two contenders could both judge the same lock stale and both remove it -- the second deleting the fresh lock the first had already published, leaving two processes believing they held the same ref.
+
+3. **What a failure means.** Anything other than a clean verdict -- another contender mid-reclaim, a permission error, a filesystem without `flock` -- leaves the lock alone. That is the fail-closed direction: **stale-lock reclamation requires a working `flock(2)`**, and where it does not work, contenders simply time out (exit 8) and `safegit unlock <name>` is the recovery path.
+
+A successful reclamation is logged to the oplog as a `lock_recovered` event.
+
+### Release is identity-checked too
+
+A holder removes its lock file only while that path still names the exact file it published. The case that makes this necessary is reachable: an operator force-releases a lock this process still holds, a third process wins the free path and publishes its own lock there, and the original process then finishes -- a blind removal would delete the newcomer's live lock. A mismatch means our lock is already gone: there is nothing to remove, and nothing to report.
 
 ### Polling and backoff
 
-Waiters use exponential backoff polling: 10ms, 20ms, 50ms, 100ms, 200ms, 500ms, capped at 1s. The total wait is bounded by `lock.acquireTimeoutSeconds` (default 30s). Past the timeout, `safegit commit` exits with an error identifying the lock holder.
+Waiters use exponential backoff polling: 10ms, 20ms, 50ms, 100ms, 200ms, 500ms, capped at 1s. The total wait is bounded by `lock.acquireTimeoutSeconds` (default 30s). Past the timeout, safegit exits **8** with an error identifying the lock holder.
+
+A waiter that sees a DIFFERENT lock file at the path than it saw last poll -- a new inode, which every publication produces -- resets its backoff to the first step. Without that, every waiter escalates to the 1s cap within six polls and stays there, so a lock held for 30ms at a time sits idle most of every second and the queue drains at about one waiter per second however many are waiting; fifty concurrent commits then take fifty seconds and time out on a lock whose total work is under two. The escalation still does its job where it was meant to: a lock one process holds for minutes never changes hands.
 
 ### Signal handling
 
-Lock files are registered for cleanup on SIGINT and SIGTERM. If safegit is interrupted while holding a lock, the signal handler removes the lock file before exiting. This prevents the most common source of stale locks in interactive use.
+Lock files are registered for cleanup on SIGINT and SIGTERM: the handler releases what this process published before exiting, which prevents the most common source of stale locks in interactive use. Signal exits report 128 + the signal number, the Unix convention. A refusal that exits through safegit's own error path releases pending locks too -- `os.Exit` runs no deferred function, so a command that had taken a lock and then died on an unrelated error would otherwise leave its lock file behind.
 
 ## What makes it safe vs regular git
 
@@ -114,11 +128,15 @@ Lock files are registered for cleanup on SIGINT and SIGTERM. If safegit is inter
 
 Every git command safegit invokes is prefixed with `--no-optional-locks`, which prevents git from refreshing the shared `.git/index` as a side effect of read-only operations like `git status` or `git diff`. Without this flag, even read operations can contend on `.git/index.lock` with concurrent writers.
 
+That is a property of a single boundary rather than of discipline: every git subprocess safegit builds is constructed by one package (`internal/gitexec`), which prepends the flag and checks the subcommand against one classification table. Nothing else in the codebase shells out to git, and the arguments an OPERATOR types for a guarded passthrough travel through the same boundary.
+
 :-: ref path="internal/git" lang="go"
 
 ## Operation log and undo
 
-Every mutating operation is recorded in the oplog at `.git/safegit/log`, an append-only JSONL file. Writes use `O_APPEND` with flock-guarded appends, and each entry is kept under 4096 bytes to preserve POSIX atomic append guarantees. This means concurrent oplog writes from parallel commits never produce corrupted or interleaved lines.
+Every mutating operation is recorded in the oplog at `.git/safegit/log`, an append-only JSONL file. Each append is made under an exclusive `flock(2)` held across the whole write, and **that** is what makes concurrent appends atomic -- not the POSIX `PIPE_BUF` guarantee, which only covers writes under 4096 bytes. Entries therefore have no size limit: an oversized one is written whole rather than refused. Concurrent oplog writes from parallel commits never produce corrupted or interleaved lines.
+
+The log is never rotated or truncated, and there is no size setting: an audit trail that silently discards its oldest entries is not one. Reading it reports how many unparseable lines were skipped, and a consumer that needs a complete log -- `undo`, bypass detection -- fails closed on a nonzero count rather than acting on a partial reading; `safegit doctor` reports it as an error-severity finding.
 
 :-: ref path="internal/oplog" lang="go"
 
@@ -140,11 +158,13 @@ If any tracked file is modified or any untracked file exists, the guarded comman
 
 The guard uses `git diff HEAD` (not `git status`, which depends on the potentially stale main index) to detect modifications, ensuring accuracy even when the shared index is out of sync with the actual committed state.
 
+Where git has an operation in flight, the same dirt is that operation's conflict markers and staged result, and "commit your work" is advice nobody can follow -- `safegit commit` is pathspec-only and refuses mid-merge. So the refusal names the operation and the command that ends it instead, rendered from one authority so no two refusals can name different commands for the same state. An in-flight operation does NOT by itself refuse a passthrough: the passthroughs are how an operator reaches `rebase --continue` and `merge --abort`, and refusing on state alone would refuse the way out.
+
 ### The worktree operation lock
 
 The dirty-tree guard answers "is it safe to start?" at one instant. The operation lock answers "is anyone else already working here?" for the whole operation, and it is what makes the first answer worth anything: without it, a passthrough could put the repository mid-merge in the window between another process's check and its ref update.
 
-Every command that mutates a worktree takes it first: the guarded passthroughs (checkout, pull, merge, rebase, reset, bisect, cherry-pick, revert), `commit` (including `--amend` and reword), and `undo`. It lives at `safegit/operation` in the **worktree-local** safegit directory, so two worktrees of one repository work independently while two processes in one worktree serialize.
+Every command that mutates a worktree takes it first: the guarded passthroughs (checkout, pull, merge, rebase, reset, bisect, cherry-pick, revert), `commit` (including `--amend` and reword), `mv`, the three conclusion commands, and `undo`. `mv` is the one whose ORDER inside the lock is worth stating: it checks for an in-flight git operation inside the lock and before its first rename, because reaching the commit pipeline's own check afterwards would have moved every file and then refused to commit them. It lives at `safegit/operation` in the **worktree-local** safegit directory, so two worktrees of one repository work independently while two processes in one worktree serialize.
 
 Lock ordering is fixed: the operation lock is **outermost**, and the per-ref locks the commit pipeline and undo take are acquired inside it. Nothing takes them the other way round, which is the whole deadlock argument.
 
@@ -207,7 +227,9 @@ After the walk, the shared finalization pipeline updates all branch and tag refs
 
 ### Multiple sessions editing different files on the same branch
 
-This is the most common case. Each session runs `safegit commit -m "message" -- file1 file2` with its own files. The commits are serialized by the per-branch lock, and CAS retry ensures each commit builds on the latest branch tip. All commits land in linear order with no lost files.
+This is the most common case. Each session runs `safegit commit -m "message" -- file1 file2` with its own files. In one worktree the commits are serialized twice over -- by the worktree operation lock and then by the per-branch lock -- and CAS retry ensures each commit builds on the latest branch tip. All commits arrive in linear order with no lost files.
+
+Same-worktree commits therefore do not overlap with each other, which is broader than the race strictly requires (only commit-vs-passthrough exclusion is necessary). It is measured as fine -- roughly 30 sequential commits a second -- and a reader-writer design that let commits proceed in parallel is deliberately left as future work, contingent on a measured demonstration of real contention.
 
 ### Multiple sessions working on different branches
 
@@ -223,10 +245,11 @@ A session can commit to a branch other than the one currently checked out using 
 
 ### Cleanup after crashes
 
-`safegit doctor --action fix` performs three cleanup tasks relevant to concurrency: removing orphan temporary index directories left by crashed processes via PID liveness checks, releasing stale lock files whose owning processes are no longer alive, and detecting raw git commits that bypassed safegit's isolation guarantees by comparing the oplog against actual branch ref state:
+`safegit doctor --action fix` performs the cleanup tasks relevant to concurrency, over both lock trees -- the shared one and this worktree's own -- and over each submodule's safegit directory:
 
 - **Orphan tmp directories.** Temporary index directories from crashed processes are identified by checking PID liveness and removed.
-- **Stale lock files.** Lock files held by dead processes are removed.
+- **Stale lock files.** Locks whose holder is genuinely gone are reclaimed through the same flock-and-identity path a contender uses, never a bare judge-then-remove: doctor sweeps unattended and by the hundred, which is exactly where a blind removal would delete a live lock that had been published in the meantime.
+- **Orphaned publication temporaries.** A kill between writing a lock's record and publishing it leaves a `.<name>.lock.tmp-*` file. It is not a lock and blocks nothing, but it is swept.
 - **Bypass detection.** Commits made via raw `git commit` (bypassing safegit) are detected by comparing the oplog against actual ref state.
 
 ## Temporary index garbage collection
@@ -235,4 +258,4 @@ Each invocation cleans up its own temporary index directory via `defer` on norma
 
 :-: ref path="internal/index" lang="go"
 
-This runs automatically during `safegit doctor --action fix` and can also be triggered manually. The garbage collector never removes directories belonging to live processes, so it is safe to run while other sessions are actively committing.
+`safegit doctor --action fix` is what runs it: there is no separate garbage-collection command, and nothing sweeps in the background. `--dry-run` reports what it would remove. The collector never removes a directory belonging to a live process, so it is safe to run while other sessions are actively committing, and it sweeps each submodule's safegit directory the same way.
