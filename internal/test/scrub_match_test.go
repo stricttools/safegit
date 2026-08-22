@@ -541,8 +541,8 @@ func TestScrubMatchIdempotent(t *testing.T) {
 	}
 
 	combined := stdout2 + stderr2
-	if !strings.Contains(combined, "No matches found") {
-		t.Errorf("second run should report no matches, got: %s", combined)
+	if !strings.Contains(combined, "0 commits contained the pattern") {
+		t.Errorf("second run should state that no commit contained the pattern, got: %s", combined)
 	}
 
 	headAfterSecond := testutil.Rev(t, dir, "HEAD")
@@ -629,8 +629,8 @@ func TestScrubMatchNoMatches(t *testing.T) {
 	}
 
 	combined := stdout + stderr
-	if !strings.Contains(combined, "No matches found") {
-		t.Errorf("should report 'No matches found', got: %s", combined)
+	if !strings.Contains(combined, "0 commits contained the pattern") {
+		t.Errorf("a pattern that matches nothing must say so in commits, got: %s", combined)
 	}
 }
 

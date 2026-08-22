@@ -435,7 +435,10 @@ func runScrubFileInSubmodule(
 	// boundary they asked for had been dropped.
 	var subFromSHA string
 	if !entireHistory {
-		resolved, err := git.RevParse(subCtx, *from)
+		// "^{commit}" is what makes this a real existence check: bare rev-parse
+		// echoes any 40-hex string back unchanged, so a parent-repository hash
+		// would "resolve" here and fail confusingly one step later.
+		resolved, err := git.RevParse(subCtx, *from+"^{commit}")
 		if err != nil {
 			die(exitcode.General, fmt.Sprintf(
 				"--from %q does not name a commit in submodule %s (a parent-repository commit hash means nothing inside a submodule).\n"+
