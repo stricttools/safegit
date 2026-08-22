@@ -10,9 +10,42 @@ import (
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/gitexec"
+	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
+
+// pipelineExitCode is the one place a commit-pipeline error becomes an exit
+// code. commit, amend and reword all end the same way -- die(code, err) -- and
+// all three read the code from here, so the three paths cannot disagree.
+//
+// Two typed sources, in order:
+//
+//   - a *commit.CommitError, which carries the code the pipeline chose
+//     deliberately (WriteTree, CommitTree, CoordinationBusy, CASExhausted).
+//     errors.As rather than a type assertion: the pipeline annotates some
+//     failures with the path they happened on, so the CommitError arrives
+//     wrapped.
+//   - a *lock.TimeoutError, which the pipeline does not wrap in a CommitError
+//     at all -- it returns the plain "acquiring lock on <ref>: %w" error from
+//     its ref-lock acquisition. Recognizing it here is what makes a contended
+//     ref lock exit LockTimeout from commit, amend and reword the way it
+//     already did from undo and the four rewrite commands. It is the same
+//     situation with the same remedy (wait, or release the lock), and it was
+//     reported as the undifferentiated General only because of where in the
+//     pipeline it happened.
+//
+// Anything else is General.
+func pipelineExitCode(err error) int {
+	var ce *commit.CommitError
+	if errors.As(err, &ce) {
+		return ce.Code
+	}
+	if lock.IsTimeout(err) {
+		return exitcode.LockTimeout
+	}
+	return exitcode.General
+}
 
 func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, trailers []string, files []string) {
 	gitDir := mustGitDir()
@@ -96,15 +129,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		DryRun:     flags.dryRun,
 	})
 	if err != nil {
-		code := exitcode.General
-		// errors.As, not a type assertion: the pipeline annotates some
-		// failures with the path they happened on, so the CommitError that
-		// carries the exit code arrives wrapped.
-		var ce *commit.CommitError
-		if errors.As(err, &ce) {
-			code = ce.Code
-		}
-		die(code, err.Error())
+		die(pipelineExitCode(err), err.Error())
 	}
 
 	if flags.verbose {
@@ -208,15 +233,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			DryRun:    flags.dryRun,
 		})
 		if err != nil {
-			code := exitcode.General
-			// errors.As, not a type assertion: the pipeline annotates some
-			// failures with the path they happened on, so the CommitError that
-			// carries the exit code arrives wrapped.
-			var ce *commit.CommitError
-			if errors.As(err, &ce) {
-				code = ce.Code
-			}
-			die(code, err.Error())
+			die(pipelineExitCode(err), err.Error())
 		}
 
 		if flags.verbose {
@@ -274,15 +291,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			DryRun:   flags.dryRun,
 		})
 		if err != nil {
-			code := exitcode.General
-			// errors.As, not a type assertion: the pipeline annotates some
-			// failures with the path they happened on, so the CommitError that
-			// carries the exit code arrives wrapped.
-			var ce *commit.CommitError
-			if errors.As(err, &ce) {
-				code = ce.Code
-			}
-			die(code, err.Error())
+			die(pipelineExitCode(err), err.Error())
 		}
 
 		if flags.verbose {

@@ -95,14 +95,23 @@ const (
 	CASExhausted = 7
 
 	// LockTimeout means a safegit lock could not be acquired within
-	// lock.acquireTimeoutSeconds because a live holder still owns it. Produced
-	// by scrub file, scrub match, scrub run and author rewrite (all four
-	// contend on the single repo-wide rewrite lock), by undo (which contends on
-	// the ref lock), and by every command that takes the worktree operation
-	// lock: checkout, pull, merge, rebase, reset, bisect, cherry-pick, revert,
-	// commit, commit --amend and reword. The commit pipeline's own ref-lock
-	// timeout, taken INSIDE the operation lock, is still reported as General
-	// (1): it is wrapped into the commit error path.
+	// lock.acquireTimeoutSeconds because a live holder still owns it. It covers
+	// every safegit lock and every command that takes one, whichever lock and
+	// wherever in the command the acquisition happens:
+	//
+	//   - the repo-wide rewrite lock: scrub file, scrub match, scrub run,
+	//     author rewrite;
+	//   - the worktree operation lock: checkout, pull, merge, rebase, reset,
+	//     bisect, cherry-pick, revert, commit, commit --amend, reword, undo;
+	//   - a per-ref CAS lock: undo, and the commit pipeline's own acquisition
+	//     inside the operation lock, which commit, commit --amend and reword
+	//     reach through pipelineExitCode.
+	//
+	// The situation is one situation -- a live holder owns a lock this command
+	// needs -- and the remedy is one remedy: wait for the holder, or release
+	// the lock once it is provably gone. Which of safegit's locks it was, and
+	// how deep in the command the acquisition sat, does not change either, so
+	// it does not change the code.
 	LockTimeout = 8
 
 	// WriteTree means `git write-tree` failed against the per-invocation index
