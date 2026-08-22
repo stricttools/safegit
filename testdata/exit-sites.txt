@@ -1,4 +1,4 @@
-== exit non-literal (351 sites)
+== exit non-literal (356 sites)
    author_check.go:76  return in runAuthorCheck  code=exitcode.Usage  | return exitcode.Usage
    author_check.go:85  die in runAuthorCheck  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("reading git log: %v", err))
    author_check.go:142  return in runAuthorCheck  code=exitcode.General  | return exitcode.General
@@ -14,16 +14,17 @@
    backup.go:230  return in runBackupCreate  code=exitcode.General  | return exitcode.General
    backup.go:242  die in runBackupCreate  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("comparing backup slot with HEAD: %v", err))
    backup.go:246  die in runBackupCreate  code=exitcode.BackupDiverged  | die(exitcode.BackupDiverged, fmt.Sprintf(
-   backup.go:264  return in runBackupCreate  code=exitcode.PushFailed  | return exitcode.PushFailed
-   backup.go:290  die in runBackupList  code=exitcode.NotInitialized  | die(exitcode.NotInitialized, err.Error())
-   backup.go:295  die in runBackupList  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
-   backup.go:300  die in runBackupList  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("listing backups on %s: %v", remote, err))
-   backup.go:335  die in runBackupRestore  code=exitcode.NotInitialized  | die(exitcode.NotInitialized, err.Error())
-   backup.go:345  return in runBackupRestore  code=code  | return code
-   backup.go:354  die in runBackupRestore  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
-   backup.go:358  die in runBackupRestore  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
-   backup.go:363  die in runBackupRestore  code=exitcode.BackupNoSlot  | die(exitcode.BackupNoSlot, fmt.Sprintf(
-   backup.go:384  die in runBackupRestore  code=exitcode.General  | die(exitcode.General, fmt.Sprintf(
+   backup.go:275  return in runBackupCreate  code=exitcode.PushLeaseRejected  | return exitcode.PushLeaseRejected
+   backup.go:278  return in runBackupCreate  code=exitcode.PushFailed  | return exitcode.PushFailed
+   backup.go:304  die in runBackupList  code=exitcode.NotInitialized  | die(exitcode.NotInitialized, err.Error())
+   backup.go:309  die in runBackupList  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
+   backup.go:314  die in runBackupList  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("listing backups on %s: %v", remote, err))
+   backup.go:349  die in runBackupRestore  code=exitcode.NotInitialized  | die(exitcode.NotInitialized, err.Error())
+   backup.go:359  return in runBackupRestore  code=code  | return code
+   backup.go:368  die in runBackupRestore  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
+   backup.go:372  die in runBackupRestore  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
+   backup.go:377  die in runBackupRestore  code=exitcode.BackupNoSlot  | die(exitcode.BackupNoSlot, fmt.Sprintf(
+   backup.go:398  die in runBackupRestore  code=exitcode.General  | die(exitcode.General, fmt.Sprintf(
    cleanup.go:296  return in verifyOldObjectsGone  code=surviving  | return surviving
    cmd_scrub_verify.go:64  die in runScrubVerify  code=exitcode.NotInitialized  | die(exitcode.NotInitialized, err.Error())
    cmd_scrub_verify.go:73  die in runScrubVerify  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("reading scrub policies: %v", err))
@@ -186,29 +187,33 @@
    main.go:948  die in requireCleanTree  code=exitcode.General  | die(exitcode.General, "working tree is dirty; commit changes before proceeding")
    main.go:955  os.Exit in commandHelp  code=exitcode.OK  | os.Exit(exitcode.OK)
    main.go:976  os.Exit in die  code=code  | os.Exit(code)
-   push.go:143  die in runPush  code=exitcode.NotInitialized  | die(exitcode.NotInitialized, err.Error())
-   push.go:144  return in runPush  code=exitcode.NotInitialized  | return exitcode.NotInitialized
-   push.go:149  die in runPush  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("loading config: %v", err))
-   push.go:150  return in runPush  code=exitcode.General  | return exitcode.General
-   push.go:159  die in runPush  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
-   push.go:160  return in runPush  code=exitcode.General  | return exitcode.General
-   push.go:180  return in runPush  code=exitcode.General  | return exitcode.General
-   push.go:187  die in runPush  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("resolving refs: %v", err))
-   push.go:188  return in runPush  code=exitcode.General  | return exitcode.General
-   push.go:192  die in runPush  code=exitcode.General  | die(exitcode.General, "nothing to push (no matching refs)")
-   push.go:193  return in runPush  code=exitcode.General  | return exitcode.General
-   push.go:259  die in runPush  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("discovering hooks: %v", err))
-   push.go:260  return in runPush  code=exitcode.General  | return exitcode.General
-   push.go:265  die in runPush  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("running hooks: %v", err))
-   push.go:266  return in runPush  code=exitcode.General  | return exitcode.General
-   push.go:276  return in runPush  code=exitcode.PushHookTimeout  | return exitcode.PushHookTimeout
-   push.go:280  return in runPush  code=exitcode.PushHookFailed  | return exitcode.PushHookFailed
-   push.go:311  return in runPush  code=exitcode.PushLeaseRejected  | return exitcode.PushLeaseRejected
-   push.go:334  die in runPush  code=exitcode.PushFailed  | die(exitcode.PushFailed, fmt.Sprintf("re-reading %s before retrying the push: %v", remote, err))
-   push.go:335  return in runPush  code=exitcode.PushFailed  | return exitcode.PushFailed
-   push.go:338  die in runPush  code=exitcode.PushFailed  | die(exitcode.PushFailed, "nothing to push (no matching refs) when re-reading the remote before a retry")
-   push.go:339  return in runPush  code=exitcode.PushFailed  | return exitcode.PushFailed
-   push.go:348  return in runPush  code=exitcode.PushFailed  | return exitcode.PushFailed
+   push.go:144  die in runPush  code=exitcode.NotInitialized  | die(exitcode.NotInitialized, err.Error())
+   push.go:145  return in runPush  code=exitcode.NotInitialized  | return exitcode.NotInitialized
+   push.go:150  die in runPush  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("loading config: %v", err))
+   push.go:151  return in runPush  code=exitcode.General  | return exitcode.General
+   push.go:160  die in runPush  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
+   push.go:161  return in runPush  code=exitcode.General  | return exitcode.General
+   push.go:181  return in runPush  code=exitcode.General  | return exitcode.General
+   push.go:195  die in runPush  code=exitcode.PushFailed  | die(exitcode.PushFailed, err.Error())
+   push.go:196  return in runPush  code=exitcode.PushFailed  | return exitcode.PushFailed
+   push.go:198  die in runPush  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("resolving refs: %v", err))
+   push.go:199  return in runPush  code=exitcode.General  | return exitcode.General
+   push.go:203  die in runPush  code=exitcode.General  | die(exitcode.General, "nothing to push (no matching refs)")
+   push.go:204  return in runPush  code=exitcode.General  | return exitcode.General
+   push.go:274  die in runPush  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("discovering hooks: %v", err))
+   push.go:275  return in runPush  code=exitcode.General  | return exitcode.General
+   push.go:280  die in runPush  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("running hooks: %v", err))
+   push.go:281  return in runPush  code=exitcode.General  | return exitcode.General
+   push.go:291  return in runPush  code=exitcode.PushHookTimeout  | return exitcode.PushHookTimeout
+   push.go:295  return in runPush  code=exitcode.PushHookFailed  | return exitcode.PushHookFailed
+   push.go:326  return in runPush  code=exitcode.PushLeaseRejected  | return exitcode.PushLeaseRejected
+   push.go:349  die in runPush  code=exitcode.PushFailed  | die(exitcode.PushFailed, fmt.Sprintf("re-reading %s before retrying the push: %v", remote, err))
+   push.go:350  return in runPush  code=exitcode.PushFailed  | return exitcode.PushFailed
+   push.go:353  die in runPush  code=exitcode.PushFailed  | die(exitcode.PushFailed, "nothing to push (no matching refs) when re-reading the remote before a retry")
+   push.go:354  return in runPush  code=exitcode.PushFailed  | return exitcode.PushFailed
+   push.go:366  die in runPush  code=exitcode.PushFailed  | die(exitcode.PushFailed, fmt.Sprintf(
+   push.go:372  return in runPush  code=exitcode.PushFailed  | return exitcode.PushFailed
+   push.go:381  return in runPush  code=exitcode.PushFailed  | return exitcode.PushFailed
    remap.go:101  die in validateRemapGlobs  code=exitcode.Usage  | die(exitcode.Usage, fmt.Sprintf("invalid --remap-shas-in glob %q: %v", g, err))
    rewrite_author.go:44  die in runRewriteAuthor  code=exitcode.NotInitialized  | die(exitcode.NotInitialized, err.Error())
    rewrite_author.go:60  die in runRewriteAuthor  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
@@ -351,4 +356,4 @@
    unlock.go:104  return in runUnlock  code=exitcode.General  | return exitcode.General
    unlock.go:128  return in runUnlock  code=exitcode.General  | return exitcode.General
 
-total exit sites: 351 across 1 distinct codes
+total exit sites: 356 across 1 distinct codes

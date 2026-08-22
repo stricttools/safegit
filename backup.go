@@ -259,7 +259,21 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 	lease := "--force-with-lease=" + slot + ":" + slotSHA
 	pushArgs := []string{"push", "--no-verify", lease, remote, "HEAD:" + slot}
 
-	if _, err := execGitPush(flags, pushArgs); err != nil {
+	if gitStderr, err := execGitPush(flags, pushArgs); err != nil {
+		// The slot moved between the read above and this push: another machine
+		// is backing up the same branch. The lease refused it, which is the same
+		// mechanism and the same verdict `push` reports, so it gets the same exit
+		// code. It is NOT BackupDiverged -- that is the ancestry refusal, decided
+		// from a slot safegit read and found to hold unfamiliar commits, and it
+		// happens before anything is pushed.
+		if leaseRejected(gitStderr, true) {
+			fmt.Fprintf(os.Stderr,
+				"backup refused: %s on %s moved after safegit read it, so the --force-with-lease expectation no longer matches\n"+
+					"  another machine backed up this branch between the read and the push, and the lease kept its work\n"+
+					"  look at what arrived (safegit backup list %s), then run the backup again\n",
+				slot, remote, remote)
+			return exitcode.PushLeaseRejected
+		}
 		fmt.Fprintf(os.Stderr, "backup push failed: %v\n", err)
 		return exitcode.PushFailed
 	}
