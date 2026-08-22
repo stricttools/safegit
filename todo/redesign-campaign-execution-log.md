@@ -1336,6 +1336,25 @@ to stderr; scrub match's nil-result payload gap.
   files, one per line) is implementor-level detail; no further ruling
   needed beyond the round-2 aggregation ruling.
 
+## USER RULINGS (settled 2026-08-22, review session, round 9)
+
+- gofmt: one mechanical normalization commit in Phase 10 on the
+  quiescent tree; the never-whole-file caveat retires with it.
+- Flakes: a dedicated Phase 10 investigation stress-loops both
+  watchlist tests to either fix a real race or certify load-sensitivity
+  with the mechanism named in a comment; zero unexplained
+  nondeterminism ships.
+- Plan-file pointer: NONE — the user's call: the plan (and this log)
+  move to todo/.done/ at Phase 11's triage anyway; auditor briefs
+  remain the mechanism that pairs plan with log until then.
+- The experiments-directory usage rule was added to the global file at
+  the user's order: raw artifacts stay ignored and disposable;
+  reusable value is promoted as generator scripts to committed homes;
+  the test suite is where findings become permanent.
+- build/audit residue: pending the user's read of the answer (the
+  scenario repos are not committable-as-useful; see conversation) —
+  orchestrator recommendation remains saferm cleanup next session.
+
 ## Open rulings (RESOLVED above — section retained for history)
 
 - **Per-path vs set-level no-match errors (2.2).** The plan contradicts
