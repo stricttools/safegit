@@ -479,6 +479,28 @@ existing entries are never rewritten.
   see --quiet; if quiet-awareness is wanted they must ride the result
   structs. Stdout/machine mode unaffected.
 
+## Phase 2 closing-audit outcome
+
+- Eight subphases PASS, 2.5 PARTIAL: the --untrack "not gitignored"
+  notice fired backwards (check-ignore without --no-index reports
+  index-present paths as not ignored; every untrack target is still
+  indexed), and the positional/--hunks conflict check was
+  spelling-based (./a.go vs a.go evaded it and the hunk entry was
+  silently dropped). Both dispatched to a fixer along with two cheap
+  pinning strengthenings.
+- Plan-text inaccuracy noted: 2.8's Verify names
+  TestMachineModeReachesEveryCommand for the commit payload; actual
+  coverage is the dedicated commit_payload_test.go (correct and
+  green) — Phase 10.2 auditors should not chase the plan's test name.
+- Reword's changed-path list is empty by construction (commented), a
+  literal-reading deviation from 2.8's "per commit/amend/reword" with
+  no behavioral consequence. Ratified.
+- More Phase 9 rows found outside Appendix A: docs/commands-guide.md
+  ~:120 "Rename detection: safegit auto-stages the deletion" (false
+  since 2.1); docs/architecture.md ~:185, :217, :221-222 still document
+  the removed positional file:1,3 hunk grammar (row 4 covers only
+  :234-242).
+
 ## Phase 9 additions (locking rework falsified these claims)
 
 The atomic publication and flock-based reclamation invalidated every
