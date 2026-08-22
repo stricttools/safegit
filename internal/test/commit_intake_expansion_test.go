@@ -273,3 +273,58 @@ func TestAmendNamedUnchangedFileIsAnError(t *testing.T) {
 		t.Errorf("the tip moved despite the refusal: %s -> %s", tip, got)
 	}
 }
+
+// TestCommitNoMatchRefusalNamesEveryUnmatchedArgument: when several named
+// arguments each contribute nothing, the refusal names all of them rather than
+// stopping at the first. Reporting one at a time turns a single mistake into a
+// sequence of retries, each of which discovers one more argument that was
+// already wrong when the first was reported.
+func TestCommitNoMatchRefusalNamesEveryUnmatchedArgument(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "moving.txt", "one\n")
+	testutil.WriteFile(t, dir, "settled-a.txt", "a\n")
+	testutil.WriteFile(t, dir, "settled-b.txt", "b\n")
+	safegitCommit(t, dir, "seed", "moving.txt", "settled-a.txt", "settled-b.txt")
+	head := testutil.Rev(t, dir, "HEAD")
+
+	testutil.WriteFile(t, dir, "moving.txt", "two\n")
+
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "second",
+		"--", "moving.txt", "settled-a.txt", "settled-b.txt")
+	if code != exitcode.PathMatchedNothing {
+		t.Fatalf("naming two unchanged files exited %d, want %d: %s", code, exitcode.PathMatchedNothing, stderr)
+	}
+	for _, want := range []string{"settled-a.txt", "settled-b.txt"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("the refusal does not name %s; every argument that contributed nothing must be named: %s", want, stderr)
+		}
+	}
+	if now := testutil.Rev(t, dir, "HEAD"); now != head {
+		t.Errorf("HEAD moved despite the refusal: %s -> %s", head, now)
+	}
+}
+
+// TestAmendNoMatchRefusalNamesEveryUnmatchedArgument is the amend twin: the
+// same aggregation, judged against the tip being replaced.
+func TestAmendNoMatchRefusalNamesEveryUnmatchedArgument(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "settled-a.txt", "a\n")
+	testutil.WriteFile(t, dir, "settled-b.txt", "b\n")
+	safegitCommit(t, dir, "seed", "settled-a.txt", "settled-b.txt")
+	testutil.WriteFile(t, dir, "tip.txt", "tip\n")
+	tip := safegitCommit(t, dir, "tip", "tip.txt")
+
+	_, stderr, code := runSafegit(t, dir, "commit", "--amend", "-m", "tip again",
+		"--", "settled-a.txt", "settled-b.txt")
+	if code != exitcode.PathMatchedNothing {
+		t.Fatalf("amending with two unchanged files exited %d, want %d: %s", code, exitcode.PathMatchedNothing, stderr)
+	}
+	for _, want := range []string{"settled-a.txt", "settled-b.txt"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("the amend refusal does not name %s: %s", want, stderr)
+		}
+	}
+	if got := testutil.Rev(t, dir, "HEAD"); got != tip {
+		t.Errorf("the tip moved despite the refusal: %s -> %s", tip, got)
+	}
+}
