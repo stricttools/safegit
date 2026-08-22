@@ -190,7 +190,12 @@ func runScrubVerify(flags globalFlags, kwargs map[string]interface{}) int {
 			combined.Matches = append(combined.Matches, allScanResults[i].Matches...)
 			ranges[i] = matchRange{start: start, end: len(combined.Matches)}
 		}
-		if err := scan.AddAttribution(ctx, &combined, scan.ScanOpts{}); err != nil {
+		// The same whole-store selector the scan above elected. An empty
+		// ScanOpts happens to mean --all inside the attribution walk, but it
+		// means it by accident: the package's selection() is the one place a
+		// selector is declared, and routing around it is how a scan and its
+		// attribution end up walking different object sets.
+		if err := scan.AddAttribution(ctx, &combined, scan.ScanOpts{EntireHistory: true}); err != nil {
 			die(exitcode.General, fmt.Sprintf("adding attribution: %v", err))
 		}
 		for i := range targets {
