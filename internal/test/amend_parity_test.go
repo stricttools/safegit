@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
@@ -600,6 +601,13 @@ func TestAmendRefusedWhileMerging(t *testing.T) {
 			if !strings.Contains(strings.ToLower(stderr), "merge") {
 				t.Errorf("the refusal does not mention the merge: %s", strings.Join(strings.Fields(stderr), " "))
 			}
+			// The registry gives a coordination refusal its own code, so a
+			// caller can tell "an operation owns this tree" from every other
+			// reason an amend or a reword could fail.
+			if code != exitcode.CoordinationBusy {
+				t.Errorf("the refusal exited %d, want %d (CoordinationBusy): %s",
+					code, exitcode.CoordinationBusy, strings.Join(strings.Fields(stderr), " "))
+			}
 		})
 	}
 }
@@ -656,5 +664,9 @@ func TestAmendRefusedWhileCherryPicking(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(stderr), "cherry") {
 		t.Errorf("the refusal does not mention the cherry-pick: %s", strings.Join(strings.Fields(stderr), " "))
+	}
+	if code != exitcode.CoordinationBusy {
+		t.Errorf("the refusal exited %d, want %d (CoordinationBusy): %s",
+			code, exitcode.CoordinationBusy, strings.Join(strings.Fields(stderr), " "))
 	}
 }

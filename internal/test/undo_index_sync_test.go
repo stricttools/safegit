@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
@@ -211,6 +212,13 @@ func TestUndoRefusedMidMerge(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(stderr), "merge") {
 		t.Errorf("refusal does not name the merge, so the operator cannot act on it: %s", oneLine(stderr))
+	}
+	// The refusal is a coordination refusal, and the registry gives that its
+	// own code so a caller can tell "an operation owns this tree" from every
+	// other reason undo could fail.
+	if code != exitcode.CoordinationBusy {
+		t.Errorf("the refusal exited %d, want %d (CoordinationBusy): %s",
+			code, exitcode.CoordinationBusy, oneLine(stderr))
 	}
 }
 
