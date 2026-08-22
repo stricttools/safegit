@@ -1,6 +1,8 @@
 package test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -195,6 +197,83 @@ func TestRevertOfARetractionDeclaresNothing(t *testing.T) {
 	if strings.Contains(msg, "Moved-Retract:") {
 		t.Errorf("the revert carried the retraction forward:\n%s", msg)
 	}
+}
+
+// A single revert has TWO doors into the same commit: the clean one, where
+// `safegit revert` computes the inverse patch and commits in one invocation,
+// and the conflicted one, where git parks the state and `safegit revert-continue`
+// concludes it. Both go through the same inverse-minting, and this is the
+// conflicted door's own end-to-end assertion -- every test above enters through
+// the clean one, so nothing else here would notice if the conclusion engine
+// stopped minting inverses.
+//
+// The conflict is arranged on a path the move does not touch: the commit being
+// reverted moves a.txt and also edits c.txt, and a later commit edits c.txt
+// again, so the inverse patch cannot apply. The move half stages cleanly, which
+// is what leaves the records as the only thing under test.
+func TestConflictedRevertConcludedThroughRevertContinueDeclaresTheMoveBack(t *testing.T) {
+	dir := newRepo(t)
+
+	testutil.WriteFile(t, dir, "a.txt", "content that does not change\n")
+	testutil.WriteFile(t, dir, "c.txt", "l1\nbase\nl3\n")
+	if _, stderr, code := runSafegitEnv(t, dir, conclusionSession,
+		"commit", "-m", "base", "--", "a.txt", "c.txt"); code != 0 {
+		t.Fatalf("base commit failed (code %d): %s", code, stderr)
+	}
+
+	// The commit to revert: a declared move plus an unrelated edit.
+	if err := os.Rename(filepath.Join(dir, "a.txt"), filepath.Join(dir, "b.txt")); err != nil {
+		t.Fatalf("rename a.txt -> b.txt: %v", err)
+	}
+	testutil.WriteFile(t, dir, "c.txt", "l1\nthe change\nl3\n")
+	if _, stderr, code := runSafegitEnv(t, dir, conclusionSession, "commit", "-m", "move a and edit c",
+		"--moved", "a.txt -> b.txt", "--", "a.txt", "b.txt", "c.txt"); code != 0 {
+		t.Fatalf("move commit failed (code %d): %s", code, stderr)
+	}
+	source := testutil.Rev(t, dir, "HEAD")
+	forward := movedRecordsIn(t, commitMessageOf(t, dir, source))
+	if len(forward) != 1 {
+		t.Fatalf("the fixture recorded no move: %v", forward)
+	}
+
+	// The later edit is what makes the inverse patch conflict.
+	testutil.WriteFile(t, dir, "c.txt", "l1\nlater\nl3\n")
+	if _, stderr, code := runSafegitEnv(t, dir, conclusionSession,
+		"commit", "-m", "a later edit", "--", "c.txt"); code != 0 {
+		t.Fatalf("later commit failed (code %d): %s", code, stderr)
+	}
+
+	stdout, stderr, code := runSafegitEnv(t, dir, conclusionSession, "revert", "--no-edit", source)
+	if code == 0 {
+		t.Fatalf("the revert succeeded; this fixture needs a conflict\nstdout=%s stderr=%s", stdout, stderr)
+	}
+	if !strings.Contains(stdout+stderr, "CONFLICT") {
+		t.Fatalf("the revert did not report a conflict (code %d)\nstdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	if _, stderr, code := runSafegitEnv(t, dir, conclusionSession,
+		"revert-continue", "--resolve", "c.txt=theirs"); code != 0 {
+		t.Fatalf("revert-continue failed (code %d): %s", code, stderr)
+	}
+
+	msg := commitMessageOf(t, dir, "HEAD")
+	inverse := movedRecordsIn(t, msg)
+	if len(inverse) != 1 {
+		t.Fatalf("the concluded revert carries %d records, want one:\n%s", len(inverse), msg)
+	}
+	if inverse[0][1] != "b.txt -> a.txt" {
+		t.Errorf("the inverse pair is %q, want %q", inverse[0][1], "b.txt -> a.txt")
+	}
+	if inverse[0][0] == forward[0][0] {
+		t.Errorf("the inverse record reuses the original's id %s; it is a different claim", forward[0][0])
+	}
+
+	// The commit is a real revert of the move as well as a record of it.
+	paths := testutil.TreePaths(t, dir, "HEAD")
+	if !testutil.Contains(paths, "a.txt") || testutil.Contains(paths, "b.txt") {
+		t.Errorf("the concluded revert did not put the content back at a.txt (tree: %v)", paths)
+	}
+	assertNoSequencerResidue(t, dir, "conflicted revert of a move")
 }
 
 func TestQueuedRevertDeclaresNoMoves(t *testing.T) {
