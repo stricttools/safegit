@@ -82,7 +82,7 @@
   },
   "project_id": "github.com/smm-h/safegit",
   "name": "safegit",
-  "version": "0.28.1-0.20260822220831-b4c68696c91d",
+  "version": "0.28.1-0.20260822220859-cfeb278d0b51+dirty",
   "help": "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "proc_observe_allowlist": [
     [
@@ -1068,7 +1068,7 @@
       "flags": [
         {
           "name": "pre-push-hook",
-          "help": "run pre-pre-push hook scripts before pushing to remote; omitted means the hooks run. Under --dry-run only EXECUTION is skipped -- a hook is an arbitrary script, so running one is a mutation a preview may not perform -- and the preview says so on stderr and in the payload's pre_pre_push_hooks_skipped member. DISCOVERY still runs in a preview: it reads the filesystem and mutates nothing, and its two refusals (exit 24 for hooks left in the pre-migration .git/hooks location, exit 25 for a checkout-provided hook without its execute bit) are verdicts about the checkout that hold whether or not anything is pushed, so a preview cannot report success for a push that could only ever exit 24 or 25. Passing --no-pre-push-hook skips discovery too",
+          "help": "run pre-pre-push hook scripts before pushing to remote; omitted means the hooks run. Under --dry-run they are never run whatever this says -- a hook is an arbitrary script, so running one is a mutation a preview may not perform -- and the preview says so on stderr and in the payload's pre_pre_push_hooks_skipped member. Only EXECUTION is skipped, though: DISCOVERY runs in a preview too, because it reads the filesystem and mutates nothing, and its two refusals (exit 24 for hooks left in the pre-migration .git/hooks location, exit 25 for a checkout-provided hook without its execute bit) are verdicts about the checkout that hold whether or not anything is pushed -- a preview that skipped discovery would report success for a push that could only ever exit 24 or 25. Passing --no-pre-push-hook skips discovery along with execution",
           "value_schema": {
             "type": "boolean"
           },
