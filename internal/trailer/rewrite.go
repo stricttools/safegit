@@ -41,7 +41,8 @@ func under(prefix, path string) bool {
 
 // Nests reports whether two paths are the same path or one is inside the
 // other. It is the one answer to "do these two declarations speak about each
-// other's paths", shared by the `--moved` overlap refusal and by `safegit mv`.
+// other's paths", and Overlap is what both callers of that question -- the
+// `--moved` refusal and `safegit mv` -- ask it through.
 func Nests(a, b string) bool {
 	if a == b {
 		return true
