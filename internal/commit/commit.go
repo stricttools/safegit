@@ -362,6 +362,12 @@ func (p *Pipeline) indexBaseDir(previewArea string) string {
 func (p *Pipeline) newTmpIndex(ctx context.Context, baseDir string, base IndexBase, isRootCommit bool, parentSHA string) (*index.TmpIndex, error) {
 	switch base {
 	case IndexBaseSharedIndex:
+		// git.GitDir answers ABSOLUTELY, which this join depends on:
+		// index.NewFromFile reads the source with a Go filesystem call and treats
+		// an absent file as git's EMPTY index, so a relative git directory would
+		// resolve against the process working directory and, from a subdirectory,
+		// silently seed a conclusion from nothing -- committing a tree holding
+		// only the paths the declared resolutions named.
 		gitDir, err := git.GitDir(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("resolving git dir: %w", err)
