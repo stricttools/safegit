@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -250,29 +251,41 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		remap = newRemapState(remapGlobs, shas)
 	}
 
+	// What this walk decides to change, per commit. targetSeen answers a
+	// different question from "did anything change": a target that is present
+	// in history and already holds the replacement content changes nothing and
+	// is a legitimate no-op, while a target present in NO commit is a typo, and
+	// only the second is an error.
+	intent := PerPathIntent()
+	targetSeen := false
+
 	treeCache := make(map[string]string)
 	shaMap, rewrittenCount, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
-		// Look up the old blob SHA at the target path before replacing.
+		// Look up the old blob SHA at the target path before replacing. This is
+		// what makes the declaration independent of the rewrite: the decision is
+		// read off the ORIGINAL tree, not off the tree the rewrite produced.
 		oldBlobSHA := lookupBlobAtPath(ctx, info.Tree, filePath)
+		if oldBlobSHA != "" {
+			targetSeen = true
+			if oldBlobSHA != newBlobSHA {
+				intent.Declare(sha, []string{filePath}, false)
+				oldBlobSHAs[oldBlobSHA] = true
+			}
+		}
 
 		newTreeSHA, err := replaceInTree(ctx, info.Tree, filePath, newBlobSHA, treeCache)
 		if err != nil {
 			return CommitTransform{}, fmt.Errorf("replacing in tree for commit %s: %w", sha, err)
 		}
-		if newTreeSHA != info.Tree {
-			// Tree changed, so the old blob was replaced. Track it.
-			if oldBlobSHA != "" && oldBlobSHA != newBlobSHA {
-				oldBlobSHAs[oldBlobSHA] = true
-			}
-		}
 		// Remap full commit hashes in glob-matched files against the
 		// growing SHA map (time-varying: no shared tree cache).
 		if remap != nil {
-			remappedTreeSHA, err := remap.remapTree(ctx, newTreeSHA, "", shaMap)
+			remappedTreeSHA, remappedPaths, err := remap.remapTree(ctx, newTreeSHA, "", shaMap)
 			if err != nil {
 				return CommitTransform{}, fmt.Errorf("commit %s: %w", sha, err)
 			}
 			newTreeSHA = remappedTreeSHA
+			intent.Declare(sha, remappedPaths, false)
 		}
 		var xform CommitTransform
 		if newTreeSHA != info.Tree {
@@ -286,10 +299,10 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	remap.reportStale(flags)
 
 	// Populate RewriteResult for the shared post-rewrite pipeline.
-	exitCode := exitcode.OK
 	rewriteResult := RewriteResult{
 		ShaMap:         shaMap,
 		RewrittenCount: rewrittenCount,
+		Intent:         intent,
 		OldHeadSHA:     oldHeadSHA,
 		SgDir:          sgDir,
 		Reason:         reason,
@@ -302,41 +315,43 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		},
 	}
 
-	// VerifyFunc: runs verifyScrub (structural integrity) and
-	// verifyOldBlobsRemoved (old blobs pruned). Neither is fatal -- failures
-	// set exitCode but allow the pipeline to continue.
-	verifyFunc := func(ctx context.Context) error {
-		infof(flags, "Verifying...\n")
-		verifyFailures, verifyChecks := verifyScrub(ctx, shaMap, filePath, flags.verbose)
-		if len(verifyFailures) > 0 {
-			fmt.Fprintf(os.Stderr, "Verification warnings (%d failures):\n", len(verifyFailures))
-			for _, f := range verifyFailures {
-				fmt.Fprintf(os.Stderr, "  WARN: %s\n", f)
-			}
-		} else {
-			infof(flags, "Verification passed: %d checks across %d rewritten commits\n", verifyChecks, rewrittenCount)
+	// Tier A: the target was found somewhere, and the rewritten history says
+	// what the mode asked for at every one of the commits it touched. Both are
+	// refusals -- nothing has moved yet.
+	tierA := func(ctx context.Context, plan *RefUpdatePlan) error {
+		if !targetSeen {
+			return fmt.Errorf("%q is not in any of the %d commits this command would rewrite, "+
+				"so there was nothing to scrub; check the path (it is repository-relative, "+
+				"not relative to your working directory) and the --from commit",
+				filePath, len(shas))
 		}
-
-		if len(oldBlobSHAs) > 0 {
-			infof(flags, "Verifying old blobs removed...\n")
-			oldBlobList := make([]string, 0, len(oldBlobSHAs))
-			for sha := range oldBlobSHAs {
-				oldBlobList = append(oldBlobList, sha)
-			}
-			if err := verifyOldBlobsRemoved(ctx, oldBlobList); err != nil {
-				fmt.Fprintf(os.Stderr, "CRITICAL: %v\n", err)
-				fmt.Fprintln(os.Stderr, "Old file content may still be present in the local object store.")
-				fmt.Fprintln(os.Stderr, "Run 'git reflog expire --expire=now --all && git gc --prune=now' to force cleanup.")
-				exitCode = exitcode.General
-			} else {
-				infof(flags, "Verification passed: all old blobs removed from object store.\n")
-			}
-		}
-		return nil // non-fatal: exitCode tracks failures
+		infof(flags, "Checking the rewritten commits...\n")
+		return verifyScrubbedFileContent(ctx, shaMap, filePath, mode, newBlobSHA, oldBlobSHAs, remapGlobs)
 	}
 
-	if err := rewriteResult.Finalize(ctx, flags, cmd, nil, verifyFunc); err != nil {
-		die(exitcode.General, err.Error())
+	// Tier B: the old blobs are gone from the object store. It can only run
+	// after cleanup, so a finding never aborts -- it exits nonzero naming what
+	// survived, with the rewrite standing.
+	tierB := func(ctx context.Context) error {
+		if len(oldBlobSHAs) == 0 {
+			return nil
+		}
+		infof(flags, "Verifying old blobs removed...\n")
+		oldBlobList := make([]string, 0, len(oldBlobSHAs))
+		for sha := range oldBlobSHAs {
+			oldBlobList = append(oldBlobList, sha)
+		}
+		if err := verifyOldBlobsRemoved(ctx, oldBlobList); err != nil {
+			fmt.Fprintln(os.Stderr, "Old file content may still be present in the local object store.")
+			fmt.Fprintln(os.Stderr, "Run 'git reflog expire --expire=now --all && git gc --prune=now' to force cleanup.")
+			return err
+		}
+		infof(flags, "Verification passed: all old blobs removed from object store.\n")
+		return nil
+	}
+
+	if err := rewriteResult.Finalize(ctx, flags, cmd, RewriteHooks{TierA: tierA, TierB: tierB}); err != nil {
+		dieFinalize("", err)
 	}
 
 	// The executed rewrite's own figures, added to the same struct the preview
@@ -366,7 +381,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	infof(flags, "  Old HEAD: %s\n", result.OldHead[:12])
 	infof(flags, "  New HEAD: %s\n", result.NewHead[:12])
 
-	return exitCode
+	return rewriteResult.TierBExit(exitcode.OK)
 }
 
 // runScrubFileInSubmodule handles `scrub file` when the target path lives inside
@@ -507,8 +522,17 @@ func runScrubFileInSubmodule(
 	// applied inside submodule histories (documented limitation).
 	oldSubBlobSHAs := make(map[string]bool)
 	subTreeCache := make(map[string]string)
+	subIntent := PerPathIntent()
+	subTargetSeen := false
 	subShaMap, subRewrittenCount, err := walkAndRewrite(subCtx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 		oldBlobSHA := lookupBlobAtPath(ctx, info.Tree, subFilePath)
+		if oldBlobSHA != "" {
+			subTargetSeen = true
+			if oldBlobSHA != newBlobSHA {
+				subIntent.Declare(sha, []string{subFilePath}, false)
+				oldSubBlobSHAs[oldBlobSHA] = true
+			}
+		}
 		newTreeSHA, err := replaceInTree(ctx, info.Tree, subFilePath, newBlobSHA, subTreeCache)
 		if err != nil {
 			return CommitTransform{}, fmt.Errorf("replacing in tree for commit %s: %w", sha, err)
@@ -516,9 +540,6 @@ func runScrubFileInSubmodule(
 		var xform CommitTransform
 		if newTreeSHA != info.Tree {
 			xform.TreeSHA = newTreeSHA
-			if oldBlobSHA != "" && oldBlobSHA != newBlobSHA {
-				oldSubBlobSHAs[oldBlobSHA] = true
-			}
 		}
 		return xform, nil
 	}, flags.verbose)
@@ -531,6 +552,7 @@ func runScrubFileInSubmodule(
 	subResult := RewriteResult{
 		ShaMap:         subShaMap,
 		RewrittenCount: subRewrittenCount,
+		Intent:         subIntent,
 		OldHeadSHA:     oldSubHeadSHA,
 		SgDir:          sub.SafegitDir,
 		Reason:         reason,
@@ -541,8 +563,16 @@ func runScrubFileInSubmodule(
 			"mode":   mode,
 		},
 	}
-	if err := subResult.Finalize(subCtx, flags, cmd, nil, nil); err != nil {
-		die(exitcode.General, fmt.Sprintf("submodule finalize: %v", err))
+	subTierA := func(ctx context.Context, plan *RefUpdatePlan) error {
+		if !subTargetSeen {
+			return fmt.Errorf("%q is not in any of the %d submodule commits this command would rewrite, "+
+				"so there was nothing to scrub; check the path (it is relative to the submodule root)",
+				subFilePath, len(subSHAs))
+		}
+		return verifyScrubbedFileContent(ctx, subShaMap, subFilePath, mode, newBlobSHA, oldSubBlobSHAs, nil)
+	}
+	if err := subResult.Finalize(subCtx, flags, cmd, RewriteHooks{TierA: subTierA}); err != nil {
+		dieFinalize(fmt.Sprintf("submodule %s", sub.RelativePath), err)
 	}
 	subTagRewrites := subResult.TagRewrites
 
@@ -584,19 +614,23 @@ func runScrubFileInSubmodule(
 	if len(remapGlobs) > 0 {
 		parentRemap = newRemapState(remapGlobs, parentSHAs)
 	}
-	parentTreeCache := make(map[string]string)
+	parentTreeCache := make(map[string]treeRewrite)
+	parentIntent := PerPathIntent()
 	parentShaMap, parentRewrittenCount, err := walkAndRewrite(ctx, parentSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
-		newTreeSHA, err := replaceInTreeByBlobMap(ctx, info.Tree, nil, gitlinkMap, parentTreeCache)
+		newTreeSHA, changedPaths, err := replaceInTreeByBlobMap(ctx, info.Tree, nil, gitlinkMap, parentTreeCache)
 		if err != nil {
 			return CommitTransform{}, fmt.Errorf("updating gitlinks in tree for commit %s: %w", sha, err)
 		}
+		intentDeclare := changedPaths
 		if parentRemap != nil {
-			remappedTreeSHA, err := parentRemap.remapTree(ctx, newTreeSHA, "", shaMap)
+			remappedTreeSHA, remappedPaths, err := parentRemap.remapTree(ctx, newTreeSHA, "", shaMap)
 			if err != nil {
 				return CommitTransform{}, fmt.Errorf("commit %s: %w", sha, err)
 			}
 			newTreeSHA = remappedTreeSHA
+			intentDeclare = append(intentDeclare, remappedPaths...)
 		}
+		parentIntent.Declare(sha, intentDeclare, false)
 		var xform CommitTransform
 		if newTreeSHA != info.Tree {
 			xform.TreeSHA = newTreeSHA
@@ -608,12 +642,12 @@ func runScrubFileInSubmodule(
 	}
 	parentRemap.reportStale(flags)
 
-	// Finalize parent rewrite via shared pipeline. The VerifyFunc checks
-	// that old submodule blobs are no longer reachable.
-	exitCode := exitcode.OK
+	// Finalize parent rewrite via shared pipeline. Its Tier B hook checks that
+	// old submodule blobs are no longer reachable.
 	parentResult := RewriteResult{
 		ShaMap:         parentShaMap,
 		RewrittenCount: parentRewrittenCount,
+		Intent:         parentIntent,
 		OldHeadSHA:     oldHeadSHA,
 		SgDir:          sgDir,
 		Reason:         reason,
@@ -627,34 +661,33 @@ func runScrubFileInSubmodule(
 		},
 	}
 
-	parentVerifyFunc := func(ctx context.Context) error {
+	parentTierB := func(ctx context.Context) error {
 		if len(oldSubBlobSHAs) == 0 {
 			return nil
 		}
 		infof(flags, "Verifying old blobs unreachable in submodule...\n")
-		oldBlobList := make([]string, 0, len(oldSubBlobSHAs))
-		for sha := range oldSubBlobSHAs {
-			oldBlobList = append(oldBlobList, sha)
-		}
 		// Use subCtx to target the submodule's object store without chdir.
 		reachableBlobs, err := buildReachableBlobSet(subCtx)
 		if err != nil {
-			return nil // can't verify, not fatal
+			return fmt.Errorf("could not read the submodule's reachable objects to verify the old blobs are gone: %v", err)
 		}
-		for _, sha := range oldBlobList {
+		var surviving []string
+		for sha := range oldSubBlobSHAs {
 			if reachableBlobs[sha] {
-				fmt.Fprintf(os.Stderr, "CRITICAL: old blob %s still reachable in submodule\n", shortSHA(sha))
-				exitCode = exitcode.General
+				surviving = append(surviving, shortSHA(sha))
 			}
 		}
-		if exitCode == 0 {
-			infof(flags, "Verification passed: old blobs unreachable in submodule.\n")
+		if len(surviving) > 0 {
+			sort.Strings(surviving)
+			return fmt.Errorf("%d old blob(s) still reachable in submodule %s: %s",
+				len(surviving), sub.RelativePath, strings.Join(surviving, ", "))
 		}
-		return nil // non-fatal: exitCode tracks failures
+		infof(flags, "Verification passed: old blobs unreachable in submodule.\n")
+		return nil
 	}
 
-	if err := parentResult.Finalize(ctx, flags, cmd, nil, parentVerifyFunc); err != nil {
-		die(exitcode.General, fmt.Sprintf("parent finalize: %v", err))
+	if err := parentResult.Finalize(ctx, flags, cmd, RewriteHooks{TierB: parentTierB}); err != nil {
+		dieFinalize("parent", err)
 	}
 
 	// The executed rewrite's own figures, added to the same struct the preview
@@ -686,7 +719,13 @@ func runScrubFileInSubmodule(
 	infof(flags, "  Old HEAD: %s\n", result.OldHead[:12])
 	infof(flags, "  New HEAD: %s\n", result.NewHead[:12])
 
-	return exitCode
+	// A submodule-side finding and a parent-side one are the same verdict: the
+	// rewrite stands and something after it did not complete.
+	prior := exitcode.OK
+	if len(subResult.TierBFailures) > 0 {
+		prior = exitcode.RewriteIncomplete
+	}
+	return parentResult.TierBExit(prior)
 }
 
 // untrackProtectedPaths runs "git rm --cached" for each path that was

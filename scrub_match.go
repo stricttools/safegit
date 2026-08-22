@@ -492,6 +492,9 @@ type submoduleScrubResult struct {
 	rewrittenCount   int
 	blobMap          map[string]string
 	messagesModified int
+	// intent is what the submodule walk decided to change, per commit, which
+	// the submodule's own Finalize verifies before its refs move.
+	intent *RewriteIntent
 }
 
 // scrubMatchExecute performs the actual rewrite: handles submodule processing,
@@ -679,7 +682,10 @@ func scrubMatchExecute(
 	infof(flags, "Rewriting history to replace pattern matches. This cannot be undone.\n")
 
 	// Phase 1: Process submodules (blob map, walkAndRewrite, Finalize per submodule).
-	replaceBytes := []byte(replace)
+	// subTierBFailed records a submodule whose own post-rewrite verification
+	// found something: the submodule rewrite stands, and the command's exit
+	// code says so.
+	subTierBFailed := false
 	var subScrubResults []submoduleScrubResult
 	for _, si := range subScans {
 		infof(flags, "Scrubbing submodule [%s]...\n", si.sub.RelativePath)
@@ -738,14 +744,16 @@ func scrubMatchExecute(
 		// Note: --remap-shas-in is not applied inside submodule histories
 		// (documented limitation).
 		subMessagesModified := 0
-		subTreeCache := make(map[string]string)
+		subTreeCache := make(map[string]treeRewrite)
+		subIntent := PerPathIntent()
 		subShaMap, subRewrittenCount, err := walkAndRewrite(subCtx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 			var xform CommitTransform
 
-			newTreeSHA, err := replaceInTreeByBlobMap(ctx, info.Tree, subBlobMap, nil, subTreeCache)
+			newTreeSHA, changedPaths, err := replaceInTreeByBlobMap(ctx, info.Tree, subBlobMap, nil, subTreeCache)
 			if err != nil {
 				return CommitTransform{}, fmt.Errorf("replacing blobs in tree for commit %s: %w", sha, err)
 			}
+			subIntent.Declare(sha, changedPaths, false)
 			if newTreeSHA != info.Tree {
 				xform.TreeSHA = newTreeSHA
 			}
@@ -762,6 +770,7 @@ func scrubMatchExecute(
 				if newMessage != info.Message {
 					xform.Message = newMessage
 					subMessagesModified++
+					subIntent.Declare(sha, nil, true)
 				}
 			}
 
@@ -777,6 +786,7 @@ func scrubMatchExecute(
 			rewrittenCount:   subRewrittenCount,
 			blobMap:          subBlobMap,
 			messagesModified: subMessagesModified,
+			intent:           subIntent,
 		})
 
 		infof(flags, "  [%s] %d commits rewritten, %d blobs replaced\n",
@@ -793,13 +803,10 @@ func scrubMatchExecute(
 		// Capture old HEAD before refs are updated.
 		subOldHead, _ := git.RevParse(subCtx, "HEAD")
 
-		// Annotation rewrite closure for submodule tags.
-		subAnnotFunc := func(ctx context.Context, shaMap map[string]string) ([]TagRewrite, int, error) {
-			subTagRewrites, subTagsRewritten := rewriteTagAnnotations(ctx, flags, cmd, compiledPattern, replaceBytes, mangleMode, shaMap)
-			if subTagsRewritten > 0 && flags.verbose {
-				fmt.Fprintf(os.Stderr, "  [%s] %d tag annotations rewritten\n", sr.sub.RelativePath, subTagsRewritten)
-			}
-			return subTagRewrites, subTagsRewritten, nil
+		// Tier A for the submodule: the pattern must be absent from the
+		// submodule history that is about to be published.
+		subTierA := func(ctx context.Context, plan *RefUpdatePlan) error {
+			return verifyPatternAbsentFromTips(ctx, compiledPattern, nil, plan.NewTips)
 		}
 
 		// Oplog extra for submodule (ref, oldHead, sha, rewritten are
@@ -834,6 +841,7 @@ func scrubMatchExecute(
 		subResult := RewriteResult{
 			ShaMap:         sr.shaMap,
 			RewrittenCount: sr.rewrittenCount,
+			Intent:         sr.intent,
 			OldHeadSHA:     subOldHead,
 			SgDir:          sr.sub.SafegitDir,
 			Reason:         reason,
@@ -841,8 +849,14 @@ func scrubMatchExecute(
 			OplogExtra:     subOplogExtra,
 			PolicyData:     &subPolicy,
 		}
-		if err := subResult.Finalize(subCtx, flags, cmd, subAnnotFunc, nil); err != nil {
-			die(exitcode.General, fmt.Sprintf("submodule %s: %v", sr.sub.RelativePath, err))
+		if err := subResult.Finalize(subCtx, flags, cmd, RewriteHooks{
+			AnnotateTag: patternTagBodyTransform(compiledPattern, replace, mangleMode),
+			TierA:       subTierA,
+		}); err != nil {
+			dieFinalize(fmt.Sprintf("submodule %s", sr.sub.RelativePath), err)
+		}
+		if len(subResult.TierBFailures) > 0 {
+			subTierBFailed = true
 		}
 	}
 
@@ -916,7 +930,7 @@ func scrubMatchExecute(
 			subResults, scanErr := scan.ScanObjects(ctx, compiledPattern, subVerifyOpts)
 			if scanErr != nil {
 				fmt.Fprintf(os.Stderr, "CRITICAL: re-scan submodule %s failed: %v\n", sr.sub.RelativePath, scanErr)
-				exitCode = exitcode.General
+				subTierBFailed = true
 				continue
 			}
 			if len(subResults.Matches) > 0 {
@@ -942,7 +956,7 @@ func scrubMatchExecute(
 				if len(remaining) > 0 {
 					fmt.Fprintf(os.Stderr, "CRITICAL: secret still present in submodule %s (%d matches)\n",
 						sr.sub.RelativePath, len(remaining))
-					exitCode = exitcode.General
+					subTierBFailed = true
 				}
 			}
 		}
@@ -951,6 +965,13 @@ func scrubMatchExecute(
 		if err := verifyGitlinksAfterScrub(ctx, result.ShaMap, subScrubResults); err != nil {
 			fmt.Fprintf(os.Stderr, "WARNING: gitlink verification: %v\n", err)
 		}
+	}
+
+	// A submodule whose own verification found something turns the exit code
+	// the same way the parent's does: the rewrite stands, and the code says
+	// what still needs attention.
+	if subTierBFailed {
+		exitCode = exitcode.RewriteIncomplete
 	}
 
 	// No rewrite was performed (e.g., no parent matches but submodules had them).
@@ -1094,33 +1115,20 @@ func buildScopedBlobSetWithDir(ctx context.Context, scope, gitDir, workTree stri
 	return result, nil
 }
 
-// rewriteTagAnnotations does a second pass over annotated tags after updateRefs,
-// checking each tag's annotation body for the pattern and rewriting if matched.
-// Returns the count of tags whose annotations were rewritten.
-func rewriteTagAnnotations(ctx context.Context, flags globalFlags, cmd string, compiledPattern *regexp.Regexp, replaceBytes []byte, mangleMode bool, shaMap map[string]string) ([]TagRewrite, int) {
-	tagRewrites, tagsRewritten, err := forEachAnnotatedTag(ctx, shaMap, func(refname, header, body string) (string, error) {
+// patternTagBodyTransform builds the annotation transform for `scrub match`:
+// the one pattern, substituted or mangled, applied to the tag body.
+func patternTagBodyTransform(compiledPattern *regexp.Regexp, replace string, mangleMode bool) TagBodyTransformFunc {
+	return func(refname, header, body string) (string, error) {
 		if !compiledPattern.MatchString(body) {
 			return body, nil
 		}
-		var newBody string
 		if mangleMode {
-			newBody = compiledPattern.ReplaceAllStringFunc(body, func(s string) string {
+			return compiledPattern.ReplaceAllStringFunc(body, func(s string) string {
 				return string(mangleBytes([]byte(s)))
-			})
-		} else {
-			newBody = compiledPattern.ReplaceAllString(body, string(replaceBytes))
+			}), nil
 		}
-		return newBody, nil
-	})
-	if err != nil {
-		die(exitcode.General, fmt.Sprintf("rewriting tag annotations: %v", err))
+		return compiledPattern.ReplaceAllString(body, replace), nil
 	}
-	if tagsRewritten > 0 && flags.verbose {
-		for _, tr := range tagRewrites {
-			fmt.Fprintf(os.Stderr, "  tag annotation %s: %s -> %s\n", tr.Refname, shortSHA(tr.OldSHA), shortSHA(tr.NewSHA))
-		}
-	}
-	return tagRewrites, tagsRewritten
 }
 
 // shortSHA returns the first 8 characters of a SHA.

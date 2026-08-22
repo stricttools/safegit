@@ -334,8 +334,8 @@ func TestReplaceInTreeByBlobMapFlat(t *testing.T) {
 		origB: newB,
 	}
 
-	cache := make(map[string]string)
-	newTree, err := replaceInTreeByBlobMap(ctx, treeSHA, blobMap, nil, cache)
+	cache := make(map[string]treeRewrite)
+	newTree, _, err := replaceInTreeByBlobMap(ctx, treeSHA, blobMap, nil, cache)
 	if err != nil {
 		t.Fatalf("replaceInTreeByBlobMap: %v", err)
 	}
@@ -377,8 +377,8 @@ func TestReplaceInTreeByBlobMapNested(t *testing.T) {
 		origDeep: newDeep,
 	}
 
-	cache := make(map[string]string)
-	newTree, err := replaceInTreeByBlobMap(ctx, treeSHA, blobMap, nil, cache)
+	cache := make(map[string]treeRewrite)
+	newTree, _, err := replaceInTreeByBlobMap(ctx, treeSHA, blobMap, nil, cache)
 	if err != nil {
 		t.Fatalf("replaceInTreeByBlobMap: %v", err)
 	}
@@ -417,8 +417,8 @@ func TestReplaceInTreeByBlobMapNoMatch(t *testing.T) {
 		bogusOld: bogusNew,
 	}
 
-	cache := make(map[string]string)
-	newTree, err := replaceInTreeByBlobMap(ctx, treeSHA, blobMap, nil, cache)
+	cache := make(map[string]treeRewrite)
+	newTree, _, err := replaceInTreeByBlobMap(ctx, treeSHA, blobMap, nil, cache)
 	if err != nil {
 		t.Fatalf("replaceInTreeByBlobMap: %v", err)
 	}
@@ -458,10 +458,10 @@ func TestReplaceInTreeByBlobMapWithCache(t *testing.T) {
 	blobMap := map[string]string{origBlob: newBlob}
 
 	// Use built-in cache: first call populates it, second call hits it.
-	cache := make(map[string]string)
+	cache := make(map[string]treeRewrite)
 
 	// First call: cache miss, compute result.
-	result1, err := replaceInTreeByBlobMap(ctx, tree1, blobMap, nil, cache)
+	result1, _, err := replaceInTreeByBlobMap(ctx, tree1, blobMap, nil, cache)
 	if err != nil {
 		t.Fatalf("replaceInTreeByBlobMap (first): %v", err)
 	}
@@ -472,7 +472,7 @@ func TestReplaceInTreeByBlobMapWithCache(t *testing.T) {
 	}
 
 	// Second call with the same tree SHA should hit the cache.
-	result2, err := replaceInTreeByBlobMap(ctx, tree2, blobMap, nil, cache)
+	result2, _, err := replaceInTreeByBlobMap(ctx, tree2, blobMap, nil, cache)
 	if err != nil {
 		t.Fatalf("replaceInTreeByBlobMap (second): %v", err)
 	}
@@ -572,18 +572,18 @@ func TestReplaceInTreeByBlobMapCacheBenefit(t *testing.T) {
 		origBlob3: newBlob,
 	}
 
-	cache := make(map[string]string)
+	cache := make(map[string]treeRewrite)
 
 	// Process all three trees with a shared cache.
-	result1, err := replaceInTreeByBlobMap(ctx, tree1, blobMap, nil, cache)
+	result1, _, err := replaceInTreeByBlobMap(ctx, tree1, blobMap, nil, cache)
 	if err != nil {
 		t.Fatalf("tree1: %v", err)
 	}
-	result2, err := replaceInTreeByBlobMap(ctx, tree2, blobMap, nil, cache)
+	result2, _, err := replaceInTreeByBlobMap(ctx, tree2, blobMap, nil, cache)
 	if err != nil {
 		t.Fatalf("tree2: %v", err)
 	}
-	result3, err := replaceInTreeByBlobMap(ctx, tree3, blobMap, nil, cache)
+	result3, _, err := replaceInTreeByBlobMap(ctx, tree3, blobMap, nil, cache)
 	if err != nil {
 		t.Fatalf("tree3: %v", err)
 	}

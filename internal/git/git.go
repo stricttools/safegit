@@ -399,15 +399,13 @@ func ListTrackedIgnoredFiles(ctx context.Context) ([]string, error) {
 //
 // Returns the list of protected tracked+gitignored paths (empty if none).
 func SyncMainIndexWithWorktree(ctx context.Context, treeish string) ([]string, error) {
-	// 1. Save existing skip-worktree files.
+	// 1. Save existing skip-worktree files. Restoring them afterwards is the
+	// reconciliation authority's job (restoreSkipWorktree, the same one
+	// ReconcileMainIndex uses), so a flag set by the operator is re-applied the
+	// same way whatever moved the ref.
 	origSkip, err := ListSkipWorktreeFiles(ctx)
 	if err != nil {
-		// Non-fatal: proceed without preservation.
-		origSkip = nil
-	}
-	origSkipSet := make(map[string]struct{}, len(origSkip))
-	for _, f := range origSkip {
-		origSkipSet[f] = struct{}{}
+		return nil, fmt.Errorf("reading skip-worktree flags before syncing the working tree: %w", err)
 	}
 
 	// 2. Collect tracked+gitignored paths.
@@ -423,13 +421,7 @@ func SyncMainIndexWithWorktree(ctx context.Context, treeish string) ([]string, e
 		if err != nil {
 			return nil, err
 		}
-		// Restore pre-existing skip-worktree flags.
-		for _, f := range origSkip {
-			if _, _, rerr := Run(ctx, "update-index", "--skip-worktree", f); rerr != nil {
-				fmt.Fprintf(os.Stderr, "safegit: warning: failed to restore skip-worktree on %s: %v\n", f, rerr)
-			}
-		}
-		return nil, nil
+		return nil, restoreSkipWorktree(ctx, origSkip)
 	}
 
 	// 4. Slow path: save on-disk content of tracked+gitignored files.
@@ -481,14 +473,7 @@ func SyncMainIndexWithWorktree(ctx context.Context, treeish string) ([]string, e
 		}
 	}
 
-	// Restore pre-existing skip-worktree flags.
-	for _, f := range origSkip {
-		if _, _, rerr := Run(ctx, "update-index", "--skip-worktree", f); rerr != nil {
-			fmt.Fprintf(os.Stderr, "safegit: warning: failed to restore skip-worktree on %s: %v\n", f, rerr)
-		}
-	}
-
-	return trackedIgnored, nil
+	return trackedIgnored, restoreSkipWorktree(ctx, origSkip)
 }
 
 // RunPassthrough executes a git command with stdin/stdout/stderr wired to
@@ -906,6 +891,18 @@ func HashObjectWrite(ctx context.Context, path string) (string, error) {
 // via git hash-object -w --stdin, returning the blob SHA.
 func HashObjectWriteBytes(ctx context.Context, data []byte) (string, error) {
 	out, _, err := RunWithEnvStdin(ctx, nil, data, "hash-object", "-w", "--stdin")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// HashObjectWriteTag writes in-memory bytes as a TAG object to the object
+// store, returning the tag object SHA. A rewritten annotated tag is a new tag
+// object, so every site that reconstructs one goes through here rather than
+// spelling the `-t tag` argv again.
+func HashObjectWriteTag(ctx context.Context, content []byte) (string, error) {
+	out, _, err := RunWithEnvStdin(ctx, nil, content, "hash-object", "-t", "tag", "-w", "--stdin")
 	if err != nil {
 		return "", err
 	}
