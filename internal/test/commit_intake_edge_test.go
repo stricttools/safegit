@@ -195,17 +195,18 @@ func TestIntakeEdgeColonNameDeletion(t *testing.T) {
 	}
 }
 
-// TestIntakeEdgeDanglingSymlinkNoColon documents a SEPARATE defect found while
-// building the discriminator for the test below: a dangling symlink cannot be
-// committed at all, whatever its name. It survives validation (os.Lstat sees
-// the link, internal/commit/commit.go:396) and staging (`git add` records the
-// link text happily), then move detection hashes it with
-// `git hash-object -- <path>` (internal/commit/moves.go:93 ->
-// internal/git/git.go:665), which opens the TARGET and fails. Move detection
-// skips disk-absent paths (moves.go:68) but not paths whose target is absent.
+// TestIntakeEdgeDanglingSymlinkNoColon pins that a dangling symlink commits
+// like any other path: git itself commits them, and safegit supports symlinks
+// everywhere else.
 //
-// RED: asserts the desired behavior -- git itself commits dangling symlinks,
-// and safegit already supports symlinks elsewhere.
+// It was a defect once, and the cause is worth keeping because it is the shape
+// a future one would take. The link survived validation (os.Lstat sees the link
+// itself) and staging (`git add` records the link text happily), and then MOVE
+// DETECTION hashed it with `git hash-object -- <path>`, which opens the TARGET
+// and fails. Detection skipped disk-absent paths but not paths whose target was
+// absent. Move detection is gone entirely -- a move is declared, never guessed
+// (see internal/commit/moved.go) -- so nothing on the commit path opens a
+// symlink's target any more.
 func TestIntakeEdgeDanglingSymlinkNoColon(t *testing.T) {
 	dir := newRepo(t)
 	name := "link1"

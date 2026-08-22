@@ -13,17 +13,20 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// The fidelity property the marker verification's hard refusal rests on:
-// given the index stages and the attributes that were in force, git's own
-// merge-file reproduces the conflict-marked file git wrote, BYTE FOR BYTE,
-// across every combination of conflict style and marker size, over conflicts
-// whose shape the test did not choose by hand.
+// The fidelity property the marker verification's ATTRIBUTION rests on: given
+// the index stages and the attributes that were in force, git's own merge-file
+// reproduces the conflict-marked file git wrote, BYTE FOR BYTE, across every
+// combination of conflict style and marker size, over conflicts whose shape the
+// test did not choose by hand.
 //
 // Why it has to be a property rather than the handful of fixed cases in
-// conflict_test.go: the verification refuses a conclusion outright when it
-// cannot obtain the emitted regions, and it treats a reproduced region as
-// authoritative evidence about the operator's file. Both are only honest if
-// reproduction is exact for conflicts nobody tuned it against.
+// conflict_test.go: the verification treats a reproduced region as authoritative
+// evidence about what git itself emitted into the operator's file, which is what
+// makes its message exact ("the conflict git wrote here is still in the content
+// being committed") rather than merely structural. That is only honest if
+// reproduction is exact for conflicts nobody tuned it against. Reconstruction is
+// never what decides the REFUSAL -- a marker-shaped block no side carried before
+// is refused whether or not safegit can name who wrote it.
 //
 // THE LABELS. Marker lines carry names, so byte identity depends on getting
 // them right, and git records them differently per operation:
@@ -35,10 +38,11 @@ import (
 //     end.
 //   - A MERGE's `theirs` label is the name the operator typed on the command
 //     line, and git records it NOWHERE machine-readable. The test SUPPLIES it,
-//     because it is the side that typed it. Production cannot, which is exactly
-//     why a merge whose AUTO_MERGE is missing is refused rather than
-//     reconstructed: the merge rows here prove the reconstruction engine is
-//     faithful given the name, not that safegit can recover the name.
+//     because it is the side that typed it. Production cannot, which is why a
+//     merge's emitted regions come from AUTO_MERGE where git wrote one and are
+//     simply unavailable where it did not -- absence costs the attribution, not
+//     the verdict. The merge rows here prove the reconstruction engine is
+//     faithful GIVEN the name; they prove nothing about recovering the name.
 //
 // Randomization is seeded from each subtest's own name, so a failure is
 // reproducible from the failing row alone and the recorded baseline is stable,

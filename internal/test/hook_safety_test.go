@@ -137,18 +137,26 @@ func TestHookInstallDoesNotClobberNativeGitHook(t *testing.T) {
 			code, strings.TrimSpace(stdout), replacedWith, nativeBefore, nativeAfter)
 	}
 
-	// Evidence of the consequence, not a second assertion: whichever script now
-	// occupies .git/hooks/pre-commit is the one safegit runs when it commits.
+	// The consequence, asserted rather than logged: whichever script occupies
+	// .git/hooks/pre-commit is the one safegit runs when it commits, and after
+	// the store move that is still the REPOSITORY'S own hook. The installed
+	// script is a safegit hook in safegit's own store and runs on a push, so a
+	// commit must not reach it -- if it did, the basenames would have collided
+	// after all, just one directory further along.
 	if err := os.WriteFile(filepath.Join(dir, "probe.txt"), []byte("probe\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, cErr, cCode := runSafegitEnv(t, dir, hookSafetyEnv, "commit", "-m", "probe", "--", "probe.txt"); cCode != 0 {
-		t.Logf("probe commit exited %d: %s", cCode, cErr)
+		t.Fatalf("the probe commit failed (exit %d): %s", cCode, cErr)
 	}
-	_, nativeRan := hookSafetyRead(t, nativeMarker)
-	_, installedRan := hookSafetyRead(t, srcMarker)
-	t.Logf("after a safegit commit: native hook ran=%v, installed hook ran=%v",
-		nativeRan == nil, installedRan == nil)
+	if body, err := hookSafetyRead(t, nativeMarker); err != nil {
+		t.Errorf("the repository's own pre-commit hook did not run on a safegit commit: %v", err)
+	} else if body != "native" {
+		t.Errorf("the pre-commit marker holds %q, want %q -- some other script is at .git/hooks/pre-commit", body, "native")
+	}
+	if _, err := hookSafetyRead(t, srcMarker); err == nil {
+		t.Error("the installed safegit hook ran on a commit; it belongs to the push path only")
+	}
 }
 
 // TestHookInstallLeavesUnrelatedNativeHookAlone is the control: installing a
@@ -189,10 +197,15 @@ func TestHookInstallLeavesUnrelatedNativeHookAlone(t *testing.T) {
 // uninstalled tool's checks keep running on every push, with no .git/safegit/
 // left to explain where they came from.
 //
-// The manually-placed pre-pre-push.d entry below is deliberately NOT asserted
-// on: an operator-authored script raises an authority question (whose file is
-// it to delete?) that this contract does not settle. Its fate is logged as
-// evidence for that separate decision.
+// The manually-placed pre-pre-push.d entry below settles the question that used
+// to be left open here -- whose file is an operator-authored script under
+// safegit's store to delete? The answer follows from what an uninstall IS: a
+// repository-wide removal of safegit's state directory, and everything inside
+// it goes with it. The store is safegit's; a script an operator put in it is a
+// script they asked safegit to run, and leaving it behind would leave a hook
+// directory with nothing left to explain it. The one store an uninstall does
+// NOT touch is the CHECKOUT's (.safegit/hooks in the work tree), which is the
+// repository's committed content and somebody else's file to delete.
 func TestDoctorUninstallRemovesInstalledHooks(t *testing.T) {
 	dir := newRepo(t)
 
@@ -207,7 +220,7 @@ func TestDoctorUninstallRemovesInstalledHooks(t *testing.T) {
 		t.Fatalf("precondition: hook install did not produce %s: %v", installedPath, err)
 	}
 
-	// An operator-authored hook alongside it, for evidence only.
+	// An operator-authored hook alongside it, inside safegit's own store.
 	operatorPath := filepath.Join(dir, ".git", "safegit", "hooks", "pre-pre-push.d", "20-operator")
 	writeHookScript(t, operatorPath, "true")
 
@@ -231,8 +244,13 @@ func TestDoctorUninstallRemovesInstalledHooks(t *testing.T) {
 		t.Errorf("stat %s: %v", installedPath, err)
 	}
 
-	_, operatorErr := os.Stat(operatorPath)
-	t.Logf("operator-authored %s after uninstall: present=%v", operatorPath, operatorErr == nil)
+	// The operator-authored entry goes too: it lives inside safegit's own store,
+	// and the uninstall removes that store whole.
+	if _, err := os.Stat(operatorPath); err == nil {
+		t.Errorf("uninstall left the operator-authored hook %s inside safegit's store; it still runs on every push", operatorPath)
+	} else if !os.IsNotExist(err) {
+		t.Errorf("stat %s: %v", operatorPath, err)
+	}
 }
 
 // TestScanSeesHooksInPrePrePushDir: `safegit scan` sweeps non-object files

@@ -14,13 +14,18 @@ import (
 // tool removes the files from the working tree and stages the deletions in the
 // index (`git rm -r dir/`); the caller then commits `dir/`.
 //
-// The directory form must behave identically to the file-path form. It does
-// not: a directory pathspec is removed from the temp index wholesale by
-// stageFile, and move detection then independently re-runs `git rm --cached`
-// on an individual path inside that directory that is already gone from the
-// index, which git rejects with exit 128. The file-path form never hits this,
-// because the individual paths are in the explicit set that move detection
-// skips.
+// The directory form behaves identically to the file-path form, and these tests
+// are what holds it there.
+//
+// It did not always. A directory pathspec is removed from the temp index
+// wholesale by stageFile, and MOVE DETECTION -- which safegit no longer has --
+// then independently re-ran `git rm --cached` on an individual path inside that
+// directory that was already gone from the index, which git rejects with exit
+// 128. The file-path form never hit it, because the individual paths were in
+// the explicit set detection skipped. A move is now declared and never guessed
+// (see internal/commit/moved.go), so nothing re-runs anything behind stageFile;
+// the cases below stay because the directory form still has to reach the same
+// commit as the file form, whatever the reason a past version did not.
 
 // seedDeletedDir creates dir/ holding the given name->content files, commits
 // it via safegit, then simulates the deletion tool with `git rm -r dir`, which
@@ -98,10 +103,11 @@ func TestCommitStagedDeletions_DirectoryPath(t *testing.T) {
 }
 
 // TestCommitStagedDeletions_DirectoryPathWithMovedFile is the regression case.
-// One of the deleted files reappears elsewhere with identical content, so move
-// detection fires. stageFile has already dropped the whole directory from the
-// temp index; move detection then re-runs `git rm --cached` on dir/a.txt,
-// which is no longer in that index, and git fails with exit 128.
+// One of the deleted files reappears elsewhere with identical content -- the
+// shape that used to make move detection fire on top of a directory stageFile
+// had already dropped from the temp index, producing git's exit 128. Nothing
+// infers a move from identical blobs any more, and the commit is the ordinary
+// one: two deletions and an addition.
 func TestCommitStagedDeletions_DirectoryPathWithMovedFile(t *testing.T) {
 	dir := seedDeletedDir(t, map[string]string{"a.txt": "alpha\n", "b.txt": "beta\n"})
 
@@ -121,10 +127,11 @@ func TestCommitStagedDeletions_DirectoryPathWithMovedFile(t *testing.T) {
 }
 
 // TestCommitStagedDeletions_DirectoryPathWithUnrelatedEmptyFile shows how
-// little it takes to trigger the same failure: no deliberate move at all. An
-// empty file was deleted with the directory, an unrelated new empty file is in
-// the same commit, and the two share the empty blob, so move detection treats
-// the new file as the destination of a move.
+// little it took to trigger the same failure back when blob equality decided
+// anything: no deliberate move at all. An empty file was deleted with the
+// directory, an unrelated new empty file is in the same commit, and the two
+// share the empty blob -- which detection read as one being the other moved.
+// Two empty files are now two empty files, and the commit records exactly that.
 func TestCommitStagedDeletions_DirectoryPathWithUnrelatedEmptyFile(t *testing.T) {
 	dir := seedDeletedDir(t, map[string]string{"empty.txt": "", "b.txt": "beta\n"})
 
