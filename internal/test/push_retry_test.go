@@ -143,8 +143,9 @@ func TestPushRefusesARetryWhenALocalRefMovedUnderTheHooks(t *testing.T) {
 
 	_, stderr, code := runSafegitEnv(t, dir, env, "--approve-consequential", "push",
 		"--refs", "head", "--force-with-lease", "origin")
-	if code == 0 {
-		t.Fatalf("a retry that would push an un-validated local ref must be refused; stderr: %s", stderr)
+	if code != exitcode.PushFailed {
+		t.Fatalf("a retry that would push an un-validated local ref must be refused with %d (PushFailed), got %d; stderr: %s",
+			exitcode.PushFailed, code, stderr)
 	}
 	if n := len(pushes()); n != 1 {
 		t.Errorf("the retry must be refused before a second push is attempted; %d pushes happened:\n%s",

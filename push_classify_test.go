@@ -131,7 +131,7 @@ func TestEveryTransportPatternIsMultiWord(t *testing.T) {
 	}
 }
 
-// TestAtomicIsDecidedInOneePlace pins the rule --atomic is derived from, so the
+// TestAtomicIsDecidedInOnePlace pins the rule --atomic is derived from, so the
 // argv and the payload cannot disagree about whether a push was
 // all-or-nothing.
 func TestAtomicIsDecidedInOnePlace(t *testing.T) {
