@@ -919,13 +919,23 @@ func CatFileBlob(ctx context.Context, sha string) ([]byte, error) {
 
 // MkTree creates a tree object from a slice of TreeEntry values and returns
 // the tree SHA. Each entry must have Mode, ObjectType, SHA, and Path
-// populated. Input is piped to `git mktree` as "<mode> <type> <sha>\t<name>\n".
+// populated. Input is piped to `git mktree -z` as
+// "<mode> <type> <sha>\t<name>\0" -- the same NUL-terminated encoding
+// `ls-tree -z` produces, which is where every entry safegit writes back came
+// from.
+//
+// The -z is not an optimization. Plain mktree input treats a path that starts
+// with a double quote as a C-quoted string, so a repository holding a file
+// whose name begins with one -- a legal name -- makes it refuse with "invalid
+// quoting", and a path containing a backslash would be read as an escape. Under
+// -z every path is taken literally, so the writer round-trips exactly what the
+// reader parsed.
 func MkTree(ctx context.Context, entries []TreeEntry) (string, error) {
 	var buf bytes.Buffer
 	for _, e := range entries {
-		fmt.Fprintf(&buf, "%s %s %s\t%s\n", e.Mode, e.ObjectType, e.SHA, e.Path)
+		fmt.Fprintf(&buf, "%s %s %s\t%s\x00", e.Mode, e.ObjectType, e.SHA, e.Path)
 	}
-	out, _, err := RunWithEnvStdin(ctx, nil, buf.Bytes(), "mktree")
+	out, _, err := RunWithEnvStdin(ctx, nil, buf.Bytes(), "mktree", "-z")
 	if err != nil {
 		return "", fmt.Errorf("mktree: %w", err)
 	}
