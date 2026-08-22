@@ -1316,6 +1316,26 @@ to stderr; scrub match's nil-result payload gap.
   GLOBAL rules file by the user; wording added to
   /home/m/Projects/CLAUDE.md.
 
+## USER RULINGS (settled 2026-08-22, review session, round 8)
+
+- Both operational facts adopted into the GLOBAL rules file
+  (/home/m/Projects/CLAUDE.md): live-workspace harness results are
+  advisory mid-wave; guard-triggering scratch goes outside the repo as
+  an interim rule. The structural fix — a scaffold-owned experiments
+  directory convention — is filed as an rlsbl todo; when it lands,
+  safegit's boundary guard adds the one skip-list entry and
+  experiments return in-project.
+- Phase 9 does the FULL fresh-read: checklist (Appendix A + this log's
+  rows) first, then a fresh-eyes agent reads every hand-written doc
+  line-by-line against the as-built tool.
+- testdata/exit-sites.txt: kept as-is, regenerated at releases only —
+  next session adds the one-line regeneration to the release checklist
+  (candidate: .rlsbl/hooks/pre-checks.sh) in the fixer window; between
+  releases its line numbers are known-stale and untrusted.
+- The aggregated no-match refusal's exact rendering (which unchanged
+  files, one per line) is implementor-level detail; no further ruling
+  needed beyond the round-2 aggregation ruling.
+
 ## Open rulings (RESOLVED above — section retained for history)
 
 - **Per-path vs set-level no-match errors (2.2).** The plan contradicts
