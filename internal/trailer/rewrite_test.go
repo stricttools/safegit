@@ -273,3 +273,63 @@ func TestNests(t *testing.T) {
 		}
 	}
 }
+
+// TestOverlap pins the one implementation both spellings of a declared move ask
+// -- `safegit mv`'s pairs and `--moved`'s records -- so a command line either of
+// them refuses is refused by both.
+func TestOverlap(t *testing.T) {
+	cases := []struct {
+		name string
+		a, b Pair
+		want OverlapKind
+		x, y string
+	}{
+		{
+			name: "unrelated moves",
+			a:    Pair{Old: "a", New: "b"},
+			b:    Pair{Old: "c", New: "d"},
+			want: NoOverlap,
+		},
+		{
+			name: "a subtree source holding the other's source",
+			a:    Pair{Old: "src/", New: "lib/"},
+			b:    Pair{Old: "src/one.txt", New: "other.txt"},
+			want: SameSource, x: "src", y: "src/one.txt",
+		},
+		{
+			name: "two moves landing inside one another",
+			a:    Pair{Old: "a.txt", New: "lib/a.txt"},
+			b:    Pair{Old: "b.txt", New: "lib/"},
+			want: SameDestination, x: "lib/a.txt", y: "lib",
+		},
+		{
+			name: "the first move's destination is the second's source",
+			a:    Pair{Old: "p.txt", New: "q.txt"},
+			b:    Pair{Old: "q.txt", New: "r.txt"},
+			want: Chained, x: "q.txt", y: "q.txt",
+		},
+		{
+			name: "the second move's destination is the first's source",
+			a:    Pair{Old: "q.txt", New: "r.txt"},
+			b:    Pair{Old: "p.txt", New: "q.txt"},
+			want: Chained, x: "q.txt", y: "q.txt",
+		},
+		{
+			name: "a chain through a subtree prefix",
+			a:    Pair{Old: "one/", New: "two/"},
+			b:    Pair{Old: "two/deep.txt", New: "three.txt"},
+			want: Chained, x: "two", y: "two/deep.txt",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			kind, x, y := Overlap(c.a, c.b)
+			if kind != c.want {
+				t.Fatalf("Overlap(%+v, %+v) = %v, want %v", c.a, c.b, kind, c.want)
+			}
+			if kind != NoOverlap && (x != c.x || y != c.y) {
+				t.Errorf("the refusal would name %q and %q, want %q and %q", x, y, c.x, c.y)
+			}
+		})
+	}
+}

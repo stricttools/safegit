@@ -74,6 +74,9 @@ func (p mvPair) subtree() bool     { return strings.HasSuffix(p.old, "/") }
 func (p mvPair) oldPrefix() string { return strings.TrimSuffix(p.old, "/") }
 func (p mvPair) newPrefix() string { return strings.TrimSuffix(p.new, "/") }
 
+// pair is this move as the shared overlap check takes it.
+func (p mvPair) pair() trailer.Pair { return trailer.Pair{Old: p.old, New: p.new} }
+
 // mvMove is one performed move as the payload reports it.
 type mvMove struct {
 	ID  string `json:"id"`
@@ -235,31 +238,23 @@ func parseMvPairs(repoRoot string, args []string) ([]mvPair, int) {
 // refuseMvOverlaps rejects a set of pairs that cannot be performed as one
 // statement.
 //
-// Two kinds, both argument-against-argument:
-//
-//   - NESTING, on either side: `src/ -> lib/` alongside `src/one.txt -> x` says
-//     two different things about one file, and a writer picking between them
-//     would be the silent precedence rule this tool does not have. It is the
-//     same refusal `--moved` makes, through the same nesting rule.
-//   - CHAINING: one path that is both a destination and a source, as in
-//     `a -> b` beside `b -> c`. The result would depend on the order the
-//     renames happened to be performed in, which is not something a caller
-//     stated.
+// The question is trailer.Overlap's -- the ONE implementation, shared with the
+// `--moved` refusal, which judges the same declarations by another spelling.
+// All this does is say the verdict in the terms an `mv` caller typed.
 func refuseMvOverlaps(pairs []mvPair) int {
 	for i := range pairs {
 		for j := i + 1; j < len(pairs); j++ {
 			a, b := pairs[i], pairs[j]
-			if trailer.Nests(a.oldPrefix(), b.oldPrefix()) {
+			switch kind, x, _ := trailer.Overlap(a.pair(), b.pair()); kind {
+			case trailer.SameSource:
 				fmt.Fprintf(os.Stderr, "error: %s and %s both move %s; say one thing about each path\n",
-					a.arg, b.arg, a.oldPrefix())
+					a.arg, b.arg, x)
 				return exitcode.Usage
-			}
-			if trailer.Nests(a.newPrefix(), b.newPrefix()) {
+			case trailer.SameDestination:
 				fmt.Fprintf(os.Stderr, "error: %s and %s both land on %s; say one thing about each path\n",
-					a.arg, b.arg, a.newPrefix())
+					a.arg, b.arg, x)
 				return exitcode.Usage
-			}
-			if trailer.Nests(a.newPrefix(), b.oldPrefix()) || trailer.Nests(b.newPrefix(), a.oldPrefix()) {
+			case trailer.Chained:
 				fmt.Fprintf(os.Stderr, "error: %s and %s chain: one moves a path the other moves away from,\n", a.arg, b.arg)
 				fmt.Fprintf(os.Stderr, "       so the result would depend on which was performed first. Make them two commands.\n")
 				return exitcode.Usage

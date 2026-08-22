@@ -43,6 +43,9 @@ type movedDeclaration struct {
 
 func (d movedDeclaration) subtree() bool { return strings.HasSuffix(d.old, "/") }
 
+// pair is this declaration as the shared overlap check takes it.
+func (d movedDeclaration) pair() trailer.Pair { return trailer.Pair{Old: d.old, New: d.new} }
+
 // oldPrefix and newPrefix are the paths without the subtree form's slash, which
 // is the form every tree and filesystem question is asked in.
 func (d movedDeclaration) oldPrefix() string { return strings.TrimSuffix(d.old, "/") }
@@ -219,43 +222,44 @@ func parseMovedArgs(repoRoot string, moved []string) ([]movedDeclaration, error)
 	return out, nil
 }
 
-// refuseOverlappingDeclarations rejects a set of declarations that speak about
-// each other's paths.
+// refuseOverlappingDeclarations rejects a set of declarations that cannot stand
+// as one statement.
 //
-// Two declarations whose old paths nest -- `src/ -> lib/` alongside
-// `src/a.go -> other.go` -- state two different fates for one file. A reader
-// can resolve that (the longest match wins), but a WRITER guessing which one
-// the caller meant is exactly the kind of silent precedence rule this tool does
-// not have: the caller says one thing about each path, and says it once. The
-// same holds on the destination side, where two declarations landing inside one
-// another describe a result no move produces.
+// The question itself is trailer.Overlap's -- the ONE implementation, shared
+// with `safegit mv`, which takes the same declarations by another spelling. All
+// this does is say the verdict in the terms a `--moved` caller typed.
 func refuseOverlappingDeclarations(declarations []movedDeclaration) error {
 	for i := range declarations {
 		for j := i + 1; j < len(declarations); j++ {
 			a, b := declarations[i], declarations[j]
-			if side, x, y := overlap(a, b); side != "" {
+			kind, x, y := trailer.Overlap(a.pair(), b.pair())
+			if kind == trailer.NoOverlap {
+				continue
+			}
+			if kind == trailer.Chained {
 				return &CommitError{
 					Code: exitcode.Usage,
-					Message: fmt.Sprintf("--moved %s and --moved %s both speak for %s (%s and %s); "+
-						"say one thing about each path", a.arg, b.arg, side, x, y),
+					Message: fmt.Sprintf("--moved %s and --moved %s chain: one moves a path the other moves "+
+						"away from (%s and %s), so the result would depend on which was performed first; "+
+						"make them two commits", a.arg, b.arg, x, y),
 				}
+			}
+			return &CommitError{
+				Code: exitcode.Usage,
+				Message: fmt.Sprintf("--moved %s and --moved %s both speak for %s (%s and %s); "+
+					"say one thing about each path", a.arg, b.arg, overlapSideName(kind), x, y),
 			}
 		}
 	}
 	return nil
 }
 
-// overlap reports which side of two declarations nests, if either does. The
-// nesting question is trailer.Nests's, which is also what `safegit mv` asks of
-// its own pairs -- one rule, one implementation.
-func overlap(a, b movedDeclaration) (side, x, y string) {
-	if trailer.Nests(a.oldPrefix(), b.oldPrefix()) {
-		return "the same source", a.oldPrefix(), b.oldPrefix()
+// overlapSideName is how a nesting verdict is spelled in a --moved refusal.
+func overlapSideName(kind trailer.OverlapKind) string {
+	if kind == trailer.SameDestination {
+		return "the same destination"
 	}
-	if trailer.Nests(a.newPrefix(), b.newPrefix()) {
-		return "the same destination", a.newPrefix(), b.newPrefix()
-	}
-	return "", "", ""
+	return "the same source"
 }
 
 // validateMoved is the whole check one declaration gets. Three questions, each
