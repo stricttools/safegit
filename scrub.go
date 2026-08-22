@@ -576,8 +576,11 @@ func runScrubFileInSubmodule(
 		die(exitcode.General, fmt.Sprintf("submodule walk and rewrite: %v", err))
 	}
 
-	// Finalize submodule rewrite via shared pipeline.
-	infof(flags, "Finalizing submodule [%s] rewrite...\n", sub.RelativePath)
+	// The submodule's rewritten commits now exist as unreachable objects. They
+	// are NOT published yet: the parent walk below builds its new commits
+	// against these SHAs, and both histories are verified before either
+	// repository's refs move, so a failure on the parent side cannot leave a
+	// published submodule behind.
 	subResult := RewriteResult{
 		ShaMap:         subShaMap,
 		RewrittenCount: subRewrittenCount,
@@ -600,10 +603,12 @@ func runScrubFileInSubmodule(
 		}
 		return verifyScrubbedFileContent(ctx, subShaMap, subFilePath, mode, newBlobSHA, oldSubBlobSHAs, nil)
 	}
-	if err := subResult.Finalize(subCtx, flags, cmd, RewriteHooks{TierA: subTierA}); err != nil {
-		dieFinalize(fmt.Sprintf("submodule %s", sub.RelativePath), err)
+	subPending := &pendingRewrite{
+		Label:  fmt.Sprintf("submodule %s", sub.RelativePath),
+		Ctx:    subCtx,
+		Result: &subResult,
+		Hooks:  RewriteHooks{TierA: subTierA},
 	}
-	subTagRewrites := subResult.TagRewrites
 
 	infof(flags, "  [%s] %d commits rewritten\n", sub.RelativePath, subRewrittenCount)
 
@@ -616,8 +621,20 @@ func runScrubFileInSubmodule(
 	}
 
 	if len(gitlinkMap) == 0 {
+		// No submodule commit moved, so the parent has nothing to follow. The
+		// submodule still gets verified and published on its own: its tag
+		// annotations or tagger identity may have been rewritten even when every
+		// commit maps to itself.
 		infof(flags, "No submodule commits were rewritten; parent history unchanged.\n")
-		return 0
+		infof(flags, "Finalizing submodule [%s] rewrite...\n", sub.RelativePath)
+		only := []*pendingRewrite{subPending}
+		if label, err := prepareAll(flags, only); err != nil {
+			dieFinalize(label, err)
+		}
+		if label, err := publishAll(flags, cmd, only); err != nil {
+			dieFinalize(label, err)
+		}
+		return subResult.TierBExit(exitcode.OK)
 	}
 
 	// Capture old parent HEAD.
@@ -716,9 +733,33 @@ func runScrubFileInSubmodule(
 		return nil
 	}
 
-	if err := parentResult.Finalize(ctx, flags, cmd, RewriteHooks{TierB: parentTierB}); err != nil {
-		dieFinalize("parent", err)
+	// Objects before refs, across both repositories. Both histories are now
+	// written as unreachable objects, so prepare verifies BOTH before publish
+	// moves anything: a refusal on either side leaves the submodule's refs and
+	// the parent's refs exactly where they were.
+	//
+	// Publication order is submodule first. A crash between the two leaves a
+	// parent whose gitlink still names a submodule commit that exists, which is
+	// the recoverable half of the window; the reverse would leave the parent
+	// pointing at submodule commits no ref keeps alive.
+	both := []*pendingRewrite{
+		subPending,
+		{
+			Label:  "parent",
+			Ctx:    ctx,
+			Result: &parentResult,
+			Hooks:  RewriteHooks{TierB: parentTierB},
+		},
 	}
+	infof(flags, "Verifying the submodule and parent rewrites before either is published...\n")
+	if label, err := prepareAll(flags, both); err != nil {
+		dieFinalize(label, err)
+	}
+	infof(flags, "Finalizing submodule [%s] rewrite...\n", sub.RelativePath)
+	if label, err := publishAll(flags, cmd, both); err != nil {
+		dieFinalize(label, err)
+	}
+	subTagRewrites := subResult.TagRewrites
 
 	// The executed rewrite's own figures, added to the same struct the preview
 	// carried.

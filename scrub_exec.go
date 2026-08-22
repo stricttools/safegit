@@ -177,6 +177,12 @@ func scrubFileCommitRange(ctx context.Context, fromSHA string, entireHistory boo
 //     nil means use a default map with just "reason" and "operations"
 //   - scanEntireHistory: when true, the scan uses EntireHistory regardless of fromSHA/entireHistory;
 //     the walk range still uses fromSHA/entireHistory
+//   - companions: rewrites in OTHER repositories whose objects already exist and
+//     whose refs have not moved -- the submodule rewrites a `scrub match` walked
+//     before delegating the parent here. They are verified alongside this
+//     rewrite and published before it, so a parent-side verification failure
+//     leaves every submodule's refs untouched, and a crash between the two
+//     leaves a parent whose gitlinks name commits that exist.
 //
 // Returns the exit code and a pointer to the RewriteResult (nil if no rewrite
 // was performed, e.g., no matches found).
@@ -196,7 +202,25 @@ func executeScrubRecipe(
 	opName string,
 	baseOplogExtra map[string]interface{},
 	scanEntireHistory bool,
+	companions []*pendingRewrite,
 ) (int, *RewriteResult) {
+	// When this repository turns out to have nothing to rewrite, the companions
+	// are still real rewrites with real objects behind them: they are verified
+	// and published on their own. There is no primary plan to hold them back
+	// for, so the both-before-either ordering is vacuous in this branch.
+	publishCompanionsAlone := func() int {
+		if len(companions) == 0 {
+			return 0
+		}
+		if label, err := prepareAll(flags, companions); err != nil {
+			dieFinalize(label, err)
+		}
+		if label, err := publishAll(flags, cmd, companions); err != nil {
+			dieFinalize(label, err)
+		}
+		return exitcode.OK
+	}
+
 	// Build a combined regex that matches ANY operation's pattern. This is used
 	// to find candidate blobs efficiently in one pass.
 	combinedPatternParts := make([]string, len(recipe.Operations))
@@ -229,7 +253,7 @@ func executeScrubRecipe(
 	// "it found nothing" can never be confused for each other.
 	if len(results.Matches) == 0 && len(gitlinkMap) == 0 {
 		infof(flags, "0 commits contained the pattern. Nothing was rewritten and no history changed.\n")
-		return 0, nil
+		return publishCompanionsAlone(), nil
 	}
 
 	// When --scope is set, build a scoped blob set to filter blobs by path.
@@ -313,7 +337,7 @@ func executeScrubRecipe(
 
 	if len(blobMap) == 0 && commitMatchCount == 0 && tagMatchCount == 0 && len(gitlinkMap) == 0 {
 		infof(flags, "0 commits contained the pattern within scope. Nothing was rewritten and no history changed.\n")
-		return 0, nil
+		return publishCompanionsAlone(), nil
 	}
 
 	// `scrub run` declares itself consequential, so the framework's confirm
@@ -472,12 +496,26 @@ func executeScrubRecipe(
 		OpName:         opName,
 		OplogExtra:     oplogExtra,
 	}
-	if err := result.Finalize(ctx, flags, cmd, RewriteHooks{
-		AnnotateTag: recipeTagBodyTransform(recipe),
-		TierA:       tierA,
-		TierB:       tierB,
-	}); err != nil {
-		dieFinalize("", err)
+
+	// Objects before refs, across every repository the operation touches: the
+	// companions and this rewrite are all verified first, and only then
+	// published -- companions first (see the parameter's documentation).
+	all := make([]*pendingRewrite, 0, len(companions)+1)
+	all = append(all, companions...)
+	all = append(all, &pendingRewrite{
+		Ctx:    ctx,
+		Result: &result,
+		Hooks: RewriteHooks{
+			AnnotateTag: recipeTagBodyTransform(recipe),
+			TierA:       tierA,
+			TierB:       tierB,
+		},
+	})
+	if label, err := prepareAll(flags, all); err != nil {
+		dieFinalize(label, err)
+	}
+	if label, err := publishAll(flags, cmd, all); err != nil {
+		dieFinalize(label, err)
 	}
 
 	// Populate post-execution metrics for callers. (TagsRewrittenCount and

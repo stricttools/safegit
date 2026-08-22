@@ -686,7 +686,10 @@ func scrubMatchExecute(
 	// The scale is stated above, not asked a second time.
 	infof(flags, "Rewriting history to replace pattern matches. This cannot be undone.\n")
 
-	// Phase 1: Process submodules (blob map, walkAndRewrite, Finalize per submodule).
+	// Phase 1: rewrite each submodule's OBJECTS -- blob map and walkAndRewrite.
+	// Nothing is published here: the submodules are carried as pending rewrites
+	// through the parent's own walk and verified with it (see below).
+	//
 	// subTierBFailed records a submodule whose own post-rewrite verification
 	// found something: the submodule rewrite stands, and the command's exit
 	// code says so.
@@ -798,10 +801,14 @@ func scrubMatchExecute(
 			si.sub.RelativePath, subRewrittenCount, len(subBlobMap))
 	}
 
-	// Apply submodule ref updates (Finalize per submodule).
+	// Every submodule's rewritten commits now exist as unreachable objects, and
+	// NONE of them is published. The parent walk below builds its own commits
+	// against those SHAs, and the whole set -- every submodule plus the parent --
+	// is verified before any repository's refs move, so a parent-side refusal
+	// leaves every submodule exactly as it was.
+	var subPending []*pendingRewrite
+	subResults := make([]*RewriteResult, 0, len(subScrubResults))
 	for _, sr := range subScrubResults {
-		infof(flags, "Updating refs for submodule [%s]...\n", sr.sub.RelativePath)
-
 		// Context-scoped git directory for this submodule's ref updates.
 		subCtx := git.WithDir(ctx, sr.sub.GitDir, sr.sub.WorkTreePath)
 
@@ -827,7 +834,7 @@ func scrubMatchExecute(
 			"parentScrub":      true,
 		}
 
-		subResult := RewriteResult{
+		subResult := &RewriteResult{
 			ShaMap:         sr.shaMap,
 			RewrittenCount: sr.rewrittenCount,
 			Intent:         sr.intent,
@@ -837,15 +844,16 @@ func scrubMatchExecute(
 			OpName:         "scrub-match",
 			OplogExtra:     subOplogExtra,
 		}
-		if err := subResult.Finalize(subCtx, flags, cmd, RewriteHooks{
-			AnnotateTag: patternTagBodyTransform(compiledPattern, replace, mangleMode),
-			TierA:       subTierA,
-		}); err != nil {
-			dieFinalize(fmt.Sprintf("submodule %s", sr.sub.RelativePath), err)
-		}
-		if len(subResult.TierBFailures) > 0 {
-			subTierBFailed = true
-		}
+		subResults = append(subResults, subResult)
+		subPending = append(subPending, &pendingRewrite{
+			Label:  fmt.Sprintf("submodule %s", sr.sub.RelativePath),
+			Ctx:    subCtx,
+			Result: subResult,
+			Hooks: RewriteHooks{
+				AnnotateTag: patternTagBodyTransform(compiledPattern, replace, mangleMode),
+				TierA:       subTierA,
+			},
+		})
 	}
 
 	// Build the combined gitlink map from all submodule SHA mappings.
@@ -903,7 +911,16 @@ func scrubMatchExecute(
 	execFlags := flags
 	execFlags.approved = true // carries the consent already given, not a bypass
 
-	exitCode, result := executeScrubRecipe(ctx, execFlags, cmd, recipe, reason, fromSHA, entireHistory, scope, remapGlobs, gitDir, sgDir, gitlinkMap, "scrub-match", parentOplogExtra, true)
+	exitCode, result := executeScrubRecipe(ctx, execFlags, cmd, recipe, reason, fromSHA, entireHistory, scope, remapGlobs, gitDir, sgDir, gitlinkMap, "scrub-match", parentOplogExtra, true, subPending)
+
+	// A submodule whose own post-rewrite verification found something is the
+	// same verdict as a parent-side finding: the rewrite stands and the exit
+	// code says so.
+	for _, sr := range subResults {
+		if len(sr.TierBFailures) > 0 {
+			subTierBFailed = true
+		}
+	}
 
 	// Post-execution submodule verification.
 	if result != nil && len(subScrubResults) > 0 {
