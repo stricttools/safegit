@@ -1255,7 +1255,29 @@ instead of reclaiming, and doctor is the recovery path).
   session's fixer window alongside the aggregated no-match listing and
   the scrub scope line.
 
-## Open rulings (need the user's decision; as-built stands meanwhile)
+## USER RULINGS (settled 2026-08-22, review session, round 4 — ASKME complete)
+
+- Push buffering: accepted for the release; everything else parked in
+  todo/push-streaming-restoration.md (tee-shipped check, streaming
+  restoration, --porcelain lease detection, the heartbeat question,
+  and the full alternatives record with pros and cons).
+- Consent prompts move to STDERR (all three confirmDeliberate
+  consumers; --quiet still never suppresses a prompt) — queued for the
+  next-session fixer window. Additionally, by user direction, a
+  framework todo was filed proposing authoritative channel management
+  (prompts/notices/results primitives, a documented stdout/stderr
+  contract): strictcli's todo/channel-management-authority.md.
+- Pre-commit exit 16 KEPT; ships with a breaking-type changelog entry
+  naming the 1-to-16 change.
+
+THE ASKME REVIEW IS COMPLETE. Every open ruling in this log is now
+settled except items that are explicitly parked as contingent or
+way-later todos. The next session's fixer-window queue, consolidated:
+aggregated no-match listing; scrub scope line; repository-wide
+uninstall with enumerating output (dry runs included); consent prompts
+to stderr; scrub match's nil-result payload gap.
+
+## Open rulings (RESOLVED above — section retained for history)
 
 - **Per-path vs set-level no-match errors (2.2).** The plan contradicts
   itself: 2.2 says a named path contributing nothing is a hard error
