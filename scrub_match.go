@@ -1057,7 +1057,10 @@ func scrubMatchExecute(
 	}
 	infof(flags, "  Old HEAD: %s\n", result.OldHeadSHA[:12])
 	infof(flags, "  New HEAD: %s\n", result.NewHeadSHA[:12])
-	printScopeNotice(flags, result.Ref)
+	// Every history this match rewrote, not just the parent's: a submodule's
+	// history moved too, and an operator reading a scope line that names only
+	// the parent has been told the submodule was left alone.
+	printScopeNotice(flags, append([]string{result.Ref}, submoduleScopeRefs(subScrubResults, subResults)...)...)
 	printRotationNotice(flags, recheckCommandForPatterns(pattern))
 
 	return exitCode
@@ -1096,6 +1099,20 @@ func reportSubmoduleOnlyCompletion(flags globalFlags, pattern string, scrubbed [
 	infof(flags, "  %d submodule commit messages modified\n", messages)
 	infof(flags, "  %d submodule tag annotations rewritten\n", tags)
 
+	printScopeNotice(flags, submoduleScopeRefs(scrubbed, published)...)
+	printRotationNotice(flags, recheckCommandForPatterns(pattern))
+}
+
+// submoduleScopeRefs names each rewritten submodule history the way the scope
+// line spells it: the ref the submodule's rewrite published, and the path the
+// submodule sits at.
+//
+// It is the one spelling for both completions -- the branch where the parent
+// was rewritten alongside its submodules, and the branch where only the
+// submodules were -- so the two cannot describe the same rewrite differently.
+// published is positional against scrubbed; a submodule whose rewrite reported
+// no ref is named by its path alone rather than dropped from the scope.
+func submoduleScopeRefs(scrubbed []submoduleScrubResult, published []*RewriteResult) []string {
 	refs := make([]string, 0, len(scrubbed))
 	for i, sr := range scrubbed {
 		ref := "its history"
@@ -1104,8 +1121,7 @@ func reportSubmoduleOnlyCompletion(flags globalFlags, pattern string, scrubbed [
 		}
 		refs = append(refs, fmt.Sprintf("%s in submodule [%s]", ref, sr.sub.RelativePath))
 	}
-	printScopeNotice(flags, refs...)
-	printRotationNotice(flags, recheckCommandForPatterns(pattern))
+	return refs
 }
 
 // nothingRewrittenMatchPayload is the `scrub match` payload for a search that

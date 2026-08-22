@@ -1274,3 +1274,44 @@ func TestScrubMatchPublishesASubmoduleWhenTheParentHasNothingToRewrite(t *testin
 		t.Errorf("the parent journal must be empty, got %v", journalPhases(lines))
 	}
 }
+
+// TestScrubMatchScopeLineNamesEveryRewrittenHistory: the scope line is the
+// operator's account of what this rewrite actually reached, and a match that
+// recurses into a submodule reached two histories, not one. Naming only the
+// parent's ref left an operator believing the submodule's history was untouched
+// -- while it had been rewritten and was ready to be pushed.
+//
+// `scrub file` has always named both; this is the same statement from
+// `scrub match`. The submodule-only branch is covered by
+// TestScrubMatchPublishesASubmoduleWhenTheParentHasNothingToRewrite.
+func TestScrubMatchScopeLineNamesEveryRewrittenHistory(t *testing.T) {
+	parentDir, _, _ := newRepoWithSubmoduleSecret(t, "SCOPE_SECRET_XYZ", "secret.txt")
+
+	stdout, stderr, code := runSafegitEnv(t, parentDir, scrubMatchEnv,
+		"--approve-consequential", "scrub", "match",
+		"--pattern", "SCOPE_SECRET_XYZ", "--replace", "CLEAN",
+		"--reason", "the scope line names every history", "--entire-history")
+	if code != 0 {
+		t.Fatalf("scrub match failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	scope := scopeLineOf(t, stdout)
+	if !strings.Contains(scope, "refs/heads/") {
+		t.Errorf("the scope line does not name the parent's ref: %q", scope)
+	}
+	if !strings.Contains(scope, "in submodule [mysub]") {
+		t.Errorf("the scope line does not name the submodule history the match rewrote: %q", scope)
+	}
+}
+
+// scopeLineOf returns the "Scope: ..." line of a rewrite's completion output.
+func scopeLineOf(t *testing.T, stdout string) string {
+	t.Helper()
+	for _, line := range strings.Split(stdout, "\n") {
+		if strings.HasPrefix(line, "Scope: ") {
+			return line
+		}
+	}
+	t.Fatalf("no scope line in:\n%s", stdout)
+	return ""
+}
