@@ -227,7 +227,8 @@ func newApp() *strictcli.App {
 		allowEmpty := optBool(kwargs["allow_empty"], false)
 		trailers := kwargsStrSlice(kwargs["trailer"])
 		files := kwargsStrSlice(kwargs["files"])
-		runCommit(gf, messages, messageFile, branch, amend, allowEmpty, trailers, files)
+		hunks := kwargsStrSlice(kwargs["hunks"])
+		runCommit(gf, messages, messageFile, branch, amend, allowEmpty, trailers, files, hunks)
 		return strictcli.Exit(exitcode.OK)
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
@@ -245,9 +246,14 @@ func newApp() *strictcli.App {
 			strictcli.BoolFlag("amend", "amend the current HEAD commit by replacing it with updated content; omitted means a new commit", strictcli.Optional()),
 			strictcli.BoolFlag("allow-empty", "allow creating a commit even when no files have been changed; omitted means an empty commit is refused", strictcli.Optional()),
 			strictcli.StringFlag("trailer", "add a key-value trailer line to the commit message (repeatable)", strictcli.Repeatable(), strictcli.Unique(false), strictcli.Optional()),
+			// The only way to select hunks. A positional path is always the
+			// literal name of a file, so this flag is what distinguishes a
+			// selection from a filename that happens to contain a colon --
+			// nothing on disk is ever consulted to tell them apart.
+			strictcli.StringFlag("hunks", "commit only the selected hunks of one file, as 'path:1,3' or 'path:2-4' (the split is on the last colon, so a path containing colons stays intact); repeatable, once per path; omitted means every named file is committed whole", strictcli.Repeatable(), strictcli.Unique(true), strictcli.Optional(), strictcli.ValidateFn(validateHunkSelection)),
 		),
 		strictcli.WithArgs(
-			strictcli.NewArg("files", "files to commit (supports hunk specs: file.go:1,3)", strictcli.ArgOptional(), strictcli.Variadic()),
+			strictcli.NewArg("files", "files to commit, taken literally -- a colon in an argument is part of the filename, and hunk selection is --hunks", strictcli.ArgOptional(), strictcli.Variadic()),
 		),
 	)
 	app.Passthrough("checkout", "checkout a branch or ref with working-tree safety guards", pt, strictcli.WithEffect(strictcli.EffectMutating))
@@ -935,46 +941,87 @@ func firstLine(s string) string {
 	return s
 }
 
-// parseFileSpecs converts raw file arguments (possibly with hunk suffixes like
-// "file.txt:1,3") into commit.FileSpec structs. Dies on malformed hunk specs.
-func parseFileSpecs(files []string) []commit.FileSpec {
-	specs := make([]commit.FileSpec, 0, len(files))
+// The hunk grammar lives in ONE flag, and a positional path is always the
+// literal name of a file.
+//
+// It used to be the other way round: a positional argument was split into a
+// path and a hunk selection when its tail looked numeric AND os.Stat could not
+// see the whole string as a file. That made the GRAMMAR of a command line a
+// function of disk state -- `notes:1` was a hunk selection from one directory
+// and a literal filename from another, one argv with two meanings -- and it
+// made a file whose name really does end in a colon plus digits impossible to
+// delete, because once it is gone from disk the probe reparses its own name.
+//
+// `--hunks 'path:1,3'` has neither problem: the flag says a hunk selection is
+// coming, the split is on the last colon, and nothing on disk is ever consulted
+// to decide how to read a command line.
+
+// hunkSelection is one --hunks element: the path it names and the hunk indices
+// it selects within that path.
+type hunkSelection struct {
+	Path  string
+	Hunks []int
+}
+
+// parseHunkSelection reads one --hunks element. The split is on the LAST colon,
+// so a path that itself contains colons stays intact: "sprint:1:2,3" is hunks
+// 2 and 3 of the file named "sprint:1".
+//
+// It is both the flag's ValidateFn (which is what makes a malformed element a
+// parse-time refusal, before any command handler runs) and the parser the
+// handler uses, so the accepted language and the parsed language are the same
+// language by construction.
+func parseHunkSelection(value string) (hunkSelection, error) {
+	colon := strings.LastIndex(value, ":")
+	if colon < 0 {
+		return hunkSelection{}, fmt.Errorf("%q needs a path and a hunk selection separated by a colon, as in 'path:1,3'", value)
+	}
+	path := value[:colon]
+	if path == "" {
+		return hunkSelection{}, fmt.Errorf("%q names no path before the colon", value)
+	}
+	hunks, err := stage.ParseHunkSpec(value[colon+1:])
+	if err != nil {
+		return hunkSelection{}, fmt.Errorf("invalid hunk selection in %q: %w", value, err)
+	}
+	return hunkSelection{Path: path, Hunks: hunks}, nil
+}
+
+// validateHunkSelection is the flag's per-element ValidateFn.
+func validateHunkSelection(v interface{}) error {
+	_, err := parseHunkSelection(v.(string))
+	return err
+}
+
+// buildFileSpecs combines the literal positional paths with the --hunks
+// selections into the pipeline's file specs.
+//
+// Naming one path both ways is a contradiction -- "commit all of it" and
+// "commit hunks 1 and 3 of it" -- and so is naming it twice in --hunks, since
+// each element states the whole selection for its path. Both are refused rather
+// than resolved by a precedence rule nobody would remember.
+func buildFileSpecs(files []string, hunks []string) ([]commit.FileSpec, error) {
+	specs := make([]commit.FileSpec, 0, len(files)+len(hunks))
+	literal := make(map[string]bool, len(files))
 	for _, f := range files {
-		spec := commit.FileSpec{}
-		colonIdx := strings.LastIndex(f, ":")
-		// Only attempt hunk parsing when:
-		// 1. There is a colon (not at position 0)
-		// 2. The suffix looks like a hunk spec
-		// 3. The full string doesn't exist as a file (avoids misidentifying "1:2" as hunk spec)
-		if colonIdx > 0 && isHunkSpec(f[colonIdx+1:]) && !fileExists(f) {
-			hunks, err := stage.ParseHunkSpec(f[colonIdx+1:])
-			if err != nil {
-				die(exitcode.Usage, fmt.Sprintf("invalid hunk spec in %q: %v", f, err))
-			}
-			spec.Path = f[:colonIdx]
-			spec.Hunks = hunks
-		} else {
-			spec.Path = f
-		}
-		specs = append(specs, spec)
+		literal[f] = true
+		specs = append(specs, commit.FileSpec{Path: f})
 	}
-	return specs
-}
 
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
-// isHunkSpec returns true if s looks like a hunk specifier (digits, commas, dashes only).
-func isHunkSpec(s string) bool {
-	if s == "" {
-		return false
-	}
-	for _, c := range s {
-		if c != ',' && c != '-' && (c < '0' || c > '9') {
-			return false
+	selected := make(map[string]bool, len(hunks))
+	for _, h := range hunks {
+		sel, err := parseHunkSelection(h)
+		if err != nil {
+			return nil, err
 		}
+		if literal[sel.Path] {
+			return nil, fmt.Errorf("%s is named both as a whole file and in --hunks %q; say one or the other", sel.Path, h)
+		}
+		if selected[sel.Path] {
+			return nil, fmt.Errorf("--hunks names %s more than once; one element states the whole selection for a path", sel.Path)
+		}
+		selected[sel.Path] = true
+		specs = append(specs, commit.FileSpec{Path: sel.Path, Hunks: sel.Hunks})
 	}
-	return true
+	return specs, nil
 }

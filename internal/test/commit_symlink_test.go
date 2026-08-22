@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
@@ -139,6 +140,50 @@ func TestCommitSymlinkInsideTargetIsSilent(t *testing.T) {
 	}
 	if strings.Contains(stderr, "outside the repository") {
 		t.Errorf("a symlink that stays inside the repository must produce no notice, got:\n%s", stderr)
+	}
+}
+
+// TestCommitHunkSelectionOnSymlinkIsRefused: a symlink's whole content is the
+// path it points at -- one line the filesystem produces -- so there are no
+// hunks to choose between and a selection could only ever select nothing. The
+// refusal is typed, and it says what to do instead.
+func TestCommitHunkSelectionOnSymlinkIsRefused(t *testing.T) {
+	dir := newRepo(t)
+
+	if err := os.Symlink("seed.txt", filepath.Join(dir, "link")); err != nil {
+		t.Fatalf("creating symlink: %v", err)
+	}
+
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "hunks of a symlink", "--hunks", "link:1")
+	if code != exitcode.SymlinkHunkSpec {
+		t.Errorf("a hunk selection on a symlink exited %d, want %d (SymlinkHunkSpec); stderr: %s",
+			code, exitcode.SymlinkHunkSpec, stderr)
+	}
+	if !strings.Contains(stderr, "symlink") {
+		t.Errorf("the refusal must say the path is a symlink; stderr: %s", stderr)
+	}
+	if _, ok := testutil.Show(t, dir, "HEAD", "link"); ok {
+		t.Error("the refused commit must not have recorded the link")
+	}
+}
+
+// TestAmendHunkSelectionOnSymlinkIsRefused is the same refusal on the amend
+// path, which reaches intake through its own code.
+func TestAmendHunkSelectionOnSymlinkIsRefused(t *testing.T) {
+	dir := newRepo(t)
+
+	if err := os.Symlink("seed.txt", filepath.Join(dir, "link")); err != nil {
+		t.Fatalf("creating symlink: %v", err)
+	}
+	before := testutil.Rev(t, dir, "HEAD")
+
+	_, stderr, code := runSafegit(t, dir, "commit", "--amend", "-m", "hunks of a symlink", "--hunks", "link:1")
+	if code != exitcode.SymlinkHunkSpec {
+		t.Errorf("an --amend hunk selection on a symlink exited %d, want %d (SymlinkHunkSpec); stderr: %s",
+			code, exitcode.SymlinkHunkSpec, stderr)
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("HEAD moved despite the refusal: %s -> %s", before, after)
 	}
 }
 

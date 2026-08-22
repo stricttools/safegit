@@ -55,12 +55,20 @@ Use `safegit commit` instead of `git add` + `git commit` whenever multiple sessi
 | `--amend` | | optional; omitted means a new commit | Amend the current HEAD commit by replacing it with updated content |
 | `--allow-empty` | | optional; omitted means an empty commit is refused | Allow creating a commit even when no files have been changed |
 | `--trailer` | | optional | Add a key-value trailer line to the commit message (repeatable) |
+| `--hunks` | | optional; omitted means every named file is committed whole | Commit only the selected hunks of one file, as `path:1,3` or `path:2-4`; repeatable, once per path |
 
 ### Arguments
 
 | Name | Required | Description |
 |------|----------|-------------|
-| `files` | No (variadic) | Files to commit; supports hunk specs like `file.go:1,3` |
+| `files` | No (variadic) | Files to commit, taken literally -- a colon in an argument is part of the filename |
+
+Hunk selection lives entirely in `--hunks`, and a positional path is always the
+literal name of a file. The split inside a `--hunks` element is on its LAST
+colon, so `--hunks 'sprint:1:2,3'` selects hunks 2 and 3 of the file named
+`sprint:1`. Naming one path both as a positional and in `--hunks` is refused, as
+is naming it twice in `--hunks`: each element states the whole selection for its
+path.
 
 ### Examples
 
@@ -90,7 +98,10 @@ safegit commit --amend -m "better commit message"
 safegit commit -m "fix: resolve race condition" --trailer "Reviewed-by: Alice" -- lock.go
 
 # Commit selected hunks from a file
-safegit commit -m "partial stage" -- main.go:1,3
+safegit commit -m "partial stage" --hunks 'main.go:1,3'
+
+# A filename that contains a colon is an ordinary positional path
+safegit commit -m "add notes" -- 'sprint:1'
 
 # Allow an empty commit (no file changes)
 safegit commit --allow-empty -m "trigger CI rebuild"
@@ -1146,10 +1157,11 @@ file is stale.
 
 Two codes cover argument errors, and the split is not cosmetic. The CLI
 framework refuses a command line it cannot parse -- an unknown flag, an unknown
-command, a missing required flag, a value outside a declared choice set -- and
-those refusals **exit 1**, which the framework owns. Code 2 is safegit's own
-validation, reached only after the parse succeeded: mutually exclusive flags, a
-missing commit message, an unparseable hunk spec. Unifying the two awaits an
+command, a missing required flag, a value outside a declared choice set, a
+`--hunks` element the flag's own validator rejects -- and those refusals **exit
+1**, which the framework owns. Code 2 is safegit's own validation, reached only
+after the parse succeeded: mutually exclusive flags, a missing commit message,
+one path named both as a whole file and in `--hunks`. Unifying the two awaits an
 upstream ruling on a framework usage-error code.
 
 The table below covers safegit's own codes. The guarded wrappers around git --

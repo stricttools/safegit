@@ -4,13 +4,18 @@ package test
 //
 // Two mechanisms are under test here.
 //
-// A. Hunk-spec disambiguation (main.go parseFileSpecs / fileExists). An
-// argument like "file.txt:1,3" is split into a path plus a hunk selection only
-// when the WHOLE argument does not name an existing file, probed with os.Stat
-// against the process working directory. The grammar of the command line is
-// therefore a function of disk state: the same argv parses differently
-// depending on what happens to be on disk, and on which directory the caller
-// stands in.
+// A. Hunk selection and literal paths. A hunk selection arrives on --hunks and
+// nowhere else, and a positional argument is the literal name of a file. The
+// grammar of a command line is therefore a property of the command line: no
+// filesystem probe decides how an argument parses, so the same argv means the
+// same thing from every directory and whatever is or is not on disk.
+//
+// The tests in this section were written against the predecessor, where a
+// positional argument was split into path plus hunks when its tail looked
+// numeric AND os.Stat could not see the whole string as a file. They are kept,
+// converted, because the properties they pin -- hunk staging works from a
+// subdirectory and from the root, a colon in a filename is harmless, one argv
+// has one meaning -- are the properties the new grammar has to keep.
 //
 // B. Tracked-deletion validation for cross-branch commits
 // (internal/commit/commit.go resolveFiles -> git.IsTracked, which asks
@@ -56,15 +61,15 @@ func intakeEdgeTwoHunks(t *testing.T, path string) {
 	testutil.WriteFileAt(t, path, intakeEdgeNumbered(20, map[int]string{2: "FIRST-CHANGE", 18: "SECOND-CHANGE"}))
 }
 
-// --- A. hunk-spec disambiguation ---
+// --- A. hunk selection and literal paths ---
 
 // TestIntakeEdgeHunkSpecFromSubdir pins the plain subdirectory case: a tracked
 // file in a subdirectory has two hunks of modifications and the caller,
 // standing in that subdirectory, selects hunk 1 with a cwd-relative path.
 //
-// GREEN: the probe and the pipeline's path resolution both use the process
-// working directory, so they agree, and `git apply --cached` reaches the right
-// blob from the subdirectory.
+// The path inside a --hunks element is resolved exactly like a positional path
+// -- against the caller's own directory -- so `git apply --cached` reaches the
+// right blob from the subdirectory.
 func TestIntakeEdgeHunkSpecFromSubdir(t *testing.T) {
 	dir := newRepo(t)
 	sub := filepath.Join(dir, "sub")
@@ -76,7 +81,7 @@ func TestIntakeEdgeHunkSpecFromSubdir(t *testing.T) {
 	}
 	intakeEdgeTwoHunks(t, path)
 
-	_, stderr, code := runSafegit(t, sub, "commit", "-m", "hunk 1 only", "--", "edited.txt:1")
+	_, stderr, code := runSafegit(t, sub, "commit", "-m", "hunk 1 only", "--hunks", "edited.txt:1")
 	if code != 0 {
 		t.Fatalf("hunk staging from subdirectory failed (%d): %s", code, stderr)
 	}
@@ -104,7 +109,7 @@ func TestIntakeEdgeHunkSpecFromRoot(t *testing.T) {
 	}
 	intakeEdgeTwoHunks(t, path)
 
-	_, stderr, code := runSafegit(t, dir, "commit", "-m", "hunk 1 only", "--", "sub/edited.txt:1")
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "hunk 1 only", "--hunks", "sub/edited.txt:1")
 	if code != 0 {
 		t.Fatalf("hunk staging from repo root failed (%d): %s", code, stderr)
 	}
@@ -136,9 +141,9 @@ func TestIntakeEdgePlainDeletionControl(t *testing.T) {
 }
 
 // TestIntakeEdgeColonNameNonNumericSuffixDeletion is the second discriminator:
-// a colon in the name is harmless as long as the suffix does not LOOK like a
-// hunk spec (isHunkSpec, main.go:891), because then the argument is never a
-// candidate for splitting and the probe is not consulted.
+// a colon whose suffix could not be mistaken for a hunk selection. Under the
+// predecessor grammar that was the ONLY colon that was safe; now every colon is,
+// and this test keeps the easy case pinned beside the hard one below.
 func TestIntakeEdgeColonNameNonNumericSuffixDeletion(t *testing.T) {
 	dir := newRepo(t)
 	name := "sprint:final"
@@ -158,14 +163,14 @@ func TestIntakeEdgeColonNameNonNumericSuffixDeletion(t *testing.T) {
 }
 
 // TestIntakeEdgeColonNameDeletion: a tracked file whose literal name ends in a
-// colon plus digits, deleted from disk. Committing that deletion is exactly
-// the same argv that committed the file in the first place -- but the probe
-// (main.go:870, fileExists at main.go:885) can no longer see the file, so the
-// argument is now reparsed as path "sprint" plus hunk 1, and the commit is
-// refused with an error naming a path the caller never typed.
+// colon plus digits, deleted from disk. Committing that deletion is exactly the
+// same argv that committed the file in the first place, and it has to work for
+// the same reason: a positional argument is the literal name of a file, so
+// nothing about the argument changes when the file leaves the disk.
 //
-// RED: asserts the desired behavior -- a tracked file can always be deleted by
-// the name it was committed under.
+// Under the predecessor grammar it did change: the probe could no longer see
+// the file, so the argument was reparsed as path "sprint" plus hunk 1 and the
+// commit was refused naming a path the caller never typed.
 func TestIntakeEdgeColonNameDeletion(t *testing.T) {
 	dir := newRepo(t)
 	name := "sprint:1"
@@ -215,19 +220,15 @@ func TestIntakeEdgeDanglingSymlinkNoColon(t *testing.T) {
 	}
 }
 
-// TestIntakeEdgeColonNameBrokenSymlink isolates the probe: it calls os.Stat,
-// which FOLLOWS symlinks (main.go:886), while the pipeline decides existence
-// with os.Lstat (internal/commit/commit.go:396). A dangling symlink whose name
-// ends in a colon plus digits is therefore invisible to the probe and visible
-// to the pipeline -- two answers about one path inside one process.
+// TestIntakeEdgeColonNameBrokenSymlink isolated the probe, which called os.Stat
+// and therefore FOLLOWED symlinks, while the pipeline decided existence with
+// os.Lstat: a dangling symlink whose name ended in a colon plus digits was
+// invisible to one and visible to the other -- two answers about one path
+// inside one process. With no probe left there is one answer, and the argument
+// is the link's own name.
 //
-// The assertion is deliberately about the classification, not about the commit
-// succeeding: a dangling symlink also trips the unrelated move-detection
-// defect pinned above, so requiring success here would conflate the two. What
-// the probe defect produces uniquely is a refusal naming "link" -- a path the
-// caller never typed.
-//
-// RED.
+// The assertion is about the classification: what the probe produced uniquely
+// was a refusal naming "link", a path the caller never typed.
 func TestIntakeEdgeColonNameBrokenSymlink(t *testing.T) {
 	dir := newRepo(t)
 	name := "link:1"
@@ -241,21 +242,30 @@ func TestIntakeEdgeColonNameBrokenSymlink(t *testing.T) {
 	}
 }
 
-// TestIntakeEdgeSameArgvDifferentMeaningByCwd pins the consequence of a
-// probe-based grammar: one argv, one repository state, two working
-// directories, two entirely different commits.
+// TestIntakeEdgeSameArgvHasOneMeaningFromEveryDirectory is the inversion of a
+// test that used to pin the opposite. Under the probe-based grammar one argv in
+// one repository state meant two entirely different commits depending on the
+// caller's directory: from sub/, "notes:1" found nothing on disk and became
+// "hunk 1 of sub/notes"; from the repo root it found the literal file and
+// became "the whole file named notes:1". The parse of the argument, not merely
+// the file it resolved to, depended on where the caller stood.
 //
-//   - from sub/, "notes:1" finds nothing on disk and becomes "hunk 1 of
-//     sub/notes";
-//   - from the repo root, "notes:1" finds the literal file and becomes "the
-//     whole file named notes:1".
+// That cannot happen now, and this is the pin for it. The same fixture is run
+// from both directories in both spellings, and each spelling means the same
+// thing in both places:
 //
-// GREEN pin of today's behavior. It is not a bug report on either outcome
-// taken alone -- each is defensible for its own directory -- but a record that
-// the parse of an argument, not merely the file it resolves to, depends on
-// where the caller stands. The intended fix is an explicit syntax rule, and
-// this test is what such a change would have to update deliberately.
-func TestIntakeEdgeSameArgvDifferentMeaningByCwd(t *testing.T) {
+//   - "notes:1" is the literal name of a file, always. From the root it names
+//     the file that is there; from sub/ it names sub/notes:1, which does not
+//     exist, so the commit is refused -- ordinary relative-path resolution, the
+//     same answer any positional path would give.
+//   - "--hunks notes:1" is hunk 1 of the file "notes", always. From sub/ it
+//     reaches sub/notes; from the root it names a file that is not there and is
+//     refused.
+//
+// What differs between the two directories is which file a relative path
+// resolves to. What does not differ, and is what this test exists to hold, is
+// how the argument is read.
+func TestIntakeEdgeSameArgvHasOneMeaningFromEveryDirectory(t *testing.T) {
 	dir := newRepo(t)
 	sub := filepath.Join(dir, "sub")
 
@@ -268,25 +278,44 @@ func TestIntakeEdgeSameArgvDifferentMeaningByCwd(t *testing.T) {
 	}
 	intakeEdgeTwoHunks(t, filepath.Join(sub, "notes"))
 
-	if _, stderr, code := runSafegit(t, sub, "commit", "-m", "from sub", "--", "notes:1"); code != 0 {
-		t.Fatalf("commit from sub/ failed (%d): %s", code, stderr)
+	// Positional, from sub/: the literal path sub/notes:1, which is not there.
+	// The refusal must name what the caller typed and must not have staged any
+	// hunk of sub/notes.
+	_, stderr, code := runSafegit(t, sub, "commit", "-m", "positional from sub", "--", "notes:1")
+	if code == 0 {
+		t.Errorf("a positional naming a file that is not in the caller's directory was accepted; stderr: %s", stderr)
 	}
-	if _, ok := testutil.Show(t, dir, "HEAD", "notes:1"); ok {
-		t.Errorf("running from sub/ committed the root file notes:1; expected it to be read as a hunk spec")
+	if !strings.Contains(stderr, "notes:1") {
+		t.Errorf("the refusal must name the literal argument, got: %s", stderr)
+	}
+	if got, ok := testutil.Show(t, dir, "HEAD", "sub/notes"); ok && strings.Contains(got, "FIRST-CHANGE") {
+		t.Error("a positional argument was read as a hunk selection")
+	}
+
+	// Positional, from the repo root: the literal file that is there.
+	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "positional from root", "--", "notes:1"); code != 0 {
+		t.Fatalf("committing the literal file notes:1 from the repo root failed (%d): %s", code, stderr)
+	}
+	if _, ok := testutil.Show(t, dir, "HEAD", "notes:1"); !ok {
+		t.Error("the literal file notes:1 was not committed from the repo root")
+	}
+
+	// --hunks, from the repo root: the path "notes", which is not there.
+	_, stderr, code = runSafegit(t, dir, "commit", "-m", "hunks from root", "--hunks", "notes:1")
+	if code == 0 {
+		t.Errorf("--hunks naming a file absent from the caller's directory was accepted; stderr: %s", stderr)
+	}
+
+	// --hunks, from sub/: hunk 1 of sub/notes, and only hunk 1.
+	if _, stderr, code := runSafegit(t, sub, "commit", "-m", "hunks from sub", "--hunks", "notes:1"); code != 0 {
+		t.Fatalf("selecting hunk 1 of sub/notes from sub/ failed (%d): %s", code, stderr)
 	}
 	got, ok := testutil.Show(t, dir, "HEAD", "sub/notes")
 	if !ok {
 		t.Fatal("sub/notes missing from HEAD")
 	}
 	if !strings.Contains(got, "FIRST-CHANGE") || strings.Contains(got, "SECOND-CHANGE") {
-		t.Errorf("running from sub/ did not stage hunk 1 of sub/notes; content:\n%s", got)
-	}
-
-	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "from root", "--", "notes:1"); code != 0 {
-		t.Fatalf("commit from repo root failed (%d): %s", code, stderr)
-	}
-	if _, ok := testutil.Show(t, dir, "HEAD", "notes:1"); !ok {
-		t.Errorf("running from the repo root did not commit the literal file notes:1")
+		t.Errorf("--hunks from sub/ did not stage exactly hunk 1 of sub/notes; content:\n%s", got)
 	}
 }
 
