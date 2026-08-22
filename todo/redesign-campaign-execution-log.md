@@ -1544,7 +1544,69 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
   (asserts `.git/worktrees/side/safegit` while the fixture names the
   worktree `linked-side`; vacuously true since it was written).
-## Ratified 7.3/7.4/7.5 decisions (resumed session, not yet audited)
+## Phase 7 closing-audit outcome and rulings (covers 7.1-7.5 + the six fixer items)
+
+- All 26 audited requirements addressed; suite fully green under -race
+  (1241 top-level PASS / 0 FAIL / 8 SKIP; the case-insensitive mv fixture
+  skips on this filesystem, its forced-core.ignorecase variant runs). All
+  headline scenarios independently hand-reproduced, including the
+  mid-merge mv refusal ordering, dry-run uninstall removing nothing, and
+  both revert doors minting identical inverses. Adversarial round:
+  quote injection and literal-arrow injection into record values re-encode
+  correctly; a file NAMED a valid ULID parses correctly.
+- BUG 1 (medium-high), ORCHESTRATOR RULING: trailer.RewriteMessage
+  re-encodes transformed pairs without re-running ValidatePair, so three
+  transform shapes write records the decoder refuses (both-paths-equal,
+  subtree-marker mismatch, empty token) — scrub exits 0 and the corrupt
+  record is silently inert forever (RemoveMovedRecordsNaming skips
+  unparseable records, proven live). Ruling: a transform whose resulting
+  pair fails ValidatePair is a HARD REFUSAL before any ref moves (Tier A
+  timing, exit 30 RewriteRefused), naming the commit, the record, and the
+  invalid result, with guidance (different replacement, scrub file
+  --delete, or retract first). Never written, never silently dropped.
+  Red-first for all three shapes; assert Malformed stays empty.
+- BUG 2 (low), ORCHESTRATOR RULING: --moved accepted chained declarations
+  (a -> b beside b -> c) that mv refuses as Usage. A chain in one commit
+  always yields a dead record (the middle path cannot be in the commit's
+  own tree) — incoherent as a declaration. --moved adopts the same Usage
+  refusal via ONE shared check with mv (single authority; red-first both
+  ways).
+- RULING (projection unconsumed): trailer.Forward/Projection/RetractedIDs'
+  absence of production consumers is AS-PLANNED, not dead code — the plan
+  builds the read layer with unit tests only; the first consumers are the
+  future work in todo/record-file-moves-remaining.md. Malformed-record
+  surfacing to operators arrives with the first production reader.
+- RULING (inverse despite retraction): conclusionMovedRecords minting an
+  inverse for a record a LATER commit retracted is correct as built — the
+  inverse describes the revert commit's own tree delta; the source
+  record's retraction status is irrelevant, and trees arbitrate any wrong
+  claim. Pin test dispatched.
+- Census staleness at audit time (498 committed vs 522 regenerated; all
+  of mv.go's sites absent) is BY DESIGN under the releases-only
+  regeneration ruling; Phase 10 regenerates and commits it as release
+  prep, which also keeps .rlsbl/hooks/pre-checks.sh green at release.
+- Dispatched to the remediation fixer besides the two bugs: scrub match's
+  scope line names only the parent ref where scrub file names the
+  submodule line too (a match that rewrote a submodule never named that
+  history — parity fix); the declined force-push prints "Aborted." on
+  bare stdout where uninstall routes it through infof (consistency fix);
+  the vacuous uninstall-test precondition (assert path is
+  .git/worktrees/linked-side/safegit — the fixture names the worktree
+  linked-side); the RepoRoot->AnchorRoot anchoring unification
+  (Pipeline.Execute at commit.go:244, Amend/Reword at amend.go:85/:446;
+  assess rewrite_result.go:476 and main.go:88 and report each site's
+  disposition).
+- Phase 9 row additions from the audit: docs/internal-trailer.md's
+  front-matter description predates the record grammar/projection layers
+  (body regenerates); architecture.md has no move-record or mv section
+  (already noted); the generated CLAUDE.md release-workflow staleness is
+  Appendix row 26's existing scope.
+- Audit scratch was archived by saferm (id 17194, 34 MB) because a hook
+  blocks plain rm; the archive stays (purging is permanent destruction
+  and is the user's call alone — the orchestrator's attempt to purge it
+  was refused by the user).
+
+## Ratified 7.3/7.4/7.5 decisions (resumed session, audited above)
 
 - Suite 1544 PASS / 0 FAIL / 9 SKIP (short run); full -race green. The
   ninth skip is the case-insensitive mv fixture (skipped on case-sensitive
