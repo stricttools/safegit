@@ -370,7 +370,7 @@ func (r *RewriteResult) publish(ctx context.Context, flags globalFlags, cmd stri
 	// 8. Post-rewrite cleanup: expire tainted reflog entries and prune old
 	// objects. Failures stay non-fatal (warnings) but are captured
 	// machine-readably in CleanupOK/CleanupErrors for orchestrators.
-	cleanupErrors, cleanupErr := cleanupAfterRewrite(ctx, flags, cmd, r.ShaMap, allTagRewrites, r.SgDir)
+	cleanupErrors, residue, cleanupErr := cleanupAfterRewrite(ctx, flags, cmd, r.ShaMap, allTagRewrites, r.SgDir)
 	if cleanupErr != nil {
 		fmt.Fprintf(os.Stderr, "warning: post-rewrite cleanup: %v\n", cleanupErr)
 		cleanupErrors = append(cleanupErrors, cleanupErr.Error())
@@ -378,7 +378,13 @@ func (r *RewriteResult) publish(ctx context.Context, flags globalFlags, cmd stri
 	r.CleanupErrors = cleanupErrors
 	r.CleanupOK = len(cleanupErrors) == 0
 
-	// 9. Tier B: the shared stale-pointer check plus the command's own.
+	// 9. Tier B: the surviving pre-rewrite objects, the shared stale-pointer
+	// check, and the command's own hook. Old objects a surviving ref still
+	// reaches are not among them -- cleanup filtered those out, because they are
+	// another branch's history rather than something the prune failed at.
+	if residue != "" {
+		r.recordTierB(residue)
+	}
 	for _, f := range verifyRefsRemapped(ctx, r.ShaMap) {
 		r.recordTierB(f)
 	}

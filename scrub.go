@@ -802,7 +802,7 @@ func runScrubFileInSubmodule(
 		}
 		infof(flags, "Verifying old blobs unreachable in submodule...\n")
 		// Use subCtx to target the submodule's object store without chdir.
-		reachableBlobs, err := buildReachableBlobSet(subCtx)
+		reachableBlobs, err := buildReachableObjectSet(subCtx)
 		if err != nil {
 			return fmt.Errorf("could not read the submodule's reachable objects to verify the old blobs are gone: %v", err)
 		}

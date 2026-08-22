@@ -246,7 +246,7 @@ func refsHoldingObjects(ctx context.Context, wanted map[string]bool) (map[string
 // nil if all are gone or accounted for.
 func verifyOldBlobsRemoved(ctx context.Context, oldBlobSHAs []string) error {
 	// Build the set of all blob SHAs reachable from current refs.
-	reachableBlobs, err := buildReachableBlobSet(ctx)
+	reachableBlobs, err := buildReachableObjectSet(ctx)
 	if err != nil {
 		return fmt.Errorf("building reachable blob set: %w", err)
 	}
@@ -277,10 +277,15 @@ func verifyOldBlobsRemoved(ctx context.Context, oldBlobSHAs []string) error {
 	return fmt.Errorf("%s", sb.String())
 }
 
-// buildReachableBlobSet returns the set of all blob SHAs reachable from any
-// ref. Uses git rev-list --all --objects which lists all reachable objects
-// with their paths (blobs have paths, commits/trees don't always).
-func buildReachableBlobSet(ctx context.Context) (map[string]bool, error) {
+// buildReachableObjectSet returns the set of every object SHA reachable from
+// any ref -- commits and trees as well as blobs. Uses git rev-list --all
+// --objects, which lists all reachable objects with their paths (blobs have
+// paths, commits/trees don't always).
+//
+// Both callers ask the same question of it: "is this pre-rewrite object one a
+// surviving ref still legitimately reaches?" A yes means it is another branch's
+// history rather than residue the cleanup failed to prune.
+func buildReachableObjectSet(ctx context.Context) (map[string]bool, error) {
 	stdout, _, err := git.Run(ctx, "rev-list", "--all", "--objects")
 	if err != nil {
 		return nil, err
