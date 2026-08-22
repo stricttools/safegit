@@ -149,6 +149,40 @@ func TestPreviewReportsAConflictWithItsPaths(t *testing.T) {
 	})
 }
 
+// TestPreviewOfAnFfOnlyMergeReportsGitsOwnRefusal: --ff-only is a REFUSAL of
+// the whole merge when the branches have diverged, and git decides it before it
+// merges anything. So does the preview.
+//
+// The conflicted case is the one that was wrong: the ff-only verdict was
+// reached only for an unconflicted merge, so a diverged merge that would also
+// conflict previewed as "CONFLICT ... the operation would stop here for you to
+// resolve them" -- advice about resolving a conflict git never gets far enough
+// to produce ("fatal: Not possible to fast-forward, aborting").
+func TestPreviewOfAnFfOnlyMergeReportsGitsOwnRefusal(t *testing.T) {
+	fx := newPreviewRepo(t)
+
+	stdout, stderr, code := runSafegit(t, fx.dir, "--dry-run", "merge", "--ff-only", "side")
+	if code != 0 {
+		t.Fatalf("merge --ff-only --dry-run failed (code %d): %s", code, stderr)
+	}
+	if !strings.Contains(stdout, "REFUSED") || !strings.Contains(stdout, "not a fast-forward") {
+		t.Errorf("the preview does not report git's outright refusal:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "CONFLICT") || strings.Contains(stdout, "resolve them") {
+		t.Errorf("the preview offers conflict resolution for a merge git refuses to start:\n%s", stdout)
+	}
+
+	// The recorded fact the verdict reproduces: git itself refuses this exact
+	// command line, and says why, without mentioning any conflict.
+	out, gitCode := testutil.GitTry(t, fx.dir, "merge", "--ff-only", "side")
+	if gitCode == 0 {
+		t.Fatalf("git accepted an --ff-only merge of diverged branches; the fixture no longer produces the case:\n%s", out)
+	}
+	if !strings.Contains(out, "Not possible to fast-forward") {
+		t.Errorf("git refused for an unexpected reason, so the preview's wording needs re-checking:\n%s", out)
+	}
+}
+
 // TestPreviewMatchesTheRealOperation is the assertion that makes the preview
 // worth anything: the outcome it reports is the outcome the operation actually
 // has, and the paths it names are the paths git actually leaves unmerged.
