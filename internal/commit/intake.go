@@ -49,6 +49,11 @@ type intakeEntry struct {
 	hunks []int
 	// src indexes the intake's sources: which argument produced this entry.
 	src int
+	// untrack makes this entry a removal from the index rather than a staging
+	// of what is on disk. The file itself is left exactly where it is: this is
+	// the "stop tracking it, keep it" half of a .gitignore cleanup, which
+	// otherwise has no safegit-mediated form at all.
+	untrack bool
 }
 
 // intake is everything argument resolution produced.
@@ -299,12 +304,21 @@ func noticeEscapingLinks(repoRoot string, paths []string) {
 // tip being replaced for an amend, and the empty string for an unborn ref. Every
 // tracked-path judgement is made against it, because a path's presence in HEAD
 // says nothing about a commit built on another branch.
-func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, specs []FileSpec) (*intake, error) {
+func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, specs []FileSpec, untrack []string) (*intake, error) {
 	in := &intake{}
 	tree := newTreeIndex(ctx, baseRev)
 	seen := make(map[string]bool)
 	skipped := make(map[string]bool)
 	var links []string
+
+	// The untrack targets are resolved first, so the staging loop below can see
+	// which paths are being removed: naming one explicitly on both sides is a
+	// contradiction, while an expansion that happens to sweep one up just
+	// leaves it to the removal.
+	dropped, err := p.resolveUntrack(ctx, repoRoot, baseRev, tree, in, seen, untrack)
+	if err != nil {
+		return nil, err
+	}
 
 	for _, spec := range specs {
 		rel, err := canonicalRel(repoRoot, spec.Path, namesThroughLink(spec.Path))
@@ -323,6 +337,13 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 		in.sources = append(in.sources, src)
 
 		if !isDir {
+			if dropped[rel] {
+				return nil, &CommitError{
+					Code: exitcode.Usage,
+					Message: fmt.Sprintf("%s is named both as a file to commit and in --untrack; "+
+						"say one or the other", spec.Path),
+				}
+			}
 			if err := p.validateNamedPath(ctx, repoRoot, rel, baseRev, spec); err != nil {
 				return nil, err
 			}
@@ -363,6 +384,103 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 	sort.Strings(in.skipped)
 	noticeEscapingLinks(repoRoot, links)
 	return in, nil
+}
+
+// resolveUntrack turns the --untrack arguments into removal entries and returns
+// the set of paths they cover.
+//
+// The scope is general: any tracked path can be untracked, not only a
+// gitignored one. What keeps a typo from silently doing nothing is the
+// tracked-in-parent check -- a target the commit's parent does not carry cannot
+// be removed from anything, so naming it is a hard error rather than a no-op
+// that leaves the caller believing a cleanup happened.
+//
+// The gitignored-path refusal that guards ordinary arguments deliberately does
+// NOT apply here. Untracking a path BECAUSE it is now ignored is the whole
+// point of the flag; what the refusal still blocks is the opposite direction,
+// adding ignored content to a commit.
+func (p *Pipeline) resolveUntrack(
+	ctx context.Context,
+	repoRoot, baseRev string,
+	tree *treeIndex,
+	in *intake,
+	seen map[string]bool,
+	untrack []string,
+) (map[string]bool, error) {
+	dropped := make(map[string]bool)
+	for _, arg := range untrack {
+		rel, err := canonicalRel(repoRoot, arg, namesThroughLink(arg))
+		if err != nil {
+			return nil, err
+		}
+
+		targets, isDir, err := p.untrackTargets(rel, tree)
+		if err != nil {
+			return nil, err
+		}
+		if len(targets) == 0 {
+			return nil, &CommitError{
+				Code: exitcode.PathMatchedNothing,
+				Message: fmt.Sprintf("nothing to untrack for %s: it is not tracked in %s, so there is "+
+					"no index entry to remove", arg, describeBase(baseRev)),
+			}
+		}
+
+		// Untracking a path nothing ignores is legal and occasionally what
+		// someone means -- but far more often the .gitignore edit that belongs
+		// with it was forgotten, and without it the next commit that names the
+		// path puts it straight back.
+		if ignored, _ := git.IsIgnored(ctx, rel); !ignored {
+			fmt.Fprintf(os.Stderr, "notice: %s is not gitignored; it stops being tracked, but nothing "+
+				"stops it from being committed again -- add a .gitignore pattern if that is what you meant\n", arg)
+		}
+
+		srcIdx := len(in.sources)
+		in.sources = append(in.sources, intakeSource{arg: arg, path: rel, dir: isDir})
+		for _, target := range targets {
+			dropped[target] = true
+			if seen[target] {
+				continue
+			}
+			seen[target] = true
+			in.entries = append(in.entries, intakeEntry{path: target, src: srcIdx, untrack: true})
+		}
+	}
+	return dropped, nil
+}
+
+// untrackTargets resolves one --untrack argument against the tree the commit is
+// built on: the exact path when the tree carries one, every path underneath it
+// when the argument names a directory, and nothing at all when the tree has
+// neither -- which is what makes a typo a refusal.
+//
+// A gitlink is skipped under a directory argument for the same reason expansion
+// skips one: naming a directory above a submodule must not move another
+// repository's pointer. Naming the gitlink itself still untracks it.
+func (p *Pipeline) untrackTargets(rel string, tree *treeIndex) (targets []string, isDir bool, err error) {
+	if rel != "" {
+		if _, inTree, eerr := tree.entry(rel); eerr != nil {
+			return nil, false, eerr
+		} else if inTree {
+			return []string{rel}, false, nil
+		}
+	}
+
+	under, err := tree.under(rel)
+	if err != nil {
+		return nil, false, err
+	}
+	for _, path := range under {
+		entry, ok, eerr := tree.entry(path)
+		if eerr != nil {
+			return nil, false, eerr
+		}
+		if ok && entry.ObjectType == "commit" {
+			continue
+		}
+		targets = append(targets, path)
+	}
+	return targets, true, nil
 }
 
 // namesADirectory decides whether an argument is a directory to expand or a

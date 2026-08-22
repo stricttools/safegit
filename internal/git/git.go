@@ -250,6 +250,26 @@ func RmCached(ctx context.Context, indexPath, filePath string) error {
 	return err
 }
 
+// DropFromIndex removes ONE exact path from a custom index, whether or not the
+// file is still on disk and whatever its content is.
+//
+// It is deliberately not RmCached. `git rm --cached` is a porcelain safety
+// check as much as a removal: it refuses a path whose indexed content differs
+// from both the working file and HEAD, and it reads HEAD -- the repository's
+// real HEAD, which on a cross-branch operation is not the tree the index was
+// seeded from. Untracking a file that is meant to STAY on disk, usually with
+// content that has moved on since it was committed, is exactly the shape that
+// check refuses. `update-index --force-remove` states the intent directly: drop
+// this index entry, touch nothing else.
+//
+// The path is repo-relative; git resolves it against the process working
+// directory, which every safegit git call has pinned to the repository root.
+func DropFromIndex(ctx context.Context, indexPath, repoRelPath string) error {
+	env := []string{"GIT_INDEX_FILE=" + indexPath}
+	_, _, err := RunWithEnv(ctx, env, "update-index", "--force-remove", "--", repoRelPath)
+	return err
+}
+
 func isDirectoryRmError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "not removing") && strings.Contains(err.Error(), "recursively without -r")
 }

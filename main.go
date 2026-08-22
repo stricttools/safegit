@@ -228,7 +228,8 @@ func newApp() *strictcli.App {
 		trailers := kwargsStrSlice(kwargs["trailer"])
 		files := kwargsStrSlice(kwargs["files"])
 		hunks := kwargsStrSlice(kwargs["hunks"])
-		runCommit(gf, messages, messageFile, branch, amend, allowEmpty, trailers, files, hunks)
+		untrack := kwargsStrSlice(kwargs["untrack"])
+		runCommit(gf, messages, messageFile, branch, amend, allowEmpty, trailers, files, hunks, untrack)
 		return strictcli.Exit(exitcode.OK)
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
@@ -251,6 +252,11 @@ func newApp() *strictcli.App {
 			// selection from a filename that happens to contain a colon --
 			// nothing on disk is ever consulted to tell them apart.
 			strictcli.StringFlag("hunks", "commit only the selected hunks of one file, as 'path:1,3' or 'path:2-4' (the split is on the last colon, so a path containing colons stays intact); repeatable, once per path; omitted means every named file is committed whole", strictcli.Repeatable(), strictcli.Unique(true), strictcli.Optional(), strictcli.ValidateFn(validateHunkSelection)),
+			// The cleanup half of `git rm --cached`: the path leaves the index
+			// and stays on disk. Any tracked path qualifies, not only an
+			// ignored one, and a target the commit's parent does not track is a
+			// hard error rather than a no-op.
+			strictcli.StringFlag("untrack", "stop tracking a path, leaving the file itself on disk: the commit records its removal from the index (repeatable, one path each); the path must be tracked in the commit's parent; omitted means nothing is untracked", strictcli.Repeatable(), strictcli.Unique(true), strictcli.Optional()),
 		),
 		strictcli.WithArgs(
 			strictcli.NewArg("files", "files to commit, taken literally -- a colon in an argument is part of the filename, and hunk selection is --hunks", strictcli.ArgOptional(), strictcli.Variadic()),
