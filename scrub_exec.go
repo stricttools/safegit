@@ -11,6 +11,7 @@ import (
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/scan"
+	"github.com/smm-h/safegit/internal/trailer"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 
@@ -426,7 +427,9 @@ func executeScrubRecipe(
 		}
 
 		// Apply recipe operations to commit messages in topo order,
-		// respecting per-op target filters.
+		// respecting per-op target filters. Each substitution goes through the
+		// trailer-aware rewrite so a match overlapping a move record's quoted
+		// path cannot break the record's grammar -- see patternSubstitution.
 		newMessage := info.Message
 		for _, idx := range recipe.TopoOrder {
 			op := recipe.Operations[idx]
@@ -438,13 +441,7 @@ func executeScrubRecipe(
 			if !pat.MatchString(newMessage) {
 				continue
 			}
-			if op.Mangle {
-				newMessage = pat.ReplaceAllStringFunc(newMessage, func(s string) string {
-					return string(mangleBytes([]byte(s)))
-				})
-			} else {
-				newMessage = pat.ReplaceAllString(newMessage, *op.Replace)
-			}
+			newMessage = trailer.RewriteMessage(newMessage, patternSubstitution(pat, op.Mangle, op.Replace))
 		}
 		if newMessage != info.Message {
 			xform.Message = newMessage
@@ -580,6 +577,38 @@ func estimateCommitCount(ctx context.Context, fromSHA string, entireHistory bool
 		return 0
 	}
 	return n
+}
+
+// patternSubstitution is one operation's substitution as a plain text
+// transform: the shape trailer.RewriteMessage applies to a message's body and,
+// separately, to the DECODED path tokens of every move record in it.
+//
+// The indirection is what keeps a scrub from producing an unreadable record. A
+// record's paths are C-quoted, so a regex applied to the raw trailer line can
+// inject the quoting delimiter, close a quoted region early, or leave an escape
+// with nothing after it -- and the record stops parsing, which turns a rewrite
+// that was correcting history into one that damaged it. Rewriting the decoded
+// value and re-encoding cannot do that: the encoder is total, so whatever the
+// substitution produces has exactly one well-formed written form.
+//
+// The refusing alternative was rejected deliberately: a scrub whose whole job
+// is removing a secret must not leave the secret standing in a commit message
+// because it happened to be spelled inside a path.
+//
+// mangle and replace come straight from the elected substitution: exactly one
+// of them is in force, and replace is non-nil whenever mangle is false.
+func patternSubstitution(pat *regexp.Regexp, mangle bool, replace *string) func(string) string {
+	return func(s string) string {
+		if !pat.MatchString(s) {
+			return s
+		}
+		if mangle {
+			return pat.ReplaceAllStringFunc(s, func(m string) string {
+				return string(mangleBytes([]byte(m)))
+			})
+		}
+		return pat.ReplaceAllString(s, *replace)
+	}
 }
 
 // TagBodyTransformFunc transforms the body of an annotated tag. It receives the
