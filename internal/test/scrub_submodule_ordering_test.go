@@ -25,16 +25,6 @@ import (
 
 var submoduleOrderingEnv = []string{"CLAUDE_CODE_SESSION_ID=submodule-ordering-test"}
 
-// runGitIn runs a git command in dir and fails the test if it does not succeed.
-func runGitIn(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %v in %s: %v\n%s", args, dir, err, out)
-	}
-}
-
 // submoduleScrubFixture builds the repository pair every test in this file
 // scrubs.
 //
@@ -49,19 +39,19 @@ func submoduleScrubFixture(t *testing.T) (parentDir, subDir, subGitDir, subGitSa
 	parentDir, _, subDir = newRepoWithSubmoduleSecret(t, "SENSITIVE_DATA_HERE", "secret.txt")
 
 	firstSubCommit = testutil.Rev(t, subDir, "HEAD")
-	runGitIn(t, subDir, "tag", "sub-v1", firstSubCommit)
+	testutil.Git(t, subDir, "tag", "sub-v1", firstSubCommit)
 
 	if err := os.WriteFile(filepath.Join(subDir, "secret.txt"), []byte("CLEANED\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	runGitIn(t, subDir, "config", "user.email", "test@test.com")
-	runGitIn(t, subDir, "config", "user.name", "Test")
-	runGitIn(t, subDir, "add", "secret.txt")
-	runGitIn(t, subDir, "commit", "-m", "commit replacement")
+	testutil.Git(t, subDir, "config", "user.email", "test@test.com")
+	testutil.Git(t, subDir, "config", "user.name", "Test")
+	testutil.Git(t, subDir, "add", "secret.txt")
+	testutil.Git(t, subDir, "commit", "-m", "commit replacement")
 
-	runGitIn(t, parentDir, "add", "mysub")
-	runGitIn(t, parentDir, "commit", "-m", "update submodule ref")
-	runGitIn(t, parentDir, "tag", "parent-v1", "HEAD")
+	testutil.Git(t, parentDir, "add", "mysub")
+	testutil.Git(t, parentDir, "commit", "-m", "update submodule ref")
+	testutil.Git(t, parentDir, "tag", "parent-v1", "HEAD")
 
 	subGitDir = submoduleGitDir(t, subDir)
 	subGitSafegitDir = filepath.Join(subGitDir, "safegit")

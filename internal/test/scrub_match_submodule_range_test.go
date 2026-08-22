@@ -46,18 +46,18 @@ func submoduleRangeFixture(t *testing.T, firstSubSecret string) (parentDir, subD
 		if err := os.WriteFile(filepath.Join(subDir, "secret.txt"), []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		runGitIn(t, subDir, "add", "secret.txt")
-		runGitIn(t, subDir, "commit", "-m", message)
+		testutil.Git(t, subDir, "add", "secret.txt")
+		testutil.Git(t, subDir, "commit", "-m", message)
 	}
 
 	commitSub("SENSITIVE_DATA_HERE second\n", "sub second")
-	runGitIn(t, parentDir, "add", "mysub")
-	runGitIn(t, parentDir, "commit", "-m", "point at sub second")
+	testutil.Git(t, parentDir, "add", "mysub")
+	testutil.Git(t, parentDir, "commit", "-m", "point at sub second")
 	parentBoundary = testutil.Rev(t, parentDir, "HEAD")
 
 	commitSub("SENSITIVE_DATA_HERE third\n", "sub third")
-	runGitIn(t, parentDir, "add", "mysub")
-	runGitIn(t, parentDir, "commit", "-m", "point at sub third")
+	testutil.Git(t, parentDir, "add", "mysub")
+	testutil.Git(t, parentDir, "commit", "-m", "point at sub third")
 
 	return parentDir, subDir, subFirst, parentInitial, parentBoundary
 }
