@@ -56,6 +56,52 @@ type intakeEntry struct {
 	untrack bool
 }
 
+// namedPath records one explicitly named file argument, so a second argument
+// resolving to the same canonical path can be refused by the spelling the
+// caller actually typed rather than by the path both happen to mean.
+type namedPath struct {
+	arg   string
+	hunks bool
+}
+
+// conflictingSpellings is the refusal for two arguments that name the same file
+// and say different things about it.
+//
+// Naming one path both ways is a contradiction -- "commit all of it" and
+// "commit hunks 1 and 3 of it" -- and so is naming it twice in --hunks, since
+// each element states the whole selection for its path. Both are refused rather
+// than resolved by a precedence rule nobody would remember, and both are
+// decided HERE, on canonical repo-relative paths, because the same file has
+// many spellings: `./a.go`, `a.go` and `sub/../a.go` are one path, and a
+// comparison of the strings a caller typed sees three.
+func conflictingSpellings(rel string, prev namedPath, arg string, hunks bool) error {
+	if prev.hunks && hunks {
+		return &CommitError{
+			Code: exitcode.Usage,
+			Message: fmt.Sprintf("--hunks names %s more than once (as %s and %s); "+
+				"one element states the whole selection for a path", displayPath(rel), prev.arg, arg),
+		}
+	}
+	whole, selected := prev.arg, arg
+	if prev.hunks {
+		whole, selected = arg, prev.arg
+	}
+	return &CommitError{
+		Code: exitcode.Usage,
+		Message: fmt.Sprintf("%s names the same path as --hunks %s (%s), one as a whole file and one "+
+			"as a hunk selection; say one or the other", whole, selected, displayPath(rel)),
+	}
+}
+
+// displayPath names a canonical path in a message. The empty string is the
+// repository root, which has no name of its own to print.
+func displayPath(rel string) string {
+	if rel == "" {
+		return "the repository root"
+	}
+	return rel
+}
+
 // intake is everything argument resolution produced.
 type intake struct {
 	sources []intakeSource
@@ -309,6 +355,7 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 	tree := newTreeIndex(ctx, baseRev)
 	seen := make(map[string]bool)
 	skipped := make(map[string]bool)
+	named := make(map[string]namedPath)
 	var links []string
 
 	// The untrack targets are resolved first, so the staging loop below can see
@@ -337,6 +384,14 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 		in.sources = append(in.sources, src)
 
 		if !isDir {
+			if prev, clash := named[rel]; clash && (prev.hunks || spec.Hunks != nil) {
+				// Two arguments naming one file, saying different things about
+				// it. Without this the second entry is silently dropped by the
+				// dedup below, and a hunk selection the caller stated turns
+				// into the whole file.
+				return nil, conflictingSpellings(rel, prev, spec.Path, spec.Hunks != nil)
+			}
+			named[rel] = namedPath{arg: spec.Path, hunks: spec.Hunks != nil}
 			if dropped[rel] {
 				return nil, &CommitError{
 					Code: exitcode.Usage,

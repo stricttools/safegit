@@ -69,7 +69,9 @@ literal name of a file. The split inside a `--hunks` element is on its LAST
 colon, so `--hunks 'sprint:1:2,3'` selects hunks 2 and 3 of the file named
 `sprint:1`. Naming one path both as a positional and in `--hunks` is refused, as
 is naming it twice in `--hunks`: each element states the whole selection for its
-path.
+path. The refusal is decided on the paths themselves, not on how they were
+typed, so `-- ./a.go --hunks a.go:1` is the same contradiction as
+`-- a.go --hunks a.go:1` and is refused the same way.
 
 ### Examples
 

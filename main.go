@@ -1000,33 +1000,27 @@ func validateHunkSelection(v interface{}) error {
 }
 
 // buildFileSpecs combines the literal positional paths with the --hunks
-// selections into the pipeline's file specs.
+// selections into the pipeline's file specs. Positionals first, then the
+// selections, each in the order given.
 //
-// Naming one path both ways is a contradiction -- "commit all of it" and
-// "commit hunks 1 and 3 of it" -- and so is naming it twice in --hunks, since
-// each element states the whole selection for its path. Both are refused rather
-// than resolved by a precedence rule nobody would remember.
+// It parses and nothing more. Whether two arguments name the SAME file, and so
+// contradict each other, is not a question about the strings a caller typed:
+// `./a.go`, `a.go` and `sub/../a.go` are one path, and only canonicalization
+// against the repository root can see that. Intake canonicalizes every
+// argument already, so the conflict is decided there
+// (internal/commit/intake.go, conflictingSpellings) and only there -- a
+// spelling comparison here would be a second authority that answers the same
+// question wrongly for every spelling but one.
 func buildFileSpecs(files []string, hunks []string) ([]commit.FileSpec, error) {
 	specs := make([]commit.FileSpec, 0, len(files)+len(hunks))
-	literal := make(map[string]bool, len(files))
 	for _, f := range files {
-		literal[f] = true
 		specs = append(specs, commit.FileSpec{Path: f})
 	}
-
-	selected := make(map[string]bool, len(hunks))
 	for _, h := range hunks {
 		sel, err := parseHunkSelection(h)
 		if err != nil {
 			return nil, err
 		}
-		if literal[sel.Path] {
-			return nil, fmt.Errorf("%s is named both as a whole file and in --hunks %q; say one or the other", sel.Path, h)
-		}
-		if selected[sel.Path] {
-			return nil, fmt.Errorf("--hunks names %s more than once; one element states the whole selection for a path", sel.Path)
-		}
-		selected[sel.Path] = true
 		specs = append(specs, commit.FileSpec{Path: sel.Path, Hunks: sel.Hunks})
 	}
 	return specs, nil

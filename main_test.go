@@ -109,8 +109,14 @@ func TestParseHunkSelection(t *testing.T) {
 
 // TestBuildFileSpecs replaces the old TestParseFileSpecs, whose whole subject
 // was a positional argument being reinterpreted as path-plus-hunks. It cannot
-// be: a positional path is literal, always, and the cases below pin that
-// alongside the two contradictions the combination refuses.
+// be: a positional path is literal, always, and the cases below pin that.
+//
+// Two contradiction cases that used to be refused here are now carried through
+// unchanged, deliberately: whether two arguments name the same file is a
+// question about canonical paths, not about the strings a caller typed, so it
+// is decided in intake and only there. The pins for the refusal itself are the
+// integration tests in internal/test/commit_hunks_conflict_test.go, which run
+// the conflicting spellings against a real repository.
 func TestBuildFileSpecs(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -149,15 +155,21 @@ func TestBuildFileSpecs(t *testing.T) {
 			want: []commit.FileSpec{},
 		},
 		{
-			name:    "the same path whole and in hunks is a contradiction",
-			files:   []string{"a.go"},
-			hunks:   []string{"a.go:1"},
-			wantErr: true,
+			name:  "the same path whole and in hunks parses; intake decides the contradiction",
+			files: []string{"a.go"},
+			hunks: []string{"a.go:1"},
+			want: []commit.FileSpec{
+				{Path: "a.go", Hunks: nil},
+				{Path: "a.go", Hunks: []int{1}},
+			},
 		},
 		{
-			name:    "one path twice in hunks is a contradiction",
-			hunks:   []string{"a.go:1", "a.go:3"},
-			wantErr: true,
+			name:  "one path twice in hunks parses; intake decides the contradiction",
+			hunks: []string{"a.go:1", "a.go:3"},
+			want: []commit.FileSpec{
+				{Path: "a.go", Hunks: []int{1}},
+				{Path: "a.go", Hunks: []int{3}},
+			},
 		},
 		{
 			name:    "a malformed element is refused here too",
