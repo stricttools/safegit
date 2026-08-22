@@ -1205,6 +1205,39 @@ instead of reclaiming, and doctor is the recovery path).
 - Tracked hook store: accepted as documented (push-intent boundary;
   the blunt clone-then-push sentence stays).
 
+## USER RULINGS (settled 2026-08-22, review session, round 2)
+
+- Scrub secret-scope: the recommended subset — behavior stays
+  complete-and-name-refs, PLUS the unconditional scope line ("rewrote
+  the history of <ref>; other refs were not rewritten", beside the
+  rotation notice) queued for the next fixer window. The two-mode
+  required selector is deferred to todo/scrub-strict-mode-selector.md
+  ("way later", user's words).
+- Doctor exit 50: KEPT. Ships as a breaking-type changelog entry
+  (previously always exit 0).
+- NEW STANDING DELIVERABLE (user decision): a single living document in
+  docs/ cataloging EVERY instance where safegit's design philosophy and
+  git's idioms clash, and which way each ruling went — because some
+  campaign rulings deliberately went git-like (muscle-memory
+  preservation) where the user might have ruled stricter, and the user
+  wants to review the whole class systematically. safegit's CLAUDE.md
+  (via the docs/_CLAUDE.md template) must mention the file so every
+  future agent keeps it updated. Slotted into Phase 9 (next session):
+  an agent mines the codebase for divergences and drafts the document;
+  known entries to seed the mining: resolution keywords writing the
+  worktree incl. delete-removes-disk (git-like; PROVISIONALLY as-built,
+  awaiting the user's review via this document — the direct question
+  was deliberately left unanswered); revert authorship = operator
+  (git-like); lone-AUTO_MERGE tolerance (git-like); empty merges need
+  no flag (git-like); repeated -m joining (git-like); commit-msg hook
+  ordering and message-file isolation (mixed); hooks output on stderr
+  (ours); untrack keeps the file on disk (ours); no --force anywhere,
+  qualified flag names, required selectors, exit-code registry,
+  consent seams (ours); passthrough exit codes = git's own (git-like);
+  --resolve paths repo-relative while commit positionals are
+  cwd-relative (ours/asymmetric); conclusion trailers and pipeline
+  authorship vs git's own committing (ours).
+
 ## Open rulings (need the user's decision; as-built stands meanwhile)
 
 - **Per-path vs set-level no-match errors (2.2).** The plan contradicts
