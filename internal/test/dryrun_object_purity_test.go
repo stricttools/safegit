@@ -230,7 +230,7 @@ func TestSubmoduleScrubDryRunLeavesBothObjectStoresUntouched(t *testing.T) {
 	subBefore := dryPurityObjectSnapshotAt(t, subObjects)
 
 	stdout, stderr, code := runSafegitEnv(t, parentDir, submoduleEnv,
-		"--dry-run", "scrub", "file", "mysub/secret.txt",
+		"--dry-run", "scrub", "file", "--replace-with", "mysub/secret.txt", "mysub/secret.txt",
 		"--from", firstSubCommit, "--reason", "preview purity")
 	if code != 0 {
 		t.Fatalf("submodule scrub --dry-run failed (%d): stdout=%s stderr=%s", code, stdout, stderr)

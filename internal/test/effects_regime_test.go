@@ -465,7 +465,7 @@ func TestHistoryRewriteDryRunRecordsNoInventedSHA(t *testing.T) {
 	head := testutil.Rev(t, dir, "HEAD")
 
 	stdout, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv,
-		"--dry-run", "scrub", "file", "secret.txt", "--from", initialSHA, "--reason", "preview honesty")
+		"--dry-run", "scrub", "file", "--replace-with", "secret.txt", "secret.txt", "--from", initialSHA, "--reason", "preview honesty")
 	if code != 0 {
 		t.Fatalf("scrub file --dry-run failed (%d): %s", code, stderr)
 	}

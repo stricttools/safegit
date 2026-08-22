@@ -137,7 +137,7 @@ func TestScrubSubdirFileRootLevelSecret(t *testing.T) {
 	first := scrubSubdirFirstCommit(t, root)
 
 	stdout, stderr, code := runSafegit(t, sub,
-		"scrub", "file", "--from", first, "--reason", "subdir scrub test",
+		"scrub", "file", "--replace-with", "secret.txt", "--from", first, "--reason", "subdir scrub test",
 		"--approve-consequential", "secret.txt")
 
 	if code == 0 {
@@ -168,7 +168,7 @@ func TestScrubSubdirFileNestedSecretPreservesRoot(t *testing.T) {
 	first := scrubSubdirFirstCommit(t, root)
 
 	stdout, stderr, code := runSafegit(t, sub,
-		"scrub", "file", "--from", first, "--reason", "subdir scrub test",
+		"scrub", "file", "--replace-with", "secret.txt", "--from", first, "--reason", "subdir scrub test",
 		"--approve-consequential", "secret.txt")
 
 	// Whatever the exit code, the repository must not have lost unrelated files.

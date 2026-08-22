@@ -71,14 +71,14 @@ func secretSurvives(t *testing.T, dir string) bool {
 func TestScrubFileJSONDoesNotConfirm(t *testing.T) {
 	dir, initialSHA := newSecretRepo(t)
 
-	_, stderr, code := runSafegitEnv(t, dir, confirmEnv, "--json", "scrub", "file",
+	_, stderr, code := runSafegitEnv(t, dir, confirmEnv, "--json", "scrub", "file", "--replace-with", "secret.txt",
 		"--from", initialSHA, "--reason", "json consent probe", "secret.txt")
 	assertRefusedForConsent(t, code, stderr)
 	if !secretSurvives(t, dir) {
 		t.Error("--json must not answer the scrub confirmation; history was rewritten")
 	}
 
-	_, stderr, code = runSafegitEnv(t, dir, confirmEnv, "--json", "--approve-consequential", "scrub", "file",
+	_, stderr, code = runSafegitEnv(t, dir, confirmEnv, "--json", "--approve-consequential", "scrub", "file", "--replace-with", "secret.txt",
 		"--from", initialSHA, "--reason", "explicit consent", "secret.txt")
 	if code != 0 {
 		t.Fatalf("an explicit --approve-consequential must run the scrub, got code %d: %s", code, stderr)
@@ -93,7 +93,7 @@ func TestScrubFileJSONDoesNotConfirm(t *testing.T) {
 func TestScrubFileDryRunPreviewsWithoutConsent(t *testing.T) {
 	dir, initialSHA := newSecretRepo(t)
 
-	stdout, stderr, code := runSafegitEnv(t, dir, confirmEnv, "--json", "--dry-run", "scrub", "file",
+	stdout, stderr, code := runSafegitEnv(t, dir, confirmEnv, "--json", "--dry-run", "scrub", "file", "--replace-with", "secret.txt",
 		"--from", initialSHA, "--reason", "preview", "secret.txt")
 	if code != 0 {
 		t.Fatalf("a --json dry run must preview without consent, got code %d: %s", code, stderr)
@@ -221,7 +221,7 @@ func TestScrubFileInSubmoduleJSONDoesNotConfirm(t *testing.T) {
 	parentHeadBefore := testutil.Rev(t, parentDir, "HEAD")
 	subHeadBefore := testutil.Rev(t, subDir, "HEAD")
 
-	_, stderr, code := runSafegitEnv(t, parentDir, submoduleEnv, "--json", "scrub", "file",
+	_, stderr, code := runSafegitEnv(t, parentDir, submoduleEnv, "--json", "scrub", "file", "--replace-with", "mysub/secret.txt",
 		"mysub/secret.txt", "--from", firstSubCommit, "--reason", "json consent probe")
 	assertRefusedForConsent(t, code, stderr)
 	if got := testutil.Rev(t, parentDir, "HEAD"); got != parentHeadBefore {
@@ -231,7 +231,7 @@ func TestScrubFileInSubmoduleJSONDoesNotConfirm(t *testing.T) {
 		t.Errorf("--json must not answer the submodule scrub confirmation; submodule HEAD moved to %s", got)
 	}
 
-	_, stderr, code = runSafegitEnv(t, parentDir, submoduleEnv, "--json", "--approve-consequential", "scrub", "file",
+	_, stderr, code = runSafegitEnv(t, parentDir, submoduleEnv, "--json", "--approve-consequential", "scrub", "file", "--replace-with", "mysub/secret.txt",
 		"mysub/secret.txt", "--from", firstSubCommit, "--reason", "explicit consent")
 	if code != 0 {
 		t.Fatalf("an explicit --approve-consequential must run the submodule scrub, got code %d: %s", code, stderr)

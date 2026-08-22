@@ -372,7 +372,7 @@ func TestScrubFilePreservesGitlink(t *testing.T) {
 	commitFileEnv(t, parentDir, submoduleEnv, "secret.txt", "clean content\n", "commit replacement")
 
 	// Run scrub file
-	_, stderr, code = runSafegitEnv(t, parentDir, submoduleEnv, "--approve-consequential", "scrub", "file", "--from", initialSHA, "--reason", "test gitlink preservation", "secret.txt")
+	_, stderr, code = runSafegitEnv(t, parentDir, submoduleEnv, "--approve-consequential", "scrub", "file", "--replace-with", "secret.txt", "--from", initialSHA, "--reason", "test gitlink preservation", "secret.txt")
 	if code != 0 {
 		t.Fatalf("scrub file failed (code %d): %s", code, stderr)
 	}
@@ -494,7 +494,7 @@ func TestScrubFileGitlinkPath(t *testing.T) {
 	headBefore := testutil.Rev(t, parentDir, "HEAD")
 
 	// Run scrub file targeting a path inside the submodule
-	_, stderr, code := runSafegitEnv(t, parentDir, submoduleEnv, "--approve-consequential", "scrub", "file", "--from", firstSHA, "--reason", "test gitlink path", "mysub/somefile.txt")
+	_, stderr, code := runSafegitEnv(t, parentDir, submoduleEnv, "--approve-consequential", "scrub", "file", "--replace-with", "mysub/somefile.txt", "--from", firstSHA, "--reason", "test gitlink path", "mysub/somefile.txt")
 
 	// Either clean exit (no-op) or meaningful error is acceptable.
 	// Crash (signal death, panic) or corruption is not.
@@ -1562,7 +1562,7 @@ func TestScrubFileInSubmodule(t *testing.T) {
 
 	// Run scrub file targeting the submodule path
 	stdout, stderr, code := runSafegitEnv(t, parentDir, submoduleEnv,
-		"--approve-consequential", "scrub", "file",
+		"--approve-consequential", "scrub", "file", "--replace-with", "mysub/secret.txt",
 		"mysub/secret.txt",
 		"--from", firstSubCommit,
 		"--reason", "test",

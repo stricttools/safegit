@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/smm-h/safegit/internal/exitcode"
@@ -26,6 +27,98 @@ func scrubRange(kwargs map[string]interface{}) (*string, bool) {
 	}
 	s := strictcli.Get[string](elected.Fields, "value")
 	return &s, false
+}
+
+// scrubFileMode reads the `mode` selector `scrub file` declares and returns the
+// two values the rest of the command takes: the payload's mode spelling
+// ("replace" or "remove") and, for a replacement, the operator-supplied source
+// path.
+//
+// The two vocabularies are deliberately different. The flags name what the
+// OPERATOR does (--delete, --replace-with FILE); the mode names what the
+// rewrite does to each tree, which is the question a machine reading the
+// payload is asking, and which has been "replace"/"remove" since the payload
+// existed.
+func scrubFileMode(kwargs map[string]interface{}) (mode string, replacementPath string) {
+	elected := strictcli.GetElected(kwargs, "mode")
+	if elected.Is(scrubDeleteChoice) {
+		return "remove", ""
+	}
+	return "replace", strictcli.Get[string](elected.Fields, "value")
+}
+
+// readReplacementSource reads the replacement file at the OPERATOR's current
+// directory. Anchoring is the whole point: the target argument is
+// repository-relative and resolves against the pinned repository root, while
+// this path is one the operator typed at a shell prompt and means relative to
+// where they are standing.
+func readReplacementSource(path string) []byte {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		die(exitcode.General, fmt.Sprintf("reading the replacement file %q (paths given to --replace-with resolve against your current directory): %v", path, err))
+	}
+	return content
+}
+
+// scrubFileModeSummary spells the elected mode for the human summary, naming
+// the replacement source so the operator can see which file was read.
+func scrubFileModeSummary(mode, replacementPath string) string {
+	if mode == "remove" {
+		return "remove (delete the file from every commit in range)"
+	}
+	return fmt.Sprintf("replace (with the contents of %s)", replacementPath)
+}
+
+// scrubRangeSummary spells the elected range for the human summary.
+func scrubRangeSummary(fromSHA string, entireHistory bool) string {
+	if entireHistory {
+		return "entire history"
+	}
+	if len(fromSHA) >= 12 {
+		return fromSHA[:12] + "..HEAD (inclusive)"
+	}
+	return fromSHA + "..HEAD (inclusive)"
+}
+
+// scrubFileCommitCount counts the commits the elected range covers.
+func scrubFileCommitCount(ctx context.Context, fromSHA string, entireHistory bool) int {
+	if entireHistory {
+		out, _, err := git.Run(ctx, "rev-list", "--count", "HEAD")
+		if err != nil {
+			die(exitcode.General, fmt.Sprintf("counting commits: %v", err))
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(out))
+		if err != nil {
+			die(exitcode.General, fmt.Sprintf("parsing commit count: %v", err))
+		}
+		return n
+	}
+	out, _, err := git.Run(ctx, "rev-list", "--count", fromSHA+"..HEAD")
+	if err != nil {
+		die(exitcode.General, fmt.Sprintf("counting commits: %v", err))
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil {
+		die(exitcode.General, fmt.Sprintf("parsing commit count: %v", err))
+	}
+	return n + 1 // inclusive of fromSHA
+}
+
+// scrubFileCommitRange lists the commits to walk, oldest first, for the elected
+// range.
+func scrubFileCommitRange(ctx context.Context, fromSHA string, entireHistory bool) []string {
+	if entireHistory {
+		out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", "HEAD")
+		if err != nil {
+			die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
+		}
+		return git.SplitNonEmpty(out)
+	}
+	out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", fromSHA+"..HEAD")
+	if err != nil {
+		die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
+	}
+	return append([]string{fromSHA}, git.SplitNonEmpty(out)...)
 }
 
 // executeScrubRecipe runs the shared execution pipeline for recipe-based scrub

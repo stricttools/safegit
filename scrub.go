@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -25,10 +23,18 @@ import (
 // know are pointers or omitempty, so a preview omits them rather than
 // publishing a zero that reads as a fact.
 type ScrubFileResult struct {
-	Version     int    `json:"version"`
-	DryRun      bool   `json:"dry_run"`
-	File        string `json:"file"`
-	Mode        string `json:"mode"`
+	Version int    `json:"version"`
+	DryRun  bool   `json:"dry_run"`
+	File    string `json:"file"`
+	// Mode keeps the payload spellings "replace" and "remove" the flags no
+	// longer use: --replace-with elects "replace", --delete elects "remove".
+	// The flag names say what the operator does; these say what the rewrite
+	// does to each tree, which is what a machine reader is asking about.
+	Mode string `json:"mode"`
+	// Range says which selector member was elected: "range" for --from,
+	// "entire_history" for --entire-history. From carries the resolved --from
+	// commit and is empty for an entire-history scrub.
+	Range       string `json:"range"`
 	From        string `json:"from"`
 	CommitCount int    `json:"commit_count"`
 	OldHead     string `json:"old_head"`
@@ -53,6 +59,7 @@ var scrubFilePayloadSchema = strictcli.SchemaObject(
 		"dry_run":             strictcli.SchemaType("boolean"),
 		"file":                strictcli.SchemaType("string"),
 		"mode":                strictcli.SchemaEnum("replace", "remove"),
+		"range":               strictcli.SchemaEnum("range", "entire_history"),
 		"from":                strictcli.SchemaType("string"),
 		"commit_count":        strictcli.SchemaType("integer"),
 		"old_head":            strictcli.SchemaType("string"),
@@ -65,14 +72,17 @@ var scrubFilePayloadSchema = strictcli.SchemaObject(
 		"cleanup_ok":          strictcli.SchemaType("boolean"),
 		"cleanup_errors":      strictcli.SchemaArray(strictcli.SchemaType("string")),
 	},
-	[]string{"version", "dry_run", "file", "mode", "from", "commit_count", "old_head"},
+	[]string{"version", "dry_run", "file", "mode", "range", "from", "commit_count", "old_head"},
 	false,
 )
 
 func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	const cmd = "scrub file"
 
-	from := kwargs["from"].(string)
+	// Both selectors are required and elect exactly one member, so "neither was
+	// given" is unrepresentable rather than something this handler refuses.
+	mode, replacementPath := scrubFileMode(kwargs)
+	from, entireHistory := scrubRange(kwargs)
 	reason := kwargs["reason"].(string)
 	filePath := kwargs["file"].(string)
 	remapGlobs := kwargsStrSlice(kwargs["remap_shas_in"])
@@ -116,22 +126,25 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 
 	if targetSub != nil {
-		return runScrubFileInSubmodule(ctx, flags, cmd, filePath, subFilePath, targetSub, from, reason, remapGlobs, gitDir, sgDir)
+		return runScrubFileInSubmodule(ctx, flags, cmd, filePath, subFilePath, targetSub, from, entireHistory, mode, replacementPath, reason, remapGlobs, gitDir, sgDir)
 	}
 
-	// Resolve --from to a full SHA
-	fromSHA, err := git.RevParse(ctx, from)
-	if err != nil {
-		die(exitcode.General, fmt.Sprintf("resolving --from %q: %v", from, err))
-	}
-
-	// Ancestry guard: --from must be an ancestor of (or equal to) HEAD
-	isAnc, err := git.IsAncestorOf(ctx, fromSHA, "HEAD")
-	if err != nil {
-		die(exitcode.General, fmt.Sprintf("checking ancestry of --from: %v", err))
-	}
-	if !isAnc {
-		die(exitcode.General, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", from))
+	// Resolve the elected range: a --from commit that must be an ancestor of
+	// HEAD, or the whole history.
+	var fromSHA string
+	if from != nil {
+		var err error
+		fromSHA, err = git.RevParse(ctx, *from)
+		if err != nil {
+			die(exitcode.General, fmt.Sprintf("resolving --from %q: %v", *from, err))
+		}
+		isAnc, err := git.IsAncestorOf(ctx, fromSHA, "HEAD")
+		if err != nil {
+			die(exitcode.General, fmt.Sprintf("checking ancestry of --from: %v", err))
+		}
+		if !isAnc {
+			die(exitcode.General, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
+		}
 	}
 
 	// Capture old HEAD before any changes
@@ -140,31 +153,28 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		die(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
 	}
 
-	// Determine replacement blob: if file exists on disk, compute its SHA
-	// (read-only, no write to object store) for dry-run output. The blob is
-	// written later only on the execute path.
+	// Read the replacement source, if there is one. It is read HERE, through
+	// the operating system, because the path is the operator's: it resolves
+	// against the directory the command was typed in, while the target argument
+	// is repository-relative. Handing the path to git hash-object would resolve
+	// it against the pinned repository root instead, which is a different file.
+	var replacement []byte
 	var newBlobSHA string
-	var mode string
-	if _, err := os.Stat(filePath); err == nil {
-		newBlobSHA, err = git.HashObject(ctx, filePath)
+	if mode == "replace" {
+		replacement = readReplacementSource(replacementPath)
+		newBlobSHA, err = git.HashObjectBytes(ctx, replacement)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("hashing file %q: %v", filePath, err))
+			die(exitcode.General, fmt.Sprintf("hashing the replacement file %q: %v", replacementPath, err))
 		}
-		mode = "replace"
-	} else {
-		mode = "remove"
 	}
 
-	// Count commits to be rewritten (inclusive of --from)
-	countOut, _, err := git.Run(ctx, "rev-list", "--count", fromSHA+"..HEAD")
-	if err != nil {
-		die(exitcode.General, fmt.Sprintf("counting commits: %v", err))
+	// Count commits to be rewritten (inclusive of --from).
+	commitCount := scrubFileCommitCount(ctx, fromSHA, entireHistory)
+
+	rangeKind := "range"
+	if entireHistory {
+		rangeKind = "entire_history"
 	}
-	exclusiveCount, err := strconv.Atoi(strings.TrimSpace(countOut))
-	if err != nil {
-		die(exitcode.General, fmt.Sprintf("parsing commit count: %v", err))
-	}
-	commitCount := exclusiveCount + 1 // inclusive of fromSHA
 
 	// The one computation both renderings read: the human summary below and the
 	// payload state the same file, mode, range and commit count.
@@ -173,6 +183,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		DryRun:      flags.dryRun,
 		File:        filePath,
 		Mode:        mode,
+		Range:       rangeKind,
 		From:        fromSHA,
 		CommitCount: commitCount,
 		OldHead:     oldHeadSHA,
@@ -182,8 +193,8 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	// Summary
 	infof(flags, "Scrub summary:\n")
 	infof(flags, "  File:    %s\n", result.File)
-	infof(flags, "  Mode:    %s\n", result.Mode)
-	infof(flags, "  From:    %s\n", result.From[:12])
+	infof(flags, "  Mode:    %s\n", scrubFileModeSummary(mode, replacementPath))
+	infof(flags, "  Range:   %s\n", scrubRangeSummary(result.From, entireHistory))
 	infof(flags, "  Commits: %d\n", result.CommitCount)
 	infof(flags, "  Reason:  %s\n", reason)
 
@@ -230,18 +241,14 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 
 	// Write the replacement blob to the object store (execute path only).
 	if mode == "replace" {
-		newBlobSHA, err = git.HashObjectWrite(ctx, filePath)
+		newBlobSHA, err = git.HashObjectWriteBytes(ctx, replacement)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("writing blob for %q: %v", filePath, err))
+			die(exitcode.General, fmt.Sprintf("writing the replacement blob from %q: %v", replacementPath, err))
 		}
 	}
 
 	// Commit walker: topo-order, parents before children (inclusive of fromSHA)
-	out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", fromSHA+"..HEAD")
-	if err != nil {
-		die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
-	}
-	shas := append([]string{fromSHA}, git.SplitNonEmpty(out)...)
+	shas := scrubFileCommitRange(ctx, fromSHA, entireHistory)
 
 	// Track old blob SHAs that get replaced, for post-cleanup verification.
 	oldBlobSHAs := make(map[string]bool)
@@ -309,6 +316,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		OpName:         "scrub-file",
 		OplogExtra: map[string]interface{}{
 			"file":   filePath,
+			"range":  rangeKind,
 			"from":   fromSHA,
 			"reason": reason,
 			"mode":   mode,
@@ -395,7 +403,10 @@ func runScrubFileInSubmodule(
 	fullPath string, // original path as user provided (e.g., "vendor/sub/secret.env")
 	subFilePath string, // path within the submodule (e.g., "secret.env")
 	sub *submodule.SubmoduleInfo,
-	from string,
+	from *string, // the elected --from commit, nil for --entire-history
+	entireHistory bool,
+	mode string, // "replace" or "remove", elected by the caller
+	replacementPath string, // operator-relative source path, empty in remove mode
 	reason string,
 	remapGlobs []string,
 	gitDir string,
@@ -413,64 +424,71 @@ func runScrubFileInSubmodule(
 	// will target the submodule's repo without needing os.Chdir.
 	subCtx := git.WithDir(ctx, sub.GitDir, sub.WorkTreePath)
 
-	// Resolve --from within the submodule. Since the user's --from likely
-	// refers to the parent repo, we use the submodule's entire history.
-	// The parent's --from will be used when rewriting parent gitlinks.
-	subFromSHA, subFromErr := git.RevParse(subCtx, from)
-	useEntireSubHistory := subFromErr != nil
-
-	if !useEntireSubHistory {
-		// Verify it's an ancestor of submodule HEAD.
-		isAnc, err := git.IsAncestorOf(subCtx, subFromSHA, "HEAD")
-		if err != nil || !isAnc {
-			useEntireSubHistory = true
+	// Resolve the elected range INSIDE the submodule. A --from commit is a
+	// commit of whichever history it names, and a parent-repo hash names
+	// nothing here -- so a --from that the submodule cannot resolve, or that is
+	// not an ancestor of its HEAD, is refused.
+	//
+	// It used to silently fall back to rewriting the submodule's ENTIRE
+	// history: a bounded request quietly became an unbounded rewrite, and the
+	// operator was told only how many commits were rewritten, never that the
+	// boundary they asked for had been dropped.
+	var subFromSHA string
+	if !entireHistory {
+		resolved, err := git.RevParse(subCtx, *from)
+		if err != nil {
+			die(exitcode.General, fmt.Sprintf(
+				"--from %q does not name a commit in submodule %s (a parent-repository commit hash means nothing inside a submodule).\n"+
+					"Pass --from with a commit from the submodule's own history, or pass --entire-history to rewrite all of it deliberately.",
+				*from, sub.RelativePath))
 		}
+		isAnc, err := git.IsAncestorOf(subCtx, resolved, "HEAD")
+		if err != nil {
+			die(exitcode.General, fmt.Sprintf("checking ancestry of --from inside submodule %s: %v", sub.RelativePath, err))
+		}
+		if !isAnc {
+			die(exitcode.General, fmt.Sprintf(
+				"--from commit %s is not an ancestor of submodule %s's HEAD.\n"+
+					"Pass --from with a commit from the submodule's own history, or pass --entire-history to rewrite all of it deliberately.",
+				*from, sub.RelativePath))
+		}
+		subFromSHA = resolved
 	}
 
-	// Determine replacement blob within the submodule context.
-	// Use absolute path for os.Stat since CWD is the parent repo.
-	// HashObject (read-only) computes the SHA for dry-run output; the blob
-	// is written later only on the execute path.
+	// Read the replacement source at the OPERATOR's current directory, exactly
+	// as the non-submodule path does. HashObjectBytes computes the SHA for the
+	// preview without writing; the blob is written to the SUBMODULE's object
+	// store later, on the execute path only.
+	var replacement []byte
 	var newBlobSHA string
-	var mode string
-	absSubFilePath := filepath.Join(sub.WorkTreePath, subFilePath)
-	if _, err := os.Stat(absSubFilePath); err == nil {
-		newBlobSHA, err = git.HashObject(subCtx, subFilePath)
+	if mode == "replace" {
+		replacement = readReplacementSource(replacementPath)
+		var err error
+		newBlobSHA, err = git.HashObjectBytes(subCtx, replacement)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("hashing file %q in submodule: %v", subFilePath, err))
+			die(exitcode.General, fmt.Sprintf("hashing the replacement file %q: %v", replacementPath, err))
 		}
-		mode = "replace"
-	} else {
-		mode = "remove"
 	}
 
 	// Get submodule commit range.
-	var subSHAs []string
-	if useEntireSubHistory {
-		out, _, err := git.Run(subCtx, "rev-list", "--topo-order", "--reverse", "HEAD")
-		if err != nil {
-			die(exitcode.General, fmt.Sprintf("submodule: listing commits: %v", err))
-		}
-		subSHAs = git.SplitNonEmpty(out)
-	} else {
-		out, _, err := git.Run(subCtx, "rev-list", "--topo-order", "--reverse", subFromSHA+"..HEAD")
-		if err != nil {
-			die(exitcode.General, fmt.Sprintf("submodule: listing commits: %v", err))
-		}
-		subSHAs = append([]string{subFromSHA}, git.SplitNonEmpty(out)...)
-	}
+	subSHAs := scrubFileCommitRange(subCtx, subFromSHA, entireHistory)
 
 	subCommitCount := len(subSHAs)
 
 	// The one computation both renderings read, exactly as on the non-submodule
 	// path. commit_count is the submodule commit count -- the number the summary
 	// line prints -- and the parent's gitlink commits follow from it.
+	rangeKind := "range"
+	if entireHistory {
+		rangeKind = "entire_history"
+	}
 	result := ScrubFileResult{
 		Version:     1,
 		DryRun:      flags.dryRun,
 		File:        fullPath,
 		Mode:        mode,
-		From:        from,
+		Range:       rangeKind,
+		From:        subFromSHA,
 		CommitCount: subCommitCount,
 		NewBlobSHA:  newBlobSHA,
 	}
@@ -478,7 +496,8 @@ func runScrubFileInSubmodule(
 	// Summary
 	infof(flags, "Scrub summary:\n")
 	infof(flags, "  File:       %s (in submodule %s)\n", subFilePath, sub.RelativePath)
-	infof(flags, "  Mode:       %s\n", result.Mode)
+	infof(flags, "  Mode:       %s\n", scrubFileModeSummary(mode, replacementPath))
+	infof(flags, "  Range:      %s\n", scrubRangeSummary(subFromSHA, entireHistory))
 	infof(flags, "  Sub commits: %d\n", result.CommitCount)
 	infof(flags, "  Reason:     %s\n", reason)
 
@@ -506,9 +525,9 @@ func runScrubFileInSubmodule(
 	// Write the replacement blob to the submodule's object store (execute path only).
 	if mode == "replace" {
 		var writeErr error
-		newBlobSHA, writeErr = git.HashObjectWrite(subCtx, subFilePath)
+		newBlobSHA, writeErr = git.HashObjectWriteBytes(subCtx, replacement)
 		if writeErr != nil {
-			die(exitcode.General, fmt.Sprintf("writing blob for %q in submodule: %v", subFilePath, writeErr))
+			die(exitcode.General, fmt.Sprintf("writing the replacement blob from %q into submodule %s: %v", replacementPath, sub.RelativePath, writeErr))
 		}
 	}
 
@@ -654,7 +673,8 @@ func runScrubFileInSubmodule(
 		OpName:         "scrub-file",
 		OplogExtra: map[string]interface{}{
 			"file":      fullPath,
-			"from":      from,
+			"range":     rangeKind,
+			"from":      subFromSHA,
 			"reason":    reason,
 			"mode":      mode,
 			"submodule": sub.RelativePath,
