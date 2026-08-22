@@ -9,7 +9,9 @@ import (
 )
 
 // TestSkipWorktreePreserved verifies that skip-worktree flags survive a
-// safegit commit (which calls SyncMainIndex -> git read-tree internally).
+// safegit commit, which reconciles the shared index through
+// git.ReconcileMainIndex -- a `git read-tree` that clears every flag, followed
+// by a replay that re-sets the ones git.ListSkipWorktreeFiles collected first.
 func TestSkipWorktreePreserved(t *testing.T) {
 	dir := newRepo(t)
 
