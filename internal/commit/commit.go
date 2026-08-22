@@ -44,6 +44,15 @@ func (e *CommitError) Error() string { return e.Message }
 // Unwrap exposes the underlying cause to errors.Is/errors.As.
 func (e *CommitError) Unwrap() error { return e.Err }
 
+// ErrTreeUnchanged is the cause behind the empty-commit refusal, so a caller
+// can recognize that particular refusal without matching on its text.
+//
+// The refusal's own message names --allow-empty, which is the answer for
+// `safegit commit`. It is not the answer for a caller that has no such flag: a
+// conclusion command wraps this with the ways out that exist for IT rather than
+// pointing at a flag it does not offer.
+var ErrTreeUnchanged = errors.New("the commit's tree is identical to its parent's")
+
 // stagingHunksError annotates a hunk-staging failure with the file it happened
 // on and, for failures that have their own exit code, attaches that code.
 //
@@ -409,7 +418,11 @@ func (p *Pipeline) tryCommit(
 
 	// Check for empty commit (tree unchanged). Root commits are never empty.
 	if !req.AllowEmpty && !isRootCommit && treeSHA == parentTree {
-		return nil, false, fmt.Errorf("nothing to commit (tree unchanged); use --allow-empty to override")
+		return nil, false, &CommitError{
+			Code:    exitcode.General,
+			Message: "nothing to commit (tree unchanged); use --allow-empty to override",
+			Err:     ErrTreeUnchanged,
+		}
 	}
 
 	// Step 3.6: the commit-msg hook, on the user's message before safegit's own

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -403,6 +404,13 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		Sequencer: &coord.SequencerContext{Kind: op.kind},
 	})
 	if err != nil {
+		// The empty-commit refusal names --allow-empty, a flag these commands do
+		// not have. A conclusion that produces nothing is a real situation with
+		// its own ways out, so it gets its own message rather than a pointer at
+		// something the operator cannot pass.
+		if errors.Is(err, commit.ErrTreeUnchanged) {
+			return op.refuseEmptyConclusion()
+		}
 		die(pipelineExitCode(err), err.Error())
 	}
 
@@ -533,6 +541,24 @@ func (op continueOp) refuseDetachedHead(state sequencer.State) int {
 	fmt.Fprintf(os.Stderr, "    safegit %s\n", op.command)
 	fmt.Fprintf(os.Stderr, "  ('git switch -c <name>' does NOT work here: git refuses to switch branches mid-%s.\n", state.Kind)
 	fmt.Fprintf(os.Stderr, "   The two commands above move HEAD without touching the index or the working tree.)\n")
+	return exitcode.General
+}
+
+// refuseEmptyConclusion covers a cherry-pick or revert whose declared
+// resolutions leave the tree exactly as it was.
+//
+// It cannot happen for a merge, whose conclusion allows an empty tree outright:
+// a merge commit records its parents whether or not anything changed. For the
+// other two, an empty result means the operation produced nothing -- every
+// conflicted path was resolved to content the branch already had -- and git
+// refuses the same case for the same reason. safegit offers no --allow-empty
+// here, so the message names the ways out that do exist.
+func (op continueOp) refuseEmptyConclusion() int {
+	verb := strings.TrimSuffix(op.command, "-continue")
+	fmt.Fprintf(os.Stderr, "error: this %s produces no change: the resolutions leave the tree exactly as it is\n", verb)
+	fmt.Fprintf(os.Stderr, "  resolve at least one path to something the branch does not already have, or drop the operation:\n")
+	fmt.Fprintf(os.Stderr, "    git %s --skip     # move past this commit, keeping the rest of the operation\n", verb)
+	fmt.Fprintf(os.Stderr, "    git %s --abort    # throw the whole operation away\n", verb)
 	return exitcode.General
 }
 
