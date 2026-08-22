@@ -54,9 +54,17 @@ import (
 // emitted blocks for them and the structural layer carries the whole check.
 // An add/add conflict is NOT in that group, whatever its name suggests: both
 // sides are present, git marks it up exactly like any other content conflict
-// and records it in AUTO_MERGE. An octopus merge is out of scope for a
-// different reason: git aborts a conflicted octopus rather than parking one, so
-// the only octopus a conclusion ever sees is clean.
+// and records it in AUTO_MERGE. An octopus merge is out of the REGION layer for
+// a different reason, and it is a reason about what git records rather than
+// about what states exist: git writes no AUTO_MERGE for an octopus, the index
+// stages describe only the LAST PAIRWISE STEP the strategy took, and the marker
+// labels it emits are random temporary file names, so no emitted block can be
+// attributed. The structural layer carries the whole check there, exactly as it
+// does for a delete/modify conflict. (A conflicted octopus is a real state a
+// conclusion can meet: only a conflict against the FIRST head aborts the merge
+// unparked, while a conflict against a later head parks normally with every
+// head in MERGE_HEAD and unmerged stages in the index -- see
+// internal/conflict/octopus_test.go, which builds one.)
 //
 // Content named by `--resolve path=ours|theirs` passes by construction rather
 // than by exception: it IS one of the stage blobs the differential measures
