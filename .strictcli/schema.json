@@ -82,7 +82,7 @@
   },
   "project_id": "github.com/smm-h/safegit",
   "name": "safegit",
-  "version": "0.28.1-0.20260822124239-4cadcd4bb2d1",
+  "version": "0.28.1-0.20260822185053-1890cf72899f",
   "help": "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "proc_observe_allowlist": [
     [
@@ -339,6 +339,18 @@
           },
           "presence": "optional",
           "unique": true
+        },
+        {
+          "name": "moved-retract",
+          "help": "retract a move record declared earlier in this branch's history, by its id -- the token a 'Moved:' trailer begins with (repeatable, one id each). The id must name a record that exists and is not already retracted in the history this commit is built on; one that does not is refused rather than written. To write an unchecked retraction, use --trailer 'Moved-Retract: <id>'. Omitted means the commit retracts nothing",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "optional",
+          "unique": true
         }
       ],
       "args": [
@@ -362,6 +374,118 @@
         {
           "name": "parent-bump",
           "reason": "committing in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
+          "kind": "proc_mutate"
+        }
+      ]
+    },
+    "mv": {
+      "name": "mv",
+      "help": "move tracked paths and commit the moves with their records in one operation",
+      "effect": "mutating",
+      "payload_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "moves": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "new": {
+                  "type": "string"
+                },
+                "old": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "old",
+                "new"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "parents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tree": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "parents",
+          "tree",
+          "sha",
+          "moves",
+          "files",
+          "attempts",
+          "dry_run"
+        ],
+        "type": "object"
+      },
+      "flags": [
+        {
+          "name": "m",
+          "help": "commit message paragraph; repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "short": "m",
+          "presence": "required"
+        }
+      ],
+      "args": [
+        {
+          "name": "pairs",
+          "help": "one move each, written 'old -> new'. End BOTH paths with a slash to move a whole directory, which is recorded as ONE subtree record however many files it holds. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. Every pair is checked before the first file is touched -- the source must be tracked and on disk, the destination must be free, and no two pairs may speak for the same path or chain into one another -- and a failure part-way through puts back everything already moved. The commit is the rename and nothing else: each path is carried across as the blob its parent commit held, so uncommitted content changes stay uncommitted",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "required",
+          "variadic": true
+        }
+      ],
+      "tags": [
+        "json"
+      ],
+      "grants": [
+        {
+          "name": "parent-bump",
+          "reason": "moving paths in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
           "kind": "proc_mutate"
         }
       ]
@@ -836,31 +960,31 @@
     },
     "checkout": {
       "name": "checkout",
-      "help": "checkout a branch or ref with working-tree safety guards",
+      "help": "checkout a branch or ref, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work",
       "effect": "mutating",
       "passthrough": true
     },
     "merge": {
       "name": "merge",
-      "help": "merge a branch into HEAD with working-tree safety guards",
+      "help": "merge a branch into HEAD, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work. A merge git stops on a conflict is concluded by safegit, not by git: 'safegit merge --continue' is refused and names 'safegit merge-continue', which commits the merge's whole staged result with safegit's trailers on it",
       "effect": "mutating",
       "passthrough": true
     },
     "rebase": {
       "name": "rebase",
-      "help": "rebase current branch onto upstream with safety guards",
+      "help": "rebase the current branch onto upstream, guarded twice before git runs: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- and then a check for uncommitted work. A rebase's own --continue and --abort stay git's: safegit has no verb that finishes one",
       "effect": "mutating",
       "passthrough": true
     },
     "reset": {
       "name": "reset",
-      "help": "reset HEAD with guards that prevent accidental --hard data loss",
+      "help": "reset HEAD with guards that prevent accidental --hard data loss. The worktree operation lock is taken for EVERY reset, because every reset moves HEAD; the uncommitted-work check applies to --hard alone, since only --hard mutates the working tree",
       "effect": "mutating",
       "passthrough": true
     },
     "bisect": {
       "name": "bisect",
-      "help": "binary search through commits to find a bug, with safety guards",
+      "help": "binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the tree-moving subcommands (good, bad, old, new, reset, start)",
       "effect": "mutating",
       "passthrough": true
     },
@@ -1018,7 +1142,7 @@
     },
     "pull": {
       "name": "pull",
-      "help": "fetch from remote and merge, defaulting to fast-forward-only mode",
+      "help": "fetch from a remote and merge, with the merge strategy stated explicitly: --merge-strategy is required and has no default, so a pull never depends on git's own configuration to decide whether it may create a merge commit",
       "effect": "mutating",
       "flags": [
         {
@@ -1096,7 +1220,7 @@
             },
             {
               "value": "uninstall",
-              "help": "remove all safegit hooks and metadata from this repository entirely"
+              "help": "remove safegit's state from this REPOSITORY -- every worktree's state directory plus the shared locks and hook store, not only the worktree you are standing in -- after listing every path it is about to remove"
             }
           ]
         }
@@ -1104,13 +1228,13 @@
     },
     "cherry-pick": {
       "name": "cherry-pick",
-      "help": "cherry-pick one or more commits onto HEAD with safety guards",
+      "help": "cherry-pick one or more commits onto HEAD, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work. A pick git stops on a conflict is concluded by safegit, not by git: 'safegit cherry-pick --continue' is refused and names 'safegit cherry-pick-continue', which declares each conflicted path with --resolve and then commits -- natively for a single pick, and by delegating the rest of the queue to git for a sequence of them",
       "effect": "mutating",
       "passthrough": true
     },
     "revert": {
       "name": "revert",
-      "help": "revert one or more commits creating inverse patches, with safety guards",
+      "help": "revert one or more commits creating inverse patches, with safety guards. Reverting a SINGLE commit produces a safegit commit: git computes the inverse patch and safegit writes the commit, so it carries safegit's trailers and, when the reverted commit declared moves, the INVERSE of each of those move records. Reverting MORE THAN ONE commit is git's own sequencer and git authors those commits, so they carry no trailers and no records at all -- the asymmetry is deliberate, and it is the same one that governs whether 'safegit undo' can reverse the result",
       "effect": "mutating",
       "passthrough": true
     },
@@ -1147,7 +1271,7 @@
     },
     "unlock": {
       "name": "unlock",
-      "help": "release a stale .lock file left behind by a crashed git process",
+      "help": "release one of SAFEGIT'S OWN lock files -- a per-ref lock, this worktree's operation lock, or the repository-wide rewrite lock -- left behind by a safegit process that was killed while holding it. It has nothing to do with git's .git/index.lock or any other lock git takes for itself. A lock whose holder is still alive is refused; ordinarily nothing needs this command, because a stale lock is reclaimed automatically by the next contender and 'safegit doctor --action fix' sweeps them, so it is the last-resort path for a filesystem where that reclamation cannot work",
       "effect": "mutating",
       "args": [
         {
@@ -1978,11 +2102,11 @@
     },
     "scrub": {
       "name": "scrub",
-      "help": "surgically rewrite git history to remove or replace sensitive content using 4 subcommands (file, match, run, verify) that operate on all commits, trees, and blobs in the repository",
+      "help": "surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store",
       "commands": {
         "file": {
           "name": "file",
-          "help": "replace or remove a specific file across all commits in the repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized version or delete the file entirely from every historical snapshot",
+          "help": "replace or remove a specific file across every commit in a SELECTED RANGE of history -- --from <commit> or --entire-history, one of which is required -- rewriting each affected commit tree to either substitute the file's contents with those of a sanitized file or delete it entirely from every snapshot in that range. A --delete also removes the move records naming that path, whole, since the path they refer to is being erased; a --replace-with edits no message, because the path still exists and a record naming it is still true",
           "effect": "mutating",
           "consequential": true,
           "payload_schema": {
@@ -2011,6 +2135,9 @@
               },
               "from": {
                 "type": "string"
+              },
+              "messages_modified": {
+                "type": "integer"
               },
               "mode": {
                 "enum": [
@@ -2181,7 +2308,7 @@
         },
         "match": {
           "name": "match",
-          "help": "replace all occurrences of a regex pattern across every blob in the repository history, rewriting commit trees to substitute matched text with a replacement string so that sensitive values like secrets and credentials are permanently removed from all historical snapshots",
+          "help": "replace every occurrence of a regex pattern in the blobs, commit messages and tag annotations of a SELECTED RANGE of history -- --from <sha> or --entire-history, one of which is required -- rewriting commit trees so that sensitive values like secrets and credentials are removed from every snapshot in that range. A move record is rewritten as a record rather than as text: the substitution applies to the decoded paths and the pair is re-encoded, so the output always parses, a pattern written against the escaped spelling matches nothing, and a substitution whose result would no longer be a move is refused before any ref moves",
           "effect": "mutating",
           "consequential": true,
           "payload_schema": {
