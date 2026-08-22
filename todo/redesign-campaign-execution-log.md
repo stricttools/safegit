@@ -438,6 +438,22 @@ instead of reclaiming, and doctor is the recovery path).
 
 ## Open rulings (need the user's decision; as-built stands meanwhile)
 
+- **Per-path vs set-level no-match errors (2.2).** The plan contradicts
+  itself: 2.2 says a named path contributing nothing is a hard error
+  naming the path (per-path), while 0.3's verify list requires tests
+  asserting that an unchanged file named ALONGSIDE a changed one commits
+  fine. As built: per-path (2.2's text), exit 11 PathMatchedNothing;
+  four formerly-green tests rewritten to assert the refusal while
+  preserving 0.3's cwd-resolution property. Consequence: `safegit
+  commit -- a.go b.go` fails when one listed file is unchanged — a
+  common agent workflow. Alternative: set-level ("at least one named
+  path must contribute"), which satisfies every 2.2 Verify item, keeps
+  0.3's tests green, and only refuses when the WHOLE named set
+  contributes nothing. Orchestrator lean: keep per-path (hard-errors
+  philosophy; catches an agent believing an edit happened when it did
+  not). Reversal is one call site (the third refusal arm) plus four
+  test assertions.
+
 - **macOS in per-push CI.** `todo/.done/ci-macos-cost-reduction.md` records a
   completed, deliberate decision to remove `macos-latest` from per-push CI
   (it was ~92% of this repo's CI cost). The plan's 0.7 text reinstates the
