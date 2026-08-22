@@ -370,6 +370,105 @@ existing entries are never rewritten.
   before any push in the observation-failure arms) with the table
   regenerated.
 
+## SESSION HANDOFF (2026-08-22, end of the first execution session)
+
+The campaign paused here by the user's instruction; a later session
+continues. Position and remaining work, for a reader with zero
+conversation context:
+
+**Done and audited:** Phases 0, 1, 2, 3, 4, 5, 6, 8 — each with a
+closing audit and a remediation pass, all findings resolved. Phase 7
+subphases 7.1 and 7.2 are DONE (ratified below) but NOT yet audited.
+The small-items queue is drained except where noted below.
+
+**Suite state at handoff:** fully green — roughly 1495 PASS / 0 FAIL /
+8 SKIP (regenerate with scripts/test-baseline for the exact figure);
+working tree clean; HEAD 7af45f6. The frozen testdata/campaign-baseline.txt
+remains the ORIGINAL deliberately-red artifact from campaign start —
+Phase 10.1 regenerates and reconciles against it; per-phase .local-only
+snapshots are the working references.
+
+**Remaining work, in order:**
+1. Subphases 7.3 (safegit mv), 7.4 (inverse records on revert), 7.5
+   (record-aware scrub) — one implementor; the 7.1 projection and
+   encoder are their foundation; 7.5 may want a real --moved-retract
+   flag (ratified note below).
+2. Phase 7 closing audit (dynamic; covers 7.1/7.2 too) + remediation.
+3. Phase 9 documentation healing: Appendix A PLUS every "Phase 9"
+   entry scattered through this log (search "Phase 9" here — there are
+   many additions beyond the appendix, including rows the appendix
+   never had and rows recorded as pre-healed that need verify-only).
+   Finish with --dump-schema (NOTE: it WRITES .strictcli/schema.json
+   as a side effect) + bare selfdoc gen.
+4. Phase 10: 10.1 full green incl. the stress run AND a GOWORK=off
+   full run; baseline reconciliation; 10.2 fresh AUDIT protocol
+   auditors — per phase, one auditor per phase, each briefed with its
+   phase text, its Appendix A rows, AND THIS LOG (ratified deviations
+   are not audit failures); 10.3 changelog coverage for the ~200+
+   unreleased commits (rlsbl changelog add per commit group).
+5. Phase 11: todo triage (the nine original todos move to .done after
+   verification; the strictcli-await todos stay; the deferred Windows
+   todo stays), release file, single release per the RLSBL protocol.
+
+**OPEN USER RULINGS (both must be resolved before Phase 11; as-built
+stands meanwhile):** the macOS-in-per-push-CI reversal, and the
+per-path vs set-level no-match rule — see "Open rulings" below.
+
+**Queued items for the next fixer window:** scrub match's nil-result
+path (parent has nothing to rewrite but submodules did) still emits no
+payload — same family as the fixed scrub file case; the confirmDeliberate
+prompt goes to stdout unsuppressed by --quiet (pre-existing, shared
+with doctor/backup, noted by the Phase 8 audit).
+
+**Operational facts a future session needs:** subagents commit via the
+INSTALLED safegit (single -m, plain paths, repo root); the
+git-execution boundary guard scans GITIGNORED files (scratch repos
+inside the repo trip it — use t.TempDir outside); --dump-schema writes
+the tracked file; the schema's version field goes stale by one commit
+immediately (release regenerates it); internal/test's TestMain compiles
+the LIVE tree (mid-wave test results are advisory); known load flake
+TestRootCommitConcurrentSafegitBothLand, and one unreproduced transient
+in TestStagesReportsADeleteModifyConflictAsOneSided.
+
+## Ratified 7.1/7.2 decisions (not yet audited)
+
+- Exit 19 MoveNotBorneOut (new; NOT a reuse of 11 — a declaration
+  stages nothing, its failure is a claim the world contradicts;
+  declaration-vs-declaration nesting exits Usage). Records are
+  caller content: they ride with user trailers BEFORE the commit-msg
+  hook; the session trailer follows — with one honest exception, a
+  kept-message amend appends after the existing block's session
+  trailer (blocks are unordered; readers parse by key).
+- The C-quoting encoder is local to internal/trailer (git's index-info
+  quoting is unconditional with no decoder; only the escape SPELLING is
+  shared). Decoder lenient for bare tokens (people type non-ASCII
+  names); two unquoted separators refuse rather than guess.
+- ULID: 48-bit UnixMilli + 80-bit crypto/rand, Crockford base32,
+  degraded entropy is an ERROR (a colliding id would let a retraction
+  hit the wrong record); id is a leading token in the value.
+- Projection: applies only if the old path is in SOME parent tree AND
+  the answer is in the commit's own tree (merges need no special
+  case); longest match wins, ties by sorted answer; file-form records
+  never speak for descendants; malformed lines surfaced, not dropped.
+  A fixture vacuity (tree filter masking the ordering rule) was found
+  by mutation probing and fixed.
+- Third amend arm ratified: --amend --moved with no files and no -m
+  rebuilds the tip's tree adding only the record. --moved judged
+  against the FIRST PARENT of the replaced tip. "new present or
+  staged" reads as on-disk-or-in-base-tree (the pipeline stages from
+  disk, not the index). No --moved-retract flag yet (expressible via
+  --trailer; 7.5 may want the real flag). Forward projection only (a
+  query index is a campaign non-goal).
+- Small-items closure: submodule scrub no-gitlink payload emitted
+  (new_head stays ABSENT — echoing old_head would claim a rewrite);
+  stopped-again delegation bumps the parent whenever the branch moved;
+  the uninstall probe is the DISJUNCTION of both stores (never refuses
+  where the old code proceeded); signal exits are 128+signum with the
+  registry carve-out documented (the guard cannot see computed exits —
+  stated there). Observation left open: uninstall from a linked
+  worktree removes locks+hooks but leaves config/oplog while printing
+  "uninstalled" — the removal set is a separate decision.
+
 ## Phase 6 remediation closure and small-item rulings
 
 - All seven audit items done red-first; suite 1438 PASS / 0 FAIL / 8
