@@ -482,3 +482,79 @@ func TestScrubFileInSubmoduleRemapShas(t *testing.T) {
 			firstSubCommit[:12], subFinal)
 	}
 }
+
+// The scrub TARGET can itself be covered by a --remap-shas-in glob. No other
+// test in this file puts it there: every one of them names a changelog the
+// scrub does not touch, so `remapped` at scrub_verify.go has been false in
+// every run the suite has ever made.
+//
+// Two things are pinned here. The glob covers the target, and the rewrite still
+// completes: Tier A's exact-content half is skipped for a covered target,
+// because the replacement blob goes in first and the remap is free to edit that
+// same file afterwards. And the other half is NOT skipped -- the secret is still
+// held to being gone from every rewritten commit -- which is what makes the skip
+// safe rather than a hole.
+//
+// What a run of this shape CANNOT produce, checked while writing this test: a
+// covered target whose finished blob differs from the replacement. Every
+// replaced commit receives the SAME replacement blob, so for the remap to edit
+// it that blob would have to name an in-range commit -- and at the FIRST
+// replaced commit no in-range commit has been rewritten yet, which the remap
+// refuses outright ("has not been rewritten yet at this point of the walk")
+// rather than resolving. The skip therefore covers the shape rather than a state
+// `--replace-with` can reach today; the shape is real for anything that edits a
+// covered target after the replacement.
+func TestScrubFileTargetCoveredByRemapGlobPassesTierA(t *testing.T) {
+	dir := newRepo(t)
+
+	// The target holds the secret; a separate changelog holds the SHA references
+	// the remap rewrites. Both are named to --remap-shas-in, so the target is
+	// covered and the remap also has real work to do.
+	c1 := commitFileEnv(t, dir, scrubEnv, "notes.txt", "hunter2 v1\n", "add secret v1")
+	appendChangelogLine(t, dir, "changelog.jsonl", c1)
+	c3 := commitFileEnv(t, dir, scrubEnv, "notes.txt", "hunter2 v2\n", "update secret v2")
+	appendChangelogLine(t, dir, "changelog.jsonl", c3)
+
+	initialSHA := revListReverse(t, dir)[0]
+	commitFileEnv(t, dir, scrubEnv, "notes.txt", "REDACTED\n", "commit replacement")
+	replacementBlob := testutil.Git(t, dir, "rev-parse", "HEAD:notes.txt")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv,
+		"--approve-consequential", "--json", "scrub", "file", "--replace-with", "notes.txt",
+		"--from", initialSHA, "--reason", "target covered by the remap glob",
+		"--remap-shas-in", "notes.txt",
+		"--remap-shas-in", "changelog.jsonl",
+		"notes.txt")
+	if code != 0 {
+		t.Fatalf("scrub of a target its own remap glob covers failed (code %d): %s", code, stderr)
+	}
+
+	var result scrubFileJSON
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
+		t.Fatalf("parsing JSON: %v\n%s", err, stdout)
+	}
+	for _, old := range []string{c1, c3} {
+		if _, ok := result.Rewrites[old]; !ok {
+			t.Fatalf("%s is not in the rewrites map: %v", old, result.Rewrites)
+		}
+	}
+
+	// The remap did its work on the file that carries references.
+	assertChangelogSelfConsistent(t, dir, "changelog.jsonl", result.Rewrites)
+
+	// The covered target holds the replacement blob wherever it is present, and
+	// the secret is gone from every rewritten commit -- the half of Tier A that
+	// the skip does not touch.
+	for _, sha := range revListReverse(t, dir) {
+		content, ok := testutil.Show(t, dir, sha, "notes.txt")
+		if !ok {
+			continue
+		}
+		if strings.Contains(content, "hunter2") {
+			t.Errorf("commit %s: notes.txt still holds the secret: %q", sha[:12], content)
+		}
+		if got := testutil.Git(t, dir, "rev-parse", sha+":notes.txt"); got != replacementBlob {
+			t.Errorf("commit %s: notes.txt is blob %s, want the replacement %s", sha[:12], got, replacementBlob)
+		}
+	}
+}
