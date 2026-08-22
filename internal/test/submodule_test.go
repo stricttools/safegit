@@ -2,6 +2,7 @@ package test
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,24 @@ import (
 
 	"github.com/smm-h/safegit/internal/testutil"
 )
+
+// submoduleGitDir resolves a submodule working directory to its real git
+// directory (under the parent's .git/modules/), which is where its safegit
+// directory -- oplog, locks, config -- lives.
+func submoduleGitDir(t *testing.T, subDir string) string {
+	t.Helper()
+	cmd := exec.Command("git", "rev-parse", "--git-dir")
+	cmd.Dir = subDir
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git rev-parse --git-dir in %s: %v", subDir, err)
+	}
+	gitDir := strings.TrimSpace(string(out))
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(subDir, gitDir)
+	}
+	return gitDir
+}
 
 // newRepoWithSubmodule creates a parent repo with one submodule at "mysub".
 // It returns the parent repo dir and the submodule origin dir.
@@ -1981,6 +2000,83 @@ func TestAutoBumpUndo(t *testing.T) {
 	gitlinkAfterUndo := lsTreeSHA(t, lsTreeEntry(t, parentDir, "mysub"))
 	if gitlinkAfterUndo != gitlinkInitial {
 		t.Errorf("parent gitlink after undo = %s, want original = %s", gitlinkAfterUndo, gitlinkInitial)
+	}
+}
+
+// heldLockFiles returns every lock file under a safegit directory, so a test
+// can assert that a failed command left none behind.
+func heldLockFiles(t *testing.T, safegitDir string) []string {
+	t.Helper()
+	var found []string
+	locks := filepath.Join(safegitDir, "locks")
+	err := filepath.WalkDir(locks, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(d.Name(), ".lock") {
+			return nil
+		}
+		found = append(found, path)
+		return nil
+	})
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("walking %s: %v", locks, err)
+	}
+	return found
+}
+
+// A failed parent bump is the one undo path that runs with BOTH locks held --
+// the worktree operation lock taken at the top of undo and the ref lock taken
+// for the rollback -- and it is reached after the rollback itself has already
+// succeeded, so the exit is unavoidable rather than a refusal that could be
+// moved earlier.
+//
+// os.Exit runs no deferred function and only die() calls lock.ReleasePending,
+// so exiting that path any other way stranded both lock files: the next
+// contender in the submodule waits out lock.acquireTimeoutSeconds before the
+// staleness rules let it reclaim them, and doctor reports them in the meantime.
+//
+// The failure is made deterministic by removing the parent's auto-bump setting
+// between the commit (which bumps) and the undo (which tries to bump back):
+// maybeAutoBumpParent then refuses with "commit.autoBumpParent not configured".
+func TestAutoBumpUndoFailureLeavesNoLockFiles(t *testing.T) {
+	parentDir, _ := newRepoWithSubmodule(t)
+	subDir := prepSubmoduleForCommit(t, parentDir)
+	enableAutoBump(t, parentDir)
+	env := []string{"CLAUDE_CODE_SESSION_ID=autobump-undo-lock-test"}
+
+	if err := os.WriteFile(filepath.Join(subDir, "file.txt"), []byte("will undo\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, stderr, code := runSafegitEnv(t, subDir, env, "commit", "-m", "commit to undo", "--", "file.txt"); code != 0 {
+		t.Fatalf("safegit commit failed (code %d): %s", code, stderr)
+	}
+
+	// Take the setting away, which is what makes the undo's bump fail.
+	parentConfig := filepath.Join(parentDir, ".git", "safegit", "config.json")
+	if err := os.WriteFile(parentConfig, []byte("{}\n"), 0644); err != nil {
+		t.Fatalf("rewriting the parent config: %v", err)
+	}
+
+	_, stderr, code := runSafegitEnv(t, subDir, env, "undo")
+	if code == 0 {
+		t.Fatalf("the undo's parent bump was supposed to fail; stderr: %s", stderr)
+	}
+	if !strings.Contains(stderr, "auto-bump parent") {
+		t.Fatalf("the fixture failed for the wrong reason (code %d): %s", code, oneLine(stderr))
+	}
+
+	subGitDir := submoduleGitDir(t, subDir)
+	for _, dir := range []string{
+		filepath.Join(subGitDir, "safegit"),
+		filepath.Join(parentDir, ".git", "safegit"),
+	} {
+		if held := heldLockFiles(t, dir); len(held) > 0 {
+			t.Errorf("the failed undo left lock files behind under %s: %v", dir, held)
+		}
 	}
 }
 
