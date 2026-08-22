@@ -264,14 +264,26 @@ func EnsureInitialized(ctx context.Context, gitDir string) error {
 // of somebody else's file.
 func Uninstall(ctx context.Context, gitDir string) error {
 	sgDir := SafegitDir(gitDir)
-	if _, err := os.Stat(sgDir); os.IsNotExist(err) {
+	shared := SharedGitDir(ctx, gitDir)
+	sharedDir := filepath.Join(shared, "safegit")
+
+	// Uninstalling is a REPOSITORY operation, not a per-checkout one: what it
+	// removes includes the shared store under the common git dir, which is
+	// where the hooks every push runs live. So "is there anything to remove" is
+	// asked of both directories. Asking it of this worktree's own directory
+	// alone refused from a linked worktree that had simply never been used --
+	// while the repository's shared state sat right there, with no way to remove
+	// it from where the operator was standing. For a normal repository the two
+	// directories are the same one and the question is unchanged.
+	_, ownErr := os.Stat(sgDir)
+	_, sharedErr := os.Stat(sharedDir)
+	if os.IsNotExist(ownErr) && os.IsNotExist(sharedErr) {
 		return errors.New("safegit is not initialized (nothing to remove)")
 	}
 	if err := os.RemoveAll(sgDir); err != nil {
 		return err
 	}
-	shared := SharedGitDir(ctx, gitDir)
-	if sharedDir := filepath.Join(shared, "safegit"); sharedDir != sgDir {
+	if sharedDir != sgDir {
 		for _, name := range []string{"locks", "hooks"} {
 			os.RemoveAll(filepath.Join(sharedDir, name))
 		}

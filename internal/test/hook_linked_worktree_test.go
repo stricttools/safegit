@@ -151,6 +151,52 @@ func TestUninstallFromLinkedWorktreeTakesTheSharedLiveStore(t *testing.T) {
 	}
 }
 
+// TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore: a linked
+// worktree need never have been initialized -- its own state directory is
+// created by the first safegit command run there -- while the repository's
+// shared store, the hooks every push runs, sits under the common git dir.
+//
+// Uninstall is a REPOSITORY operation, so "is there anything to remove" is a
+// question about that shared store. Asking it of the per-worktree directory
+// refused with "nothing to remove" from a worktree that had simply never been
+// used, leaving the repository's hooks running with no way to remove them from
+// where the operator was standing.
+func TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore(t *testing.T) {
+	dir := newRepo(t)
+
+	src := filepath.Join(dir, "hooksrc", "pre-pre-push")
+	writeHookScript(t, src, "true")
+	if _, stderr, code := runSafegitEnv(t, dir, hookSafetyEnv, "hook", "install", src); code != 0 {
+		t.Fatalf("hook install failed (%d): %s", code, stderr)
+	}
+	installed := filepath.Join(dir, ".git", "safegit", "hooks", "pre-pre-push")
+	if _, err := os.Stat(installed); err != nil {
+		t.Fatalf("precondition: the hook is not in the repository's live store: %v", err)
+	}
+
+	wt := addLinkedWorktree(t, dir, "side")
+	// The precondition that makes this test what it is: nothing has ever run
+	// safegit in this worktree, so it has no state directory of its own.
+	perWorktree := filepath.Join(dir, ".git", "worktrees", "side", "safegit")
+	if _, err := os.Stat(perWorktree); !os.IsNotExist(err) {
+		t.Fatalf("precondition: the linked worktree already has its own state directory %s (err=%v)", perWorktree, err)
+	}
+
+	stdout, stderr, code := runSafegitEnv(t, wt, hookSafetyEnv,
+		"doctor", "--action", "uninstall", "--approve-consequential")
+	if code != 0 {
+		t.Fatalf("uninstall from the uninitialized linked worktree failed (%d)\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+
+	if _, err := os.Stat(installed); !os.IsNotExist(err) {
+		t.Errorf("uninstall left the live hook %s in place; it still runs on every push (err=%v)", installed, err)
+	}
+	sharedHooks := filepath.Join(dir, ".git", "safegit", "hooks")
+	if _, err := os.Stat(sharedHooks); !os.IsNotExist(err) {
+		t.Errorf("uninstall left the repository's shared hook store %s behind (err=%v)", sharedHooks, err)
+	}
+}
+
 // TestDoctorFromLinkedWorktreeReportsUnmigratedHooks: the refusal is
 // repository-wide, so doctor must report it from any worktree. Reporting
 // hooks_migrated OK in a linked worktree while every push in the repository
