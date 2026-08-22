@@ -108,8 +108,11 @@ var pushPayloadSchema = strictcli.SchemaObject(
 	false,
 )
 
-// hookSkipDryRun is the notice a preview owes the operator, in the one spelling
-// the help text, the human preview output and the payload all use.
+// hookSkipDryRun is the value the payload's pre_pre_push_hooks_skipped member
+// carries when a preview did not run the hooks. It is the payload's spelling
+// only: the --help text and the preview's own stderr notice say the same thing
+// in prose, for readers who are not parsing anything, and there is nothing for
+// them to share a constant with.
 const hookSkipDryRun = "dry-run"
 
 // buildPushPayload renders what actually happened into the machine payload.
@@ -232,6 +235,12 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	// and the payload's pre_pre_push_hooks_skipped member (for a machine
 	// consumer, which sees neither of the other two). A preview that silently
 	// omitted the hooks would read exactly like a preview whose hooks passed.
+	//
+	// The switch arms are ordered deliberately: "disabled" beats "dry-run" when
+	// both hold. A preview of a run that turned the hooks OFF must report the
+	// operator's decision, not the preview's own limitation -- the caller wants
+	// to know what the real push will do, and the real push will not run them
+	// either.
 	var hooksSkipped *string
 	switch {
 	case noPrePrePush:

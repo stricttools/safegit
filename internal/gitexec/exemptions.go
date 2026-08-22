@@ -107,7 +107,7 @@ var dirPinExemptions = []DirPinExemption{
 	{
 		ID:     ExemptGitPush,
 		Kind:   KindEffectsHandle,
-		Reason: "the push argv names a remote and refspecs only, and the effects handle starts the process so --dry-run can record it instead",
+		Reason: "the push argv names a remote, refspecs, --atomic and per-ref --force-with-lease expectations -- every one of them a ref name or an object name, none of them resolved against a directory -- and the effects handle starts the process so --dry-run can record it instead",
 	},
 	{
 		ID:     ExemptCommitRefUpdate,

@@ -14,14 +14,27 @@ import (
 // prompt that destroys history or uninstalls the tool. Only an explicit --approve-consequential
 // does. These tests pin both halves at every destructive confirmation site.
 //
-// Since the strictcli effects regime landed, the FIRST gate is the framework's
-// own confirm protocol -- but it fires only for commands that declare
-// themselves `consequential` (the three scrub rewrites and `author rewrite`).
-// safegit's own confirmDeliberate seam sits behind it, and it is the ONLY gate
-// for `doctor --uninstall` and the public-remote backup, which are guarded at
-// flag/remote granularity rather than command granularity. The property under
-// test is unchanged either way -- --json is not --approve-consequential -- so
-// these tests assert the refusal and, above all, that nothing was destroyed.
+// The FIRST check is the framework's own confirm protocol -- but it fires only
+// for commands that declare themselves `consequential` (the three scrub
+// rewrites and `author rewrite`). safegit's own confirmDeliberate seam sits
+// behind it, and it is the ONLY check at three sites, each guarded at a
+// granularity a command-level declaration cannot express:
+//
+//   - `doctor --action uninstall` -- one flag of an otherwise repairing command;
+//   - `push --force-with-lease` -- one flag of an otherwise routine publish, so
+//     the command is consequential CONDITIONALLY, which strictcli cannot yet
+//     declare;
+//   - `backup backup` to a public or unclassifiable remote -- a property of the
+//     TARGET, discovered by probing it at run time.
+//
+// The first two are answered by --approve-consequential, because in both the
+// condition is a flag the caller typed. The third is answered ONLY by
+// --allow-public-remote, because the caller may not know the answer when
+// composing the command line.
+//
+// The property under test is the same at every one of them -- --json is not
+// consent -- so these tests assert the refusal and, above all, that nothing was
+// destroyed.
 
 var confirmEnv = []string{"CLAUDE_CODE_SESSION_ID=confirm-test"}
 
@@ -242,16 +255,17 @@ func TestScrubFileInSubmoduleJSONDoesNotConfirm(t *testing.T) {
 }
 
 // TestDeclinedDeliberateConfirmationExitsNonzero pins the exit code of a
-// refusal at safegit's OWN confirmDeliberate seam -- the sites the framework's
-// confirm protocol does not cover, because the command they guard is not
-// consequential at command granularity (`doctor --uninstall` guards one flag;
-// `backup backup` guards one remote classification).
+// refusal at safegit's OWN confirmDeliberate seam -- the three sites the
+// framework's confirm protocol does not cover, because the command they guard
+// is not consequential at command granularity (`doctor --action uninstall`
+// guards one flag; `push --force-with-lease` guards one flag; `backup backup`
+// guards one remote classification).
 //
 // A declined confirmation is a refusal, not a success. While the framework
 // prompted for every `mutating` command its exit-1 refusal masked this: the
-// handler was never reached. Now the seam is the only gate at these two sites,
-// so a zero exit here would tell a script or agent that the uninstall (or the
-// backup) succeeded when nothing happened.
+// handler was never reached. Now the seam is the only check at these sites, so
+// a zero exit here would tell a script or agent that the uninstall (or the
+// force-push, or the backup) succeeded when nothing happened.
 func TestDeclinedDeliberateConfirmationExitsNonzero(t *testing.T) {
 	t.Run("doctor uninstall", func(t *testing.T) {
 		dir := newRepo(t)
