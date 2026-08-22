@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smm-h/safegit/internal/coord"
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/index"
@@ -84,6 +85,14 @@ type CommitRequest struct {
 	Trailers   []string   // user-provided trailers ("Key: Value" format)
 	AllowEmpty bool
 	DryRun     bool
+
+	// Sequencer declares that this caller is the conclusion path for an
+	// operation git has in flight. Nil -- which is every ordinary caller --
+	// means the commit is refused whenever git is mid-merge, mid-cherry-pick,
+	// mid-revert, mid-rebase or mid-am. Only a command that FINISHES one of
+	// those operations sets it, and it is checked against the state actually
+	// on disk rather than taken on trust.
+	Sequencer *coord.SequencerContext
 }
 
 // CommitResult is the JSON-serializable output of a successful commit.
@@ -103,6 +112,12 @@ type CommitResult struct {
 // Execute runs the full two-phase commit pipeline.
 // On CAS miss it retries from Phase A up to Config.Commit.CASMaxAttempts times.
 func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResult, error) {
+	// Before anything else, including a dry run: a preview of a commit safegit
+	// would refuse must be the refusal, not a rehearsal of the wrong commit.
+	if err := guardSequencer(ctx, req.Sequencer, "commit"); err != nil {
+		return nil, err
+	}
+
 	repoRoot, err := git.RepoRoot(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolving repo root: %w", err)
