@@ -87,6 +87,14 @@ const (
 	// reword forms) and undo, which refuse outright while git has a merge,
 	// cherry-pick, revert, rebase or mailbox application in flight -- naming
 	// the operation and the command that ends it.
+	//
+	// The three conclusion commands -- merge-continue, cherry-pick-continue and
+	// revert-continue -- produce it from the other direction, for the two ways a
+	// conclusion can be asked for against the wrong state: run against an
+	// operation it does not conclude (merge-continue during a cherry-pick), and
+	// run when nothing is in flight at all. It is the same verdict as the
+	// declaration check inside the commit pipeline gives for the same two
+	// mismatches, so it is the same code.
 	CoordinationBusy = 5
 
 	// CASExhausted means the ref moved under every compare-and-swap attempt,
@@ -155,6 +163,17 @@ const (
 	// --amend and reword forms. The post-commit hook cannot produce it: it runs
 	// after the ref has moved and its exit status is ignored.
 	CommitHookRejected = 16
+
+	// ConclusionUnresolved means a conclusion command's declared resolutions do
+	// not match the conflict actually in the index: a conflicted path no
+	// --resolve or --resolve-file entry names, or an entry naming a path that is
+	// not conflicted. Both halves are one situation -- the set of paths the
+	// caller resolved is not the set of paths git left unmerged -- and the
+	// refusal lists the paths on whichever side is wrong. Nothing is committed;
+	// the operation is still in flight and the same command re-run with the
+	// missing (or without the surplus) entries concludes it. Produced by
+	// merge-continue, cherry-pick-continue and revert-continue.
+	ConclusionUnresolved = 17
 
 	// PushHookFailed means a pre-pre-push hook exited nonzero, so no network
 	// I/O was attempted. Produced by push and by `hook run`.
@@ -300,6 +319,7 @@ func All() []Entry {
 		{BinaryHunkSpec, "BinaryHunkSpec", "Hunk spec given for a binary file"},
 		{SymlinkHunkSpec, "SymlinkHunkSpec", "Hunk spec given for a symlink, which has no hunks to select"},
 		{CommitHookRejected, "CommitHookRejected", "A pre-commit or commit-msg hook refused the commit"},
+		{ConclusionUnresolved, "ConclusionUnresolved", "A conclusion's declared resolutions do not match the conflicted paths in the index"},
 		{PushHookFailed, "PushHookFailed", "Pre-pre-push hook failed"},
 		{PushHookTimeout, "PushHookTimeout", "Pre-pre-push hook timed out"},
 		{BackupDiverged, "BackupDiverged", "The remote backup slot holds work missing from the local history"},
