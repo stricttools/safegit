@@ -82,8 +82,8 @@
   },
   "project_id": "github.com/smm-h/safegit",
   "name": "safegit",
-  "version": "0.28.0",
-  "help": "concurrency-safe git wrapper providing 31 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
+  "version": "0.28.1-0.20260822111328-9fa06de07e8f",
+  "help": "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "proc_observe_allowlist": [
     [
       "git",
@@ -94,6 +94,11 @@
       "git",
       "--no-optional-locks",
       "cat-file"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
+      "check-attr"
     ],
     [
       "git",
@@ -154,6 +159,11 @@
       "git",
       "--no-optional-locks",
       "status"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
+      "stripspace"
     ]
   ],
   "global_flags": [
@@ -335,6 +345,466 @@
         {
           "name": "parent-bump",
           "reason": "committing in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
+          "kind": "proc_mutate"
+        }
+      ]
+    },
+    "merge-continue": {
+      "name": "merge-continue",
+      "help": "conclude a merge git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file), and safegit writes the merge commit itself: HEAD plus EVERY MERGE_HEAD line as parents, an octopus merge included; the merge's whole staged result as its tree, so a path the merge staged cleanly is never dropped; git's own message draft with its comment block stripped, or -m; the repository's commit-msg hook run and safegit's trailers injected; and the merge's whole state-file set removed afterwards, so a later commit is not refused. An empty merge needs no flag -- a merge commit records its parents whether or not the tree changed",
+      "effect": "mutating",
+      "payload_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "parents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "resolutions": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "choice": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "choice",
+                "source"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state_cleared": {
+            "type": "boolean"
+          },
+          "tree": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "ref",
+          "sha",
+          "parents",
+          "tree",
+          "files",
+          "resolutions",
+          "state_cleared",
+          "attempts",
+          "dry_run"
+        ],
+        "type": "object"
+      },
+      "flags": [
+        {
+          "name": "resolve",
+          "help": "resolve one conflicted path, as 'path=ours|theirs|worktree|delete' (repeatable, once per path; the split is on the last '=', so a path containing one stays intact). The keywords are defined by INDEX STAGE: ours is the stage-2 blob -- the content this branch already had, before the merge; theirs is the stage-3 blob -- the content merged in from the other side; worktree is the file's current content on disk; delete leaves the path out of the commit. ours and theirs also WRITE the chosen content into the working tree (git's own checkout --ours), and delete removes the file from disk (git's own rm). Paths are repository-relative. Omitted, every conflicted path is unresolved, which is a refusal listing them",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "optional"
+        },
+        {
+          "name": "resolve-file",
+          "help": "read resolutions from a TOML file of [[resolutions]] tables, each with a path and a choice key; combinable with --resolve, and a path named by both is a hard error; omitted means the --resolve flags are the whole declaration",
+          "value_schema": {
+            "type": "string"
+          },
+          "presence": "optional"
+        },
+        {
+          "name": "m",
+          "help": "commit message paragraph, replacing git's own draft; repeating it joins the values with a blank line between them; omitted means git's draft for this operation with its comment block stripped",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "short": "m",
+          "presence": "optional"
+        },
+        {
+          "name": "trailer",
+          "help": "add a key-value trailer line to the commit message (repeatable)",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "optional"
+        }
+      ],
+      "tags": [
+        "json"
+      ],
+      "grants": [
+        {
+          "name": "parent-bump",
+          "reason": "concluding an operation in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
+          "kind": "proc_mutate"
+        }
+      ]
+    },
+    "cherry-pick-continue": {
+      "name": "cherry-pick-continue",
+      "help": "conclude a cherry-pick git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file). For a SINGLE cherry-pick safegit writes the commit itself: one parent, the AUTHOR preserved from the commit being applied while the committer is you, git's own message draft with its comment block stripped or -m, the repository's commit-msg hook run, and the cherry-pick's state files removed afterwards. A QUEUED sequence -- git cherry-pick with more than one commit -- is DELEGATED instead: safegit stages the same declared resolutions into a copy of the index, runs the same completeness and conflict-marker checks, and then hands the rest of the queue to git's own 'cherry-pick --continue' with that copy as its index, because concluding one step natively would strand the rest of the queue. git authors those commits, so they carry no safegit trailers and 'safegit undo' does not reverse them; -m, --trailer and --dry-run are refused for a queued sequence rather than silently ignored",
+      "effect": "mutating",
+      "payload_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "author": {
+            "additionalProperties": false,
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "email"
+            ],
+            "type": "object"
+          },
+          "commits_created": {
+            "type": "integer"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "head": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operation": {
+            "type": "string"
+          },
+          "parents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "queue_delegated": {
+            "type": "boolean"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "resolutions": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "choice": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "choice",
+                "source"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state_cleared": {
+            "type": "boolean"
+          },
+          "tree": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "ref",
+          "resolutions",
+          "state_cleared",
+          "dry_run",
+          "queue_delegated",
+          "head",
+          "commits_created"
+        ],
+        "type": "object"
+      },
+      "flags": [
+        {
+          "name": "resolve",
+          "help": "resolve one conflicted path, as 'path=ours|theirs|worktree|delete' (repeatable, once per path; the split is on the last '=', so a path containing one stays intact). The keywords are defined by INDEX STAGE: ours is the stage-2 blob -- your branch's current content; theirs is the stage-3 blob -- the result of applying the cherry-picked commit; worktree is the file's current content on disk; delete leaves the path out of the commit. ours and theirs also WRITE the chosen content into the working tree (git's own checkout --ours), and delete removes the file from disk (git's own rm). Paths are repository-relative. Omitted, every conflicted path is unresolved, which is a refusal listing them",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "optional"
+        },
+        {
+          "name": "resolve-file",
+          "help": "read resolutions from a TOML file of [[resolutions]] tables, each with a path and a choice key; combinable with --resolve, and a path named by both is a hard error; omitted means the --resolve flags are the whole declaration",
+          "value_schema": {
+            "type": "string"
+          },
+          "presence": "optional"
+        },
+        {
+          "name": "m",
+          "help": "commit message paragraph, replacing git's own draft; repeating it joins the values with a blank line between them; omitted means git's draft for this operation with its comment block stripped",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "short": "m",
+          "presence": "optional"
+        },
+        {
+          "name": "trailer",
+          "help": "add a key-value trailer line to the commit message (repeatable)",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "optional"
+        }
+      ],
+      "tags": [
+        "json"
+      ],
+      "grants": [
+        {
+          "name": "parent-bump",
+          "reason": "concluding an operation in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
+          "kind": "proc_mutate"
+        }
+      ]
+    },
+    "revert-continue": {
+      "name": "revert-continue",
+      "help": "conclude a revert git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file). For a SINGLE revert safegit writes the commit itself: one parent, the AUTHOR preserved from the commit being reverted while the committer is you, git's own message draft with its comment block stripped or -m, the repository's commit-msg hook run, and the revert's state files removed afterwards. Note the stage keywords: a revert applies an INVERSE patch, so theirs is what the reverted commit's parent held -- resolving to theirs keeps the revert, resolving to ours keeps the commit being reverted. A QUEUED sequence -- git revert with more than one commit -- is DELEGATED to git's own 'revert --continue' with safegit's index copy as its index, after the same completeness and conflict-marker checks; git authors those commits, so they carry no safegit trailers and 'safegit undo' does not reverse them, and -m, --trailer and --dry-run are refused for a queued sequence rather than silently ignored",
+      "effect": "mutating",
+      "payload_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "author": {
+            "additionalProperties": false,
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "email"
+            ],
+            "type": "object"
+          },
+          "commits_created": {
+            "type": "integer"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "head": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "operation": {
+            "type": "string"
+          },
+          "parents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "queue_delegated": {
+            "type": "boolean"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "resolutions": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "choice": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "choice",
+                "source"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state_cleared": {
+            "type": "boolean"
+          },
+          "tree": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "ref",
+          "resolutions",
+          "state_cleared",
+          "dry_run",
+          "queue_delegated",
+          "head",
+          "commits_created"
+        ],
+        "type": "object"
+      },
+      "flags": [
+        {
+          "name": "resolve",
+          "help": "resolve one conflicted path, as 'path=ours|theirs|worktree|delete' (repeatable, once per path; the split is on the last '=', so a path containing one stays intact). The keywords are defined by INDEX STAGE: ours is the stage-2 blob -- your branch's current content; theirs is the stage-3 blob -- the result of UNDOING the reverted commit, which is what its parent held -- not the reverted commit's own content; worktree is the file's current content on disk; delete leaves the path out of the commit. ours and theirs also WRITE the chosen content into the working tree (git's own checkout --ours), and delete removes the file from disk (git's own rm). Paths are repository-relative. Omitted, every conflicted path is unresolved, which is a refusal listing them",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "optional"
+        },
+        {
+          "name": "resolve-file",
+          "help": "read resolutions from a TOML file of [[resolutions]] tables, each with a path and a choice key; combinable with --resolve, and a path named by both is a hard error; omitted means the --resolve flags are the whole declaration",
+          "value_schema": {
+            "type": "string"
+          },
+          "presence": "optional"
+        },
+        {
+          "name": "m",
+          "help": "commit message paragraph, replacing git's own draft; repeating it joins the values with a blank line between them; omitted means git's draft for this operation with its comment block stripped",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "short": "m",
+          "presence": "optional"
+        },
+        {
+          "name": "trailer",
+          "help": "add a key-value trailer line to the commit message (repeatable)",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "optional"
+        }
+      ],
+      "tags": [
+        "json"
+      ],
+      "grants": [
+        {
+          "name": "parent-bump",
+          "reason": "concluding an operation in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
           "kind": "proc_mutate"
         }
       ]
@@ -685,6 +1155,9 @@
                 "context": {
                   "type": "string"
                 },
+                "in_git_dir": {
+                  "type": "boolean"
+                },
                 "line": {
                   "type": "integer"
                 },
@@ -721,6 +1194,9 @@
                 "context": {
                   "type": "string"
                 },
+                "in_git_dir": {
+                  "type": "boolean"
+                },
                 "line": {
                   "type": "integer"
                 },
@@ -756,6 +1232,9 @@
                 },
                 "context": {
                   "type": "string"
+                },
+                "in_git_dir": {
+                  "type": "boolean"
                 },
                 "line": {
                   "type": "integer"
@@ -802,6 +1281,9 @@
                 "context": {
                   "type": "string"
                 },
+                "in_git_dir": {
+                  "type": "boolean"
+                },
                 "line": {
                   "type": "integer"
                 },
@@ -843,6 +1325,9 @@
                 },
                 "context": {
                   "type": "string"
+                },
+                "in_git_dir": {
+                  "type": "boolean"
                 },
                 "line": {
                   "type": "integer"
@@ -1109,7 +1594,7 @@
       "commands": {
         "list": {
           "name": "list",
-          "help": "list all pre-pre-push hooks currently installed in the .git/safegit/hooks directory, showing each hook name, file path, and whether it is executable, so you can audit which checks run before every push",
+          "help": "list every pre-pre-push hook location safegit knows about, with its origin, its path and whether it is executable, so you can audit which checks run before every push. Three origins are shown: local, the tool-owned live store under the repository's common .git/safegit/hooks that hook install writes to and every worktree shares; tracked, the hooks the CHECKOUT provides in .safegit/hooks, which run because they are in that directory whether or not git tracks them, so cloning a repository and pushing from that checkout runs the repository's scripts; and legacy, the pre-migration location in git's own .git/hooks, which nothing runs any more and safegit hook migrate relocates. Non-executable and non-hook entries are listed too, because the hook an operator is asking about is usually the one that is NOT running",
           "effect": "read_only"
         },
         "run": {
@@ -1131,7 +1616,7 @@
         },
         "install": {
           "name": "install",
-          "help": "install a pre-pre-push hook by copying a script file into the .git/safegit/hooks directory, making it executable, and registering it so that safegit push will run it before any network I/O occurs",
+          "help": "install a pre-pre-push hook by copying a script file into the live store under the repository's common .git/safegit/hooks directory and making it executable, so that safegit push runs it before any network I/O occurs. The store is keyed on the common git dir, so a hook installed from a linked worktree is the same hook every worktree of the repository runs. An existing destination is refused rather than overwritten",
           "effect": "mutating",
           "args": [
             {
@@ -1143,6 +1628,26 @@
               "presence": "required"
             }
           ]
+        },
+        "remove": {
+          "name": "remove",
+          "help": "remove one hook from the tool-owned live store under the repository's common .git/safegit/hooks directory by name, naming either the store-relative path such as pre-pre-push.d/20-lint or just the base name, so a hook can be retired or replaced without deleting files by hand; a name that resolves only to a hook the checkout provides in .safegit/hooks is refused, because removing that one means deleting the file and committing that, and a name carried by both stores removes the live one and says the other still runs",
+          "effect": "mutating",
+          "args": [
+            {
+              "name": "name",
+              "help": "name of the installed hook to remove, as shown by 'safegit hook list'",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            }
+          ]
+        },
+        "migrate": {
+          "name": "migrate",
+          "help": "move safegit's hooks out of git's own .git/hooks directory into the tool-owned .git/safegit/hooks store, relocating the pre-pre-push file and the pre-pre-push.d directory unconditionally because those two names are the only ones safegit ever wrote there, and reporting success with an explanation when there is nothing to move. Both ends are under the repository's COMMON git dir, which is git's own hook directory in every worktree, so migration run from a linked worktree relocates the repository's hooks",
+          "effect": "mutating"
         }
       }
     },
@@ -2171,7 +2676,7 @@
         },
         "verify": {
           "name": "verify",
-          "help": "check all scrub policies defined in the repository configuration to confirm that previously scrubbed secrets and sensitive patterns remain completely absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-policy pass or fail results with match locations for any violations found",
+          "help": "confirm that the patterns named on the command line -- repeatable --pattern regexes, the operations of a scrub recipe file, or both -- are absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-pattern pass or fail results with match locations for any violations found",
           "effect": "read_only",
           "payload_schema": {
             "additionalProperties": false,
@@ -2182,7 +2687,7 @@
               "passed": {
                 "type": "integer"
               },
-              "policies": {
+              "patterns": {
                 "type": "integer"
               },
               "results": {
@@ -2201,16 +2706,19 @@
                     "pattern": {
                       "type": "string"
                     },
-                    "reason": {
-                      "type": "string"
-                    },
                     "scope": {
                       "type": "string"
+                    },
+                    "source": {
+                      "enum": [
+                        "flag",
+                        "recipe"
+                      ]
                     }
                   },
                   "required": [
                     "pattern",
-                    "reason",
+                    "source",
                     "pass"
                   ],
                   "type": "object"
@@ -2223,15 +2731,71 @@
             },
             "required": [
               "version",
-              "policies",
+              "patterns",
               "passed",
               "failed",
               "results"
             ],
             "type": "object"
           },
+          "flags": [
+            {
+              "name": "pattern",
+              "help": "regular expression that must be absent from every object in the repository (repeatable)",
+              "value_schema": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "presence": "optional",
+              "unique": true
+            },
+            {
+              "name": "scope",
+              "help": "glob pattern limiting which blob file paths a --pattern match counts against (e.g. '*.env', 'config/**'); recipe operations carry their own scope in the recipe file",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "optional"
+            }
+          ],
+          "args": [
+            {
+              "name": "recipe",
+              "help": "path to a scrub recipe TOML file whose operations' patterns are verified; the format is the one 'scrub run' takes, and its replace/mangle/depends_on fields are ignored here because verification substitutes nothing",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "optional"
+            }
+          ],
           "tags": [
             "json"
+          ],
+          "constraints": [
+            {
+              "type": "at_least_one",
+              "name": "verify-input",
+              "members": [
+                {
+                  "kind": "flag",
+                  "name": "pattern",
+                  "when": "present"
+                },
+                {
+                  "kind": "arg",
+                  "name": "recipe",
+                  "when": "present"
+                }
+              ]
+            },
+            {
+              "type": "requires",
+              "name": "verify-scope",
+              "flag": "scope",
+              "depends_on": "pattern"
+            }
           ]
         }
       }
