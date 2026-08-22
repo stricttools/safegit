@@ -419,6 +419,32 @@ existing entries are never rewritten.
   not an exit). Route it through the registry constant during the
   hooks rework.
 
+## Ratified Phase 2 (P2a/P2b) decisions
+
+- Exit 11 PathMatchedNothing (no-match arms; also reused for an untrack
+  target absent from the parent). Exit 15 SymlinkHunkSpec (a symlink has
+  nothing to split; 14 stays strictly "binary").
+- Expansion never yields a gitlink; naming a gitlink is a single path.
+  Amend's changed-path count measures against the replaced tip, not the
+  parent. Nothing in reporting counts from arguments.
+- --hunks names its own complete file selection; a path named both
+  positionally and in --hunks, or twice in --hunks, is a hard error (no
+  precedence rule). Positionals are always literal (colon-named files
+  just work).
+- --untrack uses git update-index --force-remove, NOT git rm --cached
+  (rm --cached consults the REAL HEAD and refuses drifted content —
+  wrong for cross-branch operations and for exactly the untrack shape).
+  Directory --untrack expands tree paths under the prefix. Explicit
+  positional+untrack conflict is a hard error; expansion-swept overlap
+  resolves silently to the removal (mirrors the ignore rule).
+- Escaping-symlink notices fire for expansion-discovered links too (a
+  notice, not a refusal, so the explicitly-named carve-out does not
+  apply).
+- Note for Phase 3.2/8: the two new stderr notices (escaping link,
+  non-ignored untrack) are emitted from internal/commit, which cannot
+  see --quiet; if quiet-awareness is wanted they must ride the result
+  structs. Stdout/machine mode unaffected.
+
 ## Phase 9 additions (locking rework falsified these claims)
 
 The atomic publication and flock-based reclamation invalidated every
