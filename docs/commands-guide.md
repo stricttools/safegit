@@ -413,7 +413,7 @@ safegit --json scan --pattern "token" --entire-history
 
 ## scrub file
 
-Replace or remove a specific file across all commits in repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized on-disk version or delete the file entirely from every historical snapshot.
+Replace or remove a specific file across all commits in repository history, rewriting each affected commit tree to either substitute the file contents with those of a sanitized file or delete the file entirely from every historical snapshot.
 
 ### When to Use
 
@@ -423,9 +423,14 @@ Use `safegit scrub file` when you need to remove a leaked secret file (like `.en
 
 | Flag | Presence | Description |
 |------|----------|-------------|
-| `--from` | required | First commit hash to include when rewriting history |
+| `--delete` / `--replace-with <path>` | required, exactly one | What happens to the file at every commit in range: delete it, or replace its contents with those of `<path>` |
+| `--from <commit>` / `--entire-history` | required, exactly one | How much of the history is rewritten |
 | `--reason` | required | Mandatory audit trail message explaining why this scrub is needed |
 | `--remap-shas-in` | optional | Glob selecting files whose 40-character commit hashes are remapped during rewrite (repeatable) |
+
+The mode is a declaration, not an inference. It used to be inferred by checking whether the target existed on disk, which made the same command line mean opposite things depending on the directory it was typed in, and turned a typo in the path into a silent deletion from history. Naming `--delete` or `--replace-with` is now mandatory, and a command line with neither is refused before anything runs.
+
+**The two paths resolve differently, deliberately.** The `file` argument is repository-relative -- it names a path inside the commits being rewritten. The `--replace-with` path is yours: it resolves against the directory you are standing in, like any other filename you type at a shell prompt.
 
 ### Arguments
 
@@ -436,17 +441,21 @@ Use `safegit scrub file` when you need to remove a leaked secret file (like `.en
 ### Examples
 
 ```bash
-# Remove a file from all history (file does not exist on disk = removal)
-safegit scrub file --from abc1234 --reason "leaked API key" -- secrets.env
+# Delete a file from every commit since abc1234
+safegit scrub file --delete --from abc1234 --reason "leaked API key" -- secrets.env
 
-# Replace a file with the current on-disk version (file exists = replacement)
-safegit scrub file --from abc1234 --reason "sanitize credentials" -- config/database.yml
+# Replace a file's contents everywhere with a sanitized copy
+safegit scrub file --replace-with ./clean-database.yml --from abc1234 \
+  --reason "sanitize credentials" -- config/database.yml
+
+# Rewrite the whole history rather than a range
+safegit scrub file --delete --entire-history --reason "key committed at the root" -- id_rsa
 
 # Dry run to preview without making changes
-safegit --dry-run scrub file --from abc1234 --reason "test" -- secrets.env
+safegit --dry-run scrub file --delete --from abc1234 --reason "test" -- secrets.env
 
 # With SHA remapping for changelog files
-safegit scrub file --from abc1234 --reason "leaked key" --remap-shas-in "*.jsonl" -- .env
+safegit scrub file --delete --from abc1234 --reason "leaked key" --remap-shas-in "*.jsonl" -- .env
 ```
 
 ### Safety Guarantees
@@ -454,8 +463,9 @@ safegit scrub file --from abc1234 --reason "leaked key" --remap-shas-in "*.jsonl
 - **Clean tree required**: Refuses to run if the working tree has uncommitted changes.
 - **Rewrite lock**: Acquires a repository-wide rewrite lock to prevent concurrent scrub operations.
 - **Deliberate confirmation**: The framework's consequential gate takes consent before dispatch: on a terminal it prompts, and without one it refuses and names `--approve-consequential`. `--json` never answers it. safegit adds no second prompt behind the gate -- it prints the commit count and scope as a notice, so what the rewrite covers is stated rather than asked twice.
-- **Structural verification**: After rewriting, verifies that commit messages, author/committer identity, parent topology, and non-target files are preserved. Only the target file should change.
-- **Old blob verification**: Verifies that old (pre-scrub) blob objects are no longer reachable after cleanup.
+- **Verification before anything moves**: The rewritten commits are built as unreachable objects and checked BEFORE a single ref moves -- commit messages, author/committer identity and parent topology preserved, only the declared paths changed, the target holding what the mode promised in every rewritten commit, and the working tree still free of anybody else's work. A failure here exits `30` and changes nothing at all: no ref, no tag, no rewrite-journal record.
+- **Verification after the rewrite stands**: Old (pre-scrub) blob objects gone from the object store, no ref left pointing at a pre-rewrite commit. These can only be asked after cleanup, so a finding cannot undo anything: the command exits `31` naming what survived, with the rewrite in place.
+- **Never overwrites concurrent work**: If another session stages or writes something while the refs are moving, the working-tree sync is SKIPPED rather than performed, the command says so and prints the one command that completes it (`git read-tree --reset -u HEAD`), and it exits `31`.
 - **Post-rewrite cleanup**: Expires tainted reflog entries, repacks objects, and prunes unreachable objects.
 - **Rewrite maps**: Persists crash-safe rewrite maps to `.git/safegit/rewrite-maps.jsonl`.
 - **Submodule support**: Automatically detects if the target file is inside a submodule and rewrites both the submodule's history and the parent's gitlinks.
