@@ -79,6 +79,9 @@ type markerViolation struct {
 	line int
 	// why is the sentence printed next to the location.
 	why string
+	// conflicted records whether git still holds this path unmerged, which
+	// decides whether the refusal may offer a stage resolution for it.
+	conflicted bool
 }
 
 // verifyMarkers is the whole check, run after completeness and before the
@@ -245,13 +248,14 @@ func (v *markerCheck) check(ctx context.Context, path string) ([]markerViolation
 	if err != nil {
 		return nil, err
 	}
+	_, conflicted := v.sides[path]
 	violations := make([]markerViolation, 0, len(newBlocks))
 	for _, r := range newBlocks {
 		why := "a complete conflict block that no side of this conflict already carried"
 		if emitted[string(r.Bytes)] {
 			why = "the conflict git wrote here is still in the content being committed"
 		}
-		violations = append(violations, markerViolation{path: path, line: r.StartLine, why: why})
+		violations = append(violations, markerViolation{path: path, line: r.StartLine, why: why, conflicted: conflicted})
 	}
 	return violations, nil
 }
@@ -488,9 +492,17 @@ func (op continueOp) refuseSurvivingMarkers(violations []markerViolation) int {
 	for _, v := range violations {
 		fmt.Fprintf(os.Stderr, "  %s:%d  %s\n", v.path, v.line, v.why)
 	}
-	fmt.Fprintf(os.Stderr, "  nothing was committed and the %s is still in progress. Edit the file(s) and re-run,\n", op.kind)
-	fmt.Fprintf(os.Stderr, "  or take one side whole, which cannot carry a marker:\n")
-	fmt.Fprintf(os.Stderr, "    safegit %s --resolve '%s=ours'   (or =theirs)\n", op.command, violations[0].path)
+	fmt.Fprintf(os.Stderr, "  nothing was committed and the %s is still in progress. Edit the file(s) and re-run.\n", op.kind)
+	// The stage shortcut is only offered for a path git still holds unmerged:
+	// naming a path that is NOT conflicted is itself a refusal, so suggesting it
+	// for a path the operator already staged would send them into another error.
+	for _, v := range violations {
+		if v.conflicted {
+			fmt.Fprintf(os.Stderr, "  Or take one side whole, which cannot carry a marker:\n")
+			fmt.Fprintf(os.Stderr, "    safegit %s --resolve '%s=ours'   (or =theirs)\n", op.command, v.path)
+			break
+		}
+	}
 	printMarkerExemption(violations[0].path)
 	return exitcode.ConclusionMarkerSurvived
 }

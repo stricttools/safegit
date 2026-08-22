@@ -462,6 +462,12 @@ func TestConclusionChecksAPathTheOperatorStagedThemselves(t *testing.T) {
 	if !strings.Contains(stderr, "f.txt:2") {
 		t.Errorf("the refusal does not name the path and line:\n%s", stderr)
 	}
+	// The stage shortcut must NOT be offered here: the path is no longer
+	// unmerged, so `--resolve f.txt=ours` would be refused as a path that is not
+	// conflicted, sending the operator from one error into another.
+	if strings.Contains(stderr, "--resolve 'f.txt=ours'") {
+		t.Errorf("the refusal offers a resolution that would itself be refused:\n%s", stderr)
+	}
 	fx.assertRefusedNothingMoved(t)
 
 	// Resolved and re-staged, the same command concludes.
