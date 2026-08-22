@@ -245,9 +245,13 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		fmt.Fprintf(os.Stderr, "note: undoing commit that triggered parent bump %s\n", bumpSHA[:8])
 	}
 
+	// die(), not a bare os.Exit: two locks are held here -- the worktree
+	// operation lock taken at the top and the ref lock taken just above -- and
+	// os.Exit runs no deferred function. Only die() releases them, so exiting
+	// any other way leaves both lock files behind for the next contender to
+	// wait out and for doctor to report.
 	if err := maybeAutoBumpParent(ctx, flags, gitDir, targetSHA, "undo", ""); err != nil {
-		fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
-		os.Exit(exitcode.General)
+		die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 	}
 
 	// Log the undo to the oplog
