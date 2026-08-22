@@ -4,6 +4,17 @@ description: "Requirements for safegit: multi-agent concurrency safety, lock-fre
 
 # safegit Requirements
 
+> **Historical document.** This is the original requirements list, kept as the
+> record of what safegit was asked for. It is not a description of the built
+> tool, and where the two differ the implementation is the authority -- see
+> [Architecture](architecture.md) and the [Concurrency Guide](concurrency-guide.md).
+> One difference is worth naming here, because the requirement below states the
+> opposite: **the lock does poll.** Waiters use exponential-backoff polling
+> (10ms to a 1s cap, bounded by `lock.acquireTimeoutSeconds`), with the backoff
+> reset whenever the lock is observed to have changed hands. No notification
+> mechanism was built; the requirement's real goal -- that no human has to
+> intervene -- is met by automatic stale-lock reclamation.
+
 ## Core: Multi-Agent Safety
 
 - Multiple AI agent sessions must be able to work on the same repo concurrently without worktrees
@@ -14,7 +25,7 @@ description: "Requirements for safegit: multi-agent concurrency safety, lock-fre
 ## Concurrency Mechanism
 
 - Lock-free or minimally-locking design preferred over a global mutex
-- If a queue/lock is used, it must notify waiting agents automatically (no polling, no human intervention)
+- If a queue/lock is used, it must notify waiting agents automatically (no polling, no human intervention) *(as built: polling with backoff, no notification -- see the note at the top)*
 - Agent crash must not leave the repo in a permanently locked state (stale lock recovery within 30 seconds)
 
 ## Git Compatibility
