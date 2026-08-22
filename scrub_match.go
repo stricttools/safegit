@@ -60,6 +60,10 @@ type ScrubMatchResult struct {
 	PreRewriteRemotes map[string]string `json:"pre_rewrite_remotes,omitempty"`
 	CleanupOK         *bool             `json:"cleanup_ok,omitempty"`
 	CleanupErrors     []string          `json:"cleanup_errors,omitempty"`
+	// SyncSkipped is true when the working-tree sync was deliberately not
+	// performed because work that was not this rewrite's appeared while the
+	// refs were moving. The refs still moved; the working tree was left alone.
+	SyncSkipped bool `json:"sync_skipped,omitempty"`
 }
 
 // scrubMatchPayloadSchema declares what `scrub match` puts in the envelope's
@@ -91,6 +95,7 @@ var scrubMatchPayloadSchema = strictcli.SchemaObject(
 		"pre_rewrite_remotes": scrubRewritesSchema,
 		"cleanup_ok":          strictcli.SchemaType("boolean"),
 		"cleanup_errors":      strictcli.SchemaArray(strictcli.SchemaType("string")),
+		"sync_skipped":        strictcli.SchemaType("boolean"),
 	},
 	[]string{"version", "dry_run", "pattern"},
 	false,
@@ -1007,6 +1012,7 @@ func scrubMatchExecute(
 		PreRewriteRemotes: nonNilStringMap(result.PreRewriteRemotes),
 		CleanupOK:         boolPtr(result.CleanupOK),
 		CleanupErrors:     nonNilStrings(result.CleanupErrors),
+		SyncSkipped:       result.SyncSkipped,
 	})
 
 	// Summary (push hint already printed by Finalize inside executeScrubRecipe)

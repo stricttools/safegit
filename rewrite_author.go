@@ -285,6 +285,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		ParentOnly:       intPtr(parentOnly),
 		OldHead:          oldHeadSHA,
 		NewHead:          result.NewHeadSHA,
+		SyncSkipped:      result.SyncSkipped,
 	}
 	if oldName != "" {
 		payload.OldName = oldName
@@ -331,6 +332,10 @@ type RewriteAuthorResult struct {
 	ParentOnly       *int              `json:"parent_only,omitempty"`
 	OldHead          string            `json:"old_head,omitempty"`
 	NewHead          string            `json:"new_head,omitempty"`
+	// SyncSkipped is true when the working-tree sync was deliberately not
+	// performed because work that was not this rewrite's appeared while the
+	// refs were moving. The refs still moved; the working tree was left alone.
+	SyncSkipped bool `json:"sync_skipped,omitempty"`
 }
 
 // rewriteAuthorPayloadSchema declares what `author rewrite` puts in the
@@ -352,6 +357,7 @@ var rewriteAuthorPayloadSchema = strictcli.SchemaObject(
 		"parent_only":       strictcli.SchemaType("integer"),
 		"old_head":          strictcli.SchemaType("string"),
 		"new_head":          strictcli.SchemaType("string"),
+		"sync_skipped":      strictcli.SchemaType("boolean"),
 	},
 	[]string{"version", "dry_run"},
 	false,
