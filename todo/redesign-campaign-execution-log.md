@@ -430,6 +430,70 @@ the LIVE tree (mid-wave test results are advisory); known load flake
 TestRootCommitConcurrentSafegitBothLand, and one unreproduced transient
 in TestStagesReportsADeleteModifyConflictAsOneSided.
 
+## SESSION HANDOFF ADDENDUM (2026-08-22, after the review session — SUPERSEDES STALE PARTS OF THE HANDOFF ABOVE)
+
+Read this WITH the handoff above; where they disagree, this addendum
+wins. A full review session with the user followed the handoff and
+settled everything; the corrections:
+
+- **NO open user rulings remain.** The handoff's "OPEN USER RULINGS"
+  paragraph is obsolete: macOS CI is settled as the PLAIN PUSH TRIGGER
+  (the as-built matrix stands; NO workflow edit — round 7 supersedes
+  round 1's branch/dispatch wording), and no-match is settled as
+  PER-PATH plus an aggregated all-unchanged-files listing (round 2).
+  Every ruling in the ten "USER RULINGS" round sections below is final.
+- **Every historical queue in this file is DRAINED** — "Queued small
+  items", "Queued 0.5 polish", "Brief additions for Phase 1.4/1.5",
+  "Brief additions for Phase 1.5", "Brief additions for Phase 5", and
+  "Queued Phase 0 closeout items" were all executed during the
+  session. Do not re-dispatch them. The ONLY live queue is below.
+- **The next session's queue, consolidated and final:**
+  1. Housekeeping: saferm the build/audit residue tree and the
+     pre-campaign stray repo under the system temp dir.
+  2. Fixer window: aggregated no-match listing (all unchanged files in
+     one refusal); scrub scope line; repository-wide uninstall with
+     enumerating output, dry runs included; consent prompts to stderr;
+     scrub match's nil-result payload gap; the exit-sites regeneration
+     line added to the release checklist (candidate:
+     .rlsbl/hooks/pre-checks.sh).
+  3. Subphases 7.3/7.4/7.5 — 7.5 ALSO builds the real
+     --moved-retract flag with existence validation (round 6; the
+     handoff's "may want" is superseded).
+  4. Phase 7 closing audit (covers 7.1/7.2 too) + remediation.
+  5. Phase 9: the checklist (Appendix A + every Phase-9 row in this
+     log) FIRST, then a FULL fresh-read of every hand-written doc
+     line-by-line against the as-built tool (round 8); the
+     PHILOSOPHY-VS-GIT-IDIOMS DIVERGENCE DOCUMENT in docs/ (round 2 —
+     seeded entry list in round 2's section; mentioned from the
+     docs/_CLAUDE.md template) — the user reviews it as a PRE-RELEASE
+     GATE and may overturn git-like rulings (round 5); finish with
+     --dump-schema + bare selfdoc gen.
+  6. Phase 10: 10.1 as in the handoff PLUS one mechanical gofmt
+     normalization commit on the quiescent tree (round 9; the
+     four-files figure is current — the facts section's "12 files" is
+     the stale original count) PLUS the flake investigation
+     (stress-loop both watchlist tests to fix-or-certify, round 9);
+     10.2 per-phase fresh auditors briefed on plan + this log; 10.3
+     changelog as FEATURE-AREA entries with --allow-batch reasons
+     (round 5), including breaking-type entries for pre-commit 1->16,
+     doctor 0->50, and the buffered-push behavior.
+  7. Phase 11: triage — originals to .done after verification; the
+     move-records todo is ALREADY split (round 5: .done + active rump
+     todo/record-file-moves-remaining.md + .obsolete); the plan file
+     and this log BOTH move to .done at triage (round 9; no pointer
+     banner is added to the plan meanwhile); then the release per the
+     RLSBL protocol.
+- **Deferred/contingent todos created by the review** (do not work
+  without their stated preconditions): todo/scrub-strict-mode-selector.md
+  (way later), todo/reader-writer-operation-lock.md (contingent on
+  measured contention proof), todo/push-streaming-restoration.md
+  (parked on the framework's tee).
+- **File-reading note:** this log is append-only and NOT chronological
+  (sections were inserted at markers as phases completed); the ten
+  "USER RULINGS" rounds plus this addendum are the current layer. The
+  round-10 residue ruling is recorded inside the round-9 section
+  (labeled; placement quirk only).
+
 ## Ratified 7.1/7.2 decisions (not yet audited)
 
 - Exit 19 MoveNotBorneOut (new; NOT a reuse of 11 — a declaration
