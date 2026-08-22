@@ -582,26 +582,19 @@ func RunPassthroughTo(ctx context.Context, env []string, stdout io.Writer, args 
 	return cmd.Run()
 }
 
-// CommonGitDir returns the path to the shared .git directory.
-// For normal repos this equals GitDir(); for worktrees it returns the main
-// .git dir that is shared across all worktrees. Lock files should live here
+// CommonGitDirOf returns the common git directory for a given gitDir: the one
+// every worktree of a repository shares. For a normal repository it equals
+// gitDir; for a linked worktree it is the main .git dir. Lock files live there,
 // so that worktrees committing to the same branch serialize correctly.
-func CommonGitDir(ctx context.Context) (string, error) {
-	out, _, err := Run(ctx, "rev-parse", "--git-common-dir")
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out), nil
-}
-
-// CommonGitDirOf returns the common git directory for a given gitDir.
 //
-// Unlike CommonGitDir, this does not depend on the process working directory:
-// the repository is an argument, so the call goes through RunWithGitDir -- the
-// declared explicit-directory exemption from the repository-root pin -- which
-// sets GIT_DIR and runs git in that directory. An absolute gitDir therefore
-// yields an absolute answer; a relative one yields an answer relative to gitDir
-// itself, never to this process's working directory.
+// The repository is an ARGUMENT rather than the process working directory, so
+// the call goes through RunWithGitDir -- the declared explicit-directory
+// exemption from the repository-root pin -- which sets GIT_DIR and runs git in
+// that directory. An absolute gitDir therefore yields an absolute answer; a
+// relative one yields an answer relative to gitDir itself, never to this
+// process's working directory. There is deliberately no working-directory form:
+// one existed, had no callers, and returned an answer whose meaning depended on
+// where the process happened to stand.
 func CommonGitDirOf(ctx context.Context, gitDir string) (string, error) {
 	out, _, err := RunWithGitDir(ctx, gitDir, "", "rev-parse", "--git-common-dir")
 	if err != nil {

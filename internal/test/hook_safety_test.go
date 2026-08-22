@@ -17,9 +17,9 @@ import (
 //     (internal/commit/commit.go runPreCommitHook). Installing a safegit hook
 //     must never destroy an unrelated native hook.
 //  2. `doctor --action uninstall` promises to "remove all safegit hooks and
-//     metadata from this repository entirely", but repo.Uninstall deletes only
+//     metadata from this repository entirely", but the uninstall deleted only
 //     .git/safegit/ and the shared lock directory. A hook safegit itself
-//     installed survives the uninstall and keeps running on every push.
+//     installed survived the uninstall and kept running on every push.
 //  3. `safegit scan` sweeps the hook directory non-recursively and skips
 //     directory entries, so a secret inside a hook under `pre-pre-push.d/`
 //     escapes the scan that covers its siblings one directory up -- even though

@@ -250,32 +250,6 @@ func EnsureInitialized(ctx context.Context, gitDir string) error {
 	return nil
 }
 
-// Uninstall removes safegit from a repository: the .git/safegit/ directory
-// entirely -- which since the hook store moved there takes the installed hooks
-// with it -- plus the repository-level state under the common git dir in
-// worktree setups (the shared locks and the live hook store, which is the one
-// pushes actually run), plus the two safegit-owned names that may still be
-// sitting in git's own hook directory from before the move. Leaving any of
-// those behind would keep an uninstalled tool's checks running on every push
-// with no .git/safegit/ left to explain where they came from.
-//
-// The hook store the CHECKOUT provides (.safegit/hooks in the work tree) is
-// deliberately untouched: it is part of the repository's content, shared with
-// everyone who cloned it, and removing it here would be an uncommitted deletion
-// of somebody else's file.
-func Uninstall(ctx context.Context, gitDir string) error {
-	targets, err := UninstallPlan(ctx, gitDir)
-	if err != nil {
-		return err
-	}
-	for _, t := range targets {
-		if err := os.RemoveAll(t.Path); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // UninstallTarget is one path a repository-wide uninstall removes.
 type UninstallTarget struct {
 	// Path is what gets removed.
@@ -292,6 +266,26 @@ type UninstallTarget struct {
 // UninstallPlan enumerates every path a repository-wide uninstall removes,
 // without removing any of them. It returns an error when there is nothing to
 // remove, which is the "safegit is not initialized" refusal.
+//
+// Enumerating and removing are deliberately separate: the plan is what the
+// command prints before it asks for consent, and the removal itself goes
+// through the caller's effects handle so that a dry run records it instead of
+// performing it. There is no companion function that both plans and removes --
+// one existed, only its own tests called it, and it could not be previewed.
+//
+// What the plan covers: safegit's state directory entirely -- which since the
+// hook store moved there takes the installed hooks with it -- plus the
+// repository-level state under the common git dir in worktree setups (the
+// shared locks and the live hook store, which is the one pushes actually run),
+// plus the two safegit-owned names that may still be sitting in git's own hook
+// directory from before the move. Leaving any of those behind would keep an
+// uninstalled tool's checks running on every push with no state directory left
+// to explain where they came from.
+//
+// The hook store the CHECKOUT provides (.safegit/hooks in the work tree) is
+// deliberately absent from the plan: it is part of the repository's content,
+// shared with everyone who cloned it, and removing it would be an uncommitted
+// deletion of somebody else's file.
 //
 // Uninstalling is a REPOSITORY operation, not a per-checkout one. A repository
 // with linked worktrees holds safegit state in one directory per worktree git
