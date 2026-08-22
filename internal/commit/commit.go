@@ -482,6 +482,17 @@ func (p *Pipeline) tryCommit(
 	}
 
 	// An argument that changed nothing is a refusal naming that argument.
+	//
+	// This runs BEFORE the empty-tree check below, and the order is the ruling:
+	// when both conditions hold, the PER-PATH verdict is the one given.
+	// --allow-empty answers one question -- may this commit have the same tree as
+	// its parent -- and says nothing about the arguments. Naming a path is a
+	// separate statement, that the path belongs in the commit, and an argument
+	// that turns out to contribute nothing is a typo or a stale command line
+	// whether or not the caller also asked for an empty commit. So
+	// `--allow-empty -- some/path` that changes nothing refuses at
+	// PathMatchedNothing, naming the path; an empty commit is still reached the
+	// way it always was, by --allow-empty with no path named at all.
 	if unmatched := files.unmatchedSources(changed); len(unmatched) > 0 {
 		return nil, false, unmatchedSourceError(unmatched, refOrEmptyTree(isRootCommit, ref))
 	}

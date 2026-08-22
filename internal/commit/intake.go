@@ -116,7 +116,12 @@ type intake struct {
 }
 
 // unmatchedSources returns EVERY argument that contributed nothing to the given
-// set of changed paths, in the order the caller typed them.
+// set of changed paths, in the order the sources were RESOLVED: the --untrack
+// arguments first, then the positional paths, each group in the order the caller
+// typed it. That is not the order they appear on a command line, where
+// --untrack is usually interleaved with or written after the positionals -- the
+// untrack targets are resolved first so the staging loop can see which paths are
+// being removed, and the source list follows that resolution.
 //
 // Naming a path is a statement that it belongs in the commit. When it turns out
 // to change nothing -- a typo, a file already committed with this exact

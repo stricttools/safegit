@@ -498,3 +498,67 @@ func TestIntakeEdgeCrossBranchAddControl(t *testing.T) {
 		t.Error("fresh.txt missing from other after cross-branch commit")
 	}
 }
+
+// C. --allow-empty and a named path that changes nothing
+//
+// The two rules meet here, and the per-path rule governs. --allow-empty answers
+// one question -- may this commit have the SAME TREE as its parent -- and says
+// nothing about the arguments. Naming a path is a separate statement, that the
+// path belongs in the commit, and an argument that turns out to contribute
+// nothing is a typo or a stale command line either way: the refusal names it
+// (exit 11, PathMatchedNothing) whether or not --allow-empty is present.
+//
+// The ordering follows from that. The commit pipeline asks the per-path
+// question BEFORE the empty-tree question, so a run carrying both conditions
+// gets the per-path verdict, which is the one that names something actionable.
+// An empty commit is still reachable exactly as it always was -- --allow-empty
+// with NO named path -- and the last case below pins that it is.
+func TestAllowEmptyDoesNotExcuseANamedPathThatChangesNothing(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "unchanged\n")
+	safegitCommit(t, dir, "seed a", "a.txt")
+	tip := testutil.Rev(t, dir, "HEAD")
+
+	// The path is committed already with this exact content, so staging it
+	// changes nothing.
+	_, stderr, code := runSafegit(t, dir, "commit", "--allow-empty", "-m", "empty plus a stale path", "--", "a.txt")
+	if code != exitcode.PathMatchedNothing {
+		t.Fatalf("--allow-empty with a no-match named path exited %d, want %d (PathMatchedNothing): %s",
+			code, exitcode.PathMatchedNothing, stderr)
+	}
+	if !strings.Contains(stderr, "a.txt") {
+		t.Errorf("the refusal does not name the argument it was decided about: %s", stderr)
+	}
+	if got := testutil.Rev(t, dir, "HEAD"); got != tip {
+		t.Errorf("the tip moved despite the refusal: %s -> %s", tip, got)
+	}
+
+	// A directory whose contents are all unchanged is the same verdict: the
+	// argument covers everything underneath it and none of it contributed.
+	testutil.WriteFile(t, dir, "sub/b.txt", "also unchanged\n")
+	safegitCommit(t, dir, "seed sub", "sub")
+	tip = testutil.Rev(t, dir, "HEAD")
+	if _, stderr, code := runSafegit(t, dir, "commit", "--allow-empty", "-m", "empty plus a stale directory", "--", "sub"); code != exitcode.PathMatchedNothing {
+		t.Fatalf("--allow-empty with a no-match directory exited %d, want %d: %s",
+			code, exitcode.PathMatchedNothing, stderr)
+	}
+	if got := testutil.Rev(t, dir, "HEAD"); got != tip {
+		t.Errorf("the tip moved despite the directory refusal: %s -> %s", tip, got)
+	}
+
+	// And the thing --allow-empty is actually for still works: no named path,
+	// an empty commit on top of the tip.
+	if _, stderr, code := runSafegit(t, dir, "commit", "--allow-empty", "-m", "a deliberately empty commit"); code != 0 {
+		t.Fatalf("--allow-empty with no named path failed (code %d): %s", code, stderr)
+	}
+	head := testutil.Rev(t, dir, "HEAD")
+	if head == tip {
+		t.Fatal("--allow-empty with no named path created no commit")
+	}
+	if parents := testutil.Parents(t, dir, head); len(parents) != 1 || parents[0] != tip {
+		t.Errorf("the empty commit's parents are %v, want [%s]", parents, tip)
+	}
+	if got, want := testutil.Rev(t, dir, "HEAD^{tree}"), testutil.Rev(t, dir, tip+"^{tree}"); got != want {
+		t.Errorf("the empty commit's tree is %s, want the tip's own %s", got, want)
+	}
+}
