@@ -1,4 +1,15 @@
-// Package trailer injects git trailers (key-value metadata lines) into commit messages for AI agent traceability and session attribution.
+// Package trailer reads and writes the key-value metadata lines at the end of a commit message: the session attribution safegit injects, and the move records a commit declares.
+//
+// Three things live here, in three layers:
+//
+//   - the trailer BLOCK: finding it in a message (SplitBodyTrailers), appending
+//     to it (Inject, AppendCustom) and reading it as key-value pairs
+//     (Trailers);
+//   - the move-record FORMAT: one encoder and one decoder for the
+//     `old -> new` pair grammar, shared by the record writer, the `--moved`
+//     validator and `safegit mv` (moved.go, cquote.go, ulid.go);
+//   - the PROJECTION that reads records back against the trees the repository
+//     holds (project.go), where the trees, not the records, have the last word.
 package trailer
 
 import (
