@@ -1544,6 +1544,44 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
   (asserts `.git/worktrees/side/safegit` while the fixture names the
   worktree `linked-side`; vacuously true since it was written).
+## Remediation wave B1 closure (eight behavioral items)
+
+- All eight done red-first, one commit each; full -race green; tree
+  clean. Headlines: submoduleFromBoundary maps the parent's --from
+  into each submodule via the gitlink (^{commit} + ancestry check;
+  three failure modes each a hard error naming --entire-history,
+  decided before any object write); the byte-identical range arms
+  deduped onto scrubFileCommitRange. Cleanup residue now filters
+  against the reachable-object set and routes through recordTierB
+  (exit 31, rewrite stands; cleanup_ok/cleanup_errors unchanged) —
+  finding test uses a .keep-pinned pack, control is a side branch
+  legitimately reaching old commits. Dry-run push runs hook DISCOVERY
+  (24/25 refusals now surface in previews; only execution is
+  skipped). The directory spelling of positional-vs---untrack and the
+  hunks-vs-directory pairing both join the explicit-vs-explicit
+  conflict check on canonical paths (exit 2); the two absolute-path
+  error strings render repo-relative. gnutls pattern is now the
+  multi-word "gnutls_handshake() failed" (not-locally-probed marker)
+  and a NEW TestEveryTransportPatternIsMultiWord asserts the
+  invariant over the whole hoisted list; the exit-40 stderr
+  duplication is gone (phrase counted exactly once). The RefUpdate
+  port refuses an empty expected value (ErrNoExpectedValue). The
+  three loose exit assertions tightened (40, 1, 1 — plus the --quiet
+  sibling the brief did not name) and the comment typo fixed.
+- Ratified: item 1's test reshaping (the bounded-walk property is
+  unobservable when out-of-range commits carry no pattern, and Tier A
+  already refuses at 30 when they do — the triad IS the escalation
+  coverage); submodule blob SEARCH deliberately stays whole-history
+  (the range bounds the walk, not the content-addressed replacement —
+  the parent's own design); the one-word message generalization; the
+  transportPatterns package-scope hoist;
+  buildReachableBlobSet -> buildReachableObjectSet rename and the
+  cleanupAfterRewrite residue return.
+- Wave C doc notes recorded: divergences' ancestor-rule section needs
+  scrub match's new gitlink mechanism; push's --pre-push-hook help and
+  cli-push should state that discovery refusals fire in previews too;
+  _CLAUDE's cleanup_ok mention gains the exit-31 fact.
+
 ## Remediation wave A closure (the three critical items)
 
 - All three done red-first; three commits; full -race green; tree
