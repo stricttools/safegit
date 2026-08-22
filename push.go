@@ -269,9 +269,11 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		}
 
 		// Discover hooks: if inside a submodule, cascade from parent first.
-		// Each repository contributes a STORE -- work tree plus git dir -- so
-		// the parent's committed hooks participate in the cascade too.
-		own := hooks.Store{Worktree: flags.root.resolve(), GitDir: gitDir}
+		// Each repository contributes a STORE -- work tree plus SHARED git dir
+		// -- so the hooks the parent's checkout provides participate in the
+		// cascade too, and a push from a linked worktree runs the same live
+		// store as one from the main worktree.
+		own := hooks.Store{Worktree: flags.root.resolve(), SharedGitDir: repo.SharedGitDir(ctx, gitDir)}
 		var hookPaths []string
 		parent, isSubmodule := submodule.DetectParent(ctx)
 		if isSubmodule {
@@ -279,7 +281,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 				fmt.Fprintf(os.Stderr, "  submodule detected, cascading hooks from parent %s\n", parent.GitDir)
 			}
 			hookPaths, err = hooks.DiscoverMulti([]hooks.Store{
-				{Worktree: parent.WorkTree, GitDir: parent.GitDir},
+				{Worktree: parent.WorkTree, SharedGitDir: repo.SharedGitDir(ctx, parent.GitDir)},
 				own,
 			})
 		} else {

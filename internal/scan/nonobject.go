@@ -13,6 +13,7 @@ import (
 
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/hooks"
+	"github.com/smm-h/safegit/internal/repo"
 )
 
 // rewriteJournalFile is the one file under .git/safegit the sweep skips.
@@ -140,10 +141,13 @@ func gitDirFiles(ctx context.Context, gitDir, root string) ([]nonObjectFile, err
 		add(p)
 	}
 
-	// The hook stores as the enumerator sees them. The local and legacy stores
-	// are already covered above; taking the union rather than a subset is what
-	// keeps this sweep correct when the enumerator learns about a new place.
-	locations, err := hooks.Enumerate(hooks.Store{Worktree: root, GitDir: gitDir})
+	// The hook stores as the enumerator sees them, keyed on the COMMON git dir:
+	// the live store and the legacy location are repository-level, so a sweep
+	// run from a linked worktree must reach the same files a push there runs.
+	// They are largely covered above already; taking the union rather than a
+	// subset is what keeps this sweep correct when the enumerator learns about
+	// a new place.
+	locations, err := hooks.Enumerate(hooks.Store{Worktree: root, SharedGitDir: repo.SharedGitDir(ctx, gitDir)})
 	if err != nil {
 		return nil, err
 	}
@@ -181,10 +185,11 @@ func worktreeFiles(ctx context.Context, gitDir, root string) ([]nonObjectFile, e
 		out = append(out, nonObjectFile{abs: git.Anchor(root, relPath), rel: relPath})
 	}
 
-	// The committed hook store, whose files run on every push. A hook already
-	// committed is in the listing above; one that is not yet committed is not,
-	// and it runs just the same.
-	locations, err := hooks.Enumerate(hooks.Store{Worktree: root, GitDir: gitDir})
+	// The hook store the checkout provides, whose files run on every push. A
+	// hook already committed is in the listing above; one that is not yet
+	// committed is not, and it runs just the same -- membership in that store is
+	// the directory, never git's tracking.
+	locations, err := hooks.Enumerate(hooks.Store{Worktree: root, SharedGitDir: repo.SharedGitDir(ctx, gitDir)})
 	if err != nil {
 		return nil, err
 	}

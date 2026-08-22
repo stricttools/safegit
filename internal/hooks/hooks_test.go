@@ -28,7 +28,7 @@ func setupGitDir(t *testing.T) string {
 // store is the Store for a git dir whose work tree is its parent directory,
 // which is the shape setupGitDir builds.
 func store(gitDir string) Store {
-	return Store{Worktree: filepath.Dir(gitDir), GitDir: gitDir}
+	return Store{Worktree: filepath.Dir(gitDir), SharedGitDir: gitDir}
 }
 
 // writeHook writes an executable script to the given path.

@@ -11,25 +11,39 @@ import (
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/hooks"
+	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 
 // hookStore names this repository's hook stores for the hooks package: the work
-// tree holding the committed store, and the git directory holding the
-// tool-owned one. The work tree is the dispatch's own pinned root, so a hook
-// command run from a subdirectory reads the same store as one run from the top.
-// It is empty in a repository that has no work tree, where there is no
-// committed store to read.
-func hookStore(flags globalFlags, gitDir string) hooks.Store {
-	return hooks.Store{Worktree: flags.root.resolve(), GitDir: gitDir}
+// tree holding the tracked store, and the SHARED git directory holding the live
+// one and the legacy location. The work tree is the dispatch's own pinned root,
+// so a hook command run from a subdirectory reads the same store as one run
+// from the top. It is empty in a repository that has no work tree, where there
+// is no tracked store to read.
+//
+// Every caller resolves the shared git dir itself, through sharedGitDir below,
+// and passes it in -- the resolution costs a git call, and one command must not
+// pay for it more than once.
+func hookStore(flags globalFlags, sharedDir string) hooks.Store {
+	return hooks.Store{Worktree: flags.root.resolve(), SharedGitDir: sharedDir}
+}
+
+// sharedGitDir resolves the repository's common git directory, which is where
+// the live hook store and the legacy location both sit. In a linked worktree it
+// is NOT the worktree's own git dir: hooks are repository-level policy, exactly
+// like the ref locks under the same .git/safegit, so every worktree must reach
+// the same store.
+func sharedGitDir(flags globalFlags, gitDir string) string {
+	return repo.SharedGitDir(flags.ctx(), gitDir)
 }
 
 // hookDiscoveryExit maps a hook-discovery failure onto its exit code and dies.
 //
 // The two states discovery refuses each have their own registered code, because
 // the remedies are different commands: hooks left in the pre-migration location
-// need `hook migrate`, a committed hook that is not executable needs a chmod and
-// a commit. Anything else is a plain failure to read the store.
+// need `hook migrate`, a hook the checkout provides that is not executable needs
+// a chmod and a commit. Anything else is a plain failure to read the store.
 func hookDiscoveryExit(err error) int {
 	var legacy *hooks.LegacyLocationError
 	var tracked *hooks.TrackedNotExecutableError
@@ -56,7 +70,7 @@ func hookDiscoveryExit(err error) int {
 func hookList(flags globalFlags) int {
 	gitDir := mustGitDir()
 
-	locations, err := hooks.Enumerate(hookStore(flags, gitDir))
+	locations, err := hooks.Enumerate(hookStore(flags, sharedGitDir(flags, gitDir)))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
@@ -127,7 +141,7 @@ func hookRun(flags globalFlags, name string) int {
 		fmt.Sprintf("SAFEGIT_HOOK_TIMEOUT_S=%d", timeoutSec),
 	}
 
-	store := hookStore(flags, gitDir)
+	store := hookStore(flags, sharedGitDir(flags, gitDir))
 
 	if name != "" {
 		// Run a specific hook by name
@@ -210,7 +224,7 @@ func hookInstall(flags globalFlags, srcPath string) int {
 	// existing destination is refused by PlanInstall -- before the preview as
 	// well as before the install, since a preview that promised a write the
 	// real run would refuse is a lie.
-	data, dest, err := hooks.PlanInstall(gitDir, srcPath)
+	data, dest, err := hooks.PlanInstall(sharedGitDir(flags, gitDir), srcPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
@@ -240,9 +254,10 @@ func hookInstall(flags globalFlags, srcPath string) int {
 //
 // The name may be the store-relative path (`pre-pre-push.d/20-lint`) or just
 // the base name, which is what an operator reads off `hook list` and off the
-// per-hook lines a push prints. A name that resolves to a COMMITTED hook is
-// refused: that file is part of the repository's content and removing it means
-// committing the deletion, which is a different act with a different audience.
+// per-hook lines a push prints. A name that resolves ONLY to a hook the
+// checkout provides (.safegit/hooks) is refused: that file is part of the
+// repository's content and removing it means deleting it and committing that,
+// which is a different act with a different audience.
 func hookRemove(flags globalFlags, name string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
@@ -250,7 +265,7 @@ func hookRemove(flags globalFlags, name string) int {
 		return exitcode.NotInitialized
 	}
 
-	locations, err := hooks.Enumerate(hookStore(flags, gitDir))
+	locations, err := hooks.Enumerate(hookStore(flags, sharedGitDir(flags, gitDir)))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
@@ -271,13 +286,13 @@ func hookRemove(flags globalFlags, name string) int {
 		}
 	}
 
-	// A committed hook is only the answer when nothing in the live store
-	// carries that name: the command removes from the live store, and a name
-	// present in both stores names one hook this command can remove and one it
-	// cannot. The one it cannot is stated rather than silently left behind.
+	// A hook the checkout provides is only the answer when nothing in the live
+	// store carries that name: the command removes from the live store, and a
+	// name present in both stores names one hook this command can remove and one
+	// it cannot. The one it cannot is stated rather than silently left behind.
 	if len(local) == 0 && len(tracked) > 0 {
 		die(exitcode.General, fmt.Sprintf(
-			"%s is a COMMITTED hook (%s); it is part of the repository's content, so removing it means committing the deletion: "+
+			"%s is a hook the checkout provides (%s); it is part of the repository's content, so removing it means committing the deletion: "+
 				"delete the file and commit that change with `safegit commit`",
 			name, tracked[0].Path))
 		return exitcode.General
@@ -311,8 +326,13 @@ func hookRemove(flags globalFlags, name string) int {
 	if !flags.silent() && !flags.dryRun {
 		fmt.Printf("removed hook: %s\n", target.Rel)
 	}
-	if len(tracked) > 0 {
-		fmt.Fprintf(os.Stderr, "note: %s also names a COMMITTED hook (%s), which still runs; removing that one means committing its deletion\n",
+	// The advisory is what keeps the removal from reading as "that name is gone
+	// now", so a preview states it too: after the removal this command previews,
+	// the repository-provided hook of the same name still runs. It is advice
+	// about the store rather than a result, so --quiet (and machine mode, whose
+	// stdout is the envelope) suppresses it.
+	if len(tracked) > 0 && !flags.silent() {
+		fmt.Fprintf(os.Stderr, "note: %s also names a hook the checkout provides (%s), which still runs; removing that one means deleting the file and committing that\n",
 			name, tracked[0].Path)
 	}
 	return 0
@@ -334,11 +354,17 @@ func hookMigrate(flags globalFlags) int {
 		return exitcode.NotInitialized
 	}
 
+	// Both ends of every move are under the SHARED git dir: git's own hook
+	// directory is common to every worktree, and so is the live store the hooks
+	// move into, so migration run from a linked worktree relocates the
+	// repository's hooks rather than looking into an empty directory of its own.
+	shared := sharedGitDir(flags, gitDir)
+
 	type move struct{ src, dest, label string }
 	var moves []move
 	for _, m := range []move{
-		{hooks.LegacyFile(gitDir), filepath.Join(hooks.LocalDir(gitDir), "pre-pre-push"), "pre-pre-push"},
-		{hooks.LegacyDir(gitDir), filepath.Join(hooks.LocalDir(gitDir), "pre-pre-push.d"), "pre-pre-push.d"},
+		{hooks.LegacyFile(shared), filepath.Join(hooks.LocalDir(shared), "pre-pre-push"), "pre-pre-push"},
+		{hooks.LegacyDir(shared), filepath.Join(hooks.LocalDir(shared), "pre-pre-push.d"), "pre-pre-push.d"},
 	} {
 		if _, err := os.Lstat(m.src); err != nil {
 			continue
@@ -353,13 +379,13 @@ func hookMigrate(flags globalFlags) int {
 	}
 
 	if len(moves) == 0 {
-		outf(flags, "nothing to migrate: no hooks in %s\n", filepath.Join(gitDir, "hooks"))
+		outf(flags, "nothing to migrate: no hooks in %s\n", filepath.Join(shared, "hooks"))
 		return 0
 	}
 
 	fx := flags.effects()
-	if _, err := fx.Mkdir(hooks.LocalDir(gitDir)); err != nil {
-		fmt.Fprintf(os.Stderr, "error: creating %s: %v\n", hooks.LocalDir(gitDir), err)
+	if _, err := fx.Mkdir(hooks.LocalDir(shared)); err != nil {
+		fmt.Fprintf(os.Stderr, "error: creating %s: %v\n", hooks.LocalDir(shared), err)
 		return exitcode.General
 	}
 	for _, m := range moves {

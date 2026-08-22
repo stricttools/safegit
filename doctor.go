@@ -35,8 +35,15 @@ type doctorEnv struct {
 	// that look at anything committed -- the hook store above all -- need it.
 	worktree string
 	gitDir   string
-	sgDir    string
-	inited   bool
+	// sharedGitDir is the COMMON git dir (repo.SharedGitDir): the same one in
+	// an ordinary repository, the main one in a linked worktree. Everything
+	// that is repository-level rather than checkout-level -- the live hook
+	// store, the legacy hook location, the ref locks -- is anchored there, so a
+	// check that read gitDir instead would call a linked worktree healthy while
+	// the repository's pushes refuse.
+	sharedGitDir string
+	sgDir        string
+	inited       bool
 }
 
 // doctorFinding is one check's outcome.
@@ -170,11 +177,12 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 	ctx := flags.ctx()
 
 	env := doctorEnv{
-		ctx:      ctx,
-		worktree: flags.root.resolve(),
-		gitDir:   gitDir,
-		sgDir:    repo.SafegitDir(gitDir),
-		inited:   repo.IsInitialized(gitDir),
+		ctx:          ctx,
+		worktree:     flags.root.resolve(),
+		gitDir:       gitDir,
+		sharedGitDir: repo.SharedGitDir(ctx, gitDir),
+		sgDir:        repo.SafegitDir(gitDir),
+		inited:       repo.IsInitialized(gitDir),
 	}
 
 	checks := runDoctorChecks(env, flags.verbose)
@@ -386,11 +394,11 @@ func checkFilesystemRegistered(env doctorEnv) doctorFinding {
 // -- both stores, at any depth -- rather than re-deriving one directory's
 // layout and going quietly blind to the rest. The two stores get different
 // severities because push treats them differently: a non-executable LOCAL hook
-// is skipped with a warning, while a non-executable COMMITTED hook is a hard
-// refusal, so reporting the second as advisory would understate a push that is
-// already failing.
+// is skipped with a warning, while a non-executable hook the checkout provides
+// is a hard refusal, so reporting the second as advisory would understate a push
+// that is already failing.
 func checkHookPerms(env doctorEnv) doctorFinding {
-	locations, err := hooks.Enumerate(hooks.Store{Worktree: env.worktree, GitDir: env.gitDir})
+	locations, err := hooks.Enumerate(hooks.Store{Worktree: env.worktree, SharedGitDir: env.sharedGitDir})
 	if err != nil {
 		return findingFail("%v", err)
 	}
@@ -410,11 +418,11 @@ func checkHookPerms(env doctorEnv) doctorFinding {
 		}
 	}
 	if len(tracked) > 0 {
-		return findingAt("error", "%d committed hook(s) are not executable, which every push refuses on: %s (chmod +x and commit the mode change)",
+		return findingAt("error", "%d hook(s) in the checkout's .safegit/hooks are not executable, which every push refuses on: %s (chmod +x and commit the mode change)",
 			len(tracked), strings.Join(tracked, ", "))
 	}
 	if len(local) > 0 {
-		return findingFail("%d non-executable hook(s) in %s: %s", len(local), hooks.LocalDir(env.gitDir), strings.Join(local, ", "))
+		return findingFail("%d non-executable hook(s) in %s: %s", len(local), hooks.LocalDir(env.sharedGitDir), strings.Join(local, ", "))
 	}
 	return findingOK("")
 }
@@ -424,8 +432,12 @@ func checkHookPerms(env doctorEnv) doctorFinding {
 // It is an error rather than advice because of what it costs: every push, and
 // every `hook run`, refuses outright while they are there. A repository in that
 // state is not degraded, it is stopped, and one command fixes it.
+//
+// The location is the COMMON git dir's hook directory, which is the same one
+// every worktree of the repository refuses on -- reading a linked worktree's own
+// git dir found an empty directory and reported the repository healthy.
 func checkHooksMigrated(env doctorEnv) doctorFinding {
-	legacy, err := hooks.Legacy(env.gitDir)
+	legacy, err := hooks.Legacy(env.sharedGitDir)
 	if err != nil {
 		return findingFail("%v", err)
 	}
@@ -437,7 +449,7 @@ func checkHooksMigrated(env doctorEnv) doctorFinding {
 		names = append(names, loc.Rel)
 	}
 	return findingFail("%d hook(s) are still in %s: %s (run 'safegit hook migrate'; every push refuses until then)",
-		len(legacy), filepath.Join(env.gitDir, "hooks"), strings.Join(names, ", "))
+		len(legacy), filepath.Join(env.sharedGitDir, "hooks"), strings.Join(names, ", "))
 }
 
 // checkUnusedNativeHooks names the repository's own git hooks that safegit
