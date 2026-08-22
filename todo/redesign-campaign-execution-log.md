@@ -370,6 +370,47 @@ existing entries are never rewritten.
   before any push in the observation-failure arms) with the table
   regenerated.
 
+## Ratified 6.4/6.5/6.6 decisions
+
+- Delegation reconciles via git.AdoptIndexFrom, NOT ReconcileMainIndex
+  (probe-forced: git writes a mid-queue second conflict's stages into
+  the COPY only, and the shared index still holds the already-resolved
+  old conflict — a HEAD-based reconcile either resurrects the resolved
+  conflict or hides the live one). Adoption is a DIFFERENT operation
+  from reconciliation (the copy is authoritative because git advanced
+  it), stated in its doc comment; ReconcileMainIndex remains the
+  authority for its own job.
+- Worktree materialization happens BEFORE the delegation (git's
+  --continue compares the worktree against the index it is given;
+  markers beside a resolved entry are "local changes would be
+  overwritten"). Delegated payload: pipeline members ABSENT not null;
+  queue_delegated/head/commits_created added; state_cleared READ from
+  disk. Delegated oplog op is outside undoableOps; -m/--trailer/
+  --dry-run refused for queued conclusions rather than dropped.
+  Git's hooks on the delegated path probed and pinned (concluded step
+  fires all four; sequencer-committed follow-ups fire only
+  prepare-commit-msg and post-commit; no safegit trailers — output
+  says so).
+- refuseOwnedConclusion is a ratified plan extension: --continue on
+  merge/pick/revert refuses whenever safegit owns the conclusion (read
+  from coord.WayOutOf; rebase/am pass through) — the dirty-tree guard
+  alone let a CLEAN-tree merge --continue produce a git-authored,
+  trailer-less commit (reproduced live).
+- Revert restructure gated by an explicit option allowlist; --edit and
+  --no-commit and multi-commit stay passthrough. merge-tree argv
+  verified: pick C = --merge-base=C^ HEAD C; revert C =
+  --merge-base=C HEAD C^ (non-vacuity pinned). Preview replay order
+  fixed (--no-walk=unsorted + range reversal for cherry-pick).
+  Unsupported-preview-flag refusal exits 1 (same number the framework's
+  own dry-run refusal uses — one situation, one number); the -X
+  refusal reason is version-free (reversible if merge-tree -X at the
+  2.38 floor is ever confirmed).
+- OPEN DETERMINATION (assigned to the Phase 6 closing audit): what
+  does safegit undo do when git-authored commits (passthrough pick,
+  delegated conclusion) sit on top of the last oplog entry — refuse
+  via CAS/tip arithmetic, or roll back and destroy the newer commits?
+  Rule after facts are established.
+
 ## Ratified 6.3 decisions (two plan corrections, evidence-forced)
 
 - LAYER INVERSION: the plan's region-primary/structural-secondary
