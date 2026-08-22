@@ -131,10 +131,6 @@ func announceWayOut(flags globalFlags, gitDir string) {
 }
 
 func runCheckout(flags globalFlags, args []string) int {
-	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
-		commandHelp("checkout [git checkout args...]", "Checkout a ref. Guarded twice: the worktree operation lock, held for the whole command, then a check for uncommitted work.")
-	}
-
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -246,10 +242,6 @@ func runPull(flags globalFlags, mode pullMode, remote string, branch string) int
 }
 
 func runMerge(flags globalFlags, args []string) int {
-	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
-		commandHelp("merge [git merge args...]", "Merge a branch. Guarded twice: the worktree operation lock, held for the whole command, then a check for uncommitted work.")
-	}
-
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -299,10 +291,6 @@ func runMerge(flags globalFlags, args []string) int {
 }
 
 func runRebase(flags globalFlags, args []string) int {
-	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
-		commandHelp("rebase [git rebase args...]", "Rebase onto upstream. Guarded twice: the worktree operation lock, held for the whole rebase including an interactive one's editor session, then a check for uncommitted work.")
-	}
-
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -342,10 +330,6 @@ func runRebase(flags globalFlags, args []string) int {
 }
 
 func runReset(flags globalFlags, args []string) int {
-	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
-		commandHelp("reset [git reset args...]", "Reset HEAD. The worktree operation lock is taken for every reset; the uncommitted-work check applies to --hard only, since only --hard mutates the working tree.")
-	}
-
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -394,10 +378,6 @@ func runReset(flags globalFlags, args []string) int {
 }
 
 func runBisect(flags globalFlags, args []string) int {
-	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
-		commandHelp("bisect [git bisect args...]", "Bisect. The worktree operation lock is taken for every invocation; the uncommitted-work check applies to the tree-moving subcommands (good, bad, old, new, reset, start).")
-	}
-
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -445,22 +425,15 @@ func runBisect(flags globalFlags, args []string) int {
 	return 0
 }
 
-// guardedHelp maps guarded passthrough commands to their help descriptions.
-var guardedHelp = map[string]string{
-	"cherry-pick": "Cherry-pick commits. Guarded twice: the worktree operation lock, held for the whole command, then a check for uncommitted work.",
-	"revert":      "Revert commits. Guarded twice: the worktree operation lock, held for the whole command, then a check for uncommitted work.",
-}
-
 // runGuardedPassthrough runs a coordination check, then passes through to git.
+//
+// It handles no --help of its own, and neither does any other passthrough
+// handler here. strictcli intercepts --help and -h anywhere in a passthrough's
+// argv before dispatch, so a handler could only ever see them after a bare --,
+// where the forwarded args begin with -- and never with --help. The help text
+// these handlers used to print lives in the app.Passthrough registrations in
+// main.go, which is what the framework actually renders.
 func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int {
-	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
-		desc := guardedHelp[gitCmd]
-		if desc == "" {
-			desc = fmt.Sprintf("Guarded wrapper around git %s.", gitCmd)
-		}
-		commandHelp(fmt.Sprintf("%s [git %s args...]", gitCmd, gitCmd), desc)
-	}
-
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

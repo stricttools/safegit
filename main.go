@@ -1052,12 +1052,6 @@ func requireCleanTree(ctx context.Context) {
 	}
 }
 
-// commandHelp prints per-command help and exits.
-func commandHelp(cmd, usage string) {
-	fmt.Fprintf(os.Stderr, "Usage: safegit %s\n\n%s\n", cmd, usage)
-	os.Exit(exitcode.OK)
-}
-
 // die prints an error and exits with code.
 //
 // It writes no JSON of its own any more. Machine mode's stdout carries the
