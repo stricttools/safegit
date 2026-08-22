@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/smm-h/safegit/internal/git"
@@ -276,11 +277,11 @@ func (op continueOp) renderHuman(flags globalFlags, out conclusionResult, headli
 // reportDelegated emits the payload and the human rendering of a conclusion
 // GIT performed.
 //
-// The delegation is stated first and plainly, because it changes who the
-// commits belong to: they carry none of safegit's trailers, safegit's own
-// commit-msg handling never ran, and `safegit undo` will not reverse them. An
-// operator who reads only the first line still learns the thing that matters
-// about this run.
+// What the delegation COST is stated first and unconditionally, because it
+// changes who the commits belong to: they carry none of safegit's trailers,
+// safegit's own commit-msg handling never ran, and `safegit undo` will not
+// reverse them. That line is written to stderr on every run -- see the note
+// below -- so an operator learns it whatever mode they asked for.
 func reportDelegated(flags globalFlags, op continueOp, out delegatedOutcome) {
 	head := out.head
 	flags.payload(delegatedPayload{
@@ -293,6 +294,17 @@ func reportDelegated(flags globalFlags, op continueOp, out delegatedOutcome) {
 		StateCleared:   out.stateCleared,
 		DryRun:         false,
 	})
+
+	// What the delegation COST, on stderr and unconditionally -- the same class
+	// of fact as undo's "the merge state is NOT restored" note, and written the
+	// same way for the same reason: an operator who does not hear it will look
+	// for safegit's trailers on these commits, or try to reverse them with
+	// `safegit undo`. --quiet is a request for less chatter, not for less of
+	// this; machine mode's envelope owns stdout, and stderr is where a fact
+	// that must survive both belongs.
+	if out.created != 0 {
+		fmt.Fprintf(os.Stderr, "note: these commits are git's: no safegit trailers, safegit's commit-msg handling did not run, and 'safegit undo' does not reverse them\n")
+	}
 
 	if flags.silent() {
 		return
@@ -308,7 +320,6 @@ func reportDelegated(flags globalFlags, op continueOp, out delegatedOutcome) {
 	} else {
 		fmt.Printf(" the queue is NOT finished: git stopped again and its state files are still in place\n")
 	}
-	fmt.Printf(" these commits are git's: no safegit trailers, safegit's commit-msg handling did not run, and 'safegit undo' does not reverse them\n")
 
 	written, removed := worktreeEffects(out.declared)
 	if len(written) > 0 {

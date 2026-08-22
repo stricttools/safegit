@@ -149,8 +149,10 @@ func assertQueueDelegates(t *testing.T, verb, command string) {
 			t.Errorf("the report does not say %q authored the commits:\n%s", want, stdout)
 		}
 	}
-	if !strings.Contains(stdout, "undo") {
-		t.Errorf("the report does not say safegit undo cannot reverse git's commits:\n%s", stdout)
+	// The consequence of the delegation is on STDERR and unconditional -- see
+	// TestDelegatedConclusionAlwaysSaysWhoAuthoredTheCommits.
+	if !strings.Contains(stderr, "undo") {
+		t.Errorf("the report does not say safegit undo cannot reverse git's commits:\n%s", stderr)
 	}
 
 	// The queue completed: BOTH commands are on the branch. The clean path can
@@ -184,6 +186,36 @@ func assertQueueDelegates(t *testing.T, verb, command string) {
 	if _, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession,
 		"commit", "-m", "after the delegated conclusion", "--", "after.txt"); code != 0 {
 		t.Fatalf("a commit after the delegated conclusion failed (code %d): %s", code, stderr)
+	}
+}
+
+// TestDelegatedConclusionAlwaysSaysWhoAuthoredTheCommits pins the one fact a
+// delegated conclusion may not withhold: these commits are git's, so they carry
+// none of safegit's trailers and `safegit undo` will not reverse them.
+//
+// It is the same class of fact as undo's own "the merge state is NOT restored"
+// note -- something the operation did NOT do, which an operator who does not
+// hear it will assume was done -- so it is written the same way: stderr,
+// unconditionally. --quiet still silences the ordinary report.
+func TestDelegatedConclusionAlwaysSaysWhoAuthoredTheCommits(t *testing.T) {
+	fx := newQueuedPickRepo(t, "cherry-pick")
+
+	stdout, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession,
+		"--quiet", "cherry-pick-continue", "--resolve", fx.conflicted+"=theirs")
+	if code != exitcode.OK {
+		t.Fatalf("the delegated conclusion failed (code %d): %s", code, stderr)
+	}
+	for _, want := range []string{"these commits are git's", "undo"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("--quiet suppressed the delegation fact (%q):\n%s", want, stderr)
+		}
+	}
+	// safegit's own report is chatter and goes; git's passthrough output on
+	// stdout is git's, and --quiet was never a claim about it.
+	for _, gone := range []string{"git concluded the queued", "staged into safegit's index copy"} {
+		if strings.Contains(stdout, gone) {
+			t.Errorf("--quiet did not suppress safegit's own report (%q):\n%s", gone, stdout)
+		}
 	}
 }
 
