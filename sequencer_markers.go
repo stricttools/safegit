@@ -19,9 +19,11 @@ import (
 // It is LAYERED, and the two layers do different jobs:
 //
 //	STRUCTURAL (the verdict) -- does the content hold a complete conflict block
-//	that no side of this conflict, and no parent of this commit, already had?
-//	The DIFFERENTIAL against the stage 1/2/3 blobs, or against the parents'
-//	blobs, is what makes the question safe to ask: a repository whose real
+//	that no side of this conflict, and neither side of this operation, already
+//	had? The DIFFERENTIAL against the stage 1/2/3 blobs, or against the blobs
+//	the operation's base commits hold (the branch being committed onto plus its
+//	incoming side -- see baseCommitsFor), is what makes the question safe to
+//	ask: a repository whose real
 //	content carries marker-shaped lines -- documentation about conflicts, a
 //	stored fixture -- stays committable, because a block a side already had is
 //	attributed to that side instead of reported. What is left is a block that
@@ -115,7 +117,7 @@ func (op continueOp) verifyMarkers(ctx context.Context, state sequencer.State, s
 		return exitcode.General
 	}
 
-	v := &markerCheck{op: op, state: state, sides: sides, choices: choices, attrs: attrs, parents: append([]string{firstParent}, state.MergeHeads...)}
+	v := &markerCheck{op: op, state: state, sides: sides, choices: choices, attrs: attrs, baseCommits: baseCommitsFor(op.kind, firstParent, state)}
 	if err := v.readAutoMerge(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "error: reading what git recorded for this conflict: %v\n", err)
 		return exitcode.General
@@ -197,9 +199,11 @@ type markerCheck struct {
 	sides   map[string]conflict.Sides
 	choices map[string]resolutionChoice
 	attrs   map[string]conflict.Attrs
-	// parents are the commit's parents, in order, which is what "a parent
-	// already had this block" is measured against for a path with no stages.
-	parents []string
+	// baseCommits are the commits whose content this conclusion may
+	// legitimately be carrying forward, for a path with no stages: the branch
+	// being committed onto, plus the operation's INCOMING side. See
+	// baseCommitsFor.
+	baseCommits []string
 	// autoMergePresent records whether git wrote an AUTO_MERGE tree for this
 	// operation at all, asked once rather than per path.
 	autoMergePresent bool
@@ -219,8 +223,8 @@ func (v *markerCheck) readAutoMerge(ctx context.Context) error {
 // The two early exits are not optimization details. A content holding NO
 // complete block holds no surviving conflict, and a content whose every block
 // a side already carried holds none either -- in both cases the path is clean
-// under the whole check, and the more expensive questions (what did git emit
-// here, what do the other parents hold) are never asked.
+// under the whole check, and the more expensive question -- what did git emit
+// here -- is never asked.
 func (v *markerCheck) check(ctx context.Context, path string) ([]markerViolation, error) {
 	content, present, err := v.committedContent(ctx, path)
 	if err != nil || !present {
@@ -419,15 +423,52 @@ func (op continueOp) reconstructionLabels(ctx context.Context, state sequencer.S
 	return conflict.Labels{}, false, nil
 }
 
-// baseBlobs are the contents a block may legitimately have come from: the
-// conflict's own three stages where the path is unmerged, and otherwise every
-// parent of the commit being made.
+// baseCommitsFor names every commit a path with no stages may legitimately have
+// taken its content from: the branch being committed onto, plus the operation's
+// INCOMING side.
 //
-// Every parent, not only the first: a merge records the incoming side as a
-// parent too, and a file that arrived wholesale from it carries whatever that
-// side committed. Measuring against the first parent alone would refuse a merge
-// for bringing in a path whose committed content contains marker-shaped lines,
-// which is the very thing the differential exists to permit.
+// The incoming side is spelled differently per operation, which is why this is
+// not one list:
+//
+//   - a MERGE records its incoming side as a parent (every MERGE_HEAD line, an
+//     octopus included), so a file that arrived wholesale from it carries
+//     whatever that side committed;
+//   - a CHERRY-PICK produces a single-parent commit, so its incoming side is
+//     nowhere in the parent list: it is the commit being applied, which the
+//     state file names;
+//   - a REVERT's incoming content is the INVERSE patch, so both halves of it
+//     count -- the commit being reverted, and that commit's PARENT, which is
+//     where restored content comes from. Reverting "replace the documented
+//     example with a pointer" puts the example back, and the only commit that
+//     ever carried it is the source's parent.
+//
+// Measuring against the first parent alone would refuse each of those for
+// bringing in content containing marker-shaped lines, which is the very thing
+// the differential exists to permit. A revision that does not resolve (a source
+// with no parent, an empty Source between the steps of a queue) is simply
+// absent from the answer: baseBlobs treats an unresolvable one as "that commit
+// does not have this path", which is the same answer.
+func baseCommitsFor(kind sequencer.Kind, firstParent string, state sequencer.State) []string {
+	commits := []string{firstParent}
+	switch kind {
+	case sequencer.KindMerge:
+		return append(commits, state.MergeHeads...)
+	case sequencer.KindCherryPick:
+		if state.Source != "" {
+			commits = append(commits, state.Source)
+		}
+	case sequencer.KindRevert:
+		if state.Source != "" {
+			commits = append(commits, state.Source, state.Source+"^")
+		}
+	}
+	return commits
+}
+
+// baseBlobs are the contents a block may legitimately have come from: the
+// conflict's own three stages where the path is unmerged, and otherwise the
+// content each of this operation's base commits holds for the path (see
+// baseCommitsFor).
 func (v *markerCheck) baseBlobs(ctx context.Context, path string) ([][]byte, error) {
 	if s, conflicted := v.sides[path]; conflicted {
 		var blobs [][]byte
@@ -444,10 +485,10 @@ func (v *markerCheck) baseBlobs(ctx context.Context, path string) ([][]byte, err
 	}
 
 	var blobs [][]byte
-	for _, parent := range v.parents {
-		sha, err := git.RevParse(ctx, parent+":"+path)
+	for _, base := range v.baseCommits {
+		sha, err := git.RevParse(ctx, base+":"+path)
 		if err != nil {
-			// The path does not exist on that parent, which is an answer.
+			// The path does not exist on that commit, which is an answer.
 			continue
 		}
 		blob, err := git.CatFileBlob(ctx, sha)
