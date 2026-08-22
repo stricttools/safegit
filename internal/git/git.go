@@ -139,6 +139,25 @@ func GitDir(ctx context.Context) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// ObjectsDir returns the ABSOLUTE path of the repository's object store.
+//
+// Absolute because the answer is used as a GIT_ALTERNATE_OBJECT_DIRECTORIES
+// entry, which git resolves against whatever directory the child process runs
+// in -- and safegit's children run in several (the repository root under the
+// pin, another repository entirely at the explicit-directory sites). A relative
+// answer would name a different store depending on who read it.
+//
+// It is git's own answer rather than a join onto the git dir, so a linked
+// worktree (whose objects live in the common git dir) and a repository whose
+// object store is redirected both report the store git will actually use.
+func ObjectsDir(ctx context.Context) (string, error) {
+	out, _, err := Run(ctx, "rev-parse", "--path-format=absolute", "--git-path", "objects")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
 // ErrDetachedHead is returned when HEAD is not on a branch.
 var ErrDetachedHead = fmt.Errorf("HEAD is detached (not on a branch); check out a branch first or use --branch")
 

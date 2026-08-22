@@ -32,7 +32,14 @@ import (
 // preview that creates an empty fanout directory is visible as well.
 func dryPurityObjectSnapshot(t *testing.T, repoDir string) []string {
 	t.Helper()
-	root := filepath.Join(repoDir, ".git", "objects")
+	return dryPurityObjectSnapshotAt(t, filepath.Join(repoDir, ".git", "objects"))
+}
+
+// dryPurityObjectSnapshotAt is the same listing for an object store named
+// directly, which is how a submodule's store (under the parent's
+// .git/modules/<name>/objects) is reached.
+func dryPurityObjectSnapshotAt(t *testing.T, root string) []string {
+	t.Helper()
 	var paths []string
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -191,4 +198,52 @@ func TestCommitDryRunHunkPathLeavesObjectStoreUntouched(t *testing.T) {
 			t.Fatalf("hunk dry-run commit failed (%d): stdout=%s stderr=%s", code, stdout, stderr)
 		}
 	})
+}
+
+// TestSubmoduleScrubDryRunLeavesBothObjectStoresUntouched covers the paths the
+// repository-root pin does not reach: the submodule scan and cat-file calls,
+// which target a git directory given as an argument. A preview of a submodule
+// scrub reads BOTH object stores -- the parent's and the submodule's -- and it
+// must leave both exactly as it found them.
+//
+// The two stores are asserted separately on purpose: a quarantine installed for
+// the parent while the submodule's store stayed writable would look clean from
+// the parent's side alone.
+func TestSubmoduleScrubDryRunLeavesBothObjectStoresUntouched(t *testing.T) {
+	parentDir, _, subDir := newRepoWithSubmoduleSecret(t, "SUBPREVIEW_SECRET", "secret.txt")
+
+	subSHAs := revListReverse(t, subDir)
+	firstSubCommit := subSHAs[0]
+
+	parentObjects := filepath.Join(parentDir, ".git", "objects")
+	subObjects := filepath.Join(submoduleGitDir(t, subDir), "objects")
+
+	parentBefore := dryPurityObjectSnapshotAt(t, parentObjects)
+	subBefore := dryPurityObjectSnapshotAt(t, subObjects)
+
+	stdout, stderr, code := runSafegitEnv(t, parentDir, submoduleEnv,
+		"--dry-run", "scrub", "file", "mysub/secret.txt",
+		"--from", firstSubCommit, "--reason", "preview purity")
+	if code != 0 {
+		t.Fatalf("submodule scrub --dry-run failed (%d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	for _, store := range []struct {
+		name   string
+		root   string
+		before []string
+	}{
+		{"the parent's", parentObjects, parentBefore},
+		{"the submodule's", subObjects, subBefore},
+	} {
+		after := dryPurityObjectSnapshotAt(t, store.root)
+		if added := dryPurityDiff(store.before, after); len(added) > 0 {
+			t.Errorf("the submodule scrub preview wrote %d new entries into %s object store (%s): %v",
+				len(added), store.name, store.root, added)
+		}
+		if removed := dryPurityDiff(after, store.before); len(removed) > 0 {
+			t.Errorf("the submodule scrub preview removed %d entries from %s object store (%s): %v",
+				len(removed), store.name, store.root, removed)
+		}
+	}
 }

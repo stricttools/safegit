@@ -10,6 +10,7 @@ import (
 	"github.com/smm-h/safegit/internal/coord"
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/index"
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/oplog"
@@ -64,6 +65,14 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 		return nil, err
 	}
 
+	// The preview area, opened before any object-writing call -- see
+	// beginPreview.
+	ctx, previewArea, previewCleanup, err := beginPreview(ctx, req.DryRun)
+	if err != nil {
+		return nil, err
+	}
+	defer previewCleanup()
+
 	repoRoot, err := git.RepoRoot(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolving repo root: %w", err)
@@ -112,7 +121,7 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryAmend(ctx, ref, repoRoot, files, req, hooks, attempt)
+		result, retry, err := p.tryAmend(ctx, ref, repoRoot, previewArea, files, req, hooks, attempt)
 		if err != nil {
 			return nil, err
 		}
@@ -130,7 +139,7 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 
 func (p *Pipeline) tryAmend(
 	ctx context.Context,
-	ref, repoRoot string,
+	ref, repoRoot, previewArea string,
 	files *intake,
 	req AmendRequest,
 	hooks *nativeHooks,
@@ -164,13 +173,7 @@ func (p *Pipeline) tryAmend(
 	// Use headSHA (resolved above) instead of ref to avoid a TOCTOU race:
 	// if the ref moves between RevParse and index creation, the tree would be
 	// based on a different commit than headSHA, silently dropping files.
-	idxBase, idxBaseCleanup, err := p.indexBaseDir(req.DryRun)
-	if err != nil {
-		return nil, false, err
-	}
-	defer idxBaseCleanup()
-
-	tmpIdx, err := index.New(ctx, idxBase, headSHA)
+	tmpIdx, err := index.New(ctx, p.indexBaseDir(previewArea), headSHA)
 	if err != nil {
 		return nil, false, fmt.Errorf("creating tmp index: %w", err)
 	}
@@ -315,6 +318,10 @@ type RewordRequest struct {
 
 // RewordResult is the JSON-serializable output of a successful reword.
 type RewordResult struct {
+	// SHA is the reworded commit, and EMPTY under a dry run: a preview of a
+	// reword is a pure computation that builds no commit object at all, so
+	// there is no name to report. The SHA a real run produces could not be
+	// predicted anyway -- it is a function of the committer timestamp.
 	SHA string `json:"sha"`
 	Ref string `json:"ref"`
 	// Parents is the parent list the reworded commit inherited, all of it: a
@@ -334,6 +341,13 @@ func (p *Pipeline) Reword(ctx context.Context, req RewordRequest) (*RewordResult
 
 	if req.Message == "" {
 		return nil, fmt.Errorf("reword requires a message (-m)")
+	}
+
+	// A reword's preview writes no objects (see tryReword), so it needs no
+	// quarantine -- but it is still a preview, and marking it as one is what
+	// makes the boundary refuse if anything on this path ever starts writing.
+	if req.DryRun {
+		ctx = gitexec.WithPreview(ctx)
 	}
 
 	// Resolve target branch ref
@@ -413,16 +427,10 @@ func (p *Pipeline) tryReword(
 
 	// A reword stages nothing, so the content the hooks inspect is the tip's own
 	// tree. It is materialized as an index only when a hook that would read one
-	// still has to run.
+	// still has to run -- which a dry run never does, since it runs no hooks.
 	hookIndex := ""
 	if hooks.wantsIndex() {
-		idxBase, idxBaseCleanup, err := p.indexBaseDir(req.DryRun)
-		if err != nil {
-			return nil, false, err
-		}
-		defer idxBaseCleanup()
-
-		tmpIdx, err := index.New(ctx, idxBase, treeSHA)
+		tmpIdx, err := index.New(ctx, p.indexBaseDir(""), treeSHA)
 		if err != nil {
 			return nil, false, fmt.Errorf("creating tmp index: %w", err)
 		}
@@ -439,20 +447,26 @@ func (p *Pipeline) tryReword(
 		return nil, false, err
 	}
 
-	commitSHA, err := git.CommitTree(ctx, treeSHA, parents, trailer.Inject(msg), nil)
-	if err != nil {
-		return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
-	}
-
+	// A preview of a reword is a PURE COMPUTATION: everything it reports -- the
+	// ref, the tree, the parents, the commit being replaced -- was read off the
+	// existing tip, and the one thing a commit-tree would add is a SHA that
+	// depends on the committer timestamp and so cannot be the SHA the real run
+	// will produce. Building the object anyway would write it into the
+	// repository (or, since the quarantine, into a throwaway store) to compute
+	// a number nothing may report. So the preview stops here.
 	if req.DryRun {
 		return &RewordResult{
-			SHA:      commitSHA,
 			Ref:      ref,
 			Parents:  parents,
 			Tree:     treeSHA,
 			OldSHA:   headSHA,
 			Attempts: attempt,
 		}, false, nil
+	}
+
+	commitSHA, err := git.CommitTree(ctx, treeSHA, parents, trailer.Inject(msg), nil)
+	if err != nil {
+		return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
 	}
 
 	lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second

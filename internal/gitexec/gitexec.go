@@ -21,6 +21,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -54,6 +55,27 @@ type rootKey struct{}
 // noRootPinKey is the context key that records a declared exemption from the
 // repository-root pin.
 type noRootPinKey struct{}
+
+// previewKey is the context key that marks a run as a preview -- a --dry-run
+// dispatch, which promises to change nothing on disk.
+type previewKey struct{}
+
+// quarantineKey is the context key for the object quarantine a preview writes
+// through.
+type quarantineKey struct{}
+
+// quarantine is where a preview's object writes go, and which object stores
+// must stay readable while they do.
+type quarantine struct {
+	// Dir becomes GIT_OBJECT_DIRECTORY: the throwaway store every object a
+	// preview creates is written into, and which is deleted with the preview.
+	Dir string
+	// Alternates are the object stores the preview must still READ: the
+	// repository's own, first of all, since the preview stages the parent tree
+	// and builds a commit on it. They become GIT_ALTERNATE_OBJECT_DIRECTORIES,
+	// merged with whatever the environment already carried.
+	Alternates []string
+}
 
 // WithDir returns a context that targets a specific repository. Every git
 // subprocess built from it sets GIT_DIR, GIT_WORK_TREE and its working
@@ -112,6 +134,54 @@ func WithoutRootPin(ctx context.Context, id ExemptionID) context.Context {
 func rootPinSuspended(ctx context.Context) bool {
 	_, ok := ctx.Value(noRootPinKey{}).(ExemptionID)
 	return ok
+}
+
+// WithPreview marks a context as a preview: the --dry-run dispatch, which
+// promises to change nothing on disk. It is what makes the quarantine
+// ENFORCEABLE rather than merely available -- see Command, which refuses an
+// object-writing invocation on a previewing context that carries no quarantine.
+//
+// The mark is separate from the quarantine itself precisely so the refusal has
+// something to fire on: a previewing command that forgot to install a
+// quarantine is exactly the case worth catching.
+func WithPreview(ctx context.Context) context.Context {
+	if InPreview(ctx) {
+		return ctx
+	}
+	return context.WithValue(ctx, previewKey{}, true)
+}
+
+// InPreview reports whether this context belongs to a preview.
+func InPreview(ctx context.Context) bool {
+	v, _ := ctx.Value(previewKey{}).(bool)
+	return v
+}
+
+// WithObjectQuarantine returns a previewing context whose git subprocesses
+// write every object they create into dir instead of into the repository, while
+// still reading the object stores named by alternates.
+//
+// A preview that promises to change nothing cannot make that promise while
+// `git add`, `git write-tree` and `git commit-tree` deposit blobs, trees and
+// commits in the repository's own store, where they stay as unreferenced loose
+// objects. Pointing GIT_OBJECT_DIRECTORY at a throwaway directory keeps the
+// preview's arithmetic exact -- the tree SHA it computes is the tree SHA the
+// real run would compute -- and leaves nothing behind when the directory goes.
+//
+// It marks the context as a preview too: a quarantine exists for no other
+// reason.
+func WithObjectQuarantine(ctx context.Context, dir string, alternates ...string) context.Context {
+	q := quarantine{Dir: dir, Alternates: append([]string(nil), alternates...)}
+	return context.WithValue(WithPreview(ctx), quarantineKey{}, q)
+}
+
+// ObjectQuarantine reports the context-carried object quarantine, if any.
+func ObjectQuarantine(ctx context.Context) (dir string, alternates []string, ok bool) {
+	q, ok := ctx.Value(quarantineKey{}).(quarantine)
+	if !ok {
+		return "", nil, false
+	}
+	return q.Dir, append([]string(nil), q.Alternates...), true
 }
 
 // Spec describes one git invocation.
@@ -203,13 +273,101 @@ func Command(ctx context.Context, s Spec) (*exec.Cmd, error) {
 	// to EVERY spec, including the explicit-directory ones. Nothing here may be
 	// placed inside the switch above: exemption from the directory pin is not
 	// exemption from anything else.
+	//
+	// The object quarantine is the case that makes the rule concrete: the
+	// explicit-directory sites are the submodule scan and cat-file paths, and a
+	// submodule preview that skipped the quarantine would write into the
+	// submodule's object store while the parent's was protected.
+	quarantineEnv, err := s.quarantine(ctx)
+	if err != nil {
+		return nil, err
+	}
+	env = append(env, quarantineEnv...)
 
 	// os.Environ() is the base for every override that travels as an
-	// environment variable; Phase 3.1's object quarantine composes on top of it.
+	// environment variable; the quarantine composes on top of it.
 	if len(env) > 0 {
 		cmd.Env = append(os.Environ(), env...)
 	}
 	return cmd, nil
+}
+
+// objectEnvVars are the environment variables that retarget git's object store.
+var (
+	objectDirVar     = "GIT_OBJECT_DIRECTORY"
+	altObjectDirsVar = "GIT_ALTERNATE_OBJECT_DIRECTORIES"
+)
+
+// quarantine renders the object-store environment for one spec, and enforces
+// the rule that gives the quarantine its worth: in a preview, an invocation the
+// classification table says can WRITE objects may not run without one.
+//
+// The refusal is a hard error rather than a warning because the failure it
+// guards is invisible -- a preview that writes objects leaves them in the
+// repository as unreferenced loose objects, and nothing downstream ever
+// reports it.
+func (s Spec) quarantine(ctx context.Context) ([]string, error) {
+	dir, alternates, ok := ObjectQuarantine(ctx)
+	if !ok {
+		if InPreview(ctx) && WritesObjects(s.Args) {
+			return nil, &Error{Msg: "gitexec: refusing to run `git " + strings.Join(s.Args, " ") +
+				"` in a preview with no object quarantine installed: the classification table says this invocation can write to the object store, and a preview must leave it untouched (install one with gitexec.WithObjectQuarantine before the command's first object-writing call)"}
+		}
+		return nil, nil
+	}
+
+	// The alternates are assembled rather than assigned: GIT_OBJECT_DIRECTORY
+	// REPLACES the object store git would have used, so every store the
+	// invocation still has to read has to be listed here. Go's exec dedups the
+	// environment keeping the LAST occurrence of a name, so writing a bare value
+	// would silently drop an inherited one.
+	merged := append([]string(nil), splitObjectDirs(os.Getenv(altObjectDirsVar))...)
+	for _, e := range s.Env {
+		if name, value, found := strings.Cut(e, "="); found && name == altObjectDirsVar {
+			merged = append(merged, splitObjectDirs(value)...)
+		}
+	}
+	merged = append(merged, alternates...)
+	if s.GitDir != "" {
+		// A spec that names its own repository reads that repository's objects,
+		// and the quarantine has just displaced them.
+		merged = append(merged, filepath.Join(s.GitDir, "objects"))
+	}
+
+	return []string{
+		objectDirVar + "=" + dir,
+		altObjectDirsVar + "=" + strings.Join(dedupePaths(merged), string(os.PathListSeparator)),
+	}, nil
+}
+
+// splitObjectDirs splits a GIT_ALTERNATE_OBJECT_DIRECTORIES value into its
+// entries, dropping empty ones.
+func splitObjectDirs(value string) []string {
+	if value == "" {
+		return nil
+	}
+	var out []string
+	for _, p := range strings.Split(value, string(os.PathListSeparator)) {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// dedupePaths keeps the first occurrence of each path, so a store listed twice
+// is searched once.
+func dedupePaths(paths []string) []string {
+	seen := make(map[string]bool, len(paths))
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if p == "" || seen[p] {
+			continue
+		}
+		seen[p] = true
+		out = append(out, p)
+	}
+	return out
 }
 
 // ArgvAny returns the full git argv -- binary, global prefix, then args -- as
@@ -259,7 +417,11 @@ func (s Spec) validateExemption() error {
 // dirEnvVars are the environment variables that retarget git's directories.
 // The boundary sets them itself, from Spec.GitDir/WorkTree or from the
 // context-carried override; a spec may not smuggle one in through Spec.Env.
-var dirEnvVars = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR"}
+//
+// GIT_OBJECT_DIRECTORY is banned for the same reason: it retargets the object
+// store, and the ONE thing that may do that is the context-carried quarantine,
+// whose presence or absence the preview refusal reads.
+var dirEnvVars = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY"}
 
 // validateEnv refuses a directory override spelled as an environment entry.
 //
