@@ -315,6 +315,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 		infof(flags, "  %d tag annotations rewritten\n", result.TagsRewrittenCount)
 		infof(flags, "  Old HEAD: %s\n", result.OldHeadSHA[:12])
 		infof(flags, "  New HEAD: %s\n", result.NewHeadSHA[:12])
+		printScopeNotice(flags, result.Ref)
 		printRotationNotice(flags, recheckCommandForRecipe(recipePath))
 	}
 

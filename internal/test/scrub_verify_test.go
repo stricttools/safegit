@@ -391,6 +391,54 @@ func TestScrubOutputCarriesTheRotationNotice(t *testing.T) {
 	}
 }
 
+// TestScrubOutputCarriesTheScopeLine pins that a completed scrub states its
+// actual scope: which ref's history it walked, and that every other ref was
+// left alone. Without it an operator reads "Scrub complete" as "the secret is
+// gone from this repository", when a branch the walk never visited still holds
+// it.
+func TestScrubOutputCarriesTheScopeLine(t *testing.T) {
+	dir := newRepo(t)
+	const secret = "SCOPE_LINE_TOKEN_1"
+	commitFileEnv(t, dir, scrubVerifyEnv, "c.txt", "k="+secret+"\n", "add secret")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubVerifyEnv,
+		"--approve-consequential", "scrub", "match",
+		"--pattern", secret, "--replace", "REDACTED",
+		"--reason", "scope line", "--entire-history",
+	)
+	if code != 0 {
+		t.Fatalf("scrub match failed (code %d): %s", code, stderr)
+	}
+	if !strings.Contains(stdout, "Scope:") {
+		t.Errorf("scrub output must carry a scope line; stdout was:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "refs/heads/main") {
+		t.Errorf("the scope line must name the rewritten ref refs/heads/main; stdout was:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "other refs were not rewritten") {
+		t.Errorf("the scope line must say other refs were not rewritten; stdout was:\n%s", stdout)
+	}
+}
+
+// TestScrubFileOutputCarriesTheScopeLine is the `scrub file` twin.
+func TestScrubFileOutputCarriesTheScopeLine(t *testing.T) {
+	dir := newRepo(t)
+	commitFileEnv(t, dir, scrubVerifyEnv, "keep.txt", "keep\n", "seed")
+	commitFileEnv(t, dir, scrubVerifyEnv, "secret.env", "TOKEN=abc\n", "add secret file")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubVerifyEnv,
+		"--approve-consequential", "scrub", "file",
+		"secret.env", "--delete",
+		"--reason", "scope line", "--entire-history",
+	)
+	if code != 0 {
+		t.Fatalf("scrub file failed (code %d): %s", code, stderr)
+	}
+	if !strings.Contains(stdout, "Scope:") || !strings.Contains(stdout, "refs/heads/main") {
+		t.Errorf("scrub file output must carry a scope line naming refs/heads/main; stdout was:\n%s", stdout)
+	}
+}
+
 // TestDoctorReportsAndFixesALegacyPolicyFile pins the migration path for a
 // repository scrubbed by an older safegit: the leftover file is an ERROR naming
 // what it contains, and --action fix deletes it.
