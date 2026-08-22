@@ -66,8 +66,8 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	}
 
 	// The preview area, opened before any object-writing call -- see
-	// beginPreview.
-	ctx, previewArea, previewCleanup, err := beginPreview(ctx, req.DryRun)
+	// BeginPreview.
+	ctx, previewArea, previewCleanup, err := BeginPreview(ctx, req.DryRun)
 	if err != nil {
 		return nil, err
 	}

@@ -24,7 +24,7 @@ import (
 // seam.
 //
 // They no longer do. Every commit-family operation opens an object quarantine
-// before its first object-writing call (commit.beginPreview, which points
+// before its first object-writing call (commit.BeginPreview, which points
 // GIT_OBJECT_DIRECTORY at a throwaway preview area and lists the repository's
 // own store as an alternate), so a preview still computes the exact tree and
 // commit SHAs a real run would while writing every object it makes into a

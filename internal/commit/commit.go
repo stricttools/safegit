@@ -206,7 +206,7 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	// The preview area, opened before any object-writing call: from here on
 	// every git subprocess this operation builds writes its objects into the
 	// quarantine instead of into the repository.
-	ctx, previewArea, previewCleanup, err := beginPreview(ctx, req.DryRun)
+	ctx, previewArea, previewCleanup, err := BeginPreview(ctx, req.DryRun)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +286,7 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 
 // indexBaseDir returns the directory the per-invocation temp index is created
 // under. An executing run uses .git/safegit, whose tmp/ subdirectory the doctor
-// garbage-collects. A dry run stages inside the preview area beginPreview
+// garbage-collects. A dry run stages inside the preview area BeginPreview
 // opened instead: the preview still stages, writes the tree and builds the
 // commit object exactly as the real run would, and .git/safegit is left alone
 // -- including not being created at all in a repo where safegit has never run.
@@ -373,7 +373,7 @@ func (p *Pipeline) tryCommit(
 	// the handle's Run takes an argv and nothing else -- there is no stdin to
 	// hand it. Nothing rests on that, because staging is not a mutation the
 	// preview has to withhold. It runs for real in both modes, and in dry mode it
-	// runs inside the object quarantine (see beginPreview) against a temp index
+	// runs inside the object quarantine (see BeginPreview) against a temp index
 	// under the preview area, so every object it writes is thrown away with the
 	// area and the repository's own store never sees it. The one mutation this
 	// pipeline must withhold in a preview is the ref update at Step 7, which is
