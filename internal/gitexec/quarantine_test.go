@@ -186,3 +186,39 @@ func TestWithoutAQuarantineNothingIsAdded(t *testing.T) {
 		}
 	}
 }
+
+// The observe allowlist and the quarantine meet here: an allowlisted prefix is
+// the ONE way an effects-handle invocation executes during a preview, and those
+// invocations are built by ArgvAny, which carries no context and therefore no
+// quarantine. What keeps that safe is that every allowlisted prefix is a read.
+func TestObservePrefixesAreReadsOnly(t *testing.T) {
+	prefixes := ObservePrefixes()
+	if len(prefixes) == 0 {
+		t.Fatal("no observe prefixes were generated, so this proves nothing")
+	}
+	for _, prefix := range prefixes {
+		if !IsObserveOnly(prefix) {
+			t.Errorf("prefix %v is not observe-only", prefix)
+		}
+		if WritesObjects(prefix) {
+			t.Errorf("prefix %v can write objects, and an allowlisted argv executes even in a preview -- outside any quarantine", prefix)
+		}
+		if len(prefix) < 2 || prefix[0] != Binary {
+			t.Errorf("prefix %v is not a real argv prefix", prefix)
+		}
+	}
+
+	// The generation rule itself: a verb whose reading depends on what follows
+	// it is excluded, because the match is on a prefix.
+	for _, v := range Verbs() {
+		if v.Base != ObserveOnly || len(v.Conditional) == 0 {
+			continue
+		}
+		for _, prefix := range prefixes {
+			if prefix[len(prefix)-1] == v.Name {
+				t.Errorf("%q has conditional effects (%s) and must not be allowlisted: the prefix would admit the mutating spellings too",
+					v.Name, v.Conditional[0].Why)
+			}
+		}
+	}
+}
