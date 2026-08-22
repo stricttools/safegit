@@ -16,6 +16,7 @@ import (
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/scan"
 	"github.com/smm-h/safegit/internal/submodule"
+	"github.com/smm-h/safegit/internal/trailer"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 
@@ -764,15 +765,11 @@ func scrubMatchExecute(
 				xform.TreeSHA = newTreeSHA
 			}
 
-			if compiledPattern.Match([]byte(info.Message)) {
-				var newMessage string
-				if mangleMode {
-					newMessage = compiledPattern.ReplaceAllStringFunc(info.Message, func(s string) string {
-						return string(mangleBytes([]byte(s)))
-					})
-				} else {
-					newMessage = compiledPattern.ReplaceAllString(info.Message, replace)
-				}
+			if compiledPattern.MatchString(info.Message) {
+				// The same trailer-aware rewrite the parent walk uses: a match
+				// overlapping a move record's quoted path is substituted inside
+				// the decoded path and re-encoded, never in the raw line.
+				newMessage := trailer.RewriteMessage(info.Message, patternSubstitution(compiledPattern, mangleMode, &replace))
 				if newMessage != info.Message {
 					xform.Message = newMessage
 					subMessagesModified++

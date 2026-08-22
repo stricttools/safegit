@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/smm-h/safegit/internal/trailer"
 )
 
 // A move record is a REFERENCE to a path. When a rewrite erases that path from
@@ -97,6 +98,60 @@ func TestScrubFileReplaceWithKeepsTheRecords(t *testing.T) {
 	}
 	if got := testutil.Git(t, dir, "show", "HEAD:config/secret.env"); got != "TOKEN=redacted" {
 		t.Errorf("the replacement content is %q", got)
+	}
+}
+
+// TestScrubMatchRewritesInsideARecordWithoutBreakingIt is the trailer-aware
+// half of the same problem. A commit message is not free text where a move
+// record sits in it: the record's paths are C-quoted, and a substitution
+// applied to the raw line can inject a delimiter, end a quoted region early or
+// leave a backslash with nothing after it -- and what the rewrite produces is
+// then a claim nobody can read.
+//
+// The replacement here injects a double quote, which is the quoting
+// delimiter itself: applied to the raw line it opens a quoted region that never
+// closes. Applied to the DECODED path and re-encoded, it is an ordinary path
+// that happens to need quoting.
+func TestScrubMatchRewritesInsideARecordWithoutBreakingIt(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "secret.txt", "value: hunter2\n")
+	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "add the file", "--", "secret.txt"); code != 0 {
+		t.Fatalf("seed commit failed (code %d): %s", code, stderr)
+	}
+	if _, stderr, code := runSafegit(t, dir, "mv", "-m", "put it under config",
+		"secret.txt -> config/secret.txt"); code != 0 {
+		t.Fatalf("mv failed (code %d): %s", code, stderr)
+	}
+	id := movedRecordsIn(t, commitMessageOf(t, dir, "HEAD"))[0][0]
+
+	if _, stderr, code := runSafegit(t, dir, "scrub", "match", "--approve-consequential",
+		"--pattern", "secret", "--replace", `a"b`, "--entire-history",
+		"--reason", "the name leaked"); code != 0 {
+		t.Fatalf("scrub match failed (code %d): %s", code, stderr)
+	}
+
+	sha := strings.TrimSpace(testutil.Git(t, dir, "log", "--format=%H", "--grep", "put it under config"))
+	if sha == "" {
+		t.Fatal("the move commit is not in the rewritten history")
+	}
+	msg := commitMessageOf(t, dir, sha)
+
+	moves := trailer.ReadMoves(msg)
+	if len(moves.Malformed) != 0 {
+		t.Fatalf("the rewrite produced a malformed record %v in:\n%s", moves.Malformed, msg)
+	}
+	if len(moves.Records) != 1 {
+		t.Fatalf("expected one readable record in:\n%s", msg)
+	}
+	r := moves.Records[0]
+	if r.ID != id {
+		t.Errorf("the record's id was rewritten: %q, want %q", r.ID, id)
+	}
+	if r.Old != `a"b.txt` || r.New != `config/a"b.txt` {
+		t.Errorf("the record's paths are %q -> %q, want the substituted ones", r.Old, r.New)
+	}
+	if strings.Contains(msg, "secret") {
+		t.Errorf("the pattern survived in the message:\n%s", msg)
 	}
 }
 
