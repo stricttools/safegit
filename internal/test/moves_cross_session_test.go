@@ -10,20 +10,22 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// These tests cover the cross-session failure mode of automatic move
-// detection: session A deletes a tracked file from its working tree, intending
+// These tests are the cannot-happen guards for the cross-session failure mode
+// that automatic move detection used to produce, and that its deletion closed
+// structurally.
+//
+// The shape: session A deletes a tracked file from its working tree, intending
 // to commit that deletion later. Session B, sharing the same worktree, commits
 // an unrelated NEW file whose content happens to hash to the same blob as A's
-// deleted file. detectMoves (internal/commit/moves.go) then classifies A's
-// deleted path as the "source" of B's "move" and auto-stages the deletion into
-// B's commit, which never named that path.
+// deleted file -- trivially so for empty files, and easily so for any copied
+// boilerplate. Move detection classified A's deleted path as the "source" of
+// B's "move" and staged that deletion into B's commit, which never named it.
 //
-// The existing TestMoveDetection_UnrelatedDeletion in moves_test.go does NOT
-// cover this: its unrelated deletion (a.txt, "content A") has a different blob
-// from the renamed file (b.txt -> c.txt, "content B"), so the blob lookup in
-// moves.go never produces a candidate. These tests exercise the case where the
-// blobs collide -- trivially for empty files, and deliberately for identical
-// non-empty content.
+// There is no blob lookup any more, so none of it can happen: B's commit
+// contains B's file, A's deletion stays A's to commit, and no rename is
+// announced. The tests keep the fixtures that used to trigger it -- a colliding
+// blob is not rare, and a future shortcut that reintroduces the guess would
+// have to make one of these fail.
 
 // crossSessCommitPaths returns the sorted set of paths touched by the given
 // commit, each prefixed with its status letter (e.g. "A todo/b.txt",
@@ -67,12 +69,12 @@ func crossSessRemove(t *testing.T, repoDir, rel string) {
 	}
 }
 
-// TestCrossSessionMoveDetection_EmptyFileCollision is the trivial-collision
+// TestCrossSessionNoAdoption_EmptyFileCollision is the trivial-collision
 // case: every empty file in a repository shares the same blob
 // (e69de29bb2d1d6434b8b29ae775ad8c2e48c5391). Session A deletes a tracked
-// empty file; session B commits an unrelated new empty file. B's commit must
-// contain only B's file.
-func TestCrossSessionMoveDetection_EmptyFileCollision(t *testing.T) {
+// empty file; session B commits an unrelated new empty file. B's commit
+// contains only B's file.
+func TestCrossSessionNoAdoption_EmptyFileCollision(t *testing.T) {
 	dir := newRepo(t)
 
 	// Session A's file: tracked, empty, in its own directory.
@@ -94,6 +96,8 @@ func TestCrossSessionMoveDetection_EmptyFileCollision(t *testing.T) {
 		t.Fatalf("session B commit failed (code %d): %s", code, stderr)
 	}
 
+	assertNoRenameNotice(t, stderr)
+
 	got := crossSessCommitPaths(t, dir, "HEAD")
 	t.Logf("session B commit contents:\n%s", testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD"))
 	t.Logf("session B stderr: %q", stderr)
@@ -111,10 +115,10 @@ func TestCrossSessionMoveDetection_EmptyFileCollision(t *testing.T) {
 	}
 }
 
-// TestCrossSessionMoveDetection_IdenticalContentCollision is the same shape
-// with non-empty content: two unrelated files that happen to hold byte-identical
+// TestCrossSessionNoAdoption_IdenticalContentCollision is the same shape with
+// non-empty content: two unrelated files that happen to hold byte-identical
 // text (a license header, a stub, a copied boilerplate config).
-func TestCrossSessionMoveDetection_IdenticalContentCollision(t *testing.T) {
+func TestCrossSessionNoAdoption_IdenticalContentCollision(t *testing.T) {
 	dir := newRepo(t)
 
 	const shared = "# TODO\n\n- [ ] fill this in\n"
@@ -135,6 +139,8 @@ func TestCrossSessionMoveDetection_IdenticalContentCollision(t *testing.T) {
 		t.Fatalf("session B commit failed (code %d): %s", code, stderr)
 	}
 
+	assertNoRenameNotice(t, stderr)
+
 	got := crossSessCommitPaths(t, dir, "HEAD")
 	t.Logf("session B commit contents:\n%s", testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD"))
 	t.Logf("session B stderr: %q", stderr)
@@ -151,11 +157,12 @@ func TestCrossSessionMoveDetection_IdenticalContentCollision(t *testing.T) {
 	}
 }
 
-// TestCrossSessionMoveDetection_QuietIsSilentAdoption pins the observability
-// half of the problem: with --quiet the auto-staged-deletion notice is not
-// printed at all, so session B has no signal whatsoever that another session's
-// deletion was folded into its commit.
-func TestCrossSessionMoveDetection_QuietIsSilentAdoption(t *testing.T) {
+// TestCrossSessionNoAdoption_UnderQuiet closes the observability half of the
+// old problem. The notice that disclosed an adopted deletion was suppressed by
+// --quiet, so a quiet session had no signal at all that another session's
+// deletion had been folded into its commit. Nothing is adopted under --quiet
+// either, so there is nothing left for a suppressed notice to hide.
+func TestCrossSessionNoAdoption_UnderQuiet(t *testing.T) {
 	dir := newRepo(t)
 
 	crossSessMkdirAll(t, dir, "notes")
@@ -174,6 +181,8 @@ func TestCrossSessionMoveDetection_QuietIsSilentAdoption(t *testing.T) {
 		t.Fatalf("session B quiet commit failed (code %d): %s", code, stderr)
 	}
 
+	assertNoRenameNotice(t, stderr)
+
 	got := crossSessCommitPaths(t, dir, "HEAD")
 	t.Logf("session B commit contents:\n%s", testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD"))
 	t.Logf("session B stdout=%q stderr=%q", stdout, stderr)
@@ -184,13 +193,13 @@ func TestCrossSessionMoveDetection_QuietIsSilentAdoption(t *testing.T) {
 	}
 }
 
-// TestCrossSessionMoveDetection_JSONModeIsSilentAdoption is the machine-mode
+// TestCrossSessionNoAdoption_UnderMachineMode is the machine-mode
 // half of the same observability question. globalFlags.silent() is
 // `quiet || json` (main.go:84), so `--json` suppresses the stderr notice too,
 // and `commit` declares no PayloadSchema -- so the envelope carries no payload
 // in which the adopted deletion could appear. A tool driving safegit in machine
 // mode therefore receives no representation of it at all.
-func TestCrossSessionMoveDetection_JSONModeIsSilentAdoption(t *testing.T) {
+func TestCrossSessionNoAdoption_UnderMachineMode(t *testing.T) {
 	dir := newRepo(t)
 
 	crossSessMkdirAll(t, dir, "notes")
@@ -209,6 +218,8 @@ func TestCrossSessionMoveDetection_JSONModeIsSilentAdoption(t *testing.T) {
 		t.Fatalf("session B json commit failed (code %d): stdout=%q stderr=%q", code, stdout, stderr)
 	}
 
+	assertNoRenameNotice(t, stderr)
+
 	got := crossSessCommitPaths(t, dir, "HEAD")
 	t.Logf("session B commit contents:\n%s", testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD"))
 	t.Logf("session B --json stdout=%q stderr=%q", stdout, stderr)
@@ -219,13 +230,13 @@ func TestCrossSessionMoveDetection_JSONModeIsSilentAdoption(t *testing.T) {
 	}
 }
 
-// TestCrossSessionMoveDetection_MultipleDeletedShareBlob is the tie-break
-// variant. Session A deletes TWO tracked files that share a blob with session
-// B's new file. moves.go picks exactly one by pathSimilarity, falling back to
-// lexicographic order on a tie -- so which of A's files gets swept into B's
-// commit is decided by alphabetical accident. Neither is an acceptable answer:
-// B named neither path.
-func TestCrossSessionMoveDetection_MultipleDeletedShareBlob(t *testing.T) {
+// TestCrossSessionNoAdoption_MultipleDeletedShareBlob is the tie-break variant.
+// Session A deletes TWO tracked files that share a blob with session B's new
+// file. The old code picked exactly one by path similarity, falling back to
+// lexicographic order on a tie, so which of A's files got swept into B's commit
+// was decided by alphabetical accident. Neither was an acceptable answer, and
+// now neither is picked.
+func TestCrossSessionNoAdoption_MultipleDeletedShareBlob(t *testing.T) {
 	dir := newRepo(t)
 
 	crossSessMkdirAll(t, dir, "notes")
@@ -248,6 +259,8 @@ func TestCrossSessionMoveDetection_MultipleDeletedShareBlob(t *testing.T) {
 		t.Fatalf("session B commit failed (code %d): %s", code, stderr)
 	}
 
+	assertNoRenameNotice(t, stderr)
+
 	got := crossSessCommitPaths(t, dir, "HEAD")
 	t.Logf("session B commit contents:\n%s", testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD"))
 	t.Logf("session B stderr: %q", stderr)
@@ -255,16 +268,16 @@ func TestCrossSessionMoveDetection_MultipleDeletedShareBlob(t *testing.T) {
 
 	if len(got) != 1 || got[0] != "A todo/b.txt" {
 		t.Fatalf("with two blob-identical deleted files present, session B's commit contains %v; "+
-			"exactly one of session A's deletions was picked by path-similarity tie-break "+
-			"(lexicographic on an equal score), which is an arbitrary choice between two paths B never named. stderr: %q",
-			got, stderr)
+			"one of session A's deletions was swept in, which is a choice between two paths "+
+			"B never named. stderr: %q", got, stderr)
 	}
 }
 
-// TestCrossSessionMoveDetection_VictimCommitBecomesEmpty follows the damage
-// downstream: after session B's commit silently absorbed A's deletion, A's own
-// attempt to commit that deletion has nothing left to record.
-func TestCrossSessionMoveDetection_VictimCommitBecomesEmpty(t *testing.T) {
+// TestCrossSessionNoAdoption_VictimCommitsItsOwnDeletion follows the old damage
+// downstream: once session B's commit had silently absorbed A's deletion, A's
+// own attempt to commit it had nothing left to record. A's deletion is still
+// A's, so A commits it.
+func TestCrossSessionNoAdoption_VictimCommitsItsOwnDeletion(t *testing.T) {
 	dir := newRepo(t)
 
 	crossSessMkdirAll(t, dir, "notes")
@@ -283,6 +296,7 @@ func TestCrossSessionMoveDetection_VictimCommitBecomesEmpty(t *testing.T) {
 		t.Fatalf("session B commit failed (code %d): %s", code, stderr)
 	}
 	bHead := testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD")
+	assertNoRenameNotice(t, bStderr)
 
 	// Now session A commits the deletion it has been holding.
 	aStdout, aStderr, aCode := runSafegit(t, dir, "commit", "-m", "session A removes notes/a.txt", "--", "notes/a.txt")

@@ -103,10 +103,9 @@ type CommitResult struct {
 	Tree     string `json:"tree"`
 	Attempts int    `json:"attempts"`
 
-	// AutoStagedDeletions lists repo-relative paths of files that were
-	// automatically staged as deletions (e.g., by move detection). Nil
-	// when no auto-staged deletions occurred.
-	AutoStagedDeletions []string `json:"autoStagedDeletions,omitempty"`
+	// SkippedIgnored lists the gitignored repo-relative paths a directory
+	// expansion passed over. Nil when nothing was skipped.
+	SkippedIgnored []string `json:"skippedIgnored,omitempty"`
 }
 
 // Execute runs the full two-phase commit pipeline.
@@ -151,14 +150,10 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 		}
 	}
 
-	// Extract plain paths for validation
-	filePaths := make([]string, len(fileSpecs))
-	for i, fs := range fileSpecs {
-		filePaths[i] = fs.Path
-	}
-
-	// Validate and normalize file paths before entering the retry loop
-	absFiles, err := p.resolveFiles(ctx, repoRoot, filePaths)
+	// Resolve, canonicalize and expand the arguments once, before the retry
+	// loop, against the tree this commit is built on -- the TARGET branch's
+	// tip, which is not HEAD when --branch names another branch.
+	files, err := p.resolveFiles(ctx, repoRoot, baseRev(ctx, ref), fileSpecs)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +164,7 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryCommit(ctx, ref, repoRoot, absFiles, fileSpecs, req, attempt)
+		result, retry, err := p.tryCommit(ctx, ref, repoRoot, files, req, attempt)
 		if err != nil {
 			return nil, err
 		}
@@ -210,8 +205,7 @@ func (p *Pipeline) indexBaseDir(dryRun bool) (base string, cleanup func(), err e
 func (p *Pipeline) tryCommit(
 	ctx context.Context,
 	ref, repoRoot string,
-	absFiles []string,
-	fileSpecs []FileSpec,
+	files *intake,
 	req CommitRequest,
 	attempt int,
 ) (*CommitResult, bool, error) {
@@ -250,27 +244,11 @@ func (p *Pipeline) tryCommit(
 	}
 	defer tmpIdx.Cleanup()
 
-	// Step 2: Stage files into tmp index (with optional hunk selection)
-	for i, absPath := range absFiles {
-		hunks := fileSpecs[i].Hunks
-		if hunks != nil {
-			// Hunk-level staging
-			if err := stage.StageHunks(ctx, tmpIdx.IndexPath, absPath, hunks); err != nil {
-				return nil, false, stagingHunksError(absPath, err)
-			}
-		} else {
-			// Whole-file staging
-			if err := p.stageFile(ctx, tmpIdx.IndexPath, absPath); err != nil {
-				return nil, false, fmt.Errorf("staging %s: %w", absPath, err)
-			}
-		}
-	}
-
-	// Step 2.3: Detect moves (new files whose content matches a deleted file
-	// in the parent tree) and auto-stage the corresponding deletions.
-	autoStaged, err := detectMoves(ctx, parentSHA, tmpIdx.IndexPath, absFiles, fileSpecs, repoRoot)
-	if err != nil {
-		return nil, false, fmt.Errorf("detect moves: %w", err)
+	// Step 2: Stage files into tmp index (with optional hunk selection).
+	// Paths are canonical repo-relative and become absolute only here, at the
+	// syscall boundary.
+	if err := p.stageAll(ctx, tmpIdx.IndexPath, repoRoot, files); err != nil {
+		return nil, false, err
 	}
 
 	// Step 2.5: Run pre-commit hook (if present) against the tmp index.
@@ -291,15 +269,30 @@ func (p *Pipeline) tryCommit(
 		return nil, false, &CommitError{Code: exitcode.WriteTree, Message: fmt.Sprintf("write-tree failed: %v", err)}
 	}
 
-	// Check for empty commit (tree unchanged). Root commits are never empty.
-	if !req.AllowEmpty && !isRootCommit {
-		parentTree, err := p.parentTreeSHA(ctx, parentSHA)
+	// Step 3.5: What this commit actually contains, read off the objects
+	// themselves. Every count and every path safegit reports comes from here --
+	// never from the arguments, which say what was ASKED for and not what the
+	// commit holds.
+	parentTree := ""
+	if !isRootCommit {
+		parentTree, err = p.parentTreeSHA(ctx, parentSHA)
 		if err != nil {
 			return nil, false, fmt.Errorf("resolving parent tree: %w", err)
 		}
-		if treeSHA == parentTree {
-			return nil, false, fmt.Errorf("nothing to commit (tree unchanged); use --allow-empty to override")
-		}
+	}
+	changed, err := git.DiffTree(ctx, parentTree, treeSHA)
+	if err != nil {
+		return nil, false, fmt.Errorf("comparing the new tree against %s: %w", refOrEmptyTree(isRootCommit, ref), err)
+	}
+
+	// An argument that changed nothing is a refusal naming that argument.
+	if src, unmatched := files.unmatchedSource(changed); unmatched {
+		return nil, false, unmatchedSourceError(src, refOrEmptyTree(isRootCommit, ref))
+	}
+
+	// Check for empty commit (tree unchanged). Root commits are never empty.
+	if !req.AllowEmpty && !isRootCommit && treeSHA == parentTree {
+		return nil, false, fmt.Errorf("nothing to commit (tree unchanged); use --allow-empty to override")
 	}
 
 	// Step 4: Build commit object (with user trailers and session trailer)
@@ -317,12 +310,12 @@ func (p *Pipeline) tryCommit(
 	// DryRun: return result without touching the ref
 	if req.DryRun {
 		return &CommitResult{
-			SHA:                 commitSHA,
-			Ref:                 ref,
-			Parent:              parentSHA,
-			Tree:                treeSHA,
-			Attempts:            attempt,
-			AutoStagedDeletions: autoStaged,
+			SHA:            commitSHA,
+			Ref:            ref,
+			Parent:         parentSHA,
+			Tree:           treeSHA,
+			Attempts:       attempt,
+			SkippedIgnored: files.skipped,
 		}, false, nil
 	}
 
@@ -405,73 +398,42 @@ func (p *Pipeline) tryCommit(
 	}
 
 	return &CommitResult{
-		SHA:                 commitSHA,
-		Ref:                 ref,
-		Parent:              parentSHA,
-		Tree:                treeSHA,
-		Attempts:            attempt,
-		AutoStagedDeletions: autoStaged,
+		SHA:            commitSHA,
+		Ref:            ref,
+		Parent:         parentSHA,
+		Tree:           treeSHA,
+		Attempts:       attempt,
+		SkippedIgnored: files.skipped,
 	}, false, nil
 }
 
-// resolveFiles validates and returns absolute paths for all requested files.
-// Relative paths are resolved against the current working directory (not the
-// repo root), matching how users specify files from their shell.
-func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot string, files []string) ([]string, error) {
-	abs := make([]string, 0, len(files))
-	for _, f := range files {
-		var absPath string
-		if filepath.IsAbs(f) {
-			absPath = filepath.Clean(f)
-		} else {
-			// Resolve relative to cwd, not repo root. When the user runs
-			// safegit from a subdirectory, "file.txt" means "subdir/file.txt"
-			// relative to the repo root.
-			var err error
-			absPath, err = filepath.Abs(f)
-			if err != nil {
-				return nil, fmt.Errorf("resolving path %s: %w", f, err)
-			}
-		}
-
-		// Resolve symlinks so absPath matches repoRoot, which comes from
-		// git rev-parse --show-toplevel (git resolves symlinks). On macOS,
-		// /var is a symlink to /private/var, so without this, filepath.Rel
-		// produces a path starting with ".." and the file is rejected as
-		// outside the repository.
-		absPath = resolveSymlinks(absPath)
-
-		// Must be inside the repo
-		rel, err := filepath.Rel(repoRoot, absPath)
-		if err != nil || strings.HasPrefix(rel, "..") {
-			return nil, fmt.Errorf("file %s is outside the repository", f)
-		}
-
-		exists := true
-		if _, err := os.Lstat(absPath); os.IsNotExist(err) {
-			exists = false
-		}
-
-		if !exists {
-			// File doesn't exist on disk -- must be a tracked deletion
-			tracked, err := git.IsTracked(ctx, rel)
-			if err != nil {
-				return nil, fmt.Errorf("checking tracked status of %s: %w", f, err)
-			}
-			if !tracked {
-				return nil, fmt.Errorf("file %s does not exist and is not tracked by git", f)
-			}
-		} else {
-			// Check gitignore
-			ignored, _ := git.IsIgnored(ctx, rel)
-			if ignored {
-				return nil, fmt.Errorf("file %s is gitignored", f)
-			}
-		}
-
-		abs = append(abs, absPath)
+// baseRev names the revision whose tree an operation is built on, or the empty
+// string when that ref has no commit yet. It is the tree every intake
+// judgement is made against.
+func baseRev(ctx context.Context, ref string) string {
+	if _, err := git.RevParse(ctx, ref); err != nil {
+		return ""
 	}
-	return abs, nil
+	return ref
+}
+
+// stageAll stages every resolved path into the temporary index. It is the one
+// place a canonical repo-relative path becomes an absolute one, which is what
+// keeps the two spellings from mixing anywhere else in the pipeline.
+func (p *Pipeline) stageAll(ctx context.Context, indexPath, repoRoot string, files *intake) error {
+	for _, entry := range files.entries {
+		absPath := git.Anchor(repoRoot, entry.path)
+		if entry.hunks != nil {
+			if err := stage.StageHunks(ctx, indexPath, absPath, entry.hunks); err != nil {
+				return stagingHunksError(absPath, err)
+			}
+			continue
+		}
+		if err := p.stageFile(ctx, indexPath, absPath); err != nil {
+			return fmt.Errorf("staging %s: %w", absPath, err)
+		}
+	}
+	return nil
 }
 
 // resolveSymlinks resolves symlinks in a path to produce a canonical absolute

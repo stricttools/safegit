@@ -254,13 +254,23 @@ func isDirectoryRmError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "not removing") && strings.Contains(err.Error(), "recursively without -r")
 }
 
-// IsTracked checks whether a file is tracked by git (present in HEAD tree).
+// IsTracked checks whether a file is tracked in the given revision's tree.
 // Uses cat-file instead of ls-files because safegit never writes to the main
 // index -- files committed via safegit exist in HEAD but not in .git/index.
-func IsTracked(ctx context.Context, filePath string) (bool, error) {
-	_, _, err := Run(ctx, "cat-file", "-e", "HEAD:"+filePath)
+//
+// The revision is a PARAMETER rather than a hardcoded HEAD because the tree a
+// path must be judged against is the tree the operation is built on, which is
+// not always HEAD: a `commit --branch other` builds on other's tip, and an
+// amend builds on the tip it replaces. Asking HEAD there decides the request
+// against a tree the operation will never touch. An empty rev means there is no
+// such tree yet (an unborn ref), where nothing is tracked.
+func IsTracked(ctx context.Context, rev, filePath string) (bool, error) {
+	if rev == "" {
+		return false, nil
+	}
+	_, _, err := Run(ctx, "cat-file", "-e", rev+":"+filePath)
 	if err != nil {
-		// Non-zero exit means the object doesn't exist in HEAD
+		// Non-zero exit means the object doesn't exist in that tree
 		return false, nil
 	}
 	return true, nil
@@ -677,6 +687,119 @@ func LsTreeAll(ctx context.Context, treeish string) ([]TreeEntry, error) {
 		return nil, fmt.Errorf("ls-tree %s: %w", treeish, err)
 	}
 	return parseLsTreeOutput(out, true), nil
+}
+
+// LsTreeRecursive returns EVERY entry in the given treeish, recursively:
+// blobs, symlinks and gitlinks (submodule pointers, mode 160000, object type
+// "commit"). LsTreeAll drops everything that is not a blob, which hides exactly
+// the entries a caller that must not cross a submodule boundary needs to see.
+//
+// `ls-tree -r` never descends INTO a gitlink, so a submodule's own contents can
+// never appear here -- the gitlink is reported as one entry and the recursion
+// stops there.
+func LsTreeRecursive(ctx context.Context, treeish string) ([]TreeEntry, error) {
+	out, _, err := Run(ctx, "ls-tree", "--full-tree", "-r", "-z", treeish)
+	if err != nil {
+		return nil, fmt.Errorf("ls-tree %s: %w", treeish, err)
+	}
+	return parseLsTreeOutput(out, false), nil
+}
+
+// ChangedPath is one entry of a recursive name-status diff between two trees.
+type ChangedPath struct {
+	// Status is git's single-letter name-status code: A, M, D, T (type
+	// change), and nothing else, because DiffTree turns rename detection off.
+	Status string
+	// Path is the repo-relative, slash-separated path that changed.
+	Path string
+}
+
+// DiffTree lists every path that differs between two trees, recursively.
+//
+// It is the one place safegit asks git what a tree comparison contains, and the
+// answer is what the commit pipeline reports as "the files in this commit":
+// derived from the objects, never counted from the arguments a caller typed.
+//
+// Rename detection is deliberately OFF. A rename is a deletion and an addition
+// in the tree, and pairing them up is an interpretation -- one that safegit
+// used to act on automatically and no longer does. The raw delta is what a
+// reviewer of the published commit sees.
+//
+// An empty fromTreeish means "compare against nothing": every path in the new
+// tree is reported as an addition. That is the root-commit case, and it is
+// spelled this way rather than with git's empty-tree constant so the function
+// carries no assumption about the repository's hash algorithm.
+func DiffTree(ctx context.Context, fromTreeish, toTreeish string) ([]ChangedPath, error) {
+	if fromTreeish == "" {
+		entries, err := LsTreeRecursive(ctx, toTreeish)
+		if err != nil {
+			return nil, err
+		}
+		changed := make([]ChangedPath, 0, len(entries))
+		for _, e := range entries {
+			changed = append(changed, ChangedPath{Status: "A", Path: e.Path})
+		}
+		return changed, nil
+	}
+
+	out, _, err := Run(ctx, "diff-tree", "-r", "-z", "--no-commit-id", "--no-renames",
+		"--name-status", fromTreeish, toTreeish)
+	if err != nil {
+		return nil, fmt.Errorf("diff-tree %s %s: %w", fromTreeish, toTreeish, err)
+	}
+
+	// -z output is a flat NUL-terminated stream of alternating status and path
+	// fields. Without -z git C-quotes any path that is not plain ASCII, which
+	// would name no file at all.
+	fields := strings.Split(out, "\x00")
+	var changed []ChangedPath
+	for i := 0; i+1 < len(fields); i += 2 {
+		status := fields[i]
+		path := fields[i+1]
+		if status == "" || path == "" {
+			continue
+		}
+		changed = append(changed, ChangedPath{Status: status, Path: path})
+	}
+	return changed, nil
+}
+
+// FilterIgnored returns the subset of the given repo-relative paths that git's
+// ignore rules exclude, as a set. Directories may be passed too: an ignored
+// directory answers for itself, so a caller walking a tree can stop there
+// instead of asking about every file underneath it.
+//
+// One `check-ignore --stdin` invocation answers for the whole batch. git exits
+// 1 when nothing in the batch is ignored, which is an answer and not a failure.
+func FilterIgnored(ctx context.Context, paths []string) (map[string]bool, error) {
+	ignored := make(map[string]bool)
+	if len(paths) == 0 {
+		return ignored, nil
+	}
+
+	var stdin bytes.Buffer
+	for _, p := range paths {
+		stdin.WriteString(p)
+		stdin.WriteByte(0)
+	}
+
+	out, stderr, err := RunWithEnvStdin(ctx, nil, stdin.Bytes(), "check-ignore", "-z", "--stdin")
+	if err != nil {
+		var exitErr *exec.ExitError
+		// Exit 1 with nothing on stderr is check-ignore's "none of these are
+		// ignored"; any other failure is a real one.
+		if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 || strings.TrimSpace(stderr) != "" {
+			return nil, err
+		}
+		return ignored, nil
+	}
+
+	for _, p := range strings.Split(out, "\x00") {
+		if p != "" {
+			ignored[p] = true
+		}
+	}
+	return ignored, nil
 }
 
 // LsTree returns all entries (blobs and subtrees) at one level of the given
