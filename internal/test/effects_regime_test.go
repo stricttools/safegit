@@ -575,6 +575,11 @@ func TestCommitDryRunEnvelopeCarriesOneRecordedMutation(t *testing.T) {
 		t.Error("dry_run = false under --dry-run")
 	}
 
+	// One record, and it is the ref update: the whole of what a preview of a
+	// commit would change about the world.
+	if len(env.Preview) != 1 {
+		t.Fatalf("a preview carried %d effect records, want exactly 1: %v", len(env.Preview), env.Preview)
+	}
 	mutations := procMutations(env)
 	if len(mutations) != 1 {
 		t.Fatalf("a preview recorded %d subprocess mutations, want exactly 1: %v", len(mutations), env.Preview)
