@@ -345,9 +345,6 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	if code := op.refuseWrongState(ctx, gitDir, state); code != 0 {
 		return code
 	}
-	if state.Queued {
-		return delegateQueuedSequence(op, state)
-	}
 	if _, err := git.HeadRef(ctx); err != nil {
 		return op.refuseDetachedHead(state)
 	}
@@ -372,6 +369,16 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
+	}
+
+	// A QUEUED cherry-pick or revert is concluded by git, not by the pipeline:
+	// the resolutions and the checks above are safegit's, the authorship of
+	// every commit the queue still has to make is git's. Everything before this
+	// point is shared with the native path on purpose -- the operator declares
+	// the same resolutions, and they are checked for completeness and for
+	// surviving markers the same way, whoever ends up writing the commit.
+	if state.Queued {
+		return delegateQueuedSequence(flags, op, gitDir, sgDir, state, sides, declared, edits, messages, trailers)
 	}
 
 	message, err := op.conclusionMessage(ctx, state, messages)
@@ -679,18 +686,6 @@ func (op continueOp) refuseEmptyConclusion() int {
 	fmt.Fprintf(os.Stderr, "  resolve at least one path to something the branch does not already have, or drop the operation:\n")
 	fmt.Fprintf(os.Stderr, "    git %s --skip     # move past this commit, keeping the rest of the operation\n", verb)
 	fmt.Fprintf(os.Stderr, "    git %s --abort    # throw the whole operation away\n", verb)
-	return exitcode.General
-}
-
-// delegateQueuedSequence is where the queued cherry-pick and revert paths will
-// hand off to git's own `--continue` (subphase 6.4). Until they do, a queued
-// sequence is refused rather than half-concluded: concluding one step natively
-// and removing the state-file set would take the rest of the queue with it.
-func delegateQueuedSequence(op continueOp, state sequencer.State) int {
-	fmt.Fprintf(os.Stderr, "error: safegit %s cannot yet conclude %s\n", op.command, state.String())
-	fmt.Fprintf(os.Stderr, "  a QUEUED sequence is concluded by delegating to git's own '%s --continue', which safegit does not do yet\n", strings.TrimSuffix(op.command, "-continue"))
-	fmt.Fprintf(os.Stderr, "  meanwhile: resolve the conflict and run 'git %s --continue' yourself, or abandon it with 'git %s --abort'\n",
-		strings.TrimSuffix(op.command, "-continue"), strings.TrimSuffix(op.command, "-continue"))
 	return exitcode.General
 }
 
