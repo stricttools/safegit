@@ -769,7 +769,13 @@ func scrubMatchExecute(
 				// The same trailer-aware rewrite the parent walk uses: a match
 				// overlapping a move record's quoted path is substituted inside
 				// the decoded path and re-encoded, never in the raw line.
-				newMessage := trailer.RewriteMessage(info.Message, patternSubstitution(compiledPattern, mangleMode, &replace))
+				newMessage, err := trailer.RewriteMessage(info.Message, patternSubstitution(compiledPattern, mangleMode, &replace))
+				if err != nil {
+					// The submodule's own walk refuses on the same terms the
+					// parent's does, and it refuses BEFORE any repository in
+					// this operation publishes anything.
+					return CommitTransform{}, refuseCorruptRecord(sha, err)
+				}
 				if newMessage != info.Message {
 					xform.Message = newMessage
 					subMessagesModified++
@@ -780,7 +786,7 @@ func scrubMatchExecute(
 			return xform, nil
 		}, flags.verbose)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("submodule %s: walk and rewrite: %v", si.sub.RelativePath, err))
+			dieFinalize(fmt.Sprintf("submodule %s", si.sub.RelativePath), err)
 		}
 
 		subScrubResults = append(subScrubResults, submoduleScrubResult{

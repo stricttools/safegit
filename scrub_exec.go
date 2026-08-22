@@ -441,7 +441,14 @@ func executeScrubRecipe(
 			if !pat.MatchString(newMessage) {
 				continue
 			}
-			newMessage = trailer.RewriteMessage(newMessage, patternSubstitution(pat, op.Mangle, op.Replace))
+			rewritten, err := trailer.RewriteMessage(newMessage, patternSubstitution(pat, op.Mangle, op.Replace))
+			if err != nil {
+				// A substitution that would leave a move record unreadable
+				// refuses the whole rewrite, here, while every rewritten
+				// commit is still an unreachable object.
+				return CommitTransform{}, refuseCorruptRecord(sha, err)
+			}
+			newMessage = rewritten
 		}
 		if newMessage != info.Message {
 			xform.Message = newMessage
@@ -452,7 +459,7 @@ func executeScrubRecipe(
 		return xform, nil
 	}, flags.verbose)
 	if err != nil {
-		die(exitcode.General, err.Error())
+		dieFinalize("", err)
 	}
 	remap.reportStale(flags)
 

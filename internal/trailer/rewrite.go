@@ -1,6 +1,9 @@
 package trailer
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 // Rewriting a message that CARRIES move records.
 //
@@ -101,6 +104,40 @@ func RemoveMovedRecordsNaming(message, path string) (string, bool) {
 	return body + strings.Join(kept, "\n") + "\n", true
 }
 
+// RecordTransformError reports a transform that would turn a readable move
+// record into one the decoder refuses.
+//
+// Re-encoding through the one encoder keeps the QUOTING readable whatever the
+// substitution did, but the pair itself still has to be a move: two different
+// paths, both or neither naming a subtree, neither of them empty. A replacement
+// can map both sides onto one path, eat a subtree marker on one side only, or
+// empty a token -- and the line that would be written is then a claim nobody
+// can read, sitting inert in history where the rewrite meant to correct it.
+//
+// So the transform refuses rather than writing it, and the caller turns the
+// refusal into a rewrite that never starts. The record is never edited into
+// half a claim and never dropped in silence either: a record is a whole
+// statement, and the only ways out are a replacement that keeps it one, erasing
+// the path outright, or retracting the record in a commit of its own.
+type RecordTransformError struct {
+	// Line is the record's trailer line as the commit carries it, before the
+	// transform.
+	Line string
+	// Result is the line the transform would have written.
+	Result string
+	// Old and New are the transformed pair.
+	Old string
+	New string
+	// Err is ValidatePair's verdict on that pair.
+	Err error
+}
+
+func (e *RecordTransformError) Error() string {
+	return fmt.Sprintf("the transform turns %q into %q, which is not a move: %v", e.Line, e.Result, e.Err)
+}
+
+func (e *RecordTransformError) Unwrap() error { return e.Err }
+
 // RewriteMessage applies a text transform to a commit message without breaking
 // the quoting grammar of a move record.
 //
@@ -120,10 +157,15 @@ func RemoveMovedRecordsNaming(message, path string) (string, bool) {
 // transform never sees the escaped form. The rewrite's own verification is what
 // notices that the pattern survived, and it refuses the rewrite -- which is the
 // honest outcome, and the alternative was a corrupt record.
-func RewriteMessage(message string, transform func(string) string) string {
+//
+// A transform whose result is no longer a MOVE is refused: the returned message
+// is empty and the error is a *RecordTransformError, which the caller turns
+// into a rewrite that never starts. See that type for why the record is neither
+// written broken nor dropped in silence.
+func RewriteMessage(message string, transform func(string) string) (string, error) {
 	body, block := SplitBodyTrailers(message)
 	if block == "" {
-		return transform(message)
+		return transform(message), nil
 	}
 
 	lines := strings.Split(strings.TrimRight(block, "\n"), "\n")
@@ -132,12 +174,22 @@ func RewriteMessage(message string, transform func(string) string) string {
 			if r, err := ParseRecord(value); err == nil {
 				old, new := transform(r.Old), transform(r.New)
 				if old != r.Old || new != r.New {
-					lines[i] = RecordLine(Record{ID: r.ID, Old: old, New: new})
+					rewritten := Record{ID: r.ID, Old: old, New: new}
+					if err := ValidatePair(old, new); err != nil {
+						return "", &RecordTransformError{
+							Line:   line,
+							Result: RecordLine(rewritten),
+							Old:    old,
+							New:    new,
+							Err:    err,
+						}
+					}
+					lines[i] = RecordLine(rewritten)
 				}
 				continue
 			}
 		}
 		lines[i] = transform(line)
 	}
-	return transform(body) + strings.Join(lines, "\n") + "\n"
+	return transform(body) + strings.Join(lines, "\n") + "\n", nil
 }
