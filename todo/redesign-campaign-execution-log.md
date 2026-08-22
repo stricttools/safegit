@@ -370,6 +370,36 @@ existing entries are never rewritten.
   before any push in the observation-failure arms) with the table
   regenerated.
 
+## Ratified Phase 4 (P4b: 4.3/4.4) decisions
+
+- Stateless verify: input requirement is a PARSER-declared constraint
+  (AtLeastOne of --pattern/recipe; --scope Requires --pattern — scope is
+  a modifier on flag patterns only, recipe operations carry their own
+  scope field; no invented glob-intersection rule). Payload records
+  carry a source enum (flag/recipe) since both inputs may coexist.
+  Verify deliberately keeps the whole-store scan (its question is "is
+  this ANYWHERE"), not the new explicit-commit-set mode.
+- Rotation notice rides infof (stdout, quiet/json-suppressed), matching
+  the adjacent push hint; scrub file's re-check prints a
+  fill-in-yourself placeholder regex (it names a path, not a pattern).
+- 4.4: Finalize split into prepare (plan + Tier A + cleanliness) and
+  publish; prepareAll/publishAll order submodule-first; the
+  between-finalizes crash window leaves parent gitlinks PRUNED but
+  journal-explainable (the submodule's completed journal maps every
+  stale gitlink) — the plan's property, pinned as such after a stronger
+  still-resolvable assertion failed. Crash injection keys the gitShim
+  on GIT_DIR presence to address each repo's calls exactly.
+- The 4.4 tests are structurally red against the old ordering (a
+  pre-restructure binary would need a worktree, banned here); the
+  submodule-journal-empty-at-parent-commit-tree assertion is the
+  discriminator.
+- ORCHESTRATOR RULING for Phase 5.5's doctor work: doctor diagnose
+  exits a NEW registered code when at least one error-severity finding
+  FAILS (warn findings never affect exit); after --action fix, error
+  findings that remain unfixed keep the nonzero. Pre-existing weakness
+  surfaced by 4.3: an error-severity finding (a secret-bearing legacy
+  policy file) currently exits 0.
+
 ## Ratified Phase 4 (P4a: 4.1/4.2) decisions
 
 - Exit 30 RewriteRefused (Tier A, nothing moved) and 31
