@@ -267,21 +267,19 @@ func unattributed(regions []conflict.Region, bases [][]byte, size int) []conflic
 	return out
 }
 
-// committedContent reads the bytes this path will be committed with, and says
-// where they came from.
+// committedContent reads the bytes this path will be committed with.
 //
-// A content that cannot be read is reported absent rather than as an error: a
-// `worktree` resolution naming a file that is not there is refused moments
-// later by the staging that has to hash it, with a message about the real
-// problem, and nothing is committed unverified either way.
+// present=false means there is nothing to check rather than that something went
+// wrong: a stage the conflict does not have removes the path from the commit,
+// and a `worktree` resolution naming a file that is not there is refused
+// moments later by the staging that has to hash it, with a message about the
+// real problem. Nothing is committed unverified either way.
 func (v *markerCheck) committedContent(ctx context.Context, path string) (content []byte, present bool, err error) {
 	switch v.choices[path] {
 	case resolveOurs:
-		blob, err := stageBlob(ctx, v.sides[path].Ours)
-		return blob, blob != nil, err
+		return stageContent(ctx, v.sides[path].Ours)
 	case resolveTheirs:
-		blob, err := stageBlob(ctx, v.sides[path].Theirs)
-		return blob, blob != nil, err
+		return stageContent(ctx, v.sides[path].Theirs)
 	case resolveWorktree:
 		// AnchorRoot, not the process working directory: a path git listed is
 		// relative to the repository, and reading it with a syscall from a
@@ -311,6 +309,17 @@ func (v *markerCheck) committedContent(ctx context.Context, path string) (conten
 		return nil, false, err
 	}
 	return blob, true, nil
+}
+
+// stageContent reads one stage's content, saying whether the stage names a file
+// at all: an absent stage is the side that deleted the path, and a gitlink is a
+// submodule's own commit rather than content this repository holds.
+func stageContent(ctx context.Context, e *git.UnmergedEntry) (content []byte, present bool, err error) {
+	if e == nil || e.Mode == gitlinkMode {
+		return nil, false, nil
+	}
+	blob, err := git.CatFileBlob(ctx, e.SHA)
+	return blob, err == nil, err
 }
 
 // stageBlob reads one stage's content; an absent stage means the side deleted
