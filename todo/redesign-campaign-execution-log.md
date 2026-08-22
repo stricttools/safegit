@@ -1304,6 +1304,18 @@ to stderr; scrub match's nil-result payload gap.
   projects' natural triage; safegit's tee-dependent follow-ups stay
   parked accordingly.
 
+## USER RULINGS (settled 2026-08-22, review session, round 7)
+
+- macOS CI mechanism: PLAIN PUSH TRIGGER — macOS stays in the
+  push-triggered matrix with zero conditions; release-only de facto
+  under never-push-between-releases. No workflow edit needed at all:
+  the as-built matrix already satisfies this ruling, so the earlier
+  release-only ruling is implemented by DOING NOTHING to ci-go.yml.
+- The escalation rule (user-shaped subagent decisions go to open
+  rulings, ratification only for internals) was adopted into the
+  GLOBAL rules file by the user; wording added to
+  /home/m/Projects/CLAUDE.md.
+
 ## Open rulings (RESOLVED above — section retained for history)
 
 - **Per-path vs set-level no-match errors (2.2).** The plan contradicts
