@@ -142,7 +142,7 @@ The log is never rotated or truncated, and there is no size setting: an audit tr
 
 The oplog enables:
 
-- **Session-scoped undo.** `safegit undo` rolls back the last commit, amend, or reword by reading the oplog and restoring the previous ref value. Undo is scoped to the current session (identified by `CLAUDE_CODE_SESSION_ID`), so one session's undo never affects another's commits.
+- **Session-scoped undo.** `safegit undo` rolls back the last recorded operation -- a commit, amend, reword, `mv`, or one of the three conclusion commands -- by reading the oplog and restoring the previous ref value. Undo is scoped to the current session (identified by `CLAUDE_CODE_SESSION_ID`), so one session's undo never affects another's commits, and it refuses outright rather than rolling a branch back over a commit safegit did not create.
 
 - **Bypass detection.** `safegit doctor` compares the oplog's last known ref state against the actual branch tip. If they diverge, someone committed via raw `git commit`, bypassing safegit's isolation guarantees.
 
@@ -150,11 +150,13 @@ The oplog enables:
 
 ## Coordination guards for tree-mutating operations
 
-Not all git operations can be safely parallelized. Commands that mutate the working tree -- checkout, merge, rebase, reset, pull -- can clobber uncommitted work from other sessions. safegit wraps these commands with a coordination guard that checks whether the working tree is clean before proceeding.
+Not all git operations can be safely parallelized. Commands that mutate the working tree -- checkout, pull, merge, rebase, reset, bisect, cherry-pick, revert -- can clobber uncommitted work from other sessions. safegit wraps these commands with a coordination guard that checks whether the working tree is clean before proceeding.
 
 :-: ref path="internal/coord" lang="go"
 
 If any tracked file is modified or any untracked file exists, the guarded command is refused with exit code 5 and a suggestion to commit the outstanding changes first. This prevents one session from running `safegit checkout other-branch` while another session has uncommitted edits in the working tree.
+
+Two commands narrow the check to the forms that actually move the tree: `reset` runs it for `--hard` only, and `bisect` for its tree-moving subcommands (`good`, `bad`, `old`, `new`, `reset`, `start`). Neither narrowing touches the operation lock, which every invocation of both takes unconditionally -- the lock must not depend on safegit's list of git's argument vocabulary being complete.
 
 The guard uses `git diff HEAD` (not `git status`, which depends on the potentially stale main index) to detect modifications, ensuring accuracy even when the shared index is out of sync with the actual committed state.
 
@@ -164,7 +166,7 @@ Where git has an operation in flight, the same dirt is that operation's conflict
 
 The dirty-tree guard answers "is it safe to start?" at one instant. The operation lock answers "is anyone else already working here?" for the whole operation, and it is what makes the first answer worth anything: without it, a passthrough could put the repository mid-merge in the window between another process's check and its ref update.
 
-Every command that mutates a worktree takes it first: the guarded passthroughs (checkout, pull, merge, rebase, reset, bisect, cherry-pick, revert), `commit` (including `--amend` and reword), `mv`, the three conclusion commands, and `undo`. `mv` is the one whose ORDER inside the lock is worth stating: it checks for an in-flight git operation inside the lock and before its first rename, because reaching the commit pipeline's own check afterwards would have moved every file and then refused to commit them. It lives at `safegit/operation` in the **worktree-local** safegit directory, so two worktrees of one repository work independently while two processes in one worktree serialize.
+Every command that mutates a worktree takes it first: the guarded passthroughs (checkout, pull, merge, rebase, reset, bisect, cherry-pick, revert), `commit` (including `--amend` and reword), `mv`, the three conclusion commands (`merge-continue`, `cherry-pick-continue`, `revert-continue`), and `undo`. `mv` is the one whose ORDER inside the lock is worth stating: it checks for an in-flight git operation inside the lock and before its first rename, because reaching the commit pipeline's own check afterwards would have moved every file and then refused to commit them. It lives at `safegit/operation` in the **worktree-local** safegit directory, so two worktrees of one repository work independently while two processes in one worktree serialize.
 
 Lock ordering is fixed: the operation lock is **outermost**, and the per-ref locks the commit pipeline and undo take are acquired inside it. Nothing takes them the other way round, which is the whole deadlock argument.
 
