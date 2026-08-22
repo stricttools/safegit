@@ -260,6 +260,37 @@ func TestRootCommitZeroOldValueRefusesExistingRef(t *testing.T) {
 // ref-still-absent re-check (:307-312), so the loser retries from Phase A and
 // commits as a child of the winner. This is what bounds the defect above to
 // writers that do not take safegit's lock.
+//
+// FLAKE WATCHLIST -- certified load-sensitive, not racy.
+//
+// This test has failed spuriously under load. The cause is the shared temporary
+// filesystem, not anything it pins. Every repository this package builds lives
+// under $TMPDIR, and TestMain links the safegit binary there too. On a machine
+// whose /tmp is a tmpfs sized against RAM, several concurrent `go test`
+// processes exhaust it: that was reproduced here as
+// "link: mapping output file failed: disk quota exceeded" out of the TestMain
+// build, with eight concurrent runs sharing a 12 GB tmpfs already 80% full. The
+// same exhaustion reaches a RUNNING racer as an errno on any write safegit makes
+// -- the per-invocation temp index, a loose object, the lock file, the oplog --
+// and safegit then exits nonzero, which is exactly the shape this test reports
+// as "racer N failed".
+//
+// A lost update or a lock defect is not reachable by interleaving here: the lock
+// file is created O_CREAT|O_EXCL so exactly one racer ever holds the ref,
+// staleness is decided by the holder's pid liveness rather than by any age or
+// deadline (internal/lock.staleFromFields), and the loser's ref re-check plus the
+// ZeroSHA CAS send it back through Phase A with the winner's commit as its
+// parent. Both files therefore reach HEAD's tree in either order.
+//
+// Evidence: 1924 iterations under -race with no failure -- 1324 targeted plus a
+// final round of 600 across six concurrent processes -- including 400 pinned to
+// two CPUs against sixteen spinning load generators (about a tenfold slowdown,
+// against a 30-second lock acquisition timeout) and four full-package race runs
+// under eight-way load. Pointing $TMPDIR off the tmpfs removed every failure
+// that was seen.
+//
+// So do not weaken these assertions and do not add a retry. A failure here is
+// first a question about free space on $TMPDIR.
 func TestRootCommitConcurrentSafegitBothLand(t *testing.T) {
 	dir := rootCasNewUnbornRepo(t)
 
