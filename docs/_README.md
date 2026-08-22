@@ -23,7 +23,7 @@ teammates, CI, and code review tools see nothing unusual.
 
 ## Install
 
-From source (requires Go 1.24+):
+From source (requires the Go version `go.mod` declares -- currently 1.25.7):
 
 ```
 go install github.com/smm-h/safegit@latest
@@ -40,8 +40,12 @@ safegit commit -m "add feature X" -- src/foo.go src/bar.go
 safegit push --refs head
 ```
 
-safegit auto-initializes on first use (creates `.git/safegit/`).
-Use `safegit doctor --action uninstall` to remove safegit from a repo.
+safegit auto-initializes on first use (creates `.git/safegit/`); a `--dry-run`
+deliberately does not, so previewing in a fresh repository writes nothing at
+all. Use `safegit doctor --action uninstall` to remove safegit from a
+repository -- a repository-wide operation that lists every path it will remove,
+including the state of worktrees other than the one you are standing in, before
+asking you to confirm.
 
 ## Commands
 
@@ -52,31 +56,44 @@ Tree-mutating commands (`checkout`, `pull`, `merge`, `rebase`, `reset`,
 
 ## How it works
 
-The commit pipeline has two phases. Phase A (parallel-safe) creates a temporary
-index, stages the requested files into it, and builds the tree object -- all
-without touching the shared `.git/index`. Phase B acquires a per-ref lock,
-reads the current tip, creates the commit with that parent, and updates the ref
-using CAS. If the ref moved between read and write, Phase B retries from the
-new tip (re-parenting the commit) with random jitter to avoid thundering-herd
-stampedes under heavy concurrency.
+The commit pipeline has two phases. Phase A (parallel-safe) resolves the tip of
+the target branch, creates a temporary index seeded from it, stages the
+requested files, and builds the tree and commit objects -- all without touching
+the shared `.git/index`. Phase B acquires a per-ref lock, re-reads the tip to
+confirm it has not moved, and updates the ref with a compare-and-swap. If it
+did move, the pipeline retries from Phase A against the new tip (re-parenting
+the commit) with random jitter to avoid thundering-herd stampedes under heavy
+concurrency.
+
+The parent is resolved BEFORE the index rather than after the tree: the other
+order lets another session's commit land in between and produces a commit whose
+tree is based on the old tip but whose parent is the new one, silently dropping
+that session's files.
 
 See [docs/architecture.md](docs/architecture.md) for the full architecture specification.
 
 ## Configuration
 
-Run `safegit config` to view all settings, or `safegit config <key> <value>`
-to change one.
+Run `safegit config show` to view every setting, `safegit config get <key>` to
+read one, and `safegit config set <key> <value>` to change one.
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `commit.casMaxAttempts` | 5 | Max CAS retry attempts for ref updates |
-| `lock.acquireTimeoutSeconds` | 30 | Timeout waiting for a per-ref lock |
+| `commit.autoBumpParent` | (unset, and an unset one is a refusal) | Whether a commit in a submodule also commits the parent's moved gitlink |
+| `lock.acquireTimeoutSeconds` | 30 | Timeout waiting for a lock |
 | `hooks.preprepush.timeoutSeconds` | 1800 | Timeout for pre-pre-push hook execution |
 | `push.retryAttempts` | 3 | Number of push retry attempts |
-| `log.maxSizeMB` | 100 | Max operation log size before rotation |
+
+Those five are the whole key set: anything else is an unknown-key error. There
+is no oplog size or rotation setting -- the operation log is append-only and
+complete by design, and nothing truncates it.
 
 Configuration is stored in `.git/safegit/config.json`. Remove the entire
-`.git/safegit/` directory to return to vanilla git.
+`.git/safegit/` directory to return to vanilla git -- or run `safegit doctor
+--action uninstall`, which does it for the whole repository (every worktree's
+state directory plus the shared store) and enumerates every path before it asks
+for confirmation.
 
 ## Known limitations
 
@@ -84,17 +101,25 @@ Configuration is stored in `.git/safegit/config.json`. Remove the entire
   checks and hostname comparison. On network filesystems (NFS, CIFS), `safegit
   doctor` warns about reduced lock atomicity guarantees. Cross-machine lock
   reclaim is refused when the hostname doesn't match.
-- **PID reuse.** On Linux, safegit records the holder's process start time from
-  `/proc` in the lock file and compares it against the current start time of
-  whatever holds that PID, so a recycled PID is detected and a live holder is
-  never mistaken for one. On other platforms, a reused
-  PID keeps an orphan lock looking alive, and `safegit unlock <ref>` refuses to
-  clear a lock whose holder is alive, so such a lock has to be removed by hand
-  from `.git/safegit/locks/`. Where the holder really is gone, `safegit unlock
-  refs/heads/main` clears the lock.
-- **Linux and macOS only.** Windows is not supported (Unix-only syscalls for
-  locking, signals, process management). WSL (Windows Subsystem for Linux) works
-  since it runs the Linux binary natively.
+- **The filesystem must support hard links and `flock(2)`.** A lock is published
+  by writing its record to a temporary sibling and `link(2)`-ing it into place,
+  so the published file is complete the instant it exists; and a stale lock is
+  reclaimed only under an exclusive `flock` on the lock file, with an inode
+  identity re-check, so two contenders can never both "reclaim" the same lock.
+  Where `flock` does not work, nothing is reclaimed at all: contenders time out
+  and `safegit unlock <name>` is the recovery path.
+- **PID reuse.** On Linux, safegit records the holder's process start identity
+  from `/proc` in the lock file and compares it against the current start time
+  of whatever holds that PID, so a recycled PID is detected and a live holder is
+  never mistaken for one. On other platforms the comparison is unavailable and
+  fails closed: a reused PID keeps an orphan lock looking alive, and `safegit
+  unlock` refuses to clear a lock whose holder appears alive, so such a lock has
+  to be removed by hand from `.git/safegit/locks/`. Where the holder really is
+  gone, `safegit unlock refs/heads/main` clears it.
+- **Linux and macOS only.** Windows is not supported and is not built: the
+  release binaries cover linux and darwin on amd64 and arm64, and safegit uses
+  Unix-only syscalls for locking, signals and process management. WSL (Windows
+  Subsystem for Linux) works, since it runs the Linux binary natively.
 
 ## License
 
