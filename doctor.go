@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smm-h/safegit/internal/commit"
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/gitversion"
@@ -112,6 +113,8 @@ var doctorChecks = []doctorCheck{
 	{Name: "bypass_detect", Severity: "warn", RequiresInit: true, Fn: checkBypassDetect},
 	{Name: "filesystem", Severity: "warn", Fn: checkFilesystemRegistered},
 	{Name: "hook_perms", Severity: "warn", RequiresInit: true, Fn: checkHookPerms},
+	{Name: "hooks_migrated", Severity: "error", RequiresInit: true, Fn: checkHooksMigrated},
+	{Name: "native_hooks", Severity: "warn", Fn: checkUnusedNativeHooks},
 	{Name: "git_version", Severity: "warn", Fn: checkGitVersion},
 	{Name: "legacy_scrub_policies", Severity: "error", RequiresInit: true, Fn: checkLegacyScrubPolicies},
 }
@@ -171,20 +174,7 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 		inited:   repo.IsInitialized(gitDir),
 	}
 
-	var checks []checkResult
-	for _, c := range doctorChecks {
-		if c.RequiresInit && !env.inited {
-			continue
-		}
-		checkStart := time.Now()
-		f := c.Fn(env)
-		if status, reported := resolveFinding(c, f); reported {
-			checks = append(checks, checkResult{Name: c.Name, Status: status, Detail: f.detail})
-		}
-		if flags.verbose {
-			fmt.Fprintf(os.Stderr, "  checked: %s (%v)\n", c.Name, time.Since(checkStart))
-		}
-	}
+	checks := runDoctorChecks(env, flags.verbose)
 
 	allOK := true
 	for _, c := range checks {
@@ -207,11 +197,64 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 		outf(flags, "all checks passed\n")
 	}
 
+	failed := failingChecks(checks)
+
 	// --fix: run garbage collection and cleanup (formerly `safegit gc`).
 	if fix && repo.IsInitialized(gitDir) {
 		doctorFix(ctx, flags, gitDir)
+		// The exit code answers "is this repository still broken", so after a
+		// real fix it is decided by what the fix LEFT: a finding the cleanup
+		// repaired must not keep the exit nonzero, and one it could not repair
+		// must. A dry run repaired nothing, so its answer is the one above.
+		if !flags.dryRun {
+			env.inited = repo.IsInitialized(gitDir)
+			failed = failingChecks(runDoctorChecks(env, false))
+			if len(failed) > 0 {
+				fmt.Fprintf(os.Stderr, "still failing after --action fix: %s\n", strings.Join(failed, ", "))
+			}
+		}
+	}
+
+	if len(failed) > 0 {
+		return exitcode.DoctorFindings
 	}
 	return 0
+}
+
+// runDoctorChecks runs the registry once and returns what it reported.
+func runDoctorChecks(env doctorEnv, verbose bool) []checkResult {
+	var checks []checkResult
+	for _, c := range doctorChecks {
+		if c.RequiresInit && !env.inited {
+			continue
+		}
+		checkStart := time.Now()
+		f := c.Fn(env)
+		if status, reported := resolveFinding(c, f); reported {
+			checks = append(checks, checkResult{Name: c.Name, Status: status, Detail: f.detail})
+		}
+		if verbose {
+			fmt.Fprintf(os.Stderr, "  checked: %s (%v)\n", c.Name, time.Since(checkStart))
+		}
+	}
+	return checks
+}
+
+// failingChecks names the ERROR-severity checks that failed.
+//
+// Warnings are deliberately not counted. A warn-severity finding is one an
+// operator may live with -- an orphan tmp dir, a hook of git's own that safegit
+// does not run -- and a doctor that exited nonzero for those would make the
+// nonzero exit meaningless in exactly the repositories where it should mean
+// something.
+func failingChecks(checks []checkResult) []string {
+	var failed []string
+	for _, c := range checks {
+		if c.Status == "error" {
+			failed = append(failed, c.Name)
+		}
+	}
+	return failed
 }
 
 // --- registered checks ------------------------------------------------------
@@ -371,6 +414,82 @@ func checkHookPerms(env doctorEnv) doctorFinding {
 		return findingFail("%d non-executable hook(s) in %s: %s", len(local), hooks.LocalDir(env.gitDir), strings.Join(local, ", "))
 	}
 	return findingOK("")
+}
+
+// checkHooksMigrated reports hooks still sitting in the pre-migration location.
+//
+// It is an error rather than advice because of what it costs: every push, and
+// every `hook run`, refuses outright while they are there. A repository in that
+// state is not degraded, it is stopped, and one command fixes it.
+func checkHooksMigrated(env doctorEnv) doctorFinding {
+	legacy, err := hooks.Legacy(env.gitDir)
+	if err != nil {
+		return findingFail("%v", err)
+	}
+	if len(legacy) == 0 {
+		return findingOK("")
+	}
+	var names []string
+	for _, loc := range legacy {
+		names = append(names, loc.Rel)
+	}
+	return findingFail("%d hook(s) are still in %s: %s (run 'safegit hook migrate'; every push refuses until then)",
+		len(legacy), filepath.Join(env.gitDir, "hooks"), strings.Join(names, ", "))
+}
+
+// checkUnusedNativeHooks names the repository's own git hooks that safegit
+// never executes.
+//
+// It is a stated fact rather than a fault: git still runs every one of them for
+// anyone using git directly, and a repository is free to keep them. What it
+// prevents is the silent surprise -- a `prepare-commit-msg` hook that has
+// always shaped commit messages simply does not run under `safegit commit`,
+// because safegit never opens an editor, and nothing said so until now.
+//
+// The directory is git's own answer (core.hooksPath and linked worktrees both
+// move it), which is the SAME resolution the commit pipeline runs hooks
+// through, so the two can never disagree about which files are in question.
+func checkUnusedNativeHooks(env doctorEnv) doctorFinding {
+	dir, err := git.HooksDir(env.ctx)
+	if err != nil {
+		return findingFail("resolving git's hook directory: %v", err)
+	}
+	entries, readErr := os.ReadDir(dir)
+	if readErr != nil {
+		// No hook directory at all: nothing to report either way.
+		return findingNone()
+	}
+
+	runs := map[string]bool{}
+	for _, name := range commit.NativeHooks() {
+		runs[name] = true
+	}
+
+	var unused []string
+	for _, e := range entries {
+		name := e.Name()
+		switch {
+		case e.IsDir(), strings.HasSuffix(name, ".sample"),
+			strings.HasPrefix(name, "."), strings.HasSuffix(name, "~"),
+			runs[name],
+			// safegit's own former hook names are the migration check's
+			// subject, not this one's.
+			name == "pre-pre-push":
+			continue
+		}
+		info, sErr := e.Info()
+		if sErr != nil || info.Mode()&0111 == 0 {
+			// git ignores a hook it cannot execute, so its absence from
+			// safegit's runs is no surprise to report.
+			continue
+		}
+		unused = append(unused, name)
+	}
+	if len(unused) == 0 {
+		return findingOK("")
+	}
+	return findingFail("%d git hook(s) in %s that safegit never runs: %s (safegit runs only %s; git still runs the rest when you use git directly)",
+		len(unused), dir, strings.Join(unused, ", "), strings.Join(commit.NativeHooks(), ", "))
 }
 
 // checkGitVersion reports the git version safegit found against the highest

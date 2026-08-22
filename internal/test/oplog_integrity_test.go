@@ -114,9 +114,12 @@ func TestDoctorReportsCorruptedOplog(t *testing.T) {
 
 	corruptOplog(t, dir)
 
+	// An unreadable oplog is an error-severity finding, so doctor's own exit
+	// code says the repository is broken rather than reporting the problem in
+	// its output and exiting 0.
 	stdout, _, code = runSafegit(t, dir, "doctor", "--action", "diagnose")
-	if code != 0 {
-		t.Fatalf("doctor after corrupting the oplog failed (code %d)", code)
+	if code != 50 {
+		t.Fatalf("doctor after corrupting the oplog exited %d, want 50", code)
 	}
 	if !strings.Contains(stdout, "[FAIL] oplog") || !strings.Contains(stdout, "1 unparseable line(s)") {
 		t.Errorf("doctor should report the unparseable line count, got:\n%s", stdout)
