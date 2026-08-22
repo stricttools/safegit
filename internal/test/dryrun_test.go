@@ -1,7 +1,6 @@
 package test
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,24 +10,12 @@ import (
 )
 
 // plantLiveRewriteLock writes a rewrite lock file owned by the (live) test
-// process, so any command that tries to acquire the rewrite lock blocks until
-// its timeout and then fails. Returns the lock file path.
+// process into a repository's own safegit directory, so any command that tries
+// to acquire the rewrite lock blocks until its timeout and then fails. Returns
+// the lock file path.
 func plantLiveRewriteLock(t *testing.T, repoDir string) string {
 	t.Helper()
-	lockDir := filepath.Join(repoDir, ".git", "safegit", "locks", "safegit")
-	if err := os.MkdirAll(lockDir, 0755); err != nil {
-		t.Fatalf("creating lock dir: %v", err)
-	}
-	hostname, err := os.Hostname()
-	if err != nil {
-		t.Fatalf("os.Hostname: %v", err)
-	}
-	lockFile := filepath.Join(lockDir, "rewrite.lock")
-	content := fmt.Sprintf("pid=%d\nts=2026-01-01T00:00:00Z\nop=scrub-file\nhost=%s\n", os.Getpid(), hostname)
-	if err := os.WriteFile(lockFile, []byte(content), 0644); err != nil {
-		t.Fatalf("writing lock file: %v", err)
-	}
-	return lockFile
+	return plantLiveRewriteLockAt(t, filepath.Join(repoDir, ".git", "safegit"))
 }
 
 // TestAuthorRewriteDryRunSkipsRewriteLock: a dry-run preview is read-only, so
