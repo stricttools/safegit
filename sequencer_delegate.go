@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/smm-h/safegit/internal/commit"
@@ -228,8 +229,11 @@ func countCommitsBetween(flags globalFlags, before, after string) int {
 	if err != nil {
 		return -1
 	}
-	n := 0
-	if _, serr := fmt.Sscanf(strings.TrimSpace(out), "%d", &n); serr != nil {
+	// strconv rather than Sscanf, which accepts trailing garbage ("5abc" would
+	// parse as 5) and would turn an unexpected output shape into a plausible
+	// number instead of the "could not be counted" the renderer states.
+	n, cerr := strconv.Atoi(strings.TrimSpace(out))
+	if cerr != nil {
 		return -1
 	}
 	return n
