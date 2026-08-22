@@ -1226,6 +1226,25 @@ func TestScrubMatchPublishesASubmoduleWhenTheParentHasNothingToRewrite(t *testin
 		t.Errorf("the parent had nothing to rewrite and should say so; stdout: %s", stdout)
 	}
 
+	// A successful rewrite completion prints its summary, the scope it actually
+	// had, and the rotation notice -- whichever repository was the one that got
+	// rewritten. This branch published a real rewrite, so it owes the operator
+	// the same three things the parent-side branch prints: without them the run
+	// reads as "nothing happened", while a submodule's history really did move
+	// and a credential really does still need rotating.
+	if !strings.Contains(stdout, "Scrub complete:") {
+		t.Errorf("the submodule-only completion prints no summary; stdout: %s", stdout)
+	}
+	if !strings.Contains(stdout, "Scope: rewrote the history of") {
+		t.Errorf("the submodule-only completion prints no scope line; stdout: %s", stdout)
+	}
+	if !strings.Contains(stdout, "mysub") {
+		t.Errorf("the scope line does not name the submodule that was rewritten; stdout: %s", stdout)
+	}
+	if !strings.Contains(stdout, "Rotate the credential") {
+		t.Errorf("the submodule-only completion prints no rotation notice; stdout: %s", stdout)
+	}
+
 	// The submodule's rewrite was published: the tag annotation is clean and the
 	// submodule's journal records the whole rewrite.
 	cmd := exec.Command("git", "tag", "-l", "-n99", "sub-rel")
