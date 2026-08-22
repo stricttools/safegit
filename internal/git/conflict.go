@@ -39,11 +39,30 @@ type UnmergedEntry struct {
 // shared index. The listing is NUL-delimited, so a path holding a newline, a
 // quote or a non-UTF-8 byte arrives exactly as it is stored.
 func UnmergedStages(ctx context.Context, indexPath string) ([]UnmergedEntry, error) {
+	return lsFilesEntries(ctx, indexPath, "-u")
+}
+
+// IndexEntries lists EVERY entry of an index, at every stage, in git's own
+// order. A quiet index answers entirely at stage 0; a conflicted one carries
+// the unmerged path's stages 1/2/3 as well.
+//
+// It exists for the marker verification, which has to read the content a
+// conclusion is about to commit for paths that are NOT conflicted -- a path the
+// operator resolved with `git add` before running the conclusion carries no
+// stages at all, and is exactly where a forgotten marker hides.
+func IndexEntries(ctx context.Context, indexPath string) ([]UnmergedEntry, error) {
+	return lsFilesEntries(ctx, indexPath, "-s")
+}
+
+// lsFilesEntries runs one ls-files listing and parses its records. The listing
+// is NUL-delimited, so a path holding a newline, a quote or a non-UTF-8 byte
+// arrives exactly as it is stored.
+func lsFilesEntries(ctx context.Context, indexPath, selector string) ([]UnmergedEntry, error) {
 	var env []string
 	if indexPath != "" {
 		env = []string{"GIT_INDEX_FILE=" + indexPath}
 	}
-	out, _, err := RunWithEnv(ctx, env, "ls-files", "-u", "-z")
+	out, _, err := RunWithEnv(ctx, env, "ls-files", selector, "-z")
 	if err != nil {
 		return nil, err
 	}
@@ -56,19 +75,41 @@ func UnmergedStages(ctx context.Context, indexPath string) ([]UnmergedEntry, err
 		// "<mode> <sha> <stage>\t<path>"
 		meta, path, found := strings.Cut(record, "\t")
 		if !found {
-			return nil, fmt.Errorf("ls-files -u produced a record with no path separator: %q", record)
+			return nil, fmt.Errorf("ls-files %s produced a record with no path separator: %q", selector, record)
 		}
 		fields := strings.Fields(meta)
 		if len(fields) != 3 {
-			return nil, fmt.Errorf("ls-files -u produced a record with %d metadata fields, want 3: %q", len(fields), record)
+			return nil, fmt.Errorf("ls-files %s produced a record with %d metadata fields, want 3: %q", selector, len(fields), record)
 		}
 		stage, err := strconv.Atoi(fields[2])
 		if err != nil {
-			return nil, fmt.Errorf("ls-files -u produced an unreadable stage number in %q: %w", record, err)
+			return nil, fmt.Errorf("ls-files %s produced an unreadable stage number in %q: %w", selector, record, err)
 		}
 		entries = append(entries, UnmergedEntry{Mode: fields[0], SHA: fields[1], Stage: stage, Path: path})
 	}
 	return entries, nil
+}
+
+// IndexPathsChangedFrom lists the repo-relative paths whose entry in the shared
+// index differs from the given tree-ish, unmerged paths included.
+//
+// It is how the marker verification decides what a conclusion is about to
+// RECORD: a path whose index entry already matches the first parent is not
+// something the commit changes, and cannot introduce anything into it. The
+// listing is NUL-delimited, so no path is C-quoted into something that names no
+// file.
+func IndexPathsChangedFrom(ctx context.Context, treeish string) ([]string, error) {
+	out, _, err := Run(ctx, "diff-index", "--cached", "-z", "--name-only", treeish)
+	if err != nil {
+		return nil, fmt.Errorf("listing the index's changes against %s: %w", treeish, err)
+	}
+	var paths []string
+	for _, p := range strings.Split(out, "\x00") {
+		if p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths, nil
 }
 
 // AbbrevSHA returns the abbreviated object name git itself would print for a

@@ -175,6 +175,19 @@ const (
 	// merge-continue, cherry-pick-continue and revert-continue.
 	ConclusionUnresolved = 17
 
+	// ConclusionMarkerSurvived means the content a conclusion was about to
+	// commit still holds a complete conflict region: the paths match the
+	// conflict exactly (that is code 17's question), but one of them carries
+	// the markers the resolution was supposed to remove. The refusal names each
+	// path and line. Nothing is committed and the operation is still in flight,
+	// so editing the file -- or resolving the path to a stage, whose content
+	// cannot carry a survived region -- and re-running concludes it. A path
+	// whose real content legitimately holds marker-shaped lines is declared
+	// with the `safegit-conflict-markers` attribute, read from the first
+	// parent's tree. Produced by merge-continue, cherry-pick-continue and
+	// revert-continue.
+	ConclusionMarkerSurvived = 18
+
 	// PushHookFailed means a pre-pre-push hook exited nonzero, so no network
 	// I/O was attempted. Produced by push and by `hook run`.
 	PushHookFailed = 20
@@ -320,6 +333,7 @@ func All() []Entry {
 		{SymlinkHunkSpec, "SymlinkHunkSpec", "Hunk spec given for a symlink, which has no hunks to select"},
 		{CommitHookRejected, "CommitHookRejected", "A pre-commit or commit-msg hook refused the commit"},
 		{ConclusionUnresolved, "ConclusionUnresolved", "A conclusion's declared resolutions do not match the conflicted paths in the index"},
+		{ConclusionMarkerSurvived, "ConclusionMarkerSurvived", "A conclusion's content still holds a complete conflict region"},
 		{PushHookFailed, "PushHookFailed", "Pre-pre-push hook failed"},
 		{PushHookTimeout, "PushHookTimeout", "Pre-pre-push hook timed out"},
 		{BackupDiverged, "BackupDiverged", "The remote backup slot holds work missing from the local history"},
