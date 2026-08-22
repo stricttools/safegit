@@ -1544,6 +1544,32 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
   (asserts `.git/worktrees/side/safegit` while the fixture names the
   worktree `linked-side`; vacuously true since it was written).
+## Phase 11 triage closure
+
+- Eight todos verified DONE against code on disk (live test run, no
+  git history) and moved to todo/.done/, one safegit commit each:
+  multi -m joining, symlink commits, staged-deletions-by-directory
+  (diagnosis superseded — detection deleted, nothing runs behind
+  stageFile), untrack-gitignored (shipped as the --untrack flag, not
+  either drafted option; the pre-staged-removal side item pinned),
+  detect-moves-relative-cwd (refusal chosen from the file's allowed
+  outcomes; mechanism gone entirely), merge-commit-unsupported
+  (generalized to the three conclusion commands), the hook-subsystem
+  triple, and record-file-moves-remaining (7.3-7.5 + docs all
+  shipped; the query index is the file's own declared non-goal).
+- KEPT ACTIVE: reversibility-gaps-missing-inverse-commands.md — item
+  1 (hook remove) done, item 2 live: reset/rebase recovery is
+  unexposed (undoableOps covers commit/mv/amend/reword/conclusions
+  only), and the file's own premise awaits strictcli reversibility
+  support, absent in v0.33.0 — effectively joins the await family.
+- The eight relocations carry no Moved: records (the installed 0.28.0
+  predates mv; committing the repo's own moves with the unreleased
+  binary would break the installed-binary discipline). Left as-is —
+  records are optional claims.
+- Still active in todo/: the four strictcli-await files, the three
+  contingent files, the kept reversibility file, the plan, and this
+  log (the last two move to .done immediately before the release).
+
 ## Phase 10.3 closure — PHASE 10 COMPLETE
 
 - 44 changelog entries covering all 398 non-exempt commits in
