@@ -437,7 +437,7 @@ func newApp() *strictcli.App {
 		),
 		strictcli.PayloadSchema(pushPayloadSchema),
 	)
-	app.Command("pull", "fetch from remote and merge, defaulting to fast-forward-only mode", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+	app.Command("pull", "fetch from a remote and merge, with the merge strategy stated explicitly: --merge-strategy is required and has no default, so a pull never depends on git's own configuration to decide whether it may create a merge commit", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		gf := globalsToFlags(ctx, kwargs)
 		// Determine merge mode from --merge-strategy
 		var mode pullMode
@@ -596,7 +596,7 @@ func newApp() *strictcli.App {
 			strictcli.StringFlag("action", "what doctor does with the health checks it runs", strictcli.Required(), strictcli.Choices(
 				strictcli.Ch("diagnose", "run all health checks and report results without fixing any issues"),
 				strictcli.Ch("fix", "run all health checks and automatically repair any issues found"),
-				strictcli.Ch("uninstall", "remove all safegit hooks and metadata from this repository entirely"),
+				strictcli.Ch("uninstall", "remove safegit's state from this REPOSITORY -- every worktree's state directory plus the shared locks and hook store, not only the worktree you are standing in -- after listing every path it is about to remove"),
 			)),
 		),
 	)
@@ -646,8 +646,8 @@ func newApp() *strictcli.App {
 		),
 	)
 	app.Deprecated("rewrite-author", "use 'safegit author rewrite' instead")
-	sg := app.Group("scrub", "surgically rewrite git history to remove or replace sensitive content using 4 subcommands (file, match, run, verify) that operate on all commits, trees, and blobs in the repository")
-	sg.Command("file", "replace or remove a specific file across all commits in the repository history, rewriting each affected commit tree to either substitute the file contents with a sanitized version or delete the file entirely from every historical snapshot", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+	sg := app.Group("scrub", "surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store")
+	sg.Command("file", "replace or remove a specific file across every commit in a SELECTED RANGE of history -- --from <commit> or --entire-history, one of which is required -- rewriting each affected commit tree to either substitute the file's contents with those of a sanitized file or delete it entirely from every snapshot in that range. A --delete also removes the move records naming that path, whole, since the path they refer to is being erased; a --replace-with edits no message, because the path still exists and a record naming it is still true", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(runScrubFile(globalsToFlags(ctx, kwargs), kwargs))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
@@ -669,7 +669,7 @@ func newApp() *strictcli.App {
 			strictcli.NewArg("file", "repository-relative path to the file that should be scrubbed from history", strictcli.ArgRequired()),
 		),
 	)
-	sg.Command("match", "replace all occurrences of a regex pattern across every blob in the repository history, rewriting commit trees to substitute matched text with a replacement string so that sensitive values like secrets and credentials are permanently removed from all historical snapshots", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+	sg.Command("match", "replace every occurrence of a regex pattern in the blobs, commit messages and tag annotations of a SELECTED RANGE of history -- --from <sha> or --entire-history, one of which is required -- rewriting commit trees so that sensitive values like secrets and credentials are removed from every snapshot in that range. A move record is rewritten as a record rather than as text: the substitution applies to the decoded paths and the pair is re-encoded, so the output always parses, a pattern written against the escaped spelling matches nothing, and a substitution whose result would no longer be a move is refused before any ref moves", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(runScrubMatch(globalsToFlags(ctx, kwargs), kwargs))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
@@ -755,7 +755,7 @@ func newApp() *strictcli.App {
 			strictcli.IntFlag("count", "number of oplog operations to undo in a single invocation; omitted means one", strictcli.Optional()),
 		),
 	)
-	app.Command("unlock", "release a stale .lock file left behind by a crashed git process", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+	app.Command("unlock", "release one of SAFEGIT'S OWN lock files -- a per-ref lock, this worktree's operation lock, or the repository-wide rewrite lock -- left behind by a safegit process that was killed while holding it. It has nothing to do with git's .git/index.lock or any other lock git takes for itself. A lock whose holder is still alive is refused; ordinarily nothing needs this command, because a stale lock is reclaimed automatically by the next contender and 'safegit doctor --action fix' sweeps them, so it is the last-resort path for a filesystem where that reclamation cannot work", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		ref := kwargs["ref"].(string)
 		return strictcli.Exit(runUnlock(globalsToFlags(ctx, kwargs), ref))
 	},
