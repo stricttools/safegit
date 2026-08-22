@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -952,20 +951,15 @@ func ensureInitialized(flags globalFlags, gitDir string) error {
 // It asks git from the OPERATOR'S own directory, on a bare context -- discovery
 // is the one thing the repository-root pin cannot itself be applied to, because
 // there is no root to pin to until this call has found one. (repoRootOrEmpty is
-// the same case for the work-tree top.) The answer is made absolute here, so
-// every later use of it is independent of the working directory.
+// the same case for the work-tree top.) git.GitDir answers absolutely, so every
+// later use of the result is independent of the working directory.
 func mustGitDir() string {
 	ctx := context.Background()
 	gitDir, err := git.GitDir(ctx)
 	if err != nil {
 		die(exitcode.NoRepository, "not a git repository (or git is not installed)")
 	}
-	// Resolve to absolute path
-	abs, err := filepath.Abs(gitDir)
-	if err != nil {
-		abs = gitDir
-	}
-	return abs
+	return gitDir
 }
 
 // consent names what pre-answers ONE deliberate confirmation when there is no

@@ -28,6 +28,11 @@ import (
 // is the permissive one: a commit built against a repository git considers
 // mid-merge silently drops the merge's second parent and every path the
 // pathspec does not name.
+// git.GitDir answers ABSOLUTELY, which this check depends on: GuardInFlight
+// probes state files with Go filesystem calls, and a relative git directory
+// would resolve against the process working directory rather than against the
+// repository -- so from a subdirectory the probe would find nothing and the
+// refusal would silently switch itself off.
 func guardSequencer(ctx context.Context, declared *coord.SequencerContext, operation string) error {
 	gitDir, err := git.GitDir(ctx)
 	if err != nil {

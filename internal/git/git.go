@@ -130,9 +130,25 @@ func RepoRoot(ctx context.Context) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// GitDir returns the path to the .git directory.
+// GitDir returns the ABSOLUTE path of the repository's git directory.
+//
+// Absolute because every consumer joins a state-file name onto it -- MERGE_HEAD,
+// index, safegit/ -- and then reaches that path with a Go filesystem call, which
+// resolves a relative path against the PROCESS working directory. Plain
+// `rev-parse --git-dir` answers `.git` whenever git ran at the top of the work
+// tree, and safegit's own context pins every git subprocess to the repository
+// root, so from a subdirectory that answer names <subdir>/.git: a directory that
+// does not exist. Every probe of it then reports "absent", which is the
+// permissive answer in both places it is asked -- no operation in flight, and an
+// empty index -- so a commit taken mid-merge from a subdirectory succeeded and
+// dropped the merge's second parent.
+//
+// It is git's own canonicalized answer (`--absolute-git-dir`) rather than a
+// filepath.Abs of the relative one, for the same reason ObjectsDir and HooksDir
+// ask git: a linked worktree, a redirected git directory and a GIT_DIR override
+// all break any join a caller could do itself.
 func GitDir(ctx context.Context) (string, error) {
-	out, _, err := Run(ctx, "rev-parse", "--git-dir")
+	out, _, err := Run(ctx, "rev-parse", "--absolute-git-dir")
 	if err != nil {
 		return "", err
 	}
