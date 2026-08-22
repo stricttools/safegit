@@ -211,7 +211,7 @@ type scrubMode struct {
 func scrubDryRunModes() []scrubMode {
 	return []scrubMode{
 		{"scrub file", func(initialSHA, _ string) []string {
-			return []string{"--dry-run", "scrub", "file",
+			return []string{"--dry-run", "scrub", "file", "--replace-with", "secret.txt",
 				"--from", initialSHA, "--reason", "preview", "secret.txt"}
 		}},
 		{"scrub match", func(_, _ string) []string {
@@ -554,7 +554,7 @@ func TestScrubExecuteStillRequiresCleanTree(t *testing.T) {
 
 	modes := []scrubMode{
 		{"scrub file", func(initialSHA, _ string) []string {
-			return []string{"--approve-consequential", "scrub", "file",
+			return []string{"--approve-consequential", "scrub", "file", "--replace-with", "secret.txt",
 				"--from", initialSHA, "--reason", "execute", "secret.txt"}
 		}},
 		{"scrub match", func(_, _ string) []string {

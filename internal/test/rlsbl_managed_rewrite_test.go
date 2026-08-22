@@ -39,7 +39,7 @@ func newRlsblRepo(t *testing.T) (dir, initialSHA string) {
 func TestScrubFileInRlsblManagedRepoProceeds(t *testing.T) {
 	dir, initialSHA := newRlsblRepo(t)
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "file",
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "file", "--replace-with", "secret.txt",
 		"--from", initialSHA, "--reason", "raw scrub", "secret.txt")
 	if code != 0 {
 		t.Fatalf("scrub file must proceed in an rlsbl-managed repo, got code %d: %s", code, stderr)
@@ -87,7 +87,7 @@ func TestScrubInRlsblManagedRepoWritesJournal(t *testing.T) {
 	dir, initialSHA := newRlsblRepo(t)
 	before := revListReverse(t, dir)
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "file",
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "file", "--replace-with", "secret.txt",
 		"--from", initialSHA, "--reason", "raw scrub", "secret.txt")
 	if code != 0 {
 		t.Fatalf("scrub file failed (code %d): %s", code, stderr)
@@ -140,7 +140,7 @@ func TestAuthorRewriteInRlsblManagedRepoProceeds(t *testing.T) {
 func TestRewritePreviewsInRlsblManagedRepo(t *testing.T) {
 	dir, initialSHA := newRlsblRepo(t)
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--dry-run", "scrub", "file",
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--dry-run", "scrub", "file", "--replace-with", "secret.txt",
 		"--from", initialSHA, "--reason", "preview", "secret.txt")
 	if code != 0 {
 		t.Fatalf("dry-run scrub file should succeed, got code %d: %s", code, stderr)

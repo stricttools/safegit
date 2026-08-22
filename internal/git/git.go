@@ -868,21 +868,20 @@ func LsTree(ctx context.Context, treeish string) ([]TreeEntry, error) {
 	return parseLsTreeOutput(out, false), nil
 }
 
-// HashObject returns the blob SHA for a file without writing to the object store.
-func HashObject(ctx context.Context, path string) (string, error) {
-	out, _, err := Run(ctx, "hash-object", "--", path)
-	if err != nil {
-		return "", fmt.Errorf("hash-object %s: %w", path, err)
-	}
-	return strings.TrimSpace(out), nil
-}
+// The path-taking hash-object helpers are deliberately absent. git resolves a
+// path argument against the directory the child runs in, which safegit pins to
+// the repository root -- so a path the OPERATOR typed would name a different
+// file (or none) whenever the command was run from a subdirectory, silently.
+// Every caller reads the bytes itself, where the anchoring is explicit, and
+// hands them to HashObjectBytes or HashObjectWriteBytes.
 
-// HashObjectWrite hashes a file and writes the blob to the object store,
-// returning the blob SHA.
-func HashObjectWrite(ctx context.Context, path string) (string, error) {
-	out, _, err := Run(ctx, "hash-object", "-w", "--", path)
+// HashObjectBytes returns the blob SHA for in-memory bytes without writing
+// anything to the object store -- the preview counterpart of
+// HashObjectWriteBytes.
+func HashObjectBytes(ctx context.Context, data []byte) (string, error) {
+	out, _, err := RunWithEnvStdin(ctx, nil, data, "hash-object", "--stdin")
 	if err != nil {
-		return "", fmt.Errorf("hash-object -w %s: %w", path, err)
+		return "", err
 	}
 	return strings.TrimSpace(out), nil
 }

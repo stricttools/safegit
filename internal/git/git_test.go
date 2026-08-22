@@ -626,30 +626,28 @@ func TestLsTreeSubtreeEntries(t *testing.T) {
 	}
 }
 
-func TestHashObjectWrite(t *testing.T) {
+func TestHashObjectBytesMatchesTheWritingForm(t *testing.T) {
 	dir := testutil.InitBareRepo(t)
 	testutil.Chdir(t, dir)
 	ctx := context.Background()
 
-	// Create a file
-	testFile := filepath.Join(dir, "hashme.txt")
-	os.WriteFile(testFile, []byte("hash me\n"), 0644)
+	content := []byte("hash me\n")
 
-	// Hash without writing (existing function)
-	shaNoWrite, err := HashObject(ctx, testFile)
+	// Hash without writing.
+	shaNoWrite, err := HashObjectBytes(ctx, content)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// Hash with writing
-	shaWrite, err := HashObjectWrite(ctx, testFile)
+	// Hash with writing.
+	shaWrite, err := HashObjectWriteBytes(ctx, content)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// SHAs must match
+	// SHAs must match: the only difference between the two is persistence.
 	if shaNoWrite != shaWrite {
-		t.Errorf("HashObject = %q, HashObjectWrite = %q, want equal", shaNoWrite, shaWrite)
+		t.Errorf("HashObjectBytes = %q, HashObjectWriteBytes = %q, want equal", shaNoWrite, shaWrite)
 	}
 
 	// Verify the blob exists in the object store via cat-file
@@ -715,9 +713,7 @@ func TestMkTreeRoundTrip(t *testing.T) {
 	}
 
 	// Create a new blob to replace hello.txt
-	newFile := filepath.Join(dir, "newhello.txt")
-	os.WriteFile(newFile, []byte("modified hello\n"), 0644)
-	newBlobSHA, err := HashObjectWrite(ctx, newFile)
+	newBlobSHA, err := HashObjectWriteBytes(ctx, []byte("modified hello\n"))
 	if err != nil {
 		t.Fatal(err)
 	}

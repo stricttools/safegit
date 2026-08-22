@@ -85,7 +85,7 @@ func TestScrubFileRewriteMapsPersisted(t *testing.T) {
 	oldHead := commitFileEnv(t, dir, scrubEnv, "secret.txt", "REDACTED\n", "commit replacement")
 	testutil.Git(t, dir, "update-ref", "refs/remotes/origin/main", oldHead)
 
-	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--json", "scrub", "file",
+	stdout, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "--json", "scrub", "file", "--replace-with", "secret.txt",
 		"--from", initialSHA, "--reason", "test rewrite maps", "secret.txt")
 	if code != 0 {
 		t.Fatalf("scrub failed (code %d): %s", code, stderr)
@@ -363,7 +363,7 @@ func TestScrubFilePureNoOpWritesNoRewriteMaps(t *testing.T) {
 	commitFileEnv(t, dir, scrubEnv, "clean.txt", "already clean\n", "add clean file")
 	headSHA := testutil.Git(t, dir, "rev-parse", "HEAD")
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "file",
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "file", "--replace-with", "clean.txt",
 		"--from", headSHA, "--reason", "pure no-op", "clean.txt")
 	if code != 0 {
 		t.Fatalf("no-op scrub failed (code %d): %s", code, stderr)

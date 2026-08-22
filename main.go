@@ -174,6 +174,18 @@ var (
 		strictcli.BoolFlag("mangle", "replace matches with random printable ASCII of same length", strictcli.Required()),
 		"substitute random printable ASCII of the same length for every match")
 
+	// `scrub file`'s mode. It was inferred until now -- os.Stat on the target
+	// path, present means replace, absent means delete -- which made the same
+	// command line mean opposite things depending on which directory it was
+	// typed in, and made a typo in the path a silent deletion from history. The
+	// caller says which one, or the parser refuses the command.
+	scrubDeleteChoice = strictcli.MemberChoice(
+		strictcli.BoolFlag("delete", "remove the file from every commit in the rewritten range", strictcli.Required()),
+		"delete the file from every commit in range")
+	scrubReplaceWithChoice = strictcli.MemberChoice(
+		strictcli.StringFlag("replace-with", "path to the file whose contents replace the target in every commit; resolved against YOUR current directory, unlike the target argument, which is repository-relative", strictcli.Required()),
+		"replace the file's contents with those of a sanitized file")
+
 	scrubFromChoice = strictcli.MemberChoice(
 		strictcli.StringFlag("from", "first commit hash to include when rewriting history", strictcli.Required()),
 		"rewrite the commits from a given commit forward")
@@ -562,9 +574,12 @@ func newApp() *strictcli.App {
 		strictcli.WithConsequential(),
 		strictcli.WithTags("json"),
 		strictcli.WithFlags(
-			strictcli.StringFlag("from", "first commit hash to include when rewriting history", strictcli.Required()),
 			strictcli.StringFlag("reason", "mandatory audit trail message explaining why this scrub operation is needed", strictcli.Required()),
 			strictcli.StringFlag("remap-shas-in", "glob selecting files whose full 40-character commit hashes are remapped to the rewritten SHAs during the walk, keeping hash-referencing files like JSONL changelogs self-consistent at every commit (repeatable; same matching semantics as --scope; not applied inside submodule histories)", strictcli.Repeatable(), strictcli.Unique(true), strictcli.Optional()),
+			strictcli.MemberChoiceFlag("mode", "what happens to the file at every commit in range", strictcli.Required(),
+				scrubDeleteChoice, scrubReplaceWithChoice),
+			strictcli.MemberChoiceFlag("range", "how much of the history is rewritten", strictcli.Required(),
+				scrubFromChoice, scrubEntireHistoryChoice),
 		),
 		strictcli.WithArgs(
 			strictcli.NewArg("file", "repository-relative path to the file that should be scrubbed from history", strictcli.ArgRequired()),

@@ -82,12 +82,7 @@ func commitTreeSHA(t *testing.T, ctx context.Context, commitSHA string) string {
 // hashBlob writes content as a blob object and returns its SHA.
 func hashBlob(t *testing.T, dir string, ctx context.Context, content string) string {
 	t.Helper()
-	path := filepath.Join(dir, ".tmp-blob")
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatalf("write tmp blob: %v", err)
-	}
-	defer os.Remove(path)
-	sha, err := git.HashObjectWrite(ctx, path)
+	sha, err := git.HashObjectWriteBytes(ctx, []byte(content))
 	if err != nil {
 		t.Fatalf("hash-object -w: %v", err)
 	}

@@ -88,7 +88,7 @@ func humanNumber(t *testing.T, stdout, pattern string) int {
 func TestScrubFilePreviewRendersTheRewrite(t *testing.T) {
 	dir, initialSHA := newSecretRepo(t)
 
-	stdout, stderr, code := runSafegitEnv(t, dir, previewEnv, "--dry-run", "scrub", "file",
+	stdout, stderr, code := runSafegitEnv(t, dir, previewEnv, "--dry-run", "scrub", "file", "--replace-with", "secret.txt",
 		"--from", initialSHA, "--reason", "preview", "secret.txt")
 	if code != 0 {
 		t.Fatalf("dry run failed (%d): %s", code, stderr)
@@ -114,12 +114,12 @@ func TestScrubFilePreviewRendersTheRewrite(t *testing.T) {
 func TestScrubFilePreviewFiguresAgree(t *testing.T) {
 	dir, initialSHA := newSecretRepo(t)
 
-	human, stderr, code := runSafegitEnv(t, dir, previewEnv, "--dry-run", "scrub", "file",
+	human, stderr, code := runSafegitEnv(t, dir, previewEnv, "--dry-run", "scrub", "file", "--replace-with", "secret.txt",
 		"--from", initialSHA, "--reason", "preview", "secret.txt")
 	if code != 0 {
 		t.Fatalf("human dry run failed (%d): %s", code, stderr)
 	}
-	machine, stderr, code := runSafegitEnv(t, dir, previewEnv, "--json", "--dry-run", "scrub", "file",
+	machine, stderr, code := runSafegitEnv(t, dir, previewEnv, "--json", "--dry-run", "scrub", "file", "--replace-with", "secret.txt",
 		"--from", initialSHA, "--reason", "preview", "secret.txt")
 	if code != 0 {
 		t.Fatalf("machine dry run failed (%d): %s", code, stderr)

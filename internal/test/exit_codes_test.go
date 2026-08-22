@@ -63,7 +63,7 @@ func TestScrubFileLockTimeoutIsTyped(t *testing.T) {
 	shortLockTimeout(t, dir)
 	holdLock(t, dir, "safegit/rewrite", "test-holder")
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "file",
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "--approve-consequential", "scrub", "file", "--replace-with", "secret.txt",
 		"--from", initialSHA, "--reason", "lock timeout probe", "secret.txt")
 	assertLockTimeoutRefusal(t, "scrub file", code, stderr)
 	if !secretSurvives(t, dir) {
