@@ -498,9 +498,9 @@ func materializeResolutions(ctx context.Context, sides map[string]conflict.Sides
 	if len(declared) == 0 {
 		return nil
 	}
-	root, err := git.RepoRoot(ctx)
+	root, err := git.AnchorRoot(ctx)
 	if err != nil {
-		return fmt.Errorf("resolving the repository root to write the resolved files: %w", err)
+		return fmt.Errorf("resolving the directory git's paths are relative to, to write the resolved files: %w", err)
 	}
 
 	for _, r := range declared {

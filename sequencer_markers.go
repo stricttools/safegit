@@ -283,7 +283,10 @@ func (v *markerCheck) committedContent(ctx context.Context, path string) (conten
 		blob, err := stageBlob(ctx, v.sides[path].Theirs)
 		return blob, blob != nil, err
 	case resolveWorktree:
-		root, err := git.RepoRoot(ctx)
+		// AnchorRoot, not the process working directory: a path git listed is
+		// relative to the repository, and reading it with a syscall from a
+		// subdirectory would reach a different file or none at all.
+		root, err := git.AnchorRoot(ctx)
 		if err != nil {
 			return nil, false, err
 		}
