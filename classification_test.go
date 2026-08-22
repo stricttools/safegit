@@ -37,7 +37,11 @@ import (
 //     off to git; git itself does not interrupt for any of them, and safegit's
 //     coordination guard runs first.
 //   - push -- publishes local refs. Publishing is what the command is for, and
-//     --force-with-lease refuses rather than clobbers.
+//     --force-with-lease refuses rather than clobbers. A FORCED push is another
+//     matter, but it is consequential conditionally -- on one flag, not on the
+//     command -- which strictcli cannot yet declare, so it is confirmed at
+//     safegit's own confirmDeliberate seam, answered by --approve-consequential
+//     because the condition is a flag the caller typed.
 //   - pull -- fetch plus merge, fast-forward-only by default.
 //   - backup backup -- pushes one branch into the tool-owned refs/backups
 //     namespace under a lease. The question worth interrupting for is not "back
