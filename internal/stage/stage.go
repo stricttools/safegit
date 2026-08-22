@@ -20,7 +20,7 @@ var ErrBinaryFile = errors.New("binary file: hunk staging not supported")
 
 // Hunk represents a single change block from a unified diff.
 type Hunk struct {
-	Index    int      // 1-based
+	Index    int // 1-based
 	OldStart int
 	OldCount int
 	NewStart int

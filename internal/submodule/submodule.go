@@ -23,13 +23,13 @@ var ErrNestedSubmodules = errors.New("nested submodules detected")
 
 // SubmoduleInfo describes a discovered submodule within a parent repository.
 type SubmoduleInfo struct {
-	Name          string
-	RelativePath  string
-	WorkTreePath  string
-	GitDir        string
-	SafegitDir    string
-	CommitSHA     string
-	Initialized   bool
+	Name         string
+	RelativePath string
+	WorkTreePath string
+	GitDir       string
+	SafegitDir   string
+	CommitSHA    string
+	Initialized  bool
 }
 
 // Enumerate discovers all submodules in a repo. parentGitDir is the absolute

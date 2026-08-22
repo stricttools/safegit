@@ -176,9 +176,9 @@ func TestStageSpecificHunks(t *testing.T) {
 
 	// Now modify lines 1, 10, and 20 to create 3 hunks (separated by >6 unchanged lines)
 	lines := strings.Split(original, "\n")
-	lines[0] = "BBB"   // line 1
-	lines[9] = "CCC"   // line 10
-	lines[19] = "DDD"  // line 20
+	lines[0] = "BBB"  // line 1
+	lines[9] = "CCC"  // line 10
+	lines[19] = "DDD" // line 20
 	modified := strings.Join(lines, "\n")
 	if err := os.WriteFile(seedPath, []byte(modified), 0644); err != nil {
 		t.Fatal(err)
