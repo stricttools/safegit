@@ -1238,6 +1238,23 @@ instead of reclaiming, and doctor is the recovery path).
   cwd-relative (ours/asymmetric); conclusion trailers and pipeline
   authorship vs git's own committing (ours).
 
+## USER RULINGS (settled 2026-08-22, review session, round 3)
+
+- Commit serialization: accepted as built. The reader-writer
+  alternative is filed as todo/reader-writer-operation-lock.md,
+  explicitly CONTINGENT on measured proof of real contention (the
+  user's words: "proof is needed") — it is not general backlog.
+- Oplog unbounded growth: accepted. Append-only audit trails are
+  complete by design; any future management must be an explicit
+  operator-invoked archival, never silent rotation.
+- Uninstall: BOTH halves — it becomes a repository-wide operation
+  (removes every worktree's state dir plus the shared store) AND the
+  output, dry runs included, clearly enumerates what is about to be
+  removed and what may be surprising (e.g. that state for worktrees
+  other than the invoking one is included). Queued for the next
+  session's fixer window alongside the aggregated no-match listing and
+  the scrub scope line.
+
 ## Open rulings (need the user's decision; as-built stands meanwhile)
 
 - **Per-path vs set-level no-match errors (2.2).** The plan contradicts
