@@ -44,20 +44,29 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		die(exitcode.NotInitialized, err.Error())
 	}
 
-	// Undoing while git has an operation in flight is incoherent on its face --
-	// the operation was computed against a commit undo is about to move off
-	// HEAD -- and the rollback's index reconciliation would erase the conflict
-	// stages git needs to conclude it, leaving a repository that looks clean and
-	// mid-merge at once.
-	if err := coord.GuardInFlight(gitDir, "undo", nil); err != nil {
-		die(exitcode.CoordinationBusy, err.Error())
-	}
-
 	sgDir := repo.SafegitDir(gitDir)
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
 		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
+	}
+
+	// Outermost, and taken BEFORE the in-flight check below so the check reads a
+	// state no passthrough in this worktree can change while undo acts on it.
+	// The ref lock further down is the inner one.
+	release, code := acquireOperationLock(flags, gitDir, cmd)
+	if code != 0 {
+		os.Exit(code)
+	}
+	defer release()
+
+	// Undoing while git has an operation in flight is incoherent on its face --
+	// the operation was computed against a commit undo is about to move off
+	// HEAD -- and the rollback's index reconciliation would erase the conflict
+	// stages git needs to conclude it, leaving a repository that looks clean and
+	// mid-merge at once.
+	if err := coord.GuardInFlight(gitDir, cmd, nil); err != nil {
+		die(exitcode.CoordinationBusy, err.Error())
 	}
 
 	ctx := flags.ctx()

@@ -65,6 +65,16 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
 	}
 
+	// Outermost, around the pipeline's whole run: the in-flight-operation check
+	// inside it reads state a concurrent passthrough would otherwise be free to
+	// create between the check and the ref update. The pipeline's per-ref CAS
+	// lock is taken inside this one.
+	release, code := acquireOperationLock(flags, gitDir, "commit")
+	if code != 0 {
+		os.Exit(code)
+	}
+	defer release()
+
 	if flags.verbose {
 		paths := make([]string, len(fileSpecs))
 		for i, fs := range fileSpecs {
@@ -94,8 +104,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		if errors.As(err, &ce) {
 			code = ce.Code
 		}
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(code)
+		die(code, err.Error())
 	}
 
 	if flags.verbose {
@@ -106,8 +115,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	}
 
 	if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "commit", firstLine(msg)); err != nil {
-		fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
-		os.Exit(exitcode.General)
+		die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 	}
 
 	recordCommitRefUpdate(flags, result.Ref, result.SHA, result.Parent)
@@ -161,6 +169,15 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 	if err != nil {
 		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
 	}
+
+	// Same ordering as the plain commit path: operation lock outermost, the
+	// pipeline's per-ref CAS lock inside it.
+	release, code := acquireOperationLock(flags, gitDir, "amend")
+	if code != 0 {
+		os.Exit(code)
+	}
+	defer release()
+
 	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg}
 
 	if len(files) > 0 {
@@ -199,8 +216,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			if errors.As(err, &ce) {
 				code = ce.Code
 			}
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(code)
+			die(code, err.Error())
 		}
 
 		if flags.verbose {
@@ -212,8 +228,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		}
 
 		if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "amend", firstLine(msg)); err != nil {
-			fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
-			os.Exit(exitcode.General)
+			die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 		}
 
 		recordCommitRefUpdate(flags, result.Ref, result.SHA, result.OldSHA)
@@ -267,8 +282,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			if errors.As(err, &ce) {
 				code = ce.Code
 			}
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(code)
+			die(code, err.Error())
 		}
 
 		if flags.verbose {
@@ -278,8 +292,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		}
 
 		if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "reword", firstLine(msg)); err != nil {
-			fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
-			os.Exit(exitcode.General)
+			die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 		}
 
 		recordCommitRefUpdate(flags, result.Ref, result.SHA, result.OldSHA)

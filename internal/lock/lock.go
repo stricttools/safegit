@@ -61,6 +61,14 @@ const (
 // interactive `rebase -i`'s editor session. A second safegit process in the same
 // worktree waits (lock.acquireTimeoutSeconds) and then refuses with
 // exitcode.LockTimeout rather than running concurrently with a rebase.
+//
+// That editor does run -- verified, not assumed, by
+// testdata/experiments/exp-passthrough-editor-stdin.sh. The passthroughs that go
+// through the effects handle (checkout, pull, merge, rebase, reset, bisect) give
+// their git child /dev/null on stdin, so an editor that opens /dev/tty -- vim,
+// nano, emacs -nw, every terminal editor -- works, while anything reading stdin
+// sees EOF at once. The passthroughs that exec git directly (cherry-pick,
+// revert) inherit stdin whole and have neither limitation.
 
 // RefLock represents an acquired lock on a git ref.
 type RefLock struct {

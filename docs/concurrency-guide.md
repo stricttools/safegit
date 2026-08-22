@@ -140,6 +140,23 @@ If any tracked file is modified or any untracked file exists, the guarded comman
 
 The guard uses `git diff HEAD` (not `git status`, which depends on the potentially stale main index) to detect modifications, ensuring accuracy even when the shared index is out of sync with the actual committed state.
 
+### The worktree operation lock
+
+The dirty-tree guard answers "is it safe to start?" at one instant. The operation lock answers "is anyone else already working here?" for the whole operation, and it is what makes the first answer worth anything: without it, a passthrough could put the repository mid-merge in the window between another process's check and its ref update.
+
+Every command that mutates a worktree takes it first: the guarded passthroughs (checkout, pull, merge, rebase, reset, bisect, cherry-pick, revert), `commit` (including `--amend` and reword), and `undo`. It lives at `safegit/operation` in the **worktree-local** safegit directory, so two worktrees of one repository work independently while two processes in one worktree serialize.
+
+Lock ordering is fixed: the operation lock is **outermost**, and the per-ref locks the commit pipeline and undo take are acquired inside it. Nothing takes them the other way round, which is the whole deadlock argument.
+
+A passthrough holds the lock for the **full duration** of the git command it wraps -- including an interactive `rebase -i`'s editor session. A second safegit process in that worktree waits `lock.acquireTimeoutSeconds` and then exits 8, naming the holder; it never runs concurrently. Two notes on interactive passthroughs, both measured rather than assumed (`testdata/experiments/exp-passthrough-editor-stdin.sh`):
+
+- The editor does run. A terminal editor (vim, nano, `emacs -nw`) opens `/dev/tty` and works normally.
+- `checkout`, `pull`, `merge`, `rebase`, `reset` and `bisect` reach git through the effects handle, which gives the child no stdin: anything that reads standard input sees EOF immediately. `cherry-pick` and `revert` exec git directly and inherit stdin whole.
+
+A dry run takes no lock: it performs no mutation, and acquiring one would mean a command that promises to change nothing writing a file into `.git/safegit`.
+
+`safegit unlock safegit/operation` releases a stale operation lock left by a crashed process, and `safegit doctor` reports it by name.
+
 ## Session attribution via trailers
 
 Each commit created by safegit includes a `Claude-Code-Session-Id` trailer (when the environment variable is set), enabling post-hoc attribution of which session created which commit. This is not a concurrency mechanism -- it is an audit trail that makes it possible to trace commit ownership in multi-session repositories.
@@ -148,9 +165,11 @@ Each commit created by safegit includes a `Claude-Code-Session-Id` trailer (when
 
 ## Worktree support
 
-Git worktrees allow multiple checkouts of the same repository. safegit handles this by placing lock files under the common `.git` directory (the one shared by all worktrees), not under each worktree's local `.git` file. This ensures that commits to the same branch from different worktrees are properly serialized.
+Git worktrees allow multiple checkouts of the same repository. safegit places **ref** locks and the repository-wide rewrite lock under the common `.git` directory (the one shared by all worktrees), not under each worktree's local `.git` file. This ensures that commits to the same branch from different worktrees are properly serialized.
 
-The `SharedSafegitDir` function resolves the common git directory at runtime, so lock files always land in the shared location regardless of which worktree initiated the commit.
+The `SharedSafegitDir` function resolves the common git directory at runtime, so those lock files always land in the shared location regardless of which worktree initiated the commit.
+
+The **operation** lock is the deliberate exception: it lives in the worktree-local safegit directory, because it protects one worktree's tree rather than a ref every worktree shares. Two worktrees therefore checkout, merge and rebase independently, while two processes in one worktree serialize. `safegit doctor` scans both trees.
 
 :-: ref path="internal/repo" lang="go"
 
