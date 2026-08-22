@@ -1309,6 +1309,44 @@ safegit hook install ./scripts/lint-check.sh
 
 The script is copied to `.git/safegit/hooks/` and made executable.
 
+## hook remove
+
+Remove one hook from the tool-owned live store by name -- either its store-relative path (`pre-pre-push.d/20-lint`) or just its base name -- so a hook can be retired or replaced without deleting files by hand.
+
+### Arguments
+
+| Name | Required | Description |
+|------|----------|-------------|
+| `name` | Yes | Name of the installed hook to remove, as shown by `safegit hook list` |
+
+### The two stores are not symmetric here
+
+- A name that only the **checkout-provided** store carries is refused with an explanation: that hook is a file in the work tree, and removing it means deleting the file and committing that.
+- A name **both** stores carry removes the live one and says plainly that the checkout's hook still runs. Refusing outright would make the live hook unremovable by name.
+
+Both non-removals exit 1. So does an ambiguous base name that resolves to more than one live hook, which asks for the full name instead. A name that is only in the pre-migration `.git/hooks` location exits **24** and points at `safegit hook migrate`.
+
+### Examples
+
+```bash
+safegit hook remove pre-pre-push.d/20-lint
+safegit hook remove lint-check.sh
+```
+
+## hook migrate
+
+Move safegit's hooks out of git's own `.git/hooks/` directory into the tool-owned live store.
+
+`pre-pre-push` and `pre-pre-push.d/` are the only two names safegit ever wrote into git's directory, so the relocation is unconditional -- there is nothing to identify or choose. While either name sits there, every `safegit push` and every `safegit hook run` refuses with exit 24; this is the command that clears that. With nothing to move it reports success and explains why.
+
+Both ends are under the repository's **common** git dir -- git's hook directory is the same one in every worktree -- so a migration run from a linked worktree relocates the repository's hooks.
+
+### Examples
+
+```bash
+safegit hook migrate
+```
+
 ## version
 
 Print the safegit binary version, Go runtime version with platform architecture, and the installed git version in a human-readable format. This command provides all the version information needed for bug reports, compatibility checks, and verifying that the correct safegit binary is installed on the system.
