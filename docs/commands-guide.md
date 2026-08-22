@@ -1238,10 +1238,13 @@ coordination guard, an uninitialized repository, a rejected argument).
 | 21 | Pre-pre-push hook timed out |
 | 22 | The remote backup slot holds work missing from the local history |
 | 23 | The branch has no backup slot on the remote |
+| 24 | Hooks are still in the pre-migration .git/hooks location (run `safegit hook migrate`) |
+| 25 | A hook committed to .safegit/hooks is not executable |
 | 30 | A history rewrite was refused before any ref moved (nothing changed) |
 | 31 | A history rewrite stands, but post-rewrite verification found residue or skipped the working-tree sync |
 | 40 | The push did not get through: git push failed, or the refs could not be safely re-read around it |
 | 41 | The remote ref moved after safegit observed it, so the --force-with-lease expectation no longer matched |
+| 50 | doctor found at least one error-severity problem (warnings alone exit 0) |
 | 70 | Internal invariant violated (a bug) |
 
 <!-- END generated exit-code table -->

@@ -224,8 +224,8 @@ func TestHookTimeout(t *testing.T) {
 	requireStress(t)
 	dir := newRepo(t)
 
-	// Install a hook that sleeps forever
-	hookDir := filepath.Join(dir, ".git", "hooks")
+	// Install a hook that sleeps forever, in the tool-owned hook store
+	hookDir := filepath.Join(dir, ".git", "safegit", "hooks")
 	hookPath := filepath.Join(hookDir, "pre-pre-push")
 	hookContent := "#!/bin/sh\nsleep 60\n"
 	if err := os.WriteFile(hookPath, []byte(hookContent), 0755); err != nil {

@@ -197,24 +197,39 @@ func nameFromGitDir(parentGitDir, gitDir string) string {
 	return rel
 }
 
+// Parent describes the superproject a submodule is checked out inside.
+//
+// WorkTree is carried alongside GitDir because several things a parent owns
+// live in the work tree rather than the git directory -- its committed hook
+// store above all -- and a caller handed only the git directory cannot find
+// them without re-asking git.
+type Parent struct {
+	// GitDir is the parent repository's git directory, absolute.
+	GitDir string
+	// WorkTree is the parent repository's work tree, absolute.
+	WorkTree string
+	// SubmodulePath is this submodule's path relative to WorkTree.
+	SubmodulePath string
+}
+
 // DetectParent checks whether the current working directory is inside a git
 // submodule and returns information about the parent repo.
 //
-// Returns ("", "", false) if not inside a submodule. Returns the immediate
-// parent only; callers recurse if needed for nested submodules.
-func DetectParent(ctx context.Context) (parentGitDir string, submodulePath string, ok bool) {
+// Returns ok=false if not inside a submodule. Returns the immediate parent
+// only; callers recurse if needed for nested submodules.
+func DetectParent(ctx context.Context) (parent Parent, ok bool) {
 	out, err := runGit(ctx, "", "rev-parse", "--show-superproject-working-tree")
 	if err != nil || strings.TrimSpace(out) == "" {
-		return "", "", false
+		return Parent{}, false
 	}
 
 	parentWorkTree := cleanPath(strings.TrimSpace(out))
 
 	pgd, err := runGit(ctx, parentWorkTree, "rev-parse", "--git-dir")
 	if err != nil {
-		return "", "", false
+		return Parent{}, false
 	}
-	parentGitDir = strings.TrimSpace(pgd)
+	parentGitDir := strings.TrimSpace(pgd)
 	if !filepath.IsAbs(parentGitDir) {
 		parentGitDir = filepath.Join(parentWorkTree, parentGitDir)
 	}
@@ -223,16 +238,15 @@ func DetectParent(ctx context.Context) (parentGitDir string, submodulePath strin
 	// Determine this submodule's relative path within the parent.
 	cwd, err := os.Getwd()
 	if err != nil {
-		return "", "", false
+		return Parent{}, false
 	}
 	cwd = cleanPath(cwd)
 	rel, err := filepath.Rel(parentWorkTree, cwd)
 	if err != nil || strings.HasPrefix(rel, "..") {
-		return "", "", false
+		return Parent{}, false
 	}
-	submodulePath = rel
 
-	return parentGitDir, submodulePath, true
+	return Parent{GitDir: parentGitDir, WorkTree: parentWorkTree, SubmodulePath: rel}, true
 }
 
 // resolveSubmoduleGitDir runs `git rev-parse --git-dir` inside the submodule

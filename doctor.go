@@ -11,6 +11,7 @@ import (
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/gitversion"
+	"github.com/smm-h/safegit/internal/hooks"
 	"github.com/smm-h/safegit/internal/index"
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/oplog"
@@ -28,10 +29,13 @@ type checkResult struct {
 // doctor run so a check function takes no other arguments and can be added,
 // removed or reordered without touching any other check.
 type doctorEnv struct {
-	ctx    context.Context
-	gitDir string
-	sgDir  string
-	inited bool
+	ctx context.Context
+	// worktree is the repository's work tree, empty when it has none. Checks
+	// that look at anything committed -- the hook store above all -- need it.
+	worktree string
+	gitDir   string
+	sgDir    string
+	inited   bool
 }
 
 // doctorFinding is one check's outcome.
@@ -160,10 +164,11 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 	ctx := flags.ctx()
 
 	env := doctorEnv{
-		ctx:    ctx,
-		gitDir: gitDir,
-		sgDir:  repo.SafegitDir(gitDir),
-		inited: repo.IsInitialized(gitDir),
+		ctx:      ctx,
+		worktree: flags.root.resolve(),
+		gitDir:   gitDir,
+		sgDir:    repo.SafegitDir(gitDir),
+		inited:   repo.IsInitialized(gitDir),
 	}
 
 	var checks []checkResult
@@ -329,30 +334,41 @@ func checkFilesystemRegistered(env doctorEnv) doctorFinding {
 	return findingAt(r.Status, "%s", r.Detail)
 }
 
-// checkHookPerms reports non-executable hooks in pre-pre-push.d/, which git
-// would silently never run.
+// checkHookPerms reports hooks whose mode says they cannot run.
+//
+// It reads the location enumerator, so it sees exactly the set discovery sees
+// -- both stores, at any depth -- rather than re-deriving one directory's
+// layout and going quietly blind to the rest. The two stores get different
+// severities because push treats them differently: a non-executable LOCAL hook
+// is skipped with a warning, while a non-executable COMMITTED hook is a hard
+// refusal, so reporting the second as advisory would understate a push that is
+// already failing.
 func checkHookPerms(env doctorEnv) doctorFinding {
-	hookDir := filepath.Join(env.gitDir, "hooks", "pre-pre-push.d")
-	entries, readErr := os.ReadDir(hookDir)
-	if readErr != nil {
-		// No hook directory at all: nothing to report either way.
+	locations, err := hooks.Enumerate(hooks.Store{Worktree: env.worktree, GitDir: env.gitDir})
+	if err != nil {
+		return findingFail("%v", err)
+	}
+	if len(locations) == 0 {
+		// No hooks anywhere: nothing to report either way.
 		return findingNone()
 	}
-	var nonExec []string
-	for _, e := range entries {
-		if e.IsDir() || strings.HasPrefix(e.Name(), ".") || strings.HasSuffix(e.Name(), "~") {
+	var local, tracked []string
+	for _, loc := range locations {
+		if loc.Executable || !loc.IsHookName() || loc.Origin == hooks.OriginLegacy {
 			continue
 		}
-		info, sErr := e.Info()
-		if sErr != nil {
-			continue
-		}
-		if info.Mode()&0111 == 0 {
-			nonExec = append(nonExec, e.Name())
+		if loc.Origin == hooks.OriginTracked {
+			tracked = append(tracked, loc.Rel)
+		} else {
+			local = append(local, loc.Rel)
 		}
 	}
-	if len(nonExec) > 0 {
-		return findingFail("%d non-executable hook(s) in pre-pre-push.d/: %s", len(nonExec), strings.Join(nonExec, ", "))
+	if len(tracked) > 0 {
+		return findingAt("error", "%d committed hook(s) are not executable, which every push refuses on: %s (chmod +x and commit the mode change)",
+			len(tracked), strings.Join(tracked, ", "))
+	}
+	if len(local) > 0 {
+		return findingFail("%d non-executable hook(s) in %s: %s", len(local), hooks.LocalDir(env.gitDir), strings.Join(local, ", "))
 	}
 	return findingOK("")
 }

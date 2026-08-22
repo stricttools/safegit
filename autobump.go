@@ -140,10 +140,11 @@ var errAutoBumpUnset = fmt.Errorf("commit.autoBumpParent not configured in paren
 // parent repository a preview touches: the config is READ, and nothing is
 // created there, not even safegit's own directory.
 func requireAutoBumpDecision(ctx context.Context, flags globalFlags) error {
-	parentGitDir, _, ok := submodule.DetectParent(ctx)
+	parent, ok := submodule.DetectParent(ctx)
 	if !ok {
 		return nil // not in a submodule
 	}
+	parentGitDir := parent.GitDir
 
 	if flags.dryRun {
 		// No ensureInitialized: a preview creates nothing in the parent. A
@@ -179,10 +180,11 @@ func requireAutoBumpDecision(ctx context.Context, flags globalFlags) error {
 // maybeAutoBumpParent checks config and conditions, then bumps the parent
 // submodule pointer if appropriate.
 func maybeAutoBumpParent(ctx context.Context, flags globalFlags, gitDir, newHeadSHA, operation, firstLineMsg string) error {
-	parentGitDir, subRelPath, ok := submodule.DetectParent(ctx)
+	parent, ok := submodule.DetectParent(ctx)
 	if !ok {
 		return nil // not in a submodule
 	}
+	parentGitDir, subRelPath := parent.GitDir, parent.SubmodulePath
 
 	// A dry run must leave the parent repository entirely alone: no safegit
 	// directory created there, no config read-modify, and above all no commit.

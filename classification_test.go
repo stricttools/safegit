@@ -28,7 +28,7 @@ import (
 // object store, the config file or the remote's ref list and writes nothing;
 // `backup list` is a network read (git ls-remote) but still a read.
 //
-// Mutating and NOT consequential (18):
+// Mutating and NOT consequential (20):
 //
 //   - commit -- creates a commit and moves a ref. The routine operation this
 //     tool exists for, and `safegit undo` reverses it from the oplog.
@@ -53,6 +53,9 @@ import (
 //   - config set -- writes one key into .git/safegit/config.json.
 //   - hook run -- executes the installed pre-pre-push hook scripts.
 //   - hook install -- copies a script into .git/safegit/hooks and chmods it.
+//   - hook remove -- deletes one hook from .git/safegit/hooks.
+//   - hook migrate -- moves safegit's hooks out of git's own .git/hooks into
+//     the tool-owned store.
 //   - doctor -- repairs or uninstalls. --diagnose only reads, so the command as
 //     a whole is not worth an unconditional interruption; the destructive case
 //     is --uninstall, gated at flag granularity by safegit's own seam.
@@ -104,6 +107,8 @@ var classification = map[string]struct {
 	"hook.list":      {strictcli.EffectReadOnly, false, true, false},
 	"hook.run":       {strictcli.EffectMutating, false, false, false},
 	"hook.install":   {strictcli.EffectMutating, false, true, false},
+	"hook.remove":    {strictcli.EffectMutating, false, true, false},
+	"hook.migrate":   {strictcli.EffectMutating, false, true, false},
 	"scrub.file":     {strictcli.EffectMutating, true, true, false},
 	"scrub.match":    {strictcli.EffectMutating, true, true, false},
 	"scrub.run":      {strictcli.EffectMutating, true, true, false},
@@ -116,7 +121,7 @@ var groupTree = map[string][]string{
 	"author": {"check", "list", "rewrite"},
 	"backup": {"backup", "list", "restore"},
 	"config": {"get", "set", "show"},
-	"hook":   {"install", "list", "run"},
+	"hook":   {"install", "list", "migrate", "remove", "run"},
 	"scrub":  {"file", "match", "run", "verify"},
 }
 

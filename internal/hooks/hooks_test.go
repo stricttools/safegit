@@ -10,16 +10,25 @@ import (
 	"time"
 )
 
-// setupGitDir creates a temporary .git structure with a hooks directory.
+// setupGitDir creates a temporary .git structure with git's own hooks directory
+// and safegit's tool-owned live hook store.
 func setupGitDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	gitDir := filepath.Join(dir, ".git")
-	hooksDir := filepath.Join(gitDir, "hooks")
-	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(gitDir, "hooks"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(LocalDir(gitDir), 0755); err != nil {
 		t.Fatal(err)
 	}
 	return gitDir
+}
+
+// store is the Store for a git dir whose work tree is its parent directory,
+// which is the shape setupGitDir builds.
+func store(gitDir string) Store {
+	return Store{Worktree: filepath.Dir(gitDir), GitDir: gitDir}
 }
 
 // writeHook writes an executable script to the given path.
@@ -35,10 +44,10 @@ func writeHook(t *testing.T, path, content string) {
 
 func TestDiscoverSingleHook(t *testing.T) {
 	gitDir := setupGitDir(t)
-	hookPath := filepath.Join(gitDir, "hooks", "pre-pre-push")
+	hookPath := filepath.Join(LocalDir(gitDir), "pre-pre-push")
 	writeHook(t, hookPath, "#!/bin/sh\nexit 0\n")
 
-	hooks, err := Discover(gitDir)
+	hooks, err := Discover(store(gitDir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +61,7 @@ func TestDiscoverSingleHook(t *testing.T) {
 
 func TestDiscoverDirectory(t *testing.T) {
 	gitDir := setupGitDir(t)
-	dDir := filepath.Join(gitDir, "hooks", "pre-pre-push.d")
+	dDir := filepath.Join(LocalDir(gitDir), "pre-pre-push.d")
 	if err := os.MkdirAll(dDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +71,7 @@ func TestDiscoverDirectory(t *testing.T) {
 	writeHook(t, filepath.Join(dDir, "01-test"), "#!/bin/sh\nexit 0\n")
 	writeHook(t, filepath.Join(dDir, "03-build"), "#!/bin/sh\nexit 0\n")
 
-	hooks, err := Discover(gitDir)
+	hooks, err := Discover(store(gitDir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +92,7 @@ func TestDiscoverDirectory(t *testing.T) {
 
 func TestSkipNonExecutable(t *testing.T) {
 	gitDir := setupGitDir(t)
-	dDir := filepath.Join(gitDir, "hooks", "pre-pre-push.d")
+	dDir := filepath.Join(LocalDir(gitDir), "pre-pre-push.d")
 	if err := os.MkdirAll(dDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +104,7 @@ func TestSkipNonExecutable(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	hooks, err := Discover(gitDir)
+	hooks, err := Discover(store(gitDir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +118,7 @@ func TestSkipNonExecutable(t *testing.T) {
 
 func TestSkipDotFiles(t *testing.T) {
 	gitDir := setupGitDir(t)
-	dDir := filepath.Join(gitDir, "hooks", "pre-pre-push.d")
+	dDir := filepath.Join(LocalDir(gitDir), "pre-pre-push.d")
 	if err := os.MkdirAll(dDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +127,7 @@ func TestSkipDotFiles(t *testing.T) {
 	writeHook(t, filepath.Join(dDir, "backup~"), "#!/bin/sh\nexit 0\n")
 	writeHook(t, filepath.Join(dDir, "good-hook"), "#!/bin/sh\nexit 0\n")
 
-	hooks, err := Discover(gitDir)
+	hooks, err := Discover(store(gitDir))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,11 +141,11 @@ func TestSkipDotFiles(t *testing.T) {
 
 func TestRunSuccess(t *testing.T) {
 	gitDir := setupGitDir(t)
-	hookPath := filepath.Join(gitDir, "hooks", "pre-pre-push")
+	hookPath := filepath.Join(LocalDir(gitDir), "pre-pre-push")
 	writeHook(t, hookPath, "#!/bin/sh\necho running\nexit 0\n")
 
 	ctx := context.Background()
-	results, err := Run(ctx, gitDir, []byte("refs/heads/main abc123 refs/heads/main def456\n"), 30, nil)
+	results, err := Run(ctx, store(gitDir), []byte("refs/heads/main abc123 refs/heads/main def456\n"), 30, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +162,7 @@ func TestRunSuccess(t *testing.T) {
 
 func TestRunFailure(t *testing.T) {
 	gitDir := setupGitDir(t)
-	dDir := filepath.Join(gitDir, "hooks", "pre-pre-push.d")
+	dDir := filepath.Join(LocalDir(gitDir), "pre-pre-push.d")
 	if err := os.MkdirAll(dDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +171,7 @@ func TestRunFailure(t *testing.T) {
 	writeHook(t, filepath.Join(dDir, "02-never"), "#!/bin/sh\nexit 0\n")
 
 	ctx := context.Background()
-	results, err := Run(ctx, gitDir, []byte("refs/heads/main abc123 refs/heads/main def456\n"), 30, nil)
+	results, err := Run(ctx, store(gitDir), []byte("refs/heads/main abc123 refs/heads/main def456\n"), 30, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,13 +190,13 @@ func TestRunTimeout(t *testing.T) {
 	}
 
 	gitDir := setupGitDir(t)
-	hookPath := filepath.Join(gitDir, "hooks", "pre-pre-push")
+	hookPath := filepath.Join(LocalDir(gitDir), "pre-pre-push")
 	// Hook that sleeps indefinitely (well, 60s -- longer than our timeout)
 	writeHook(t, hookPath, "#!/bin/sh\nsleep 60\n")
 
 	ctx := context.Background()
 	start := time.Now()
-	results, err := Run(ctx, gitDir, []byte("refs/heads/main abc123 refs/heads/main def456\n"), 1, nil)
+	results, err := Run(ctx, store(gitDir), []byte("refs/heads/main abc123 refs/heads/main def456\n"), 1, nil)
 	elapsed := time.Since(start)
 	if err != nil {
 		t.Fatal(err)
@@ -228,71 +237,17 @@ func TestParseTimeoutOverride(t *testing.T) {
 	}
 }
 
-func TestInstallPlaceholder(t *testing.T) {
-	gitDir := setupGitDir(t)
-
-	// Install placeholder
-	if err := InstallPlaceholder(gitDir); err != nil {
-		t.Fatal(err)
-	}
-
-	hookPath := filepath.Join(gitDir, "hooks", "pre-pre-push")
-	info, err := os.Stat(hookPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !isExecutable(info) {
-		t.Error("placeholder should be executable")
-	}
-
-	// Running again should not overwrite
-	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\necho custom\n"), 0755); err != nil {
-		t.Fatal(err)
-	}
-	if err := InstallPlaceholder(gitDir); err != nil {
-		t.Fatal(err)
-	}
-	data, _ := os.ReadFile(hookPath)
-	if string(data) != "#!/bin/sh\necho custom\n" {
-		t.Error("InstallPlaceholder overwrote existing hook")
-	}
-}
-
-func TestInstall(t *testing.T) {
-	gitDir := setupGitDir(t)
-
-	// Create a source hook file in a temp location
-	srcDir := t.TempDir()
-	srcPath := filepath.Join(srcDir, "my-check")
-	if err := os.WriteFile(srcPath, []byte("#!/bin/sh\necho checking\nexit 0\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := Install(gitDir, srcPath); err != nil {
-		t.Fatal(err)
-	}
-
-	destPath := filepath.Join(gitDir, "hooks", "my-check")
-	info, err := os.Stat(destPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !isExecutable(info) {
-		t.Error("installed hook should be executable")
-	}
-}
-
 func TestSetOutputCapturesHookOutput(t *testing.T) {
 	var outBuf, errBuf bytes.Buffer
 	restore := SetOutput(&outBuf, &errBuf)
 	defer restore()
 
 	gitDir := setupGitDir(t)
-	hookPath := filepath.Join(gitDir, "hooks", "pre-pre-push")
+	hookPath := filepath.Join(LocalDir(gitDir), "pre-pre-push")
 	writeHook(t, hookPath, "#!/bin/sh\necho hello-from-hook\necho oops >&2\n")
 
 	ctx := context.Background()
-	results, err := Run(ctx, gitDir, []byte("refs/heads/main abc def456\n"), 30, nil)
+	results, err := Run(ctx, store(gitDir), []byte("refs/heads/main abc def456\n"), 30, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,12 +270,12 @@ func TestSetOutputCapturesDiscoverWarning(t *testing.T) {
 
 	gitDir := setupGitDir(t)
 	// Write a non-executable hook to trigger the warning
-	hookPath := filepath.Join(gitDir, "hooks", "pre-pre-push")
+	hookPath := filepath.Join(LocalDir(gitDir), "pre-pre-push")
 	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\nexit 0\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	hooks, err := Discover(gitDir)
+	hooks, err := Discover(store(gitDir))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -174,6 +174,26 @@ const (
 	// Produced by `backup restore`.
 	BackupNoSlot = 23
 
+	// HooksNotMigrated means hook discovery found hooks still sitting in the
+	// pre-migration location -- the `pre-pre-push` file or the
+	// `pre-pre-push.d/` directory inside git's own .git/hooks -- after safegit
+	// moved its live hook store to the tool-owned .git/safegit/hooks. Running
+	// them from there would make the store safegit executes from depend on
+	// where a file happened to be left, and skipping them would stop an
+	// operator's checks in silence, so discovery refuses. The remedy is one
+	// command: `safegit hook migrate`. Produced by push, `hook run` and
+	// `hook list`.
+	HooksNotMigrated = 24
+
+	// TrackedHookNotExecutable means a hook committed to the repository's
+	// .safegit/hooks store is not executable. A committed hook is disabled by
+	// committing its DELETION, never by dropping its mode, so a lost executable
+	// bit is treated as the accident it almost always is rather than as an
+	// intentional disabling that would stop the checks in silence. The remedy
+	// is `chmod +x` plus a commit of the mode change. Produced by push and
+	// `hook run`.
+	TrackedHookNotExecutable = 25
+
 	// RewriteRefused means a history rewrite was refused by the verification
 	// that runs BEFORE any ref moves: the rewritten commits existed only as
 	// unreachable objects, and the check found the rewrite did not do what the
@@ -232,6 +252,15 @@ const (
 	// is pushed at all.
 	PushLeaseRejected = 41
 
+	// DoctorFindings means `doctor` ran its checks and at least one
+	// ERROR-severity check failed: safegit cannot work correctly in this
+	// repository until the named finding is dealt with. Warn-severity findings
+	// are advisory and never reach this code -- a repository whose only
+	// findings are warnings exits 0. Under `--action fix` the code reflects
+	// what the fix LEFT behind: a finding the fix repaired does not produce it,
+	// one it could not repair does. Produced by doctor.
+	DoctorFindings = 50
+
 	// Internal marks an invariant safegit believes cannot be violated -- a
 	// switch over a closed set of framework-validated choices reaching its
 	// default arm. Produced by push. Seeing it is a bug report.
@@ -272,10 +301,13 @@ func All() []Entry {
 		{PushHookTimeout, "PushHookTimeout", "Pre-pre-push hook timed out"},
 		{BackupDiverged, "BackupDiverged", "The remote backup slot holds work missing from the local history"},
 		{BackupNoSlot, "BackupNoSlot", "The branch has no backup slot on the remote"},
+		{HooksNotMigrated, "HooksNotMigrated", "Hooks are still in the pre-migration .git/hooks location (run `safegit hook migrate`)"},
+		{TrackedHookNotExecutable, "TrackedHookNotExecutable", "A hook committed to .safegit/hooks is not executable"},
 		{RewriteRefused, "RewriteRefused", "A history rewrite was refused before any ref moved (nothing changed)"},
 		{RewriteIncomplete, "RewriteIncomplete", "A history rewrite stands, but post-rewrite verification found residue or skipped the working-tree sync"},
 		{PushFailed, "PushFailed", "The push did not get through: git push failed, or the refs could not be safely re-read around it"},
 		{PushLeaseRejected, "PushLeaseRejected", "The remote ref moved after safegit observed it, so the --force-with-lease expectation no longer matched"},
+		{DoctorFindings, "DoctorFindings", "doctor found at least one error-severity problem (warnings alone exit 0)"},
 		{Internal, "Internal", "Internal invariant violated (a bug)"},
 	}
 }

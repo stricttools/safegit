@@ -11,6 +11,7 @@ import (
 	"strconv"
 
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/hooks"
 )
 
 // Config holds safegit configuration persisted in config.json.
@@ -233,8 +234,17 @@ func EnsureInitialized(ctx context.Context, gitDir string) error {
 	return nil
 }
 
-// Uninstall removes the .git/safegit/ directory entirely.
-// In worktree setups, also cleans up the shared lock directory.
+// Uninstall removes safegit from a repository: the .git/safegit/ directory
+// entirely -- which since the hook store moved there takes the installed hooks
+// with it -- plus the shared lock directory in worktree setups, plus the two
+// safegit-owned names that may still be sitting in git's own hook directory
+// from before the move. Leaving those behind would keep an uninstalled tool's
+// checks running on every push with no .git/safegit/ left to explain where they
+// came from.
+//
+// The COMMITTED hook store in the work tree is deliberately untouched: it is
+// part of the repository's content, shared with everyone who cloned it, and
+// removing it here would be an uncommitted deletion of somebody else's file.
 func Uninstall(ctx context.Context, gitDir string) error {
 	sgDir := SafegitDir(gitDir)
 	if _, err := os.Stat(sgDir); os.IsNotExist(err) {
@@ -246,6 +256,11 @@ func Uninstall(ctx context.Context, gitDir string) error {
 	sharedDir := SharedSafegitDir(ctx, gitDir)
 	if sharedDir != sgDir {
 		os.RemoveAll(filepath.Join(sharedDir, "locks"))
+	}
+	for _, legacy := range []string{hooks.LegacyFile(gitDir), hooks.LegacyDir(gitDir)} {
+		if err := os.RemoveAll(legacy); err != nil {
+			return err
+		}
 	}
 	return nil
 }

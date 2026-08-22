@@ -208,15 +208,20 @@ func TestDetectParent_InsideSubmodule(t *testing.T) {
 	t.Cleanup(func() { os.Chdir(old) })
 
 	ctx := context.Background()
-	pgd, relPath, ok := DetectParent(ctx)
+	parent, ok := DetectParent(ctx)
 	if !ok {
 		t.Fatal("DetectParent returned ok=false inside a submodule")
 	}
-	if pgd != parentGitDir {
-		t.Errorf("parentGitDir = %q, want %q", pgd, parentGitDir)
+	if parent.GitDir != parentGitDir {
+		t.Errorf("parent.GitDir = %q, want %q", parent.GitDir, parentGitDir)
 	}
-	if relPath != "sub" {
-		t.Errorf("submodulePath = %q, want %q", relPath, "sub")
+	if parent.SubmodulePath != "sub" {
+		t.Errorf("parent.SubmodulePath = %q, want %q", parent.SubmodulePath, "sub")
+	}
+	// The work tree is carried because the parent's COMMITTED hooks live in
+	// it: a cascade handed only the git dir could never find them.
+	if want := filepath.Dir(parentGitDir); parent.WorkTree != want {
+		t.Errorf("parent.WorkTree = %q, want %q", parent.WorkTree, want)
 	}
 }
 
@@ -232,7 +237,7 @@ func TestDetectParent_NotASubmodule(t *testing.T) {
 	t.Cleanup(func() { os.Chdir(old) })
 
 	ctx := context.Background()
-	_, _, ok := DetectParent(ctx)
+	_, ok := DetectParent(ctx)
 	if ok {
 		t.Error("DetectParent returned ok=true outside a submodule")
 	}
