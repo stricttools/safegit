@@ -1277,6 +1277,24 @@ aggregated no-match listing; scrub scope line; repository-wide
 uninstall with enumerating output (dry runs included); consent prompts
 to stderr; scrub match's nil-result payload gap.
 
+## USER RULINGS (settled 2026-08-22, review session, round 5 — loose-end review)
+
+- The divergence-document review happens BEFORE the release: Phase 9
+  drafts it, the user reviews it as part of the release gate, and any
+  overturned git-like ruling is fixed pre-release.
+- Changelog granularity: feature-area entries with --allow-batch and
+  reasons (likely 15-25 user-facing entries); internal clusters as
+  no-user-facing entries.
+- The move-records todo was SPLIT three ways by the orchestrator:
+  delivered parts to .done, the 7.3-7.5/docs rump stays active as
+  todo/record-file-moves-remaining.md, and the superseded blob-pairing
+  mechanism to .obsolete (blob equality never decides — the declared
+  --moved ruling replaced it).
+- macOS trigger mechanism: still open — the user asked for the option-2
+  cost estimate (answered: ~an hour plus re-auditing both CI gates'
+  job-name matching; recommendation remains the zero-mechanism plain
+  push trigger, release-only de facto under never-push-between-releases).
+
 ## Open rulings (RESOLVED above — section retained for history)
 
 - **Per-path vs set-level no-match errors (2.2).** The plan contradicts
