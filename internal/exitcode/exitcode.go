@@ -178,6 +178,19 @@ const (
 	// was exhausted. Produced by push and by `backup backup`.
 	PushFailed = 40
 
+	// PushLeaseRejected means git refused the push because a --force-with-lease
+	// expectation did not match: between safegit observing the remote ref and
+	// the push reaching it, somebody else moved it. The lease did its job -- the
+	// other session's commits are still there -- so this is a verdict about the
+	// world, not a failure to retry: it is terminal, and the remedy is to fetch,
+	// look at what arrived, and decide again. It is a separate code from
+	// PushFailed because the two ask for different things: PushFailed says the
+	// push did not get through, this says it got through and was refused.
+	// Produced by push, which is the only command that pins leases from
+	// observations it took itself (`backup backup` pins one too, but its slot is
+	// tool-owned and its refusal is BackupDiverged).
+	PushLeaseRejected = 41
+
 	// Internal marks an invariant safegit believes cannot be violated -- a
 	// switch over a closed set of framework-validated choices reaching its
 	// default arm. Produced by push. Seeing it is a bug report.
@@ -219,6 +232,7 @@ func All() []Entry {
 		{BackupDiverged, "BackupDiverged", "The remote backup slot holds work missing from the local history"},
 		{BackupNoSlot, "BackupNoSlot", "The branch has no backup slot on the remote"},
 		{PushFailed, "PushFailed", "Git push failed"},
+		{PushLeaseRejected, "PushLeaseRejected", "The remote ref moved after safegit observed it, so the --force-with-lease expectation no longer matched"},
 		{Internal, "Internal", "Internal invariant violated (a bug)"},
 	}
 }

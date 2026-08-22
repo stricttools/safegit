@@ -259,7 +259,7 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 	lease := "--force-with-lease=" + slot + ":" + slotSHA
 	pushArgs := []string{"push", "--no-verify", lease, remote, "HEAD:" + slot}
 
-	if err := execGitPush(flags, pushArgs); err != nil {
+	if _, err := execGitPush(flags, pushArgs); err != nil {
 		fmt.Fprintf(os.Stderr, "backup push failed: %v\n", err)
 		return exitcode.PushFailed
 	}
