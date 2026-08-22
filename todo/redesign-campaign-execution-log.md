@@ -1544,6 +1544,25 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
   (asserts `.git/worktrees/side/safegit` while the fixture names the
   worktree `linked-side`; vacuously true since it was written).
+## Phase 9 closure — PHASE 9 COMPLETE
+
+- docs/divergences.md created: 46 verified entries across 8 sections;
+  every entry deliberate except the working-tree-writing resolution
+  keywords, marked PROVISIONAL in a top blockquote and its own entry —
+  THE USER'S PRE-RELEASE REVIEW ITEM. The _CLAUDE template's
+  conventions now require any change introducing a philosophy-vs-idiom
+  decision to add its entry in the same commit (an overturn updates the
+  existing entry rather than adding a second).
+- --dump-schema ran clean; .strictcli/schema.json regenerated and
+  committed via rlsbl commit (emission validates against the declared
+  payload schemas by construction — settles the fresh reader's
+  unsettled conformance item). Bare selfdoc gen regenerated 2 root
+  files + 48 docs (cli-mv.md and the three cli-*-continue.md now
+  exist) and auto-committed. Tree clean.
+
+PHASE 9 IS COMPLETE. The divergence document awaits the user's review
+as the pre-release item; Phase 10 proceeds meanwhile.
+
 ## Phase 9 fresh-read closure
 
 - Ten commits; suite green three times (before/after the main.go edit
