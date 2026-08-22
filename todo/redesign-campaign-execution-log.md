@@ -1295,6 +1295,15 @@ to stderr; scrub match's nil-result payload gap.
   job-name matching; recommendation remains the zero-mechanism plain
   push trigger, release-only de facto under never-push-between-releases).
 
+## USER RULINGS (settled 2026-08-22, review session, round 6)
+
+- Phase 7.5 additionally builds a real `--moved-retract <id>` flag with
+  existence validation (refuses a typo'd/nonexistent id loudly); the
+  trailer spelling stays as the open-convention escape hatch.
+- Upstream todos (framework and release tooling) wait for those
+  projects' natural triage; safegit's tee-dependent follow-ups stay
+  parked accordingly.
+
 ## Open rulings (RESOLVED above — section retained for history)
 
 - **Per-path vs set-level no-match errors (2.2).** The plan contradicts
