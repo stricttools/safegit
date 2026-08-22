@@ -292,6 +292,7 @@ func reportDelegated(flags globalFlags, op continueOp, out delegatedOutcome) {
 		CommitsCreated: out.created,
 		Resolutions:    reportedResolutions(out.declared),
 		StateCleared:   out.stateCleared,
+		StoppedAgain:   out.stoppedAgain,
 		DryRun:         false,
 	})
 
@@ -311,8 +312,17 @@ func reportDelegated(flags globalFlags, op continueOp, out delegatedOutcome) {
 	}
 
 	verb := strings.TrimSuffix(op.command, "-continue")
-	fmt.Printf("[%s] git concluded the queued %s: 'git %s --continue' authored the commits\n",
-		shortSHA(out.head), op.kind, verb)
+	switch {
+	case out.stoppedAgain && out.created == 0:
+		fmt.Printf("[%s] git stopped the queued %s without committing anything: the branch has not moved\n",
+			shortSHA(out.head), op.kind)
+	case out.stoppedAgain:
+		fmt.Printf("[%s] git stopped the queued %s again: 'git %s --continue' authored the commit(s) it made first\n",
+			shortSHA(out.head), op.kind, verb)
+	default:
+		fmt.Printf("[%s] git concluded the queued %s: 'git %s --continue' authored the commits\n",
+			shortSHA(out.head), op.kind, verb)
+	}
 	fmt.Printf(" %s, %d declared resolution(s) staged into safegit's index copy\n",
 		commitCountText(out.created), len(out.declared))
 	if out.stateCleared {
