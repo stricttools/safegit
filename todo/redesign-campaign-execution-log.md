@@ -1544,6 +1544,45 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
   (asserts `.git/worktrees/side/safegit` while the fixture names the
   worktree `linked-side`; vacuously true since it was written).
+## Phase 9 fresh-read closure
+
+- Ten commits; suite green three times (before/after the main.go edit
+  and at the end); tree clean. The three conclusion-command sections now
+  exist in commands-guide (one shared + three per-command, after mv);
+  integration-guide gains the conclude/abandon table and the two
+  automation properties; architecture gains the delegated-conclusion
+  subsection and the six-pipeline-paths correction; _CLAUDE's
+  self-contradicting passthrough bullet fixed; undo's documented
+  undoable set completed everywhere (mv + the three conclusions).
+  Substantive false claims fixed included: scrub run examples missing
+  the required --reason, a scrub match example missing the required
+  range flag, schemaVersion listed as a config key (it is a file
+  member), push/backup exit tables missing 24/25 and 5/41, and the
+  retired positional hunk syntax surviving in architecture's hunk note.
+- CODE FINDING + ORCHESTRATOR RULING: the passthrough handlers' --help
+  branches (coord_cmd.go:134-461 family plus guardedHelp) are
+  UNREACHABLE — strictcli intercepts --help/-h anywhere in a
+  passthrough argv before dispatch (reproduced three ways; after a bare
+  -- the args begin with --, never --help). The checklist pass's
+  passthrough-help commit had edited invisible text; the fresh reader
+  moved the substance into the reachable app.Passthrough registration
+  strings. RULING (dead-code policy, superseded and unreachable):
+  DELETE the dead branches and guardedHelp — Phase 10 window.
+- Ratified: @latest -> @v0 in the README template (the standing fleet
+  convention mandates it; orchestrator additionally verified the proxy
+  holds no phantom 1.x — @latest currently resolves v0.28.0, so the
+  change is convention + insurance, not a live wrong resolution);
+  conclusion-section placement; the six registration-string rewrites;
+  the architecture delegated-conclusion subsection.
+- Accepted as-is: the version section's sample output block stays a
+  static era sample, not a live claim.
+- Nuance recorded: a delegated cherry-pick's commits CAN carry a
+  Claude-Code-Session-Id trailer copied verbatim from the source
+  commit's message by git; "no safegit trailers" is about injection.
+  Docs worded to prevent the misreading.
+- The --dump-schema-vs-declared-schemas conformance check rides the
+  phase-end schema/selfdoc run.
+
 ## Phase 9 checklist pass closure
 
 - All 42 Appendix A rows and every log-recorded Phase 9 row resolved
