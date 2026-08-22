@@ -479,6 +479,23 @@ existing entries are never rewritten.
   see --quiet; if quiet-awareness is wanted they must ride the result
   structs. Stdout/machine mode unaffected.
 
+## Phase 2 remediation ratifications
+
+- The positional/--hunks contradiction is decided on CANONICAL paths in
+  intake (single authority; main.go's parse is spelling-free); exit 2.
+  Plain duplicate positionals still dedup silently (one statement made
+  twice is not a contradiction).
+- The untrack notice asks the IGNORE RULES (check-ignore --no-index),
+  never the index; git.IsIgnored keeps index-aware semantics for the
+  positional refusal and expansion filtering — two helpers, two
+  documented questions.
+- ORCHESTRATOR RULING (consistent with the ignore and untrack
+  precedents — explicit beats expanded): a directory expansion that
+  sweeps up a path carrying an explicit --hunks selection EXCLUDES that
+  path from the sweep; the hunk selection stands. The hard-error rule
+  covers explicit-vs-explicit only. Dispatched as a follow-up fix (the
+  silent whole-file commit was verified live).
+
 ## Phase 2 closing-audit outcome
 
 - Eight subphases PASS, 2.5 PARTIAL: the --untrack "not gitignored"
