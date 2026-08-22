@@ -14,6 +14,7 @@ import (
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/gitexec"
+	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/stage"
 	"github.com/smm-h/strictcli/go/strictcli"
@@ -907,7 +908,14 @@ func commandHelp(cmd, usage string) {
 // document that would have to imitate the envelope. It took a globalFlags and a
 // command name while the JSON branch existed; both went unread once that branch
 // died, so neither is a parameter any more.
+// Locks are released first. os.Exit runs no deferred function, so a command
+// that had taken the worktree operation lock or a ref lock and then died on an
+// unrelated error would leave its lock file on disk. The holder is dead, so the
+// staleness rules would let the next contender reclaim it -- but only after
+// waiting, and doctor would report it in the meantime. Releasing here costs
+// nothing and keeps the failure local to the command that failed.
 func die(code int, msg string) {
+	lock.ReleasePending()
 	fmt.Fprintf(os.Stderr, "error: %s\n", msg)
 	os.Exit(code)
 }

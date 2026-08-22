@@ -97,10 +97,12 @@ const (
 	// LockTimeout means a safegit lock could not be acquired within
 	// lock.acquireTimeoutSeconds because a live holder still owns it. Produced
 	// by scrub file, scrub match, scrub run and author rewrite (all four
-	// contend on the single repo-wide rewrite lock) and by undo (which contends
-	// on the ref lock). The commit pipeline's own ref-lock timeout is reported
-	// as General (1): it is wrapped into the commit error path, and this
-	// subphase did not change which code any commit path produces.
+	// contend on the single repo-wide rewrite lock), by undo (which contends on
+	// the ref lock), and by every command that takes the worktree operation
+	// lock: checkout, pull, merge, rebase, reset, bisect, cherry-pick, revert,
+	// commit, commit --amend and reword. The commit pipeline's own ref-lock
+	// timeout, taken INSIDE the operation lock, is still reported as General
+	// (1): it is wrapped into the commit error path.
 	LockTimeout = 8
 
 	// WriteTree means `git write-tree` failed against the per-invocation index

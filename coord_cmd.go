@@ -105,6 +105,12 @@ func runCheckout(flags globalFlags, args []string) int {
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
+	release, code := acquireOperationLock(flags, gitDir, "checkout")
+	if code != 0 {
+		return code
+	}
+	defer release()
+
 	if code := coordGuard(flags, gitDir, "checkout"); code != 0 {
 		return code
 	}
@@ -153,6 +159,12 @@ func runPull(flags globalFlags, mode pullMode, remote string, branch string) int
 		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
+
+	release, code := acquireOperationLock(flags, gitDir, "pull")
+	if code != 0 {
+		return code
+	}
+	defer release()
 
 	if code := coordGuard(flags, gitDir, "pull"); code != 0 {
 		return code
@@ -208,6 +220,12 @@ func runMerge(flags globalFlags, args []string) int {
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
+	release, code := acquireOperationLock(flags, gitDir, "merge")
+	if code != 0 {
+		return code
+	}
+	defer release()
+
 	if code := coordGuard(flags, gitDir, "merge"); code != 0 {
 		return code
 	}
@@ -248,6 +266,12 @@ func runRebase(flags globalFlags, args []string) int {
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
+	release, code := acquireOperationLock(flags, gitDir, "rebase")
+	if code != 0 {
+		return code
+	}
+	defer release()
+
 	if code := coordGuard(flags, gitDir, "rebase"); code != 0 {
 		return code
 	}
@@ -284,6 +308,15 @@ func runReset(flags globalFlags, args []string) int {
 		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
+
+	// Unconditionally, unlike the dirty-tree guard below: every reset moves
+	// HEAD, and safegit cannot tell which forms are harmless without
+	// re-deriving git's own argument vocabulary.
+	release, code := acquireOperationLock(flags, gitDir, "reset")
+	if code != 0 {
+		return code
+	}
+	defer release()
 
 	// Only guard --hard resets (those are the tree-mutating ones)
 	isHard := false
@@ -327,6 +360,15 @@ func runBisect(flags globalFlags, args []string) int {
 		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
+
+	// Unconditionally, for the same reason as reset: the subcommand list below
+	// is an approximation of git's vocabulary and the lock must not depend on
+	// it being complete.
+	release, code := acquireOperationLock(flags, gitDir, "bisect")
+	if code != 0 {
+		return code
+	}
+	defer release()
 
 	// Guard tree-moving subcommands (good, bad, reset, start with a rev)
 	needsGuard := false
@@ -382,6 +424,12 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
+	release, code := acquireOperationLock(flags, gitDir, gitCmd)
+	if code != 0 {
+		return code
+	}
+	defer release()
+
 	if code := coordGuard(flags, gitDir, gitCmd); code != 0 {
 		return code
 	}
@@ -395,7 +443,7 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 		return 0
 	}
 
-	code := runPassthrough(flags, gitCmd, args)
+	code = runPassthrough(flags, gitCmd, args)
 
 	_ = oplog.Append(sgDir, oplog.Entry{
 		Op: gitCmd,
