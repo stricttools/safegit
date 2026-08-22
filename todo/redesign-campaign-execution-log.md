@@ -1544,6 +1544,53 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
   (asserts `.git/worktrees/side/safegit` while the fixture names the
   worktree `linked-side`; vacuously true since it was written).
+## Phase 10 window closure and the flake root cause
+
+- All six window items done; gofmt-clean; suite green; tree clean.
+- FLAKE ROOT CAUSE FOUND AND FIXED (a real defect, not a
+  certification): internal/test's TestMain built the test binary into
+  os.MkdirTemp and deferred the RemoveAll directly above
+  os.Exit(m.Run()) — os.Exit runs no defers, so EVERY run of the
+  package permanently leaked ~11 MB into $TMPDIR. 1234 leaked
+  directories holding 7.5 GB were found; the /tmp quota sat at 36 MB
+  headroom, and EDQUOT at arbitrary points is exactly both watchlist
+  flakes' shape (reproduced twice as quota failures). This was ALSO the
+  "disk pressure" environment anomaly recorded earlier in this log.
+  Fix: TestMain became os.Exit(runSuite(m)) with the build and cleanup
+  inside runSuite; a new AST guard test refuses any function in
+  internal/test that both calls os.Exit and defers (deliberately scoped
+  to that package — production code pairs defer release() with die()
+  by design, which is why die calls lock.ReleasePending). Red-first;
+  leak count verified flat across runs.
+- Both watchlist tests stress-certified INNOCENT after the fix:
+  TestRootCommitConcurrentSafegitBothLand 1924 iterations (CPU pinning,
+  up to 24 spinners, 8-way concurrency); TestStagesReportsADelete-
+  ModifyConflictAsOneSided 3360 iterations. Comments on both record the
+  cause, the no-interleaving-can-break-this argument, the counts, and
+  forbid weakened assertions or retries. Zero unexplained
+  nondeterminism remains.
+- Cleanup: 574 of the leaked dirs (older than one day, 750 MB) deleted
+  via saferm, age-restricted so no live run could own one; recoverable.
+  660 recent ones left untouched (possibly owned by live sessions);
+  deletable once no session is running the suite.
+- Items 1-4, 6 as ruled: the six dead --help branches, guardedHelp and
+  commandHelp deleted with one comment recording why they were
+  unreachable; infof is the single output helper (printf deleted;
+  push's block kept its !dryRun outer condition); the inner scan-result
+  shadow renamed — the :540/:606 sites are NOT shadowing (the outer
+  name is not yet in scope there; verified); gofmt normalization was
+  four files, 12 insertions / 12 deletions, struct-field alignment (not
+  const blocks as earlier recorded); census regenerated 498 -> 520,
+  pre-checks.sh exits 0.
+- Ratified: keeping infof (matches sibling outf); the TestMain/runSuite
+  split (structural rather than remembered); the guard written against
+  the class, scoped to internal/test. Process violation self-reported
+  by the fixer: 11 mechanical replacements in sequencer_preview.go went
+  through a Python heredoc instead of Edit — verified by read-back;
+  not repeated.
+- Changelog note for 10.3: the TestMain fix is --no-user-facing (test
+  infrastructure).
+
 ## Phase 9 closure — PHASE 9 COMPLETE
 
 - docs/divergences.md created: 46 verified entries across 8 sections;
