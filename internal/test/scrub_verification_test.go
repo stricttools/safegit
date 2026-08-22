@@ -435,3 +435,97 @@ func TestScrubMatchOffWalkRemoteTrackingRefIsResidueNotRefusal(t *testing.T) {
 		t.Errorf("the stale remote-tracking ref moved: %s -> %s", staleTip, got)
 	}
 }
+
+// TestSubmoduleScrubSkippedSyncReachesThePayload is the same fact for the other
+// repository a submodule scrub writes. When it is the SUBMODULE's working tree
+// that acquires foreign work mid-rewrite, the submodule's sync is skipped, and
+// the payload has to say so: one command reports one outcome, and "the working
+// tree was left alone" is the same outcome whichever of the two repositories it
+// happened in.
+//
+// The interleaving is produced by the submodule's own reference-transaction
+// hook, which fires exactly while the submodule's refs are moving.
+func TestSubmoduleScrubSkippedSyncReachesThePayload(t *testing.T) {
+	parentDir, subDir, subGitDir, _, _ := submoduleScrubFixture(t)
+
+	foreign := filepath.Join(subDir, "foreign.txt")
+	hookDir := filepath.Join(subGitDir, "hooks")
+	if err := os.MkdirAll(hookDir, 0o755); err != nil {
+		t.Fatalf("creating the submodule hook directory: %v", err)
+	}
+	script := "#!/bin/sh\n" +
+		"# Stand in for a concurrent session working in the submodule.\n" +
+		"if [ ! -e " + foreign + " ]; then\n" +
+		"  echo \"another session's work\" > " + foreign + "\n" +
+		"fi\n" +
+		"exit 0\n"
+	if err := os.WriteFile(filepath.Join(hookDir, "reference-transaction"), []byte(script), 0o755); err != nil {
+		t.Fatalf("installing the submodule reference-transaction hook: %v", err)
+	}
+
+	stdout, stderr, code := runSafegitEnv(t, parentDir, submoduleOrderingEnv,
+		"--approve-consequential", "--json", "scrub", "file",
+		"--replace-with", "mysub/secret.txt", "mysub/secret.txt",
+		"--entire-history", "--reason", "foreign submodule state mid-rewrite")
+
+	if code != exitcode.RewriteIncomplete {
+		t.Fatalf("a skipped submodule sync must exit %d (RewriteIncomplete), got %d: %s",
+			exitcode.RewriteIncomplete, code, stderr)
+	}
+
+	var payload struct {
+		SyncSkipped bool `json:"sync_skipped"`
+	}
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &payload); err != nil {
+		t.Fatalf("parsing the payload: %v\n%s", err, stdout)
+	}
+	if !payload.SyncSkipped {
+		t.Errorf("the payload must report sync_skipped when the SUBMODULE's sync was skipped; stdout: %s", stdout)
+	}
+
+	if _, err := os.Stat(foreign); err != nil {
+		t.Errorf("the foreign submodule file must survive the rewrite: %v", err)
+	}
+}
+
+// TestScrubMatchSubmoduleSkippedSyncReachesThePayload is the same contract on
+// the command that recurses into every submodule holding the pattern.
+func TestScrubMatchSubmoduleSkippedSyncReachesThePayload(t *testing.T) {
+	parentDir, _, subDir := newRepoWithSubmoduleSecret(t, "SUBSYNC_SECRET", "secret.txt")
+
+	foreign := filepath.Join(subDir, "foreign.txt")
+	hookDir := filepath.Join(submoduleGitDir(t, subDir), "hooks")
+	if err := os.MkdirAll(hookDir, 0o755); err != nil {
+		t.Fatalf("creating the submodule hook directory: %v", err)
+	}
+	script := "#!/bin/sh\n" +
+		"if [ ! -e " + foreign + " ]; then\n" +
+		"  echo \"another session's work\" > " + foreign + "\n" +
+		"fi\n" +
+		"exit 0\n"
+	if err := os.WriteFile(filepath.Join(hookDir, "reference-transaction"), []byte(script), 0o755); err != nil {
+		t.Fatalf("installing the submodule reference-transaction hook: %v", err)
+	}
+
+	stdout, stderr, code := runSafegitEnv(t, parentDir, submoduleOrderingEnv,
+		"--approve-consequential", "--json", "scrub", "match",
+		"--pattern", "SUBSYNC_SECRET", "--replace", "REDACTED",
+		"--entire-history", "--reason", "foreign submodule state mid-rewrite")
+
+	if code != exitcode.RewriteIncomplete {
+		t.Fatalf("a skipped submodule sync must exit %d (RewriteIncomplete), got %d: %s",
+			exitcode.RewriteIncomplete, code, stderr)
+	}
+	var payload struct {
+		SyncSkipped bool `json:"sync_skipped"`
+	}
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &payload); err != nil {
+		t.Fatalf("parsing the payload: %v\n%s", err, stdout)
+	}
+	if !payload.SyncSkipped {
+		t.Errorf("the payload must report sync_skipped when the SUBMODULE's sync was skipped; stdout: %s", stdout)
+	}
+	if _, err := os.Stat(foreign); err != nil {
+		t.Errorf("the foreign submodule file must survive the rewrite: %v", err)
+	}
+}

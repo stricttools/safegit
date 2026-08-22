@@ -783,7 +783,11 @@ func runScrubFileInSubmodule(
 	result.PreRewriteRemotes = nonNilStringMap(parentResult.PreRewriteRemotes)
 	result.CleanupOK = boolPtr(parentResult.CleanupOK)
 	result.CleanupErrors = nonNilStrings(parentResult.CleanupErrors)
-	result.SyncSkipped = parentResult.SyncSkipped
+	// One command, one outcome: a skipped sync is reported whichever of the two
+	// repositories left its working tree alone. The payload carries no
+	// per-repository record to hang it on, so it is the disjunction, exactly as
+	// the exit code is.
+	result.SyncSkipped = parentResult.SyncSkipped || subResult.SyncSkipped
 	flags.payload(result)
 
 	// Summary.
