@@ -75,9 +75,13 @@ func runGitMutation(flags globalFlags, args ...string) int {
 // exitcode.CoordinationBusy when another operation owns the working tree,
 // exitcode.OK when it is clean, and exitcode.General when the check itself
 // could not be made.
-func coordGuard(flags globalFlags, sgDir, operation string) int {
+//
+// gitDir, not the safegit dir: the check reads git's own in-flight operation
+// state so that a refusal issued mid-merge or mid-rebase names that operation
+// and the command that ends it.
+func coordGuard(flags globalFlags, gitDir, operation string) int {
 	ctx := flags.ctx()
-	dirty, err := coord.Check(ctx, sgDir)
+	dirty, err := coord.Check(ctx, gitDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
@@ -101,7 +105,7 @@ func runCheckout(flags globalFlags, args []string) int {
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
-	if code := coordGuard(flags, sgDir, "checkout"); code != 0 {
+	if code := coordGuard(flags, gitDir, "checkout"); code != 0 {
 		return code
 	}
 
@@ -150,7 +154,7 @@ func runPull(flags globalFlags, mode pullMode, remote string, branch string) int
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
-	if code := coordGuard(flags, sgDir, "pull"); code != 0 {
+	if code := coordGuard(flags, gitDir, "pull"); code != 0 {
 		return code
 	}
 
@@ -204,7 +208,7 @@ func runMerge(flags globalFlags, args []string) int {
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
-	if code := coordGuard(flags, sgDir, "merge"); code != 0 {
+	if code := coordGuard(flags, gitDir, "merge"); code != 0 {
 		return code
 	}
 
@@ -244,7 +248,7 @@ func runRebase(flags globalFlags, args []string) int {
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
-	if code := coordGuard(flags, sgDir, "rebase"); code != 0 {
+	if code := coordGuard(flags, gitDir, "rebase"); code != 0 {
 		return code
 	}
 
@@ -291,7 +295,7 @@ func runReset(flags globalFlags, args []string) int {
 	}
 
 	if isHard {
-		if code := coordGuard(flags, sgDir, "reset --hard"); code != 0 {
+		if code := coordGuard(flags, gitDir, "reset --hard"); code != 0 {
 			return code
 		}
 	}
@@ -334,7 +338,7 @@ func runBisect(flags globalFlags, args []string) int {
 	}
 
 	if needsGuard {
-		if code := coordGuard(flags, sgDir, "bisect"); code != 0 {
+		if code := coordGuard(flags, gitDir, "bisect"); code != 0 {
 			return code
 		}
 	}
@@ -378,7 +382,7 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
-	if code := coordGuard(flags, sgDir, gitCmd); code != 0 {
+	if code := coordGuard(flags, gitDir, gitCmd); code != 0 {
 		return code
 	}
 

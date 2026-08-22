@@ -12,10 +12,10 @@ import (
 )
 
 func TestCleanRepo(t *testing.T) {
-	dir, _, sgDir := testutil.InitRepo(t, repo.Init)
+	dir, gitDir, _ := testutil.InitRepo(t, repo.Init)
 	testutil.Chdir(t, dir)
 
-	ds, err := Check(context.Background(), sgDir)
+	ds, err := Check(context.Background(), gitDir)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -25,7 +25,7 @@ func TestCleanRepo(t *testing.T) {
 }
 
 func TestDirtyModified(t *testing.T) {
-	dir, _, sgDir := testutil.InitRepo(t, repo.Init)
+	dir, gitDir, _ := testutil.InitRepo(t, repo.Init)
 	testutil.Chdir(t, dir)
 
 	// Modify the tracked file
@@ -33,7 +33,7 @@ func TestDirtyModified(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ds, err := Check(context.Background(), sgDir)
+	ds, err := Check(context.Background(), gitDir)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestDirtyModified(t *testing.T) {
 }
 
 func TestDirtyUntracked(t *testing.T) {
-	dir, _, sgDir := testutil.InitRepo(t, repo.Init)
+	dir, gitDir, _ := testutil.InitRepo(t, repo.Init)
 	testutil.Chdir(t, dir)
 
 	// Create an untracked file
@@ -66,7 +66,7 @@ func TestDirtyUntracked(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ds, err := Check(context.Background(), sgDir)
+	ds, err := Check(context.Background(), gitDir)
 	if err != nil {
 		t.Fatalf("Check: %v", err)
 	}
