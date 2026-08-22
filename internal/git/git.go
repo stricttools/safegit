@@ -178,14 +178,46 @@ func WriteTree(ctx context.Context, indexPath string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// CommitTree creates a commit object from a tree SHA and parent, returns commit SHA.
-// If parentSHA is empty, creates a root commit.
-func CommitTree(ctx context.Context, treeSHA, parentSHA, message string) (string, error) {
-	args := []string{"commit-tree", treeSHA, "-m", message}
-	if parentSHA != "" {
-		args = []string{"commit-tree", treeSHA, "-p", parentSHA, "-m", message}
+// CommitIdentity pins the author and committer a commit is written with,
+// timestamps included. A caller that has no identity to impose passes nil to
+// CommitTree and gets git's own configured identity and the current time,
+// which is what every ordinary commit wants; the rewrite paths, which must
+// reproduce an existing commit's identity exactly, pass one.
+type CommitIdentity struct {
+	Author    AuthorInfo
+	Committer AuthorInfo
+}
+
+// CommitTree creates a commit object from a tree SHA and its parents, in the
+// order given, and returns the new commit SHA. An empty parents slice creates a
+// root commit; more than one parent creates a merge commit, which is why the
+// parameter is a slice rather than a single SHA -- a caller that rewrites a
+// merge commit with one parent silently unmerges the branch.
+//
+// identity, when non-nil, pins the author and committer (see CommitIdentity).
+func CommitTree(ctx context.Context, treeSHA string, parents []string, message string, identity *CommitIdentity) (string, error) {
+	args := []string{"commit-tree", treeSHA}
+	for _, p := range parents {
+		if p == "" {
+			continue
+		}
+		args = append(args, "-p", p)
 	}
-	out, _, err := Run(ctx, args...)
+	args = append(args, "-m", message)
+
+	var env []string
+	if identity != nil {
+		env = []string{
+			"GIT_AUTHOR_NAME=" + identity.Author.Name,
+			"GIT_AUTHOR_EMAIL=" + identity.Author.Email,
+			"GIT_AUTHOR_DATE=" + identity.Author.Date,
+			"GIT_COMMITTER_NAME=" + identity.Committer.Name,
+			"GIT_COMMITTER_EMAIL=" + identity.Committer.Email,
+			"GIT_COMMITTER_DATE=" + identity.Committer.Date,
+		}
+	}
+
+	out, _, err := RunWithEnv(ctx, env, args...)
 	if err != nil {
 		return "", err
 	}
@@ -516,15 +548,6 @@ func IsAncestorOf(ctx context.Context, commitSHA, descendantSHA string) (bool, e
 	return false, err
 }
 
-// CommitMessage returns the full commit message of the given revision.
-func CommitMessage(ctx context.Context, rev string) (string, error) {
-	out, _, err := Run(ctx, "log", "-1", "--format=%B", rev)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimRight(out, "\n"), nil
-}
-
 // AuthorInfo holds the name, email, and raw git date for an author or committer.
 type AuthorInfo struct {
 	Name  string
@@ -617,31 +640,6 @@ func ParseCommit(ctx context.Context, sha string) (CommitInfo, error) {
 	}
 
 	return info, nil
-}
-
-// CommitTreeWithAuthor creates a commit object with explicit author and committer
-// identity, returning the new commit SHA.
-func CommitTreeWithAuthor(ctx context.Context, treeSHA string, parentSHAs []string, message string, author, committer AuthorInfo) (string, error) {
-	args := []string{"commit-tree", treeSHA}
-	for _, p := range parentSHAs {
-		args = append(args, "-p", p)
-	}
-	args = append(args, "-m", message)
-
-	env := []string{
-		"GIT_AUTHOR_NAME=" + author.Name,
-		"GIT_AUTHOR_EMAIL=" + author.Email,
-		"GIT_AUTHOR_DATE=" + author.Date,
-		"GIT_COMMITTER_NAME=" + committer.Name,
-		"GIT_COMMITTER_EMAIL=" + committer.Email,
-		"GIT_COMMITTER_DATE=" + committer.Date,
-	}
-
-	out, _, err := RunWithEnv(ctx, env, args...)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(out), nil
 }
 
 // TreeEntry represents an entry from git ls-tree (blob, tree, or other object).

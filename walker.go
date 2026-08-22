@@ -91,7 +91,8 @@ func walkAndRewrite(ctx context.Context, shas []string, transform TransformFunc,
 		needsRewrite := treeChanged || messageChanged || authorChanged || committerChanged || parentRemapped
 
 		if needsRewrite {
-			newSHA, err := git.CommitTreeWithAuthor(ctx, treeSHA, remappedParents, message, author, committer)
+			newSHA, err := git.CommitTree(ctx, treeSHA, remappedParents, message,
+				&git.CommitIdentity{Author: author, Committer: committer})
 			if err != nil {
 				return nil, 0, fmt.Errorf("creating rewritten commit for %s: %w", sha, err)
 			}

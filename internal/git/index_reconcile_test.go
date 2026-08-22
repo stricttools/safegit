@@ -138,7 +138,7 @@ func TestReconcileMainIndexPreservesUnmergedStages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write-tree: %v", err)
 	}
-	tip, err := CommitTree(ctx, strings.TrimSpace(tree), "", "tip")
+	tip, err := CommitTree(ctx, strings.TrimSpace(tree), nil, "tip", nil)
 	if err != nil {
 		t.Fatalf("commit-tree: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestReconcileMainIndexPreservesForeignStagedWork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write-tree: %v", err)
 	}
-	tip, err := CommitTree(ctx, strings.TrimSpace(tipTree), "", "tip")
+	tip, err := CommitTree(ctx, strings.TrimSpace(tipTree), nil, "tip", nil)
 	if err != nil {
 		t.Fatalf("commit-tree: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestReconcileMainIndexPreservesForeignStagedWork(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write-tree: %v", err)
 	}
-	next, err := CommitTree(ctx, strings.TrimSpace(nextTree), tip, "next")
+	next, err := CommitTree(ctx, strings.TrimSpace(nextTree), []string{tip}, "next", nil)
 	if err != nil {
 		t.Fatalf("commit-tree: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestReconcileMainIndexRestoresSkipWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write-tree: %v", err)
 	}
-	tip, err := CommitTree(ctx, strings.TrimSpace(tipTree), "", "tip")
+	tip, err := CommitTree(ctx, strings.TrimSpace(tipTree), nil, "tip", nil)
 	if err != nil {
 		t.Fatalf("commit-tree: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestReconcileMainIndexRestoresSkipWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write-tree: %v", err)
 	}
-	next, err := CommitTree(ctx, strings.TrimSpace(nextTree), tip, "next")
+	next, err := CommitTree(ctx, strings.TrimSpace(nextTree), []string{tip}, "next", nil)
 	if err != nil {
 		t.Fatalf("commit-tree: %v", err)
 	}
@@ -334,7 +334,7 @@ func TestReconcileMainIndexToEmptyTreeClearsEverything(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write-tree: %v", err)
 	}
-	tip, err := CommitTree(ctx, strings.TrimSpace(tipTree), "", "tip")
+	tip, err := CommitTree(ctx, strings.TrimSpace(tipTree), nil, "tip", nil)
 	if err != nil {
 		t.Fatalf("commit-tree: %v", err)
 	}
@@ -366,7 +366,7 @@ func TestReconcileMainIndexWithNoPriorTipKeepsEverythingStaged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("write-tree: %v", err)
 	}
-	root, err := CommitTree(ctx, strings.TrimSpace(rootTree), "", "root")
+	root, err := CommitTree(ctx, strings.TrimSpace(rootTree), nil, "root", nil)
 	if err != nil {
 		t.Fatalf("commit-tree: %v", err)
 	}
@@ -527,7 +527,7 @@ func TestReconcileMainIndexRandomizedRoundTrip(t *testing.T) {
 		if err != nil {
 			t.Fatalf("iteration %d (seed %d): write-tree: %v\nstderr: %s", iter, iterSeed, err, stderr)
 		}
-		tip, err := CommitTree(ctx, strings.TrimSpace(treeOut), "", fmt.Sprintf("tip %d", iter))
+		tip, err := CommitTree(ctx, strings.TrimSpace(treeOut), nil, fmt.Sprintf("tip %d", iter), nil)
 		if err != nil {
 			t.Fatalf("iteration %d (seed %d): commit-tree: %v", iter, iterSeed, err)
 		}

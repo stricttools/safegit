@@ -1843,7 +1843,17 @@ func TestAutoBumpOnCommit(t *testing.T) {
 	}
 }
 
-// Test 5.2: When autoBumpParent config is absent, commit in submodule fails.
+// Test 5.2: a submodule commit whose parent has not answered the auto-bump
+// question is refused BEFORE the submodule commit is made -- in a real run and
+// in a dry run alike.
+//
+// The refusal used to fire after the submodule's ref had already moved, which
+// left the one outcome nobody asked for: a commit in the submodule, no pointer
+// update in the parent, and a nonzero exit saying so. The key's PRESENCE is
+// what is mandatory; an explicit `false` is a decision and stays legal.
+//
+// The dry run validates too, and it is the only part of the parent a preview
+// touches: the config is read, nothing is created there.
 func TestAutoBumpConfigAbsentErrors(t *testing.T) {
 	parentDir, _ := newRepoWithSubmodule(t)
 	subDir := filepath.Join(parentDir, "mysub")
@@ -1862,27 +1872,37 @@ func TestAutoBumpConfigAbsentErrors(t *testing.T) {
 	// Do NOT set autoBumpParent config in parent
 
 	subCountBefore := gitLog(t, subDir, "HEAD")
+	subTipBefore := testutil.Rev(t, subDir, "HEAD")
 
-	// Create file in submodule and commit
 	if err := os.WriteFile(filepath.Join(subDir, "file.txt"), []byte("test\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	_, stderr, code := runSafegit(t, subDir, "commit", "-m", "test", "--", "file.txt")
 
-	// Verify: exit code is non-zero
-	if code == 0 {
-		t.Fatal("expected non-zero exit code when autoBumpParent not configured")
-	}
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{"dry run", []string{"commit", "--dry-run", "-m", "test", "--", "file.txt"}},
+		{"real run", []string{"commit", "-m", "test", "--", "file.txt"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, stderr, code := runSafegit(t, subDir, tc.args...)
 
-	// Verify: stderr mentions the config issue
-	if !strings.Contains(stderr, "commit.autoBumpParent not configured") {
-		t.Errorf("stderr should mention 'commit.autoBumpParent not configured', got: %s", stderr)
-	}
+			if code == 0 {
+				t.Fatal("expected non-zero exit code when autoBumpParent is not configured")
+			}
+			if !strings.Contains(stderr, "commit.autoBumpParent not configured") {
+				t.Errorf("stderr should mention 'commit.autoBumpParent not configured', got: %s", stderr)
+			}
 
-	// Verify: the submodule commit DID land (the commit itself succeeded)
-	subCountAfter := gitLog(t, subDir, "HEAD")
-	if subCountAfter != subCountBefore+1 {
-		t.Errorf("submodule commit count: want %d, got %d (commit should have landed)", subCountBefore+1, subCountAfter)
+			// The refusal comes BEFORE the commit: nothing moved in the submodule.
+			if got := gitLog(t, subDir, "HEAD"); got != subCountBefore {
+				t.Errorf("submodule commit count = %d, want %d: a commit was made before the refusal", got, subCountBefore)
+			}
+			if got := testutil.Rev(t, subDir, "HEAD"); got != subTipBefore {
+				t.Errorf("submodule HEAD = %s, want the untouched tip %s", got, subTipBefore)
+			}
+		})
 	}
 }
 

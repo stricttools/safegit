@@ -125,8 +125,8 @@ func TestPipelineHonorsADeclaredSequencerContext(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a declared merge conclusion was refused: %v", err)
 	}
-	if result.Parent != tip {
-		t.Errorf("the commit's parent is %s, want the pre-merge tip %s", result.Parent, tip)
+	if firstParent(result.Parents) != tip {
+		t.Errorf("the commit's parent is %s, want the pre-merge tip %s", firstParent(result.Parents), tip)
 	}
 	commitLandsOnBranch(t, "refs/heads/main", result.SHA)
 

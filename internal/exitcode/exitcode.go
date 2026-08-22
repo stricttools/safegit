@@ -146,6 +146,16 @@ const (
 	// including --amend.
 	SymlinkHunkSpec = 15
 
+	// CommitHookRejected means one of the repository's own git hooks refused the
+	// commit: a pre-commit hook that exited nonzero against the staged content,
+	// or a commit-msg hook that exited nonzero on the message. Both are one
+	// situation -- the repository's own policy said no -- and the remedy is one
+	// remedy: satisfy the hook, or take it out of .git/hooks. No commit, amend
+	// or reword is created when it fires. Produced by commit, including its
+	// --amend and reword forms. The post-commit hook cannot produce it: it runs
+	// after the ref has moved and its exit status is ignored.
+	CommitHookRejected = 16
+
 	// PushHookFailed means a pre-pre-push hook exited nonzero, so no network
 	// I/O was attempted. Produced by push and by `hook run`.
 	PushHookFailed = 20
@@ -203,6 +213,7 @@ func All() []Entry {
 		{PathMatchedNothing, "PathMatchedNothing", "A named path or directory contributes nothing to the commit"},
 		{BinaryHunkSpec, "BinaryHunkSpec", "Hunk spec given for a binary file"},
 		{SymlinkHunkSpec, "SymlinkHunkSpec", "Hunk spec given for a symlink, which has no hunks to select"},
+		{CommitHookRejected, "CommitHookRejected", "A pre-commit or commit-msg hook refused the commit"},
 		{PushHookFailed, "PushHookFailed", "Pre-pre-push hook failed"},
 		{PushHookTimeout, "PushHookTimeout", "Pre-pre-push hook timed out"},
 		{BackupDiverged, "BackupDiverged", "The remote backup slot holds work missing from the local history"},

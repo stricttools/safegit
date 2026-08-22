@@ -275,7 +275,7 @@ safegit discovers pre-pre-push hooks from two locations: a single-file hook and 
 
 A hook must be executable (`chmod +x`). Non-executable files in `.d/` are skipped with a warning (`safegit doctor` reports them).
 
-Standard git hooks (post-commit, prepare-commit-msg, etc.) live in `.git/hooks/` as usual and run normally because safegit shells out to git.
+Standard git hooks live in `.git/hooks/` as usual. safegit builds commits from git plumbing rather than by invoking `git commit`, so it runs the commit family itself: `pre-commit` against the per-invocation index, `commit-msg` on the composed message before safegit's own session trailer is added (a rewrite by the hook is adopted), and `post-commit` after the ref has moved. Each runs once per commit, amend or reword, whatever the compare-and-swap loop does, and a `--dry-run` runs none of them and says so. `prepare-commit-msg` never runs: safegit never opens an editor, so there is no message-preparation step for it to act on.
 
 ### Stdin contract
 

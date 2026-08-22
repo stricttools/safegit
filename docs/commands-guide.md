@@ -49,7 +49,7 @@ Use `safegit commit` instead of `git add` + `git commit` whenever multiple sessi
 
 | Flag | Short | Presence | Description |
 |------|-------|----------|-------------|
-| `-m` | `-m` | optional | Commit message line; repeatable for multi-line messages |
+| `-m` | `-m` | optional | Commit message paragraph; repeatable, and the values are joined with a blank line between them, so `-m subject -m body` is a subject and a body |
 | `-F` | `-F` | optional | Read the full commit message body from a file (mutually exclusive with `-m`) |
 | `--branch` | | optional | Commit onto a different branch without switching to it |
 | `--amend` | | optional; omitted means a new commit | Amend the current HEAD commit by replacing it with updated content |
@@ -1193,6 +1193,7 @@ coordination guard, an uninitialized repository, a rejected argument).
 | 11 | A named path or directory contributes nothing to the commit |
 | 14 | Hunk spec given for a binary file |
 | 15 | Hunk spec given for a symlink, which has no hunks to select |
+| 16 | A pre-commit or commit-msg hook refused the commit |
 | 20 | Pre-pre-push hook failed |
 | 21 | Pre-pre-push hook timed out |
 | 22 | The remote backup slot holds work missing from the local history |
