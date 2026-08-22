@@ -1544,6 +1544,84 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
   (asserts `.git/worktrees/side/safegit` while the fixture names the
   worktree `linked-side`; vacuously true since it was written).
+## Ratified 7.3/7.4/7.5 decisions (resumed session, not yet audited)
+
+- Suite 1544 PASS / 0 FAIL / 9 SKIP (short run); full -race green. The
+  ninth skip is the case-insensitive mv fixture (skipped on case-sensitive
+  filesystems; a forced-core.ignorecase variant runs everywhere and covers
+  the two-step rename branch).
+- mv commits the RENAME ONLY: each moved path carries the exact
+  parent-tree blob via IndexEdits, never staged from disk — matching
+  `git mv` + commit; uncommitted content changes at a moved path stay
+  uncommitted; preview and execution compute the same tree; case-only
+  renames fall out. DIVERGENCE-DOC SEED (git-like).
+- mv mints its records via CommitRequest.MovedRecords, not --moved (the
+  two validations ask opposite questions: --moved asks "is the old path
+  gone", which is false under dry run and under a case-only rename; the
+  shared authority is the pair grammar only).
+- mv creates missing destination directories through the effects handle
+  (dry run records the mkdir; rollback removes the topmost directory it
+  created); git mv refuses instead. DIVERGENCE-DOC SEED (ours).
+- A commit failure AFTER successful renames leaves the files moved, with
+  a message saying so and pointing at `safegit commit --moved` (the
+  plan's rollback covers the rename sequence only).
+- A directory named in file form is refused (exit 19) naming the subtree
+  spelling (grammar shape never inferred from disk); pair CHAINING
+  (a -> b beside b -> c) is refused as Usage alongside nesting (the
+  result would depend on performance order).
+- mv's -m is REQUIRED, repeatable, no default (the mutating-default ban;
+  no codebase precedent for a default commit message).
+- Exit 19's registered meaning WIDENED from "a declared move (--moved)"
+  to "a claim about a move (--moved, --moved-retract, a mv pair)"; the
+  generated table regenerated. --moved-retract reuses 19; its refusals
+  name EVERY bad id; retraction is judged against the same base as
+  --moved (branch tip; the tip's first parent for amend/reword) — a
+  record declared by the very commit being amended is not retractable in
+  that same amend (an amend drops it by not re-declaring); in code.
+- scrub --replace-with makes NO message edit (content replacement keeps
+  the path; records naming it remain true); only --delete removes records
+  naming the scrubbed path (as old, as new, or inside a covering subtree
+  prefix), on both the top-level and submodule walks, declared per commit
+  so Tier A accounts for the message change. A --delete that empties a
+  whole message writes a bare newline (the walker's Message=="" sentinel
+  means keep-original, which would fail Tier A).
+- match trailer rewrite: transform the DECODED path tokens and re-encode
+  through the one total encoder — output always parses; never refuses.
+  Documented consequence: a pattern matching only the escaped spelling
+  matches nothing, and Tier A then refuses the rewrite rather than a
+  corrupt record ever being written.
+- 7.4: inverse records minted in BOTH revert doors (clean computed revert
+  and conflicted revert-continue) with fresh ULIDs; retractions are not
+  inverted; queued reverts stay git-authored and record-free; the revert
+  help text states the asymmetry.
+- PLAN EXTENSION (defect found and fixed red-first): the pipeline's
+  in-flight refusal fired at commit-build time — AFTER mv's renames — so
+  mv mid-merge would move every file and then refuse. coord.GuardInFlight
+  now runs inside the operation lock before the first mutation.
+- Folded item 1 done (submodule-only scrub match completion prints
+  summary + scope + rotation; scrub run has no such branch — it passes
+  nil companions, and its result==nil case is "matched nothing", which
+  correctly prints no completion). Folded item 2 was ALREADY done
+  (ApplyIndexEditsTo already anchors via AnchorRoot). Queued for the
+  Phase 7 audit remediation: Pipeline.Execute/Amend still call
+  git.RepoRoot directly for their own repoRoot — the same
+  single-authority question one level up; identical under the pin.
+- ENVIRONMENT: /tmp is at its tmpfs quota (~9455M/9472M, ~110k foreign
+  entries) and /home is at 100% (~3.0G free); go test can fail with
+  "disk quota exceeded". Test runs point TMPDIR at a scratch under
+  ~/.cache for now. Surfaced to the user.
+- Phase 9 rows: commands-guide needs a mv section, a --moved-retract row
+  in commit's flag table, the "Declared moves, never detected" note
+  updated (the checked flag and safegit mv), scrub file --delete record
+  removal, scrub match's trailer-aware rewrite, and a revert section
+  stating the single-vs-queued record asymmetry; the _CLAUDE template's
+  internal/trailer row underdescribes (it now owns the record grammar,
+  projection, and record-aware rewriting) and its conventions need
+  mv / --moved-retract / record-aware-scrub bullets; architecture's
+  commit-family narrative needs mv as the fourth commit-producing path
+  (validate -> rename -> commit). Generated docs (root CLAUDE.md,
+  README.md, cli-*.md incl. a new cli-mv.md) heal via selfdoc gen.
+
 - Phase 9 rows from the fixer: the confirmation-seam paragraph in
   docs/_CLAUDE.md must say the prompt goes to STDERR unsuppressed by
   --quiet; uninstall's repository-wide scope and enumeration need
