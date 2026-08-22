@@ -109,7 +109,18 @@ func removeScrubbedMoveRecords(mode, message, filePath string) (string, bool) {
 	if mode != "remove" {
 		return message, false
 	}
-	return trailer.RemoveMovedRecordsNaming(message, filePath)
+	stripped, removed := trailer.RemoveMovedRecordsNaming(message, filePath)
+	if removed && stripped == "" {
+		// The records were the WHOLE message, so what is left is nothing. The
+		// walker reads an empty CommitTransform.Message as "keep the original",
+		// and keeping the original here would leave the record standing after
+		// the walk had already declared it gone -- which the rewrite's own
+		// verification then refuses, taking the whole rewrite down over a commit
+		// whose message happened to be one trailer. A bare newline is the
+		// emptiest message the sentinel can express.
+		stripped = "\n"
+	}
+	return stripped, removed
 }
 
 func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
