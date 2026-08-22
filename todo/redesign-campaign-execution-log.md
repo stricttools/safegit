@@ -310,12 +310,47 @@ existing entries are never rewritten.
   `merge --autostash` would strand the autostash; 6.2 must either add
   them to the owned set (autostash needs APPLYING, not just deleting)
   or refuse autostash merges explicitly.
+## Ratified Phase 3 decisions
+
+- Quarantine INSTALLATION lives with the commands that write objects in
+  preview (today: the commit pipeline), not dispatch-wide; the boundary
+  ENFORCEMENT (preview + object-writing argv + no quarantine = hard
+  error) is what makes any future escape loud instead of silent, and
+  main's ctx marks preview for every command. Application is structural
+  (one exec constructor), so all eight sites including the *WithDir
+  variants are covered without per-site edits.
+- The pipeline's effects threading is a required one-method RefUpdate
+  port (production implementation IS the handle) rather than the
+  *strictcli.Effects type: strictcli.Completed cannot be constructed
+  outside the framework (settled-ness unexported, accessors panic), so
+  a direct dependency would leave the pipeline's unit tests unable to
+  supply a double. Nil port is a hard error, never a fallback.
+- The observe allowlist admits only verbs that are observe-only WITH NO
+  conditional effects (reflog/tag/notes/stash/hash-object excluded — a
+  prefix ending at the verb would admit their mutating forms into
+  dry-run execution). The runGitMutation dry-run guard keeps keying off
+  flags.dryRun; its premise pin became TestObserveAllowlistCannotAdmitAMutation
+  (every declared prefix observe-only per the table AND none matches a
+  runGitMutation argv).
+- ArgvAny needs no context: allowlisted observes write nothing by
+  construction; non-allowlisted effects argv is recorded, never started,
+  in preview. Documented and pinned.
+- ExemptCommitRefUpdateRecord renamed ExemptCommitRefUpdate (the old ID
+  named a deleted function and a false never-executed claim).
+- scrub_preview's records were already honest — the sibling-rule
+  deliverable became a pin, not a change.
+- todo/effects-handle-commit-pipeline-and-method-set.md split by the
+  orchestrator: pipeline item to .done (delivered by 3.3), method-set
+  item continues as todo/effects-handle-closed-method-set.md.
+
 - **Phase 6 upstream filing:** when filing the framework's dict-flag
   ValidateFn bug (planned in 6.2), the same todo or a sibling should
   also report: (a) the effects handle assigns no stdin to children
   (breaks interactive passthroughs); (b) Completed exposes no public
   settled-ness/executed-vs-recorded probe (all accessors panic when
-  unsettled), and (c) the observe branch under dry-run is non-uniform
+  unsettled — which also makes Completed unconstructable in a consumer's
+  own tests, forcing port-based indirection around the handle), and (c)
+  the observe branch under dry-run is non-uniform
   (executes and returns settled normally, but returns an unsettled
   stale-brand carrier after a recorded mutation). Evidence pinned by
   TestSafegitDeclaresNoProcObserveAllowlist and the wave-A audit.
