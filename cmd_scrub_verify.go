@@ -5,7 +5,6 @@ import (
 	"os"
 	"path"
 	"regexp"
-	"strings"
 
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/scan"
@@ -281,18 +280,10 @@ func verifyTargetLabel(t verifyTarget) string {
 	return fmt.Sprintf("pattern=%q scope=%q", t.pattern, t.scope)
 }
 
-// formatMatchFailure formats scan matches into an error string matching the
-// format produced by verifySecretRemoved/verifySecretRemovedScoped.
+// formatMatchFailure formats scan matches into a detail string, through the
+// same renderer Tier B uses. Verification passes no ref attribution: it is a
+// standalone question about the whole object store rather than a report about a
+// rewrite that just ran, and the per-ref walk it would cost buys nothing here.
 func formatMatchFailure(matches []scan.Match) string {
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("secret still present in %d object(s):\n", len(matches)))
-	for _, m := range matches {
-		reachable := "unreachable"
-		if m.Reachable {
-			reachable = "reachable"
-		}
-		sb.WriteString(fmt.Sprintf("  %s %s (%s, line %d): %s\n",
-			m.ObjectType, shortSHA(m.SHA), reachable, m.Line, m.Context))
-	}
-	return sb.String()
+	return renderSurvivingMatches(matches, nil, nil)
 }

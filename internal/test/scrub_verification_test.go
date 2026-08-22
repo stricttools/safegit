@@ -353,3 +353,85 @@ func TestScrubFileInSubmoduleRefusesAForeignFrom(t *testing.T) {
 		t.Errorf("the parent was rewritten despite the refusal: %s -> %s", parentHead, got)
 	}
 }
+
+// TestScrubMatchOffWalkBranchIsResidueNotRefusal draws the line between the two
+// tiers at the object set the walk actually produced.
+//
+// A secret on a branch the scrub never walks is not a failure OF the rewrite:
+// the rewritten history is clean, so Tier A has nothing to refuse. The secret
+// is still in the repository, which is exactly the whole-store question Tier B
+// asks -- so the rewrite STANDS, the command exits RewriteIncomplete, and the
+// message names the ref that still holds the content so the operator can scrub
+// that branch too.
+func TestScrubMatchOffWalkBranchIsResidueNotRefusal(t *testing.T) {
+	dir := newRepo(t)
+
+	// A commit only refs/heads/old reaches: HEAD's walk never sees it.
+	testutil.Git(t, dir, "checkout", "-q", "-b", "old")
+	commitFileEnv(t, dir, tierEnv, "stale.txt", "OFFWALK_SECRET on a branch\n", "add the branch copy")
+	oldTip := testutil.Rev(t, dir, "HEAD")
+	testutil.Git(t, dir, "checkout", "-q", "main")
+	commitFileEnv(t, dir, tierEnv, "live.txt", "OFFWALK_SECRET on main\n", "add the walked copy")
+
+	_, stderr, code := runSafegitEnv(t, dir, tierEnv, "--approve-consequential",
+		"scrub", "match", "--pattern", "OFFWALK_SECRET", "--replace", "REDACTED",
+		"--entire-history", "--reason", "off-walk branch")
+
+	if code != exitcode.RewriteIncomplete {
+		t.Fatalf("a secret on an unwalked branch must leave the rewrite standing and exit %d (RewriteIncomplete), got %d: %s",
+			exitcode.RewriteIncomplete, code, stderr)
+	}
+	if strings.Contains(stderr, "Nothing was changed") {
+		t.Errorf("the rewrite must not be refused -- the history it produced is clean; stderr: %s", stderr)
+	}
+	if !strings.Contains(stderr, "refs/heads/old") {
+		t.Errorf("the Tier B finding must name the ref that still holds the content; stderr: %s", stderr)
+	}
+
+	// The rewrite really happened on the walked history.
+	if content, ok := testutil.Show(t, dir, "HEAD", "live.txt"); !ok || strings.Contains(content, "OFFWALK_SECRET") {
+		t.Errorf("the walked history was not scrubbed: live.txt = %q (present=%v)", content, ok)
+	}
+	// The unwalked branch is untouched: nothing claimed to rewrite it.
+	if got := testutil.Rev(t, dir, "refs/heads/old"); got != oldTip {
+		t.Errorf("the unwalked branch moved: %s -> %s", oldTip, got)
+	}
+}
+
+// TestScrubMatchOffWalkRemoteTrackingRefIsResidueNotRefusal is the same
+// boundary for a stale remote-tracking ref, which is the shape an operator hits
+// far more often than a live branch: refs/remotes/* is listed by the ref plan
+// and never walked, so it used to turn every scrub of a repository with an old
+// fetch into a hard refusal.
+func TestScrubMatchOffWalkRemoteTrackingRefIsResidueNotRefusal(t *testing.T) {
+	dir := newRepo(t)
+
+	testutil.Git(t, dir, "checkout", "-q", "-b", "feature")
+	commitFileEnv(t, dir, tierEnv, "stale.txt", "STALEREF_SECRET fetched long ago\n", "add the fetched copy")
+	staleTip := testutil.Rev(t, dir, "HEAD")
+	testutil.Git(t, dir, "update-ref", "refs/remotes/origin/feature", staleTip)
+	testutil.Git(t, dir, "checkout", "-q", "main")
+	testutil.Git(t, dir, "branch", "-D", "feature")
+	commitFileEnv(t, dir, tierEnv, "live.txt", "STALEREF_SECRET on main\n", "add the walked copy")
+
+	_, stderr, code := runSafegitEnv(t, dir, tierEnv, "--approve-consequential",
+		"scrub", "match", "--pattern", "STALEREF_SECRET", "--replace", "REDACTED",
+		"--entire-history", "--reason", "stale remote-tracking ref")
+
+	if code != exitcode.RewriteIncomplete {
+		t.Fatalf("a secret on a stale remote-tracking ref must leave the rewrite standing and exit %d (RewriteIncomplete), got %d: %s",
+			exitcode.RewriteIncomplete, code, stderr)
+	}
+	if strings.Contains(stderr, "Nothing was changed") {
+		t.Errorf("the rewrite must not be refused -- the history it produced is clean; stderr: %s", stderr)
+	}
+	if !strings.Contains(stderr, "refs/remotes/origin/feature") {
+		t.Errorf("the Tier B finding must name the remote-tracking ref that still holds the content; stderr: %s", stderr)
+	}
+	if content, ok := testutil.Show(t, dir, "HEAD", "live.txt"); !ok || strings.Contains(content, "STALEREF_SECRET") {
+		t.Errorf("the walked history was not scrubbed: live.txt = %q (present=%v)", content, ok)
+	}
+	if got := testutil.Rev(t, dir, "refs/remotes/origin/feature"); got != staleTip {
+		t.Errorf("the stale remote-tracking ref moved: %s -> %s", staleTip, got)
+	}
+}

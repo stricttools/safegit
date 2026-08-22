@@ -38,11 +38,21 @@ type RefUpdatePlan struct {
 	// TagsRewritten counts the annotation-body rewrites.
 	TagsRewritten int
 
-	// NewTips are the objects refs will point at once the plan is applied:
-	// every branch and tag head of the rewritten history, plus a detached
+	// WalkedTips are the objects the REWRITE produced: for every ref whose
+	// object the SHA map covers, the object that ref will point at once the
+	// plan is applied, plus every tag object this plan rewrote and a detached
 	// HEAD's new commit. Scanning them scans the whole new history, including
 	// the parts no ref reaches yet.
-	NewTips []string
+	//
+	// It is deliberately not every ref the plan listed. A branch or a stale
+	// remote-tracking ref the walk never visited still points at history this
+	// rewrite never claimed to touch: scanning it in Tier A would refuse the
+	// whole rewrite over content the operation never walked, and describe that
+	// content as "of the rewritten history", which it is not. Whether the
+	// pattern survives ANYWHERE in the repository is Tier B's question, asked
+	// of the whole object store after the refs have moved -- and Tier B names
+	// the refs that still hold it.
+	WalkedTips []string
 }
 
 // planRefUpdates computes every ref update the SHA map implies and writes the
@@ -53,18 +63,27 @@ type RefUpdatePlan struct {
 // annotation transform changed its body. Both writes happen here, chained, and
 // the ref moves once, from the original object to the final one.
 func planRefUpdates(ctx context.Context, shaMap map[string]string, oldName, newName, oldEmail, newEmail string, annotate TagBodyTransformFunc, verbose bool) (*RefUpdatePlan, error) {
-	out, _, err := git.Run(ctx, "for-each-ref", "--format=%(refname) %(objecttype) %(objectname)", "refs/heads/", "refs/tags/", "refs/remotes/")
+	// %(*objectname) is the dereferenced target of an annotated tag and is empty
+	// for everything else. It is what says whether a tag belongs to the walked
+	// history: a tag whose target commit the SHA map covers does, one pointing
+	// at an unwalked commit does not. Refnames cannot contain spaces, so
+	// splitting on whitespace is exact.
+	out, _, err := git.Run(ctx, "for-each-ref", "--format=%(refname) %(objecttype) %(objectname) %(*objectname)", "refs/heads/", "refs/tags/", "refs/remotes/")
 	if err != nil {
 		return nil, fmt.Errorf("listing refs: %w", err)
 	}
 
 	plan := &RefUpdatePlan{}
 	for _, line := range git.SplitNonEmpty(out) {
-		parts := strings.SplitN(line, " ", 3)
-		if len(parts) != 3 {
+		parts := strings.Fields(line)
+		if len(parts) < 3 {
 			continue
 		}
 		refname, objecttype, objectname := parts[0], parts[1], parts[2]
+		derefTarget := ""
+		if len(parts) >= 4 {
+			derefTarget = parts[3]
+		}
 
 		// Skip stash refs.
 		if strings.HasPrefix(refname, "refs/stash") {
@@ -79,14 +98,18 @@ func planRefUpdates(ctx context.Context, shaMap map[string]string, oldName, newN
 
 		switch objecttype {
 		case "commit":
-			// Branch or lightweight tag pointing directly at a commit.
+			// Branch or lightweight tag pointing directly at a commit. A ref
+			// the SHA map does not cover points at history the walk never
+			// visited: it neither moves nor belongs to the walked tips.
 			newSHA, ok := shaMap[objectname]
-			if !ok || newSHA == objectname {
-				plan.NewTips = append(plan.NewTips, objectname)
+			if !ok {
+				continue
+			}
+			plan.WalkedTips = append(plan.WalkedTips, newSHA)
+			if newSHA == objectname {
 				continue
 			}
 			plan.Moves = append(plan.Moves, refMove{Refname: refname, OldSHA: objectname, NewSHA: newSHA})
-			plan.NewTips = append(plan.NewTips, newSHA)
 			if strings.HasPrefix(refname, "refs/tags/") {
 				plan.TagRewrites = append(plan.TagRewrites, TagRewrite{Refname: refname, OldSHA: objectname, NewSHA: newSHA, Annotated: false})
 			}
@@ -119,7 +142,14 @@ func planRefUpdates(ctx context.Context, shaMap map[string]string, oldName, newN
 				}
 			}
 
-			plan.NewTips = append(plan.NewTips, final)
+			// A tag belongs to the walked tips when the walk covers the commit
+			// it points at, or when this plan rewrote the tag object itself --
+			// a retargeted tag, a rewritten tagger line, or an annotation body
+			// this rewrite just produced, all of which Tier A must read.
+			_, targetWalked := shaMap[derefTarget]
+			if targetWalked || final != objectname {
+				plan.WalkedTips = append(plan.WalkedTips, final)
+			}
 			if final != objectname {
 				plan.Moves = append(plan.Moves, refMove{Refname: refname, OldSHA: objectname, NewSHA: final})
 			}
@@ -134,7 +164,7 @@ func planRefUpdates(ctx context.Context, shaMap map[string]string, oldName, newN
 		}
 		if newSHA, ok := shaMap[headSHA]; ok && newSHA != headSHA {
 			plan.Moves = append(plan.Moves, refMove{Refname: "HEAD", OldSHA: headSHA, NewSHA: newSHA})
-			plan.NewTips = append(plan.NewTips, newSHA)
+			plan.WalkedTips = append(plan.WalkedTips, newSHA)
 		}
 	}
 

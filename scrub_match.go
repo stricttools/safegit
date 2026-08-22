@@ -818,7 +818,7 @@ func scrubMatchExecute(
 		// Tier A for the submodule: the pattern must be absent from the
 		// submodule history that is about to be published.
 		subTierA := func(ctx context.Context, plan *RefUpdatePlan) error {
-			return verifyPatternAbsentFromTips(ctx, compiledPattern, nil, plan.NewTips)
+			return verifyPatternAbsentFromTips(ctx, compiledPattern, nil, plan.WalkedTips)
 		}
 
 		// Oplog extra for submodule (ref, oldHead, sha, rewritten are
@@ -1216,18 +1216,7 @@ func verifySecretRemovedScoped(ctx context.Context, pattern *regexp.Regexp, scop
 	if len(failures) == 0 {
 		return nil
 	}
-
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("secret still present in %d object(s):\n", len(failures)))
-	for _, m := range failures {
-		reachable := "unreachable"
-		if m.Reachable {
-			reachable = "reachable"
-		}
-		sb.WriteString(fmt.Sprintf("  %s %s (%s, line %d): %s\n",
-			m.ObjectType, shortSHA(m.SHA), reachable, m.Line, m.Context))
-	}
-	return fmt.Errorf("%s", sb.String())
+	return fmt.Errorf("%s", describeSurvivingMatches(ctx, failures))
 }
 
 // matchScope checks whether a file path matches a glob scope pattern.
