@@ -1351,9 +1351,13 @@ to stderr; scrub match's nil-result payload gap.
   the user's order: raw artifacts stay ignored and disposable;
   reusable value is promoted as generator scripts to committed homes;
   the test suite is where findings become permanent.
-- build/audit residue: pending the user's read of the answer (the
-  scenario repos are not committable-as-useful; see conversation) —
-  orchestrator recommendation remains saferm cleanup next session.
+- build/audit residue: SETTLED (round 10) — plain saferm cleanup as
+  the next session's first housekeeping act (the build/audit tree and
+  the pre-campaign stray under the system temp dir); no salvage
+  scripts (the pinned tests are the permanent form). THE ASKME REVIEW
+  OF THIS SESSION'S LOOSE ENDS IS NOW FULLY COMPLETE — every ruling in
+  this log is settled; nothing awaits the user before the next session
+  begins its queue.
 
 ## Open rulings (RESOLVED above — section retained for history)
 
