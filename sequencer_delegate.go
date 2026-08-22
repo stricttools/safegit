@@ -169,7 +169,25 @@ func delegateQueuedSequence(
 		return exitcode.General
 	}
 
+	// The parent's gitlink follows the branch, so the bump keys on the branch
+	// having MOVED and on nothing else. A queue that stopped on its next
+	// conflict still concluded the step it was given: those commits are on the
+	// branch, the tip they produced is the submodule's real tip, and a parent
+	// left pointing at the pre-conclusion commit names a tip this repository no
+	// longer has. Running it only where git finished the whole queue made the
+	// parent's correctness depend on which command the queue happened to stop on.
+	bumpParentIfBranchMoved := func() {
+		if before == after {
+			return
+		}
+		if err := maybeAutoBumpParent(ctx, flags, gitDir, after, op.command, "concluded "+state.String()); err != nil {
+			die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+		}
+	}
+
 	if runErr != nil {
+		bumpParentIfBranchMoved()
+
 		// git said what went wrong on its own stderr, and it said nothing about
 		// the commits it MADE first: a queue that stops on its next conflict
 		// has still concluded the step it was given. Reporting them is not
@@ -204,9 +222,7 @@ func delegateQueuedSequence(
 		}
 	}
 
-	if err := maybeAutoBumpParent(ctx, flags, gitDir, after, op.command, "concluded "+state.String()); err != nil {
-		die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
-	}
+	bumpParentIfBranchMoved()
 
 	reportDelegated(flags, op, delegatedOutcome{
 		head:         after,
