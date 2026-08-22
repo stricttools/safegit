@@ -1192,6 +1192,19 @@ hard-link support on the filesystem holding .git, and stale-lock
 reclamation requires working flock(2) (without it, contenders time out
 instead of reclaiming, and doctor is the recovery path).
 
+## USER RULINGS (settled 2026-08-22, review session)
+
+- macOS CI: release-only — macOS runs where it must be green (the
+  release-candidate push on main) via a branch/dispatch condition, not
+  on every push. Supersedes both the plan's matrix and the as-built
+  workflow; the workflow edit is next-session work before Phase 11.
+- No-match commit errors: PER-PATH STANDS, with a refinement the user
+  specified: the refusal must AGGREGATE and name every argument that
+  contributed nothing (today unmatchedSource reports only the first).
+  Small fix queued for the next fixer window.
+- Tracked hook store: accepted as documented (push-intent boundary;
+  the blunt clone-then-push sentence stays).
+
 ## Open rulings (need the user's decision; as-built stands meanwhile)
 
 - **Per-path vs set-level no-match errors (2.2).** The plan contradicts
