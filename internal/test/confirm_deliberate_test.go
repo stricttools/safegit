@@ -296,3 +296,70 @@ func TestDeclinedDeliberateConfirmationExitsNonzero(t *testing.T) {
 		}
 	})
 }
+
+// TestDeliberateConfirmationPromptGoesToStderr pins the CHANNEL of the prompt
+// at all three confirmDeliberate sites.
+//
+// stdout is a structured channel: a machine reading it gets the command's own
+// result, and under --json it carries exactly one document. A question written
+// there is interleaved with the answer to a different question. stderr is where
+// an interactive exchange belongs, and --quiet never suppresses it -- a prompt
+// the operator cannot see is a prompt that hangs.
+func TestDeliberateConfirmationPromptGoesToStderr(t *testing.T) {
+	// promptText is the shared tail of every confirmDeliberate question.
+	const promptText = "[y/N]"
+
+	t.Run("doctor uninstall", func(t *testing.T) {
+		dir := newRepo(t)
+		commitFileEnv(t, dir, confirmEnv, "file.txt", "content\n", "add file")
+
+		stdout, stderr, _ := runSafegitEnv(t, dir, confirmEnv, "doctor", "--action", "uninstall")
+		if !strings.Contains(stderr, promptText) {
+			t.Errorf("the uninstall prompt must be on stderr; stderr was:\n%s", stderr)
+		}
+		if !strings.Contains(stderr, "Remove safegit from this repository?") {
+			t.Errorf("the uninstall question must be on stderr; stderr was:\n%s", stderr)
+		}
+		if strings.Contains(stdout, promptText) {
+			t.Errorf("stdout is a structured channel and must carry no prompt; stdout was:\n%s", stdout)
+		}
+	})
+
+	t.Run("backup to unclassifiable remote", func(t *testing.T) {
+		dir := newRepo(t)
+		commitFileEnv(t, dir, confirmEnv, "file.txt", "content\n", "add file")
+		testutil.Git(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
+
+		stdout, stderr, _ := runSafegitEnv(t, dir, confirmEnv, "backup", "backup", "cloudy")
+		if !strings.Contains(stderr, promptText) {
+			t.Errorf("the backup prompt must be on stderr; stderr was:\n%s", stderr)
+		}
+		if strings.Contains(stdout, promptText) {
+			t.Errorf("stdout is a structured channel and must carry no prompt; stdout was:\n%s", stdout)
+		}
+	})
+
+	t.Run("push force-with-lease", func(t *testing.T) {
+		dir := newRepo(t)
+		commitFileEnv(t, dir, confirmEnv, "file.txt", "content\n", "add file")
+		testutil.Git(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
+
+		stdout, stderr, _ := runSafegitEnv(t, dir, confirmEnv, "push", "--refs", "head", "--force-with-lease", "cloudy")
+		if !strings.Contains(stderr, promptText) {
+			t.Errorf("the force-push prompt must be on stderr; stderr was:\n%s", stderr)
+		}
+		if strings.Contains(stdout, promptText) {
+			t.Errorf("stdout is a structured channel and must carry no prompt; stdout was:\n%s", stdout)
+		}
+	})
+
+	t.Run("quiet does not suppress the prompt", func(t *testing.T) {
+		dir := newRepo(t)
+		commitFileEnv(t, dir, confirmEnv, "file.txt", "content\n", "add file")
+
+		_, stderr, _ := runSafegitEnv(t, dir, confirmEnv, "--quiet", "doctor", "--action", "uninstall")
+		if !strings.Contains(stderr, promptText) {
+			t.Errorf("--quiet must never suppress a prompt; stderr was:\n%s", stderr)
+		}
+	})
+}

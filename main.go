@@ -984,7 +984,11 @@ func confirmDeliberate(flags globalFlags, c consent, format string, args ...inte
 		fmt.Fprintf(os.Stderr, "          --json does not answer this confirmation; pass %s to consent deliberately\n", c.flag)
 		return false
 	}
-	fmt.Printf("\n"+format+" [y/N] ", args...)
+	// The prompt goes to STDERR, and --quiet never suppresses it. stdout is a
+	// structured channel -- the command's own result, and under --json exactly
+	// one document -- so a question written there interleaves with the answer to
+	// a different one; and a prompt a quiet run hid would be a prompt that hangs.
+	fmt.Fprintf(os.Stderr, "\n"+format+" [y/N] ", args...)
 	var answer string
 	fmt.Scanln(&answer)
 	return answer == "y" || answer == "Y"
