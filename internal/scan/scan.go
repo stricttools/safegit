@@ -25,6 +25,11 @@ type Match struct {
 	Context       string // surrounding text with match replaced by <MATCH>
 	IsBinary      bool   // true if this was a binary blob (skipped)
 	SubmodulePath string // relative path of the submodule this match belongs to; empty for parent repo
+	// InGitDir marks a non-object match whose Path is relative to the GIT
+	// DIRECTORY rather than to the repository root. Every other coordinate in a
+	// scan is repo-relative, so without this flag a reader cannot tell
+	// `hooks/pre-commit` inside .git from a tracked file of that name.
+	InGitDir bool
 }
 
 // ScanResults holds the aggregate output of a scan across all git objects.
