@@ -40,6 +40,10 @@ type AmendResult struct {
 	OldSHA   string `json:"oldSha"`
 	Attempts int    `json:"attempts"`
 
+	// Files lists the repo-relative paths this amend changed relative to the
+	// tip it replaced, sorted, derived from the objects themselves.
+	Files []string `json:"files"`
+
 	// SkippedIgnored lists the gitignored repo-relative paths a directory
 	// expansion passed over. Nil when nothing was skipped.
 	SkippedIgnored []string `json:"skippedIgnored,omitempty"`
@@ -200,6 +204,7 @@ func (p *Pipeline) tryAmend(
 			Tree:           treeSHA,
 			OldSHA:         headSHA,
 			Attempts:       attempt,
+			Files:          changedPaths(changed),
 			SkippedIgnored: files.skipped,
 		}, false, nil
 	}
@@ -262,6 +267,7 @@ func (p *Pipeline) tryAmend(
 		Tree:           treeSHA,
 		OldSHA:         headSHA,
 		Attempts:       attempt,
+		Files:          changedPaths(changed),
 		SkippedIgnored: files.skipped,
 	}, false, nil
 }
@@ -281,11 +287,12 @@ type RewordRequest struct {
 
 // RewordResult is the JSON-serializable output of a successful reword.
 type RewordResult struct {
-	SHA    string `json:"sha"`
-	Ref    string `json:"ref"`
-	Parent string `json:"parent"`
-	Tree   string `json:"tree"`
-	OldSHA string `json:"oldSha"`
+	SHA      string `json:"sha"`
+	Ref      string `json:"ref"`
+	Parent   string `json:"parent"`
+	Tree     string `json:"tree"`
+	OldSHA   string `json:"oldSha"`
+	Attempts int    `json:"attempts"`
 }
 
 // Reword rewrites only the commit message of the tip of the current branch.
@@ -370,11 +377,12 @@ func (p *Pipeline) tryReword(
 
 	if req.DryRun {
 		return &RewordResult{
-			SHA:    commitSHA,
-			Ref:    ref,
-			Parent: parentSHA,
-			Tree:   treeSHA,
-			OldSHA: headSHA,
+			SHA:      commitSHA,
+			Ref:      ref,
+			Parent:   parentSHA,
+			Tree:     treeSHA,
+			OldSHA:   headSHA,
+			Attempts: attempt,
 		}, false, nil
 	}
 
@@ -421,10 +429,11 @@ func (p *Pipeline) tryReword(
 	}
 
 	return &RewordResult{
-		SHA:    commitSHA,
-		Ref:    ref,
-		Parent: parentSHA,
-		Tree:   treeSHA,
-		OldSHA: headSHA,
+		SHA:      commitSHA,
+		Ref:      ref,
+		Parent:   parentSHA,
+		Tree:     treeSHA,
+		OldSHA:   headSHA,
+		Attempts: attempt,
 	}, false, nil
 }

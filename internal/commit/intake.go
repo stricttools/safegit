@@ -474,6 +474,18 @@ func isNestedRepository(absDir string) bool {
 	return err == nil
 }
 
+// changedPaths reduces a name-status diff to its sorted paths. It always
+// returns a non-nil slice, so a result carrying no changes serializes as an
+// empty list rather than as null.
+func changedPaths(changed []git.ChangedPath) []string {
+	out := make([]string, 0, len(changed))
+	for _, c := range changed {
+		out = append(out, c.Path)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // unmatchedSourceError is the refusal for an argument that contributed nothing.
 func unmatchedSourceError(src intakeSource, against string) error {
 	what := "it"

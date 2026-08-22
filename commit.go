@@ -47,6 +47,81 @@ func pipelineExitCode(err error) int {
 	return exitcode.General
 }
 
+// commitPayload is what `commit` puts in the envelope's payload, in all three
+// of its forms: a new commit, an amend, and a reword.
+//
+// Nothing here is counted from the arguments. `files` is the changed-path list
+// the pipeline read off the objects -- for a commit, against its parent; for an
+// amend, against the tip it replaced; empty for a reword, which changes no path
+// at all. A caller that wants to know what a commit contains reads this rather
+// than assuming its own argument list survived intake unchanged, which it does
+// not: a directory expands, and a gitignored path under one is skipped.
+type commitPayload struct {
+	Ref string `json:"ref"`
+	// Parents is the commit's parent list: empty for a root commit. It is a
+	// list because a merge commit has more than one.
+	Parents []string `json:"parents"`
+	Tree    string   `json:"tree"`
+	// SHA is the commit that was created, and null under --dry-run: the
+	// preview builds an object to compute the tree honestly, but no commit
+	// exists at that name for anyone to fetch, so reporting it as this run's
+	// commit would be a lie a machine consumer cannot detect.
+	SHA *string `json:"sha"`
+	// OldSHA is the commit an amend or reword replaced, and null for a plain
+	// commit, which replaces nothing.
+	OldSHA         *string  `json:"old_sha"`
+	Files          []string `json:"files"`
+	SkippedIgnored []string `json:"skipped_ignored"`
+	Attempts       int      `json:"attempts"`
+	DryRun         bool     `json:"dry_run"`
+}
+
+// commitPayloadSchema declares what `commit` puts in the envelope's payload.
+// The framework validates the value against it at emission, so the declaration
+// and the struct above cannot drift.
+var commitPayloadSchema = strictcli.SchemaObject(
+	map[string]interface{}{
+		"ref":             strictcli.SchemaType("string"),
+		"parents":         strictcli.SchemaArray(strictcli.SchemaType("string")),
+		"tree":            strictcli.SchemaType("string"),
+		"sha":             strictcli.SchemaType("string", "null"),
+		"old_sha":         strictcli.SchemaType("string", "null"),
+		"files":           strictcli.SchemaArray(strictcli.SchemaType("string")),
+		"skipped_ignored": strictcli.SchemaArray(strictcli.SchemaType("string")),
+		"attempts":        strictcli.SchemaType("integer"),
+		"dry_run":         strictcli.SchemaType("boolean"),
+	},
+	[]string{"ref", "parents", "tree", "sha", "old_sha", "files", "skipped_ignored", "attempts", "dry_run"},
+	false,
+)
+
+// parentList renders the pipeline's single parent as the payload's list form.
+// An unborn ref has no parent, which is an empty list and not a null entry.
+func parentList(parent string) []string {
+	if parent == "" {
+		return []string{}
+	}
+	return []string{parent}
+}
+
+// realSHA reports the commit SHA a run actually created, and nothing under a
+// dry run.
+func realSHA(flags globalFlags, sha string) *string {
+	if flags.dryRun {
+		return nil
+	}
+	return &sha
+}
+
+// orEmpty renders an absent list as an empty one, so a payload member is never
+// null where the schema declares an array.
+func orEmpty(list []string) []string {
+	if list == nil {
+		return []string{}
+	}
+	return list
+}
+
 func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, trailers []string, files []string) {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
@@ -145,12 +220,24 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 
 	recordCommitRefUpdate(flags, result.Ref, result.SHA, result.Parent)
 
+	flags.payload(commitPayload{
+		Ref:            result.Ref,
+		Parents:        parentList(result.Parent),
+		Tree:           result.Tree,
+		SHA:            realSHA(flags, result.SHA),
+		OldSHA:         nil,
+		Files:          result.Files,
+		SkippedIgnored: orEmpty(result.SkippedIgnored),
+		Attempts:       result.Attempts,
+		DryRun:         flags.dryRun,
+	})
+
 	if !flags.silent() {
 		fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msg))
 		if flags.dryRun {
-			fmt.Printf(" %d file(s) would be committed", len(files))
+			fmt.Printf(" %d file(s) would be committed", len(result.Files))
 		} else {
-			fmt.Printf(" %d file(s) committed", len(files))
+			fmt.Printf(" %d file(s) committed", len(result.Files))
 		}
 		if result.Attempts > 1 {
 			fmt.Printf(" (%d CAS retries)", result.Attempts-1)
@@ -247,6 +334,18 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 
 		recordCommitRefUpdate(flags, result.Ref, result.SHA, result.OldSHA)
 
+		flags.payload(commitPayload{
+			Ref:            result.Ref,
+			Parents:        parentList(result.Parent),
+			Tree:           result.Tree,
+			SHA:            realSHA(flags, result.SHA),
+			OldSHA:         &result.OldSHA,
+			Files:          result.Files,
+			SkippedIgnored: orEmpty(result.SkippedIgnored),
+			Attempts:       result.Attempts,
+			DryRun:         flags.dryRun,
+		})
+
 		if !flags.silent() {
 			msgDisplay := msg
 			if msgDisplay == "" {
@@ -254,9 +353,9 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			}
 			fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msgDisplay))
 			if flags.dryRun {
-				fmt.Printf(" would amend (was %s)", result.OldSHA[:8])
+				fmt.Printf(" %d file(s) would be amended (was %s)", len(result.Files), result.OldSHA[:8])
 			} else {
-				fmt.Printf(" amended (was %s)", result.OldSHA[:8])
+				fmt.Printf(" %d file(s) amended (was %s)", len(result.Files), result.OldSHA[:8])
 			}
 			if result.Attempts > 1 {
 				fmt.Printf(" (%d CAS retries)", result.Attempts-1)
@@ -299,6 +398,20 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		}
 
 		recordCommitRefUpdate(flags, result.Ref, result.SHA, result.OldSHA)
+
+		// A reword replaces a message and nothing else, so its changed-path
+		// list is empty by construction rather than by measurement.
+		flags.payload(commitPayload{
+			Ref:            result.Ref,
+			Parents:        parentList(result.Parent),
+			Tree:           result.Tree,
+			SHA:            realSHA(flags, result.SHA),
+			OldSHA:         &result.OldSHA,
+			Files:          []string{},
+			SkippedIgnored: []string{},
+			Attempts:       result.Attempts,
+			DryRun:         flags.dryRun,
+		})
 
 		if !flags.silent() {
 			fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msg))

@@ -1,6 +1,7 @@
 package test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -193,12 +194,12 @@ func TestCrossSessionNoAdoption_UnderQuiet(t *testing.T) {
 	}
 }
 
-// TestCrossSessionNoAdoption_UnderMachineMode is the machine-mode
-// half of the same observability question. globalFlags.silent() is
-// `quiet || json` (main.go:84), so `--json` suppresses the stderr notice too,
-// and `commit` declares no PayloadSchema -- so the envelope carries no payload
-// in which the adopted deletion could appear. A tool driving safegit in machine
-// mode therefore receives no representation of it at all.
+// TestCrossSessionNoAdoption_UnderMachineMode is the machine-mode half of the
+// same observability question. globalFlags.silent() is `quiet || json`, so
+// --json suppressed the stderr notice too, and a tool driving safegit received
+// no representation of the adopted deletion at all. Machine mode adopts nothing
+// either -- and the envelope's payload now says, positively, which paths the
+// commit holds.
 func TestCrossSessionNoAdoption_UnderMachineMode(t *testing.T) {
 	dir := newRepo(t)
 
@@ -227,6 +228,14 @@ func TestCrossSessionNoAdoption_UnderMachineMode(t *testing.T) {
 	if len(got) != 1 || got[0] != "A todo/b.txt" {
 		t.Fatalf("under --json, session B's commit adopted %v; envelope on stdout was %q and stderr was %q, "+
 			"neither naming the adopted path", got, stdout, stderr)
+	}
+
+	var doc commitPayloadDoc
+	if err := json.Unmarshal(decodeEnvelope(t, stdout).Payload, &doc); err != nil {
+		t.Fatalf("commit payload does not decode: %v\nstdout: %s", err, stdout)
+	}
+	if strings.Join(doc.Files, ",") != "todo/b.txt" {
+		t.Errorf("the payload reports files %v; session B named only todo/b.txt", doc.Files)
 	}
 }
 
