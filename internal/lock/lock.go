@@ -17,6 +17,51 @@ import (
 	"github.com/smm-h/safegit/internal/procutil"
 )
 
+// The tool-owned pseudo-refs safegit locks under. They are not git refs and
+// nothing ever resolves them as such: they are names in the same namespace as
+// a ref so that one lock implementation serves both, and `safegit unlock`
+// addresses them by these exact strings.
+const (
+	// RewriteRef is the repository-wide history-rewrite lock. It lives in the
+	// SHARED safegit directory, so every worktree of the repository contends on
+	// the same file: a rewrite changes object names for all of them. Taken by
+	// scrub file, scrub match, scrub run and author rewrite.
+	RewriteRef = "safegit/rewrite"
+
+	// OperationRef is the worktree operation lock. It lives in the
+	// WORKTREE-LOCAL safegit directory, so two worktrees of the same repository
+	// operate independently while two processes in one worktree serialize.
+	// Taken by every command that mutates this worktree: the guarded
+	// passthroughs (checkout, pull, merge, rebase, reset, bisect, cherry-pick,
+	// revert) and the commit pipeline's three entry points plus undo.
+	//
+	// It is what makes a commit's in-flight-operation check meaningful. Without
+	// it a passthrough could create sequencer state (a conflicted merge, a
+	// stopped cherry-pick) in the window between a commit reading that state and
+	// updating the ref, and the commit would build its tree against a repository
+	// git considers mid-operation.
+	OperationRef = "safegit/operation"
+)
+
+// Lock ordering, declared once for the whole tool.
+//
+// safegit takes at most two locks at a time, and always in this order:
+//
+//  1. OperationRef -- the worktree operation lock, OUTERMOST. A command that
+//     takes it takes it first and holds it for its whole operation.
+//  2. a per-ref lock (the commit pipeline's CAS lock on refs/heads/<branch>,
+//     undo's lock on the same) or RewriteRef -- INSIDE.
+//
+// Nothing ever takes them the other way round, and nothing takes two locks at
+// the same level. That is the entire deadlock argument: a total order over the
+// two levels, with no cycle to close.
+//
+// The one consequence worth stating out loud: a passthrough holds the operation
+// lock for the FULL duration of the git command it wraps, including an
+// interactive `rebase -i`'s editor session. A second safegit process in the same
+// worktree waits (lock.acquireTimeoutSeconds) and then refuses with
+// exitcode.LockTimeout rather than running concurrently with a rebase.
+
 // RefLock represents an acquired lock on a git ref.
 type RefLock struct {
 	Ref      string
@@ -71,12 +116,35 @@ func lockDir(locksBaseDir, ref string) string {
 	return filepath.Join(locksBaseDir, "locks", filepath.Dir(ref))
 }
 
+// lockSuffix is the extension every lock file carries. A file under a locks/
+// subtree is a lock if and only if its name ends in this.
+const lockSuffix = ".lock"
+
 // lockPath returns the full path to the lock file for a ref.
 // e.g. refs/heads/main -> <locksBaseDir>/locks/refs/heads/main.lock
 func lockPath(locksBaseDir, ref string) string {
 	dir := lockDir(locksBaseDir, ref)
-	base := filepath.Base(ref) + ".lock"
+	base := filepath.Base(ref) + lockSuffix
 	return filepath.Join(dir, base)
+}
+
+// Path returns where the lock file for ref lives under locksBaseDir. Callers
+// that inspect or remove a lock by name -- `safegit unlock`, doctor -- resolve
+// it here rather than rebuilding the path themselves.
+func Path(locksBaseDir, ref string) string { return lockPath(locksBaseDir, ref) }
+
+// NameFromPath is Path's inverse: it turns an absolute lock-file path under
+// locksBaseDir back into the ref (or pseudo-ref) it locks, for display. A path
+// outside that subtree, or one that is not a lock file, yields "".
+func NameFromPath(locksBaseDir, path string) string {
+	rel, err := filepath.Rel(filepath.Join(locksBaseDir, "locks"), path)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return ""
+	}
+	if !IsLockFile(filepath.Base(rel)) {
+		return ""
+	}
+	return filepath.ToSlash(strings.TrimSuffix(rel, lockSuffix))
 }
 
 // Acquire attempts to acquire a lock on the given ref.
@@ -183,7 +251,7 @@ func Acquire(locksBaseDir, safegitDir, ref, op string, timeout time.Duration) (*
 // IsStale). started= is the same instant in human-readable form and carries no
 // decision.
 func tryCreate(path, op string) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-")
+	tmp, err := os.CreateTemp(filepath.Dir(path), publicationTempPrefix(filepath.Base(path)))
 	if err != nil {
 		return fmt.Errorf("creating temporary lock file: %w", err)
 	}
@@ -208,6 +276,35 @@ func tryCreate(path, op string) error {
 	// atomic "one winner" property O_CREAT|O_EXCL gives, and Acquire reads that
 	// error as "someone else holds it".
 	return os.Link(tmpName, path)
+}
+
+// publicationTempInfix is what tryCreate appends to a lock's own base name to
+// build the temporary sibling it publishes that lock from. os.CreateTemp then
+// appends random digits, so a temp name can never end in lockSuffix.
+const publicationTempInfix = ".tmp-"
+
+// publicationTempPrefix is the name prefix tryCreate gives that temporary
+// sibling: a leading dot (so the file is hidden and is not a lock by name)
+// followed by the lock's own base name and the infix.
+//
+// It exists so the writer and every reader agree on one spelling: doctor's lock
+// walk must never mistake one of these for a lock, and doctor's cleanup must be
+// able to recognize one that a kill between creation and publication left
+// behind.
+func publicationTempPrefix(lockBase string) string {
+	return "." + lockBase + publicationTempInfix
+}
+
+// IsLockFile reports whether name (a bare file name, not a path) names a lock.
+// It is the predicate every scan of a locks/ subtree uses.
+func IsLockFile(name string) bool {
+	return strings.HasSuffix(name, lockSuffix) && !IsPublicationTemp(name)
+}
+
+// IsPublicationTemp reports whether name (a bare file name, not a path) is a
+// lock-publication temporary sibling rather than a lock.
+func IsPublicationTemp(name string) bool {
+	return strings.HasPrefix(name, ".") && strings.Contains(name, lockSuffix+publicationTempInfix)
 }
 
 // writeLockContent writes the owner record into an open lock file.

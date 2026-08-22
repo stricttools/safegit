@@ -214,7 +214,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
 	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
-	lk, err := lock.Acquire(sharedDir, sgDir, "safegit/rewrite", "scrub-file", timeout)
+	lk, err := lock.Acquire(sharedDir, sgDir, lock.RewriteRef, "scrub-file", timeout)
 	if err != nil {
 		// The real error, not a fixed sentence: it names the ref and the
 		// process still holding it, which is the only thing that tells the
