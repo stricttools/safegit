@@ -70,10 +70,14 @@ func SafegitDir(gitDir string) string {
 	return filepath.Join(gitDir, "safegit")
 }
 
-// SharedSafegitDir returns the safegit directory under the common .git dir.
-// For normal repos this is identical to SafegitDir(gitDir). For worktrees it
-// returns <common-git-dir>/safegit so that lock files are shared across all
-// worktrees, ensuring proper serialization of ref updates.
+// SharedGitDir returns the COMMON git directory: the one every worktree of a
+// repository shares. For a normal repository it is gitDir itself; for a linked
+// worktree, whose git dir is <common>/worktrees/<name>, it is <common>.
+//
+// It is the anchor for everything that is repository-level policy rather than
+// checkout state -- the ref locks, and safegit's live hook store -- so that two
+// worktrees can never disagree about it. Git's own hook directory is common
+// too, which is why the pre-migration hook location is resolved from here.
 //
 // The parameter accepts either the git directory (.git) or the safegit
 // directory (.git/safegit); callers use both forms.
@@ -83,7 +87,7 @@ func SafegitDir(gitDir string) string {
 // relative is relative to THAT directory and is anchored there -- filepath.Abs,
 // which would resolve it against this process's own directory, is exactly the
 // wrong anchor and is not used.
-func SharedSafegitDir(ctx context.Context, gitDir string) string {
+func SharedGitDir(ctx context.Context, gitDir string) string {
 	// Normalize: some callers pass the safegit dir instead of the git dir.
 	actualGitDir := gitDir
 	if filepath.Base(gitDir) == "safegit" {
@@ -91,12 +95,23 @@ func SharedSafegitDir(ctx context.Context, gitDir string) string {
 	}
 	commonDir, err := git.CommonGitDirOf(ctx, actualGitDir)
 	if err != nil || commonDir == "" {
-		return filepath.Join(actualGitDir, "safegit")
+		return actualGitDir
 	}
 	if !filepath.IsAbs(commonDir) {
 		commonDir = filepath.Join(actualGitDir, commonDir)
 	}
-	return filepath.Join(filepath.Clean(commonDir), "safegit")
+	return filepath.Clean(commonDir)
+}
+
+// SharedSafegitDir returns the safegit directory under the common .git dir.
+// For normal repos this is identical to SafegitDir(gitDir). For worktrees it
+// returns <common-git-dir>/safegit so that lock files and the live hook store
+// are shared across all worktrees, ensuring proper serialization of ref updates
+// and one repository-wide answer to which hooks run.
+//
+// It takes the same parameter forms as SharedGitDir, whose resolution it is.
+func SharedSafegitDir(ctx context.Context, gitDir string) string {
+	return filepath.Join(SharedGitDir(ctx, gitDir), "safegit")
 }
 
 // IsInitialized reports whether this repository has a usable safegit data
@@ -236,15 +251,17 @@ func EnsureInitialized(ctx context.Context, gitDir string) error {
 
 // Uninstall removes safegit from a repository: the .git/safegit/ directory
 // entirely -- which since the hook store moved there takes the installed hooks
-// with it -- plus the shared lock directory in worktree setups, plus the two
-// safegit-owned names that may still be sitting in git's own hook directory
-// from before the move. Leaving those behind would keep an uninstalled tool's
-// checks running on every push with no .git/safegit/ left to explain where they
-// came from.
+// with it -- plus the repository-level state under the common git dir in
+// worktree setups (the shared locks and the live hook store, which is the one
+// pushes actually run), plus the two safegit-owned names that may still be
+// sitting in git's own hook directory from before the move. Leaving any of
+// those behind would keep an uninstalled tool's checks running on every push
+// with no .git/safegit/ left to explain where they came from.
 //
-// The COMMITTED hook store in the work tree is deliberately untouched: it is
-// part of the repository's content, shared with everyone who cloned it, and
-// removing it here would be an uncommitted deletion of somebody else's file.
+// The hook store the CHECKOUT provides (.safegit/hooks in the work tree) is
+// deliberately untouched: it is part of the repository's content, shared with
+// everyone who cloned it, and removing it here would be an uncommitted deletion
+// of somebody else's file.
 func Uninstall(ctx context.Context, gitDir string) error {
 	sgDir := SafegitDir(gitDir)
 	if _, err := os.Stat(sgDir); os.IsNotExist(err) {
@@ -253,11 +270,13 @@ func Uninstall(ctx context.Context, gitDir string) error {
 	if err := os.RemoveAll(sgDir); err != nil {
 		return err
 	}
-	sharedDir := SharedSafegitDir(ctx, gitDir)
-	if sharedDir != sgDir {
-		os.RemoveAll(filepath.Join(sharedDir, "locks"))
+	shared := SharedGitDir(ctx, gitDir)
+	if sharedDir := filepath.Join(shared, "safegit"); sharedDir != sgDir {
+		for _, name := range []string{"locks", "hooks"} {
+			os.RemoveAll(filepath.Join(sharedDir, name))
+		}
 	}
-	for _, legacy := range []string{hooks.LegacyFile(gitDir), hooks.LegacyDir(gitDir)} {
+	for _, legacy := range []string{hooks.LegacyFile(shared), hooks.LegacyDir(shared)} {
 		if err := os.RemoveAll(legacy); err != nil {
 			return err
 		}

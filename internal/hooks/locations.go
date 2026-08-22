@@ -11,12 +11,31 @@ import (
 
 // Origin says which store a hook location came from.
 //
-// The three are not interchangeable. A TRACKED hook is committed to the
-// repository, so everyone who clones it gets it and disabling one means
-// committing its deletion. A LOCAL hook lives in the tool-owned directory
-// inside the git dir and belongs to this checkout alone. A LEGACY hook is one
+// The three are not interchangeable. A TRACKED hook is repository-provided: it
+// sits in the checkout's .safegit/hooks, so everyone who clones the repository
+// gets it and disabling one means committing its deletion. A LOCAL hook lives
+// in the tool-owned directory under the common git dir and belongs to this
+// repository's own state, shared by every worktree of it. A LEGACY hook is one
 // still sitting where safegit used to keep them, in git's own .git/hooks --
 // discovery refuses to run from there, and `safegit hook migrate` relocates it.
+//
+// # Tracked membership is the directory, not git
+//
+// A location is TRACKED because it is IN .safegit/hooks on disk, never because
+// git tracks it: an uncommitted -- even gitignored -- executable file in that
+// directory runs on the next push exactly like a committed one. Probing
+// git-tracked-ness instead would make a hook an operator just wrote silently
+// invisible to `hook list` and to discovery while it kept running, which is a
+// worse failure than the one it would prevent.
+//
+// # The execution boundary
+//
+// `safegit push` executes the scripts in the checkout's .safegit/hooks, so
+// cloning a repository and pushing from that checkout runs the repository's
+// committed code. Execution happens only on push and on `safegit hook run` --
+// an operator action with push intent -- never on clone, fetch, checkout or any
+// inspection command, and `hook list` names every location with its origin
+// precisely so the set can be read before anything is pushed.
 type Origin string
 
 const (
@@ -26,14 +45,23 @@ const (
 )
 
 // Store names one repository's hook stores: its work tree (which holds the
-// committed store) and its git directory (which holds the local one and the
-// legacy location).
+// tracked store) and its COMMON git directory (which holds the live store and
+// the legacy location).
 //
 // Worktree is empty for a repository that has none -- a bare repository -- in
 // which case there is no tracked store to read.
 type Store struct {
+	// Worktree is this checkout's work tree. The tracked store is checkout
+	// content, so it is per-worktree by nature: a linked worktree runs the
+	// hooks ITS checkout has.
 	Worktree string
-	GitDir   string
+	// SharedGitDir is the repository's COMMON git directory, never a linked
+	// worktree's own -- repo.SharedGitDir is the resolution every caller uses.
+	// The live store is repository-level policy, exactly like the ref locks
+	// that already live under the same directory, so a hook installed from one
+	// worktree is the hook every worktree runs. Git's hook directory is common
+	// as well, which puts the legacy location here too.
+	SharedGitDir string
 }
 
 // Location is one file found in a hook store. It is a LOCATION and nothing
@@ -52,7 +80,9 @@ type Location struct {
 	Executable bool
 }
 
-// TrackedDir is the committed hook store inside the work tree.
+// TrackedDir is the repository-provided hook store inside the work tree. Its
+// membership is the directory itself: a file there runs whether or not git
+// tracks it (see Origin).
 func TrackedDir(worktree string) string {
 	if worktree == "" {
 		return ""
@@ -60,10 +90,14 @@ func TrackedDir(worktree string) string {
 	return filepath.Join(worktree, ".safegit", "hooks")
 }
 
-// LocalDir is the tool-owned hook store inside the git directory. It is where
-// `hook install` writes and where discovery runs hooks from.
-func LocalDir(gitDir string) string {
-	return filepath.Join(gitDir, "safegit", "hooks")
+// LocalDir is the tool-owned live hook store under the COMMON git directory. It
+// is where `hook install` writes and where discovery runs hooks from.
+//
+// The argument is the shared git dir (repo.SharedGitDir), never a linked
+// worktree's own: the store is one repository-wide answer, alongside the ref
+// locks in the same .git/safegit.
+func LocalDir(sharedGitDir string) string {
+	return filepath.Join(sharedGitDir, "safegit", "hooks")
 }
 
 // LegacyFile and LegacyDir are the two names safegit used to keep its hooks
@@ -71,13 +105,20 @@ func LocalDir(gitDir string) string {
 // are the ONLY safegit-owned names there -- everything else in .git/hooks is
 // git's own -- which is what lets `hook migrate` relocate them unconditionally,
 // with no content sniffing.
-func LegacyFile(gitDir string) string {
-	return filepath.Join(gitDir, "hooks", "pre-pre-push")
+//
+// The argument is the shared git dir for the same reason git's own hook
+// directory is common in a linked worktree: there is one such location per
+// repository, and every worktree must reach the same one. It is deliberately
+// NOT git's resolved hook directory (core.hooksPath): safegit only ever wrote
+// these two names into <common>/hooks, so a repository that redirects
+// core.hooksPath still has its legacy hooks here.
+func LegacyFile(sharedGitDir string) string {
+	return filepath.Join(sharedGitDir, "hooks", "pre-pre-push")
 }
 
 // LegacyDir is the directory half of the legacy location (see LegacyFile).
-func LegacyDir(gitDir string) string {
-	return filepath.Join(gitDir, "hooks", "pre-pre-push.d")
+func LegacyDir(sharedGitDir string) string {
+	return filepath.Join(sharedGitDir, "hooks", "pre-pre-push.d")
 }
 
 // Enumerate is the single authority for where hooks live.
@@ -104,13 +145,13 @@ func Enumerate(s Store) ([]Location, error) {
 		out = append(out, found...)
 	}
 
-	found, err := walkStore(LocalDir(s.GitDir), OriginLocal)
+	found, err := walkStore(LocalDir(s.SharedGitDir), OriginLocal)
 	if err != nil {
 		return nil, err
 	}
 	out = append(out, found...)
 
-	legacy, err := Legacy(s.GitDir)
+	legacy, err := Legacy(s.SharedGitDir)
 	if err != nil {
 		return nil, err
 	}
@@ -118,23 +159,23 @@ func Enumerate(s Store) ([]Location, error) {
 }
 
 // Legacy enumerates the pre-migration location alone: the `pre-pre-push` file
-// and everything under `pre-pre-push.d/` in git's own hook directory. Rel is
-// relative to that directory, so it reads the same as the corresponding entry
-// in a live store.
-func Legacy(gitDir string) ([]Location, error) {
-	base := filepath.Join(gitDir, "hooks")
+// and everything under `pre-pre-push.d/` in git's own hook directory, which is
+// the COMMON one (see LegacyFile). Rel is relative to that directory, so it
+// reads the same as the corresponding entry in a live store.
+func Legacy(sharedGitDir string) ([]Location, error) {
+	base := filepath.Join(sharedGitDir, "hooks")
 	var out []Location
 
-	if info, err := os.Stat(LegacyFile(gitDir)); err == nil && !info.IsDir() {
+	if info, err := os.Stat(LegacyFile(sharedGitDir)); err == nil && !info.IsDir() {
 		out = append(out, Location{
-			Path:       LegacyFile(gitDir),
+			Path:       LegacyFile(sharedGitDir),
 			Rel:        "pre-pre-push",
 			Origin:     OriginLegacy,
 			Executable: isExecutable(info),
 		})
 	}
 
-	nested, err := walkStore(LegacyDir(gitDir), OriginLegacy)
+	nested, err := walkStore(LegacyDir(sharedGitDir), OriginLegacy)
 	if err != nil {
 		return nil, err
 	}

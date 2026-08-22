@@ -152,7 +152,7 @@ func TestEnumerateBareRepoHasNoTrackedStore(t *testing.T) {
 	gitDir := setupGitDir(t)
 	writeFileMode(t, filepath.Join(LocalDir(gitDir), "pre-pre-push"), "#!/bin/sh\n", 0o755)
 
-	locs, err := Enumerate(Store{GitDir: gitDir})
+	locs, err := Enumerate(Store{SharedGitDir: gitDir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,8 +229,8 @@ func TestDiscoverMultiResolvesTrackedStoresAcrossTheCascade(t *testing.T) {
 	writeFileMode(t, filepath.Join(LocalDir(childGitDir), "pre-pre-push"), "#!/bin/sh\nexit 0\n", 0o755)
 
 	got, err := DiscoverMulti([]Store{
-		{Worktree: parentWorktree, GitDir: parentGitDir},
-		{Worktree: childWorktree, GitDir: childGitDir},
+		{Worktree: parentWorktree, SharedGitDir: parentGitDir},
+		{Worktree: childWorktree, SharedGitDir: childGitDir},
 	})
 	if err != nil {
 		t.Fatal(err)
