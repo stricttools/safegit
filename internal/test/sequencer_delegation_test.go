@@ -335,6 +335,137 @@ func TestDelegatedConclusionStopsAtTheNextConflict(t *testing.T) {
 	}
 }
 
+// newThreeStepQueue parks a repository in a cherry-pick queue of three
+// commands whose FIRST and SECOND both conflict, so concluding the first stops
+// git again with one commit made and one command still queued.
+//
+// It is the shape a mid-queue stop needs and the two-command fixture cannot
+// give: there is a commit git created, a conflict it stopped on, and a further
+// command behind that one.
+func newThreeStepQueue(t *testing.T) string {
+	t.Helper()
+	dir := newRepo(t)
+
+	testutil.WriteFile(t, dir, "c.txt", "base\n")
+	testutil.WriteFile(t, dir, "d.txt", "base\n")
+	safegitCommitEnv(t, dir, conclusionSession, "base", "c.txt", "d.txt")
+
+	testutil.Git(t, dir, "branch", "side")
+	testutil.WriteFile(t, dir, "c.txt", "main c\n")
+	testutil.WriteFile(t, dir, "d.txt", "main d\n")
+	safegitCommitEnv(t, dir, conclusionSession, "main edits both", "c.txt", "d.txt")
+
+	testutil.Git(t, dir, "switch", "side")
+	testutil.WriteFile(t, dir, "c.txt", "side c\n")
+	first := safegitCommitEnv(t, dir, conclusionSession, "side c", "c.txt")
+	testutil.WriteFile(t, dir, "d.txt", "side d\n")
+	second := safegitCommitEnv(t, dir, conclusionSession, "side d", "d.txt")
+	testutil.WriteFile(t, dir, "e.txt", "side e\n")
+	third := safegitCommitEnv(t, dir, conclusionSession, "side e", "e.txt")
+	testutil.Git(t, dir, "switch", "main")
+
+	if _, stderr, code := runSafegitEnv(t, dir, conclusionSession, "cherry-pick", first, second, third); code == 0 {
+		t.Fatalf("the fixture needs the queue to stop on its first command: %s", stderr)
+	}
+	return dir
+}
+
+// TestDelegatedConclusionReportsTheCommitsItMadeBeforeStoppingAgain: a
+// conclusion that stops on the queue's NEXT conflict still created commits, and
+// said nothing about them at all -- the text report was skipped and the
+// envelope carried a null payload at exit 1.
+//
+// The commits exist either way. A caller that has to re-read the branch to find
+// out what a safegit command did to it is being told less than safegit knows.
+func TestDelegatedConclusionReportsTheCommitsItMadeBeforeStoppingAgain(t *testing.T) {
+	t.Run("the text report", func(t *testing.T) {
+		dir := newThreeStepQueue(t)
+		before := testutil.Rev(t, dir, "HEAD")
+
+		stdout, stderr, code := runSafegitEnv(t, dir, conclusionSession,
+			"cherry-pick-continue", "--resolve", "c.txt=theirs")
+		if code == 0 {
+			t.Fatalf("the queue's second command conflicts, so this must exit nonzero:\n%s", stderr)
+		}
+		if head := testutil.Rev(t, dir, "HEAD"); head == before {
+			t.Fatal("the conclusion committed nothing, so there is nothing to report")
+		}
+
+		if !strings.Contains(stdout, "1 commit(s) created") {
+			t.Errorf("the report does not say how many commits git made before stopping:\n%s", stdout)
+		}
+		if !strings.Contains(stdout, "NOT finished") {
+			t.Errorf("the report does not say the queue is unfinished:\n%s", stdout)
+		}
+		// The delegation's cost covers the commit that WAS made.
+		if !strings.Contains(stderr, "these commits are git's") {
+			t.Errorf("the report does not say who authored the commit it made:\n%s", stderr)
+		}
+		// And the way out of the state it left, which was already there.
+		if !strings.Contains(stderr, "cherry-pick-continue") {
+			t.Errorf("the report does not name the command that concludes the new stop:\n%s", stderr)
+		}
+	})
+
+	t.Run("the payload", func(t *testing.T) {
+		dir := newThreeStepQueue(t)
+
+		stdout, stderr, code := runSafegitEnv(t, dir, conclusionSession,
+			"--json", "cherry-pick-continue", "--resolve", "c.txt=theirs")
+		if code == 0 {
+			t.Fatalf("the queue's second command conflicts, so this must exit nonzero:\n%s", stderr)
+		}
+
+		var envelope struct {
+			ExitCode int                    `json:"exit_code"`
+			Payload  map[string]interface{} `json:"payload"`
+		}
+		if err := json.Unmarshal([]byte(stdout), &envelope); err != nil {
+			t.Fatalf("the envelope is not JSON (%v):\n%s", err, stdout)
+		}
+		if envelope.ExitCode == 0 {
+			t.Errorf("the envelope reports exit_code 0 for a run that stopped on a conflict:\n%s", stdout)
+		}
+		p := envelope.Payload
+		if p == nil {
+			t.Fatalf("the envelope carries no payload for a run that created commits:\n%s", stdout)
+		}
+		if delegated, _ := p["queue_delegated"].(bool); !delegated {
+			t.Errorf("queue_delegated = %v, want true", p["queue_delegated"])
+		}
+		if stopped, _ := p["stopped_again"].(bool); !stopped {
+			t.Errorf("stopped_again = %v, want true", p["stopped_again"])
+		}
+		if cleared, _ := p["state_cleared"].(bool); cleared {
+			t.Errorf("state_cleared = %v, but git stopped again and its state is still in place", p["state_cleared"])
+		}
+		if n, _ := p["commits_created"].(float64); int(n) != 1 {
+			t.Errorf("commits_created = %v, want 1 (the concluded step)", p["commits_created"])
+		}
+		if head, _ := p["head"].(string); head != testutil.Rev(t, dir, "HEAD") {
+			t.Errorf("head = %q, want the branch tip %s", head, testutil.Rev(t, dir, "HEAD"))
+		}
+	})
+
+	// The queue still composes with itself afterwards: the report is an
+	// addition to the stopped state, not a change to it.
+	t.Run("it still continues", func(t *testing.T) {
+		dir := newThreeStepQueue(t)
+		if _, stderr, code := runSafegitEnv(t, dir, conclusionSession,
+			"cherry-pick-continue", "--resolve", "c.txt=theirs"); code == 0 {
+			t.Fatalf("the fixture needs the second stop: %s", stderr)
+		}
+		if _, stderr, code := runSafegitEnv(t, dir, conclusionSession,
+			"cherry-pick-continue", "--resolve", "d.txt=theirs"); code != 0 {
+			t.Fatalf("the second delegated conclusion failed (code %d): %s", code, stderr)
+		}
+		assertNoSequencerResidue(t, dir, "the finished three-command queue")
+		if !testutil.Contains(testutil.TreePaths(t, dir, "HEAD"), "e.txt") {
+			t.Error("the queue's third command did not run")
+		}
+	})
+}
+
 // TestDelegatedConclusionRefusesWhatItCannotHonor: -m, --trailer and --dry-run
 // have no honest meaning when git writes the commits, so each is refused
 // naming its reason rather than silently dropped.

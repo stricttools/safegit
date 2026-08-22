@@ -160,18 +160,32 @@ func delegateQueuedSequence(
 		return exitcode.General
 	}
 
-	if runErr != nil {
-		// git said what went wrong on its own stderr. What safegit owes on top
-		// is the state the repository is in now, which the queue's next stop
-		// has changed.
-		announceWayOut(flags, gitDir)
-		return passthroughExitCode(runErr)
-	}
-
+	// Read BEFORE the two outcomes part company: what git left in flight is a
+	// fact about the repository either way, and the stopped-again path reports
+	// it exactly as the finished one does.
 	remaining, err := sequencer.Read(gitDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: re-reading git's in-flight operation state after the conclusion: %v\n", err)
 		return exitcode.General
+	}
+
+	if runErr != nil {
+		// git said what went wrong on its own stderr, and it said nothing about
+		// the commits it MADE first: a queue that stops on its next conflict
+		// has still concluded the step it was given. Reporting them is not
+		// optional -- they are on the branch, they are git's, and a caller that
+		// has to re-read the ref to discover them was told less than safegit
+		// knows. The way out of the state git left comes after, from the single
+		// way-out authority.
+		reportDelegated(flags, op, delegatedOutcome{
+			head:         after,
+			created:      created,
+			declared:     declared,
+			stateCleared: !remaining.InProgress(),
+			stoppedAgain: true,
+		})
+		announceWayOut(flags, gitDir)
+		return passthroughExitCode(runErr)
 	}
 
 	// git removes its own state when a queue finishes, but it leaves
@@ -216,6 +230,11 @@ type delegatedOutcome struct {
 	// git removes its own state when the queue finishes and leaves it when the
 	// queue stops again.
 	stateCleared bool
+	// stoppedAgain reports that git's own `--continue` ended NONZERO because
+	// the queue stopped on a further conflict. It is what makes the report
+	// readable alongside a nonzero exit: head and created then describe the
+	// commits git made BEFORE it stopped.
+	stoppedAgain bool
 }
 
 // countCommitsBetween reports how many commits the branch gained. A count that
