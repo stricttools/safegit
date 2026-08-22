@@ -387,13 +387,13 @@
 			kwargsStrSlice(kwargs["resolve"]),
 			optStr(kwargs["resolve_file"], ""),
 		)  | return strictcli.Exit(runContinue(gf,
-   sequencer_markers.go:95  return in verifyMarkers  code=exitcode.General  | return exitcode.General
-   sequencer_markers.go:107  return in verifyMarkers  code=exitcode.General  | return exitcode.General
-   sequencer_markers.go:112  return in verifyMarkers  code=exitcode.General  | return exitcode.General
-   sequencer_markers.go:118  return in verifyMarkers  code=exitcode.General  | return exitcode.General
-   sequencer_markers.go:129  return in verifyMarkers  code=exitcode.General  | return exitcode.General
-   sequencer_markers.go:135  return in verifyMarkers  code=op.refuseSurvivingMarkers(violations)  | return op.refuseSurvivingMarkers(violations)
-   sequencer_markers.go:495  return in refuseSurvivingMarkers  code=exitcode.ConclusionMarkerSurvived  | return exitcode.ConclusionMarkerSurvived
+   sequencer_markers.go:98  return in verifyMarkers  code=exitcode.General  | return exitcode.General
+   sequencer_markers.go:110  return in verifyMarkers  code=exitcode.General  | return exitcode.General
+   sequencer_markers.go:115  return in verifyMarkers  code=exitcode.General  | return exitcode.General
+   sequencer_markers.go:121  return in verifyMarkers  code=exitcode.General  | return exitcode.General
+   sequencer_markers.go:132  return in verifyMarkers  code=exitcode.General  | return exitcode.General
+   sequencer_markers.go:138  return in verifyMarkers  code=op.refuseSurvivingMarkers(violations)  | return op.refuseSurvivingMarkers(violations)
+   sequencer_markers.go:507  return in refuseSurvivingMarkers  code=exitcode.ConclusionMarkerSurvived  | return exitcode.ConclusionMarkerSurvived
    undo.go:60  die in runUndo  code=exitcode.Usage  | die(exitcode.Usage, fmt.Sprintf("--count must be positive, got %d", count))
    undo.go:65  die in runUndo  code=exitcode.NotInitialized  | die(exitcode.NotInitialized, err.Error())
    undo.go:72  die in runUndo  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("loading config: %v", err))
