@@ -713,6 +713,13 @@ existing entries are never rewritten.
 
 ## Queued small items (dispatch at the next natural gap)
 
+- doctor --action uninstall from an UNINITIALIZED linked worktree
+  refuses ("nothing to remove") even when the repository has shared
+  state — the initialized probe keys on the per-worktree dir while
+  uninstall now removes the shared store. Decide: uninstall is a
+  repository operation; key its probe on the shared dir. (Surfaced by
+  the Phase 5 remediation; pre-existing.)
+
 - `repo.SaveConfig` / `SaveConfigTo` still plain-write `config.json`
   (the race writeFileAtomic closed on Init). First check whether they
   have any production caller (config set mints through the effects
