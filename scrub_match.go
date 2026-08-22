@@ -547,6 +547,10 @@ func scrubMatchExecute(
 		}
 		if !anySubMatches {
 			infof(flags, "0 commits contained the pattern. Nothing was rewritten and no history changed.\n")
+			// A search that matched nothing is a successful ANSWER, and machine
+			// mode has to be able to read it: the payload states the zeroes
+			// rather than leaving the envelope's payload absent.
+			flags.payload(nothingRewrittenMatchPayload(ctx, pattern))
 			return 0
 		}
 	}
@@ -651,6 +655,10 @@ func scrubMatchExecute(
 	if blobMatchCount == 0 && commitMatchCount == 0 && tagMatchCount == 0 &&
 		totalSubBlobCount == 0 && totalSubCommitCount == 0 && totalSubTagCount == 0 {
 		infof(flags, "0 commits contained the pattern within scope. Nothing was rewritten and no history changed.\n")
+		// A search that matched nothing is a successful ANSWER, and machine mode
+		// has to be able to read it: the payload states the zeroes rather than
+		// leaving the envelope's payload absent.
+		flags.payload(nothingRewrittenMatchPayload(ctx, pattern))
 		return 0
 	}
 
@@ -985,8 +993,14 @@ func scrubMatchExecute(
 		exitCode = exitcode.RewriteIncomplete
 	}
 
-	// No rewrite was performed (e.g., no parent matches but submodules had them).
+	// No PARENT rewrite was performed: the parent repository held nothing to
+	// change while a submodule did, and the submodule's rewrite was verified
+	// and published on its own. The command succeeded, so machine mode carries
+	// the payload that says what happened -- an envelope with an absent payload
+	// is indistinguishable, from the outside, from a command with nothing to
+	// report at all.
 	if result == nil {
+		flags.payload(submoduleOnlyMatchPayload(ctx, pattern, subScrubResults, subResults, subSyncSkipped))
 		return exitCode
 	}
 
@@ -1043,6 +1057,82 @@ func scrubMatchExecute(
 	printRotationNotice(flags, recheckCommandForPatterns(pattern))
 
 	return exitCode
+}
+
+// nothingRewrittenMatchPayload is the `scrub match` payload for a search that
+// matched nothing anywhere: every count is zero, old_head is where the
+// repository still sits, and new_head is ABSENT because nothing was rewritten.
+func nothingRewrittenMatchPayload(ctx context.Context, pattern string) ScrubMatchResult {
+	oldHead, _ := git.RevParse(ctx, "HEAD")
+	return ScrubMatchResult{
+		Version:          1,
+		DryRun:           false,
+		Pattern:          pattern,
+		CommitsRewritten: intPtr(0),
+		BlobsReplaced:    intPtr(0),
+		MessagesModified: intPtr(0),
+		TagsRewritten:    intPtr(0),
+		OldHead:          oldHead,
+	}
+}
+
+// submoduleOnlyMatchPayload is the `scrub match` payload for the branch where
+// the parent repository had nothing to rewrite and one or more submodules did.
+//
+// Every figure is the submodules' own, because they are the only figures this
+// run produced. old_head is the parent's head, which the run did not move;
+// new_head is left ABSENT rather than echoing it, because a new_head equal to
+// old_head reads as "the parent was rewritten and arrived where it already was".
+func submoduleOnlyMatchPayload(
+	ctx context.Context,
+	pattern string,
+	subScrubResults []submoduleScrubResult,
+	subResults []*RewriteResult,
+	syncSkipped bool,
+) ScrubMatchResult {
+	oldHead, _ := git.RevParse(ctx, "HEAD")
+
+	commits, blobs, messages := 0, 0, 0
+	for _, sr := range subScrubResults {
+		commits += sr.rewrittenCount
+		blobs += len(sr.blobMap)
+		messages += sr.messagesModified
+	}
+
+	tags := []TagRewrite{}
+	preRewriteRemotes := map[string]string{}
+	tagsRewritten := 0
+	cleanupOK := true
+	var cleanupErrors []string
+	for _, sr := range subResults {
+		tags = append(tags, sr.TagRewrites...)
+		tags = append(tags, sr.AnnotationTagRewrites...)
+		tagsRewritten += sr.TagsRewrittenCount
+		for refname, sha := range sr.PreRewriteRemotes {
+			preRewriteRemotes[refname] = sha
+		}
+		if !sr.CleanupOK {
+			cleanupOK = false
+		}
+		cleanupErrors = append(cleanupErrors, sr.CleanupErrors...)
+	}
+
+	return ScrubMatchResult{
+		Version:           1,
+		DryRun:            false,
+		Pattern:           pattern,
+		Rewrites:          map[string]string{},
+		Tags:              tags,
+		CommitsRewritten:  intPtr(commits),
+		BlobsReplaced:     intPtr(blobs),
+		MessagesModified:  intPtr(messages),
+		TagsRewritten:     intPtr(tagsRewritten),
+		OldHead:           oldHead,
+		PreRewriteRemotes: preRewriteRemotes,
+		CleanupOK:         boolPtr(cleanupOK),
+		CleanupErrors:     nonNilStrings(cleanupErrors),
+		SyncSkipped:       syncSkipped,
+	}
 }
 
 // scrubMatchMode names which substitution a `scrub match` elected, for the
