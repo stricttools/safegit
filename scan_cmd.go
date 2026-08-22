@@ -39,6 +39,11 @@ type ScanMatchJSON struct {
 	Line       int    `json:"line"`
 	Reachable  bool   `json:"reachable"`
 	Context    string `json:"context"`
+	// InGitDir says Path is relative to the git directory rather than to the
+	// repository root. It is present only on file matches, and only on the ones
+	// inside the git dir, so a reader never has to guess which coordinate
+	// system a path is in.
+	InGitDir bool `json:"in_git_dir,omitempty"`
 }
 
 // scanMatchSchema is the declared shape of one match inside the scan payload.
@@ -54,6 +59,7 @@ var scanMatchSchema = strictcli.SchemaObject(
 		"line":        strictcli.SchemaType("integer"),
 		"reachable":   strictcli.SchemaType("boolean"),
 		"context":     strictcli.SchemaType("string"),
+		"in_git_dir":  strictcli.SchemaType("boolean"),
 	},
 	[]string{"object_type", "line", "reachable", "context"},
 	false,
@@ -437,6 +443,7 @@ func matchesToJSON(matches []scan.Match) []ScanMatchJSON {
 			Line:       m.Line,
 			Reachable:  m.Reachable,
 			Context:    m.Context,
+			InGitDir:   m.InGitDir,
 		}
 	}
 	return out
