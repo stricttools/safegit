@@ -289,7 +289,7 @@ func TestBuildRecipeBlobMapIndependentNonOverlapping(t *testing.T) {
 			{Pattern: "bbb", Replace: &replaceB},
 			{Pattern: "ccc", Replace: &replaceC},
 		},
-		Patterns: compilePatterns(t, "aaa", "bbb", "ccc"),
+		Patterns:  compilePatterns(t, "aaa", "bbb", "ccc"),
 		TopoOrder: []int{0, 1, 2},
 	}
 
