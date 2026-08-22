@@ -254,27 +254,23 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		}
 	}
 
-	var hookResults []hooks.HookResult
-	if !noPrePrePush && !flags.dryRun {
-		timeoutSec := cfg.Hooks.PrePrePush.TimeoutSeconds
-		if timeoutSec <= 0 {
-			timeoutSec = 1800
-		}
-
-		hookEnv := []string{
-			"SAFEGIT_REMOTE_NAME=" + remote,
-			"SAFEGIT_REMOTE_URL=" + remoteURL,
-			"SAFEGIT_PHASE=pre-pre-push",
-			fmt.Sprintf("SAFEGIT_HOOK_TIMEOUT_S=%d", timeoutSec),
-		}
-
-		// Discover hooks: if inside a submodule, cascade from parent first.
-		// Each repository contributes a STORE -- work tree plus SHARED git dir
-		// -- so the hooks the parent's checkout provides participate in the
-		// cascade too, and a push from a linked worktree runs the same live
-		// store as one from the main worktree.
+	// Discovery is separate from execution, and a dry run does it too.
+	//
+	// Finding which hooks a push would run reads the filesystem and mutates
+	// nothing, and the two refusals it can produce -- hooks left in the
+	// pre-migration location (24), a committed hook without its execute bit
+	// (25) -- are verdicts about the CHECKOUT that hold whether or not anything
+	// is pushed. Skipping discovery under --dry-run made a preview report
+	// success for a push that could only ever exit 24 or 25, which is the one
+	// thing a preview may never do.
+	//
+	// If inside a submodule, the discovery cascades from the parent first. Each
+	// repository contributes a STORE -- work tree plus SHARED git dir -- so the
+	// hooks the parent's checkout provides participate too, and a push from a
+	// linked worktree runs the same live store as one from the main worktree.
+	var hookPaths []string
+	if !noPrePrePush {
 		own := hooks.Store{Worktree: flags.root.resolve(), SharedGitDir: repo.SharedGitDir(ctx, gitDir)}
-		var hookPaths []string
 		parent, isSubmodule := submodule.DetectParent(ctx)
 		if isSubmodule {
 			if flags.verbose {
@@ -289,6 +285,21 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		}
 		if err != nil {
 			return hookDiscoveryExit(err)
+		}
+	}
+
+	var hookResults []hooks.HookResult
+	if !noPrePrePush && !flags.dryRun {
+		timeoutSec := cfg.Hooks.PrePrePush.TimeoutSeconds
+		if timeoutSec <= 0 {
+			timeoutSec = 1800
+		}
+
+		hookEnv := []string{
+			"SAFEGIT_REMOTE_NAME=" + remote,
+			"SAFEGIT_REMOTE_URL=" + remoteURL,
+			"SAFEGIT_PHASE=pre-pre-push",
+			fmt.Sprintf("SAFEGIT_HOOK_TIMEOUT_S=%d", timeoutSec),
 		}
 
 		hookResults, err = hooks.RunAll(ctx, hookPaths, hookStdin, timeoutSec, hookEnv)
