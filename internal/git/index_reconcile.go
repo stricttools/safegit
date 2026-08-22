@@ -247,12 +247,18 @@ func readIndexSlots(ctx context.Context) ([]indexSlot, error) {
 // readTreeEntries reads every path a commit-ish's tree holds, recursively.
 // An empty treeish means "no tip at all" and yields an empty set, which makes
 // every index slot delta -- the root-commit case.
+//
+// --full-tree is mandatory for the same reason it is on LsTreeAll: without it
+// git resolves the listing against the process working directory PREFIX, so
+// from a subdirectory the reconciler would compare the index against that
+// subdirectory's entries with the prefix stripped and read every path outside
+// it as a delta.
 func readTreeEntries(ctx context.Context, treeish string) (map[string]treeEntry, error) {
 	entries := make(map[string]treeEntry)
 	if treeish == "" {
 		return entries, nil
 	}
-	out, _, err := Run(ctx, "ls-tree", "-r", "-z", treeish)
+	out, _, err := Run(ctx, "ls-tree", "--full-tree", "-r", "-z", treeish)
 	if err != nil {
 		return nil, err
 	}
