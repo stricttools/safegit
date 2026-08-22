@@ -122,7 +122,7 @@ func orEmpty(list []string) []string {
 	return list
 }
 
-func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, trailers []string, files []string) {
+func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, trailers []string, files []string, hunks []string) {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -143,7 +143,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 			die(exitcode.Usage, "-F cannot be used with --amend")
 		}
 
-		runCommitAmend(flags, gitDir, messages, branch, trailers, files)
+		runCommitAmend(flags, gitDir, messages, branch, trailers, files, hunks)
 		return
 	}
 
@@ -159,13 +159,16 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	if len(messages) == 0 {
 		die(exitcode.Usage, "commit message required (-m or -F)")
 	}
-	if len(files) == 0 && !allowEmpty {
-		die(exitcode.Usage, "no files specified (use -- file1 file2 ...)")
+	if len(files) == 0 && len(hunks) == 0 && !allowEmpty {
+		die(exitcode.Usage, "no files specified (use -- file1 file2 ... or --hunks path:1,3)")
 	}
 
 	msg := strings.Join(messages, "\n")
 
-	fileSpecs := parseFileSpecs(files)
+	fileSpecs, err := buildFileSpecs(files, hunks)
+	if err != nil {
+		die(exitcode.Usage, err.Error())
+	}
 
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
@@ -272,7 +275,7 @@ func recordCommitRefUpdate(flags globalFlags, ref, newSHA, oldSHA string) {
 	_, _ = flags.effects().Run(argv, strictcli.Resource("ref:"+ref))
 }
 
-func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch string, trailers []string, files []string) {
+func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch string, trailers []string, files []string, hunks []string) {
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
@@ -289,14 +292,17 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 
 	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg}
 
-	if len(files) > 0 {
+	if len(files) > 0 || len(hunks) > 0 {
 		// Amend: add new files to the tip commit
 		var msg string
 		if len(messages) > 0 {
 			msg = strings.Join(messages, "\n")
 		}
 
-		fileSpecs := parseFileSpecs(files)
+		fileSpecs, err := buildFileSpecs(files, hunks)
+		if err != nil {
+			die(exitcode.Usage, err.Error())
+		}
 
 		if flags.verbose {
 			paths := make([]string, len(fileSpecs))

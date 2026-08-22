@@ -184,9 +184,9 @@ func TestCommitDryRunHunkPathLeavesObjectStoreUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dryPurityAssertUntouched(t, dir, "commit --dry-run with a hunk spec", func() {
+	dryPurityAssertUntouched(t, dir, "commit --dry-run with a hunk selection", func() {
 		stdout, stderr, code := runSafegit(t, dir,
-			"--dry-run", "commit", "-m", "preview hunks", "--", "hunked.txt:1")
+			"--dry-run", "commit", "-m", "preview hunks", "--hunks", "hunked.txt:1")
 		if code != 0 {
 			t.Fatalf("hunk dry-run commit failed (%d): stdout=%s stderr=%s", code, stdout, stderr)
 		}

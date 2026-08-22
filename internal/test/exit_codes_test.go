@@ -151,7 +151,7 @@ func TestCommitHunkSpecOnBinaryFileIsTyped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "commit", "-m", "hunk of a binary file", "--", "blob.bin:1")
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "commit", "-m", "hunk of a binary file", "--hunks", "blob.bin:1")
 	if code != exitcode.BinaryHunkSpec {
 		t.Errorf("a hunk spec on a binary file exited %d, want %d (BinaryHunkSpec); stderr: %s",
 			code, exitcode.BinaryHunkSpec, stderr)
@@ -175,7 +175,7 @@ func TestAmendHunkSpecOnBinaryFileIsTyped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "commit", "--amend", "-m", "amend a binary hunk", "--", "blob.bin:1")
+	_, stderr, code := runSafegitEnv(t, dir, scrubEnv, "commit", "--amend", "-m", "amend a binary hunk", "--hunks", "blob.bin:1")
 	if code != exitcode.BinaryHunkSpec {
 		t.Errorf("an --amend hunk spec on a binary file exited %d, want %d (BinaryHunkSpec); stderr: %s",
 			code, exitcode.BinaryHunkSpec, stderr)

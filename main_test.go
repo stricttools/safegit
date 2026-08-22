@@ -48,42 +48,76 @@ func TestGlobalsToFlagsJSONDoesNotImplyApproval(t *testing.T) {
 	}
 }
 
-func TestIsHunkSpec(t *testing.T) {
+// TestParseHunkSelection replaces the old TestIsHunkSpec, which pinned the
+// disk-probing grammar's first stage: a predicate over the tail of a positional
+// argument, asking whether it "looked like" a hunk spec. Nothing asks that any
+// more. A hunk selection is announced by the flag it arrives on, and the only
+// question left is what one element of that flag means -- which is what this
+// pins, including the property that makes a colon in a filename harmless: the
+// split is on the LAST colon, so everything before it is the path, verbatim.
+func TestParseHunkSelection(t *testing.T) {
 	tests := []struct {
-		input string
-		want  bool
+		name      string
+		input     string
+		wantPath  string
+		wantHunks []int
+		wantErr   bool
 	}{
-		{"1,3,5", true},
-		{"2-4", true},
-		{"1", true},
-		{"10,20,30", true},
-		{"1-3,5-7", true},
-		{"", false},
-		{"abc", false},
-		{"1.2", false},
-		{"1,a", false},
-		{"hello", false},
-		{" ", false},
-		{"1 2", false},
+		{name: "single hunk", input: "file.txt:1", wantPath: "file.txt", wantHunks: []int{1}},
+		{name: "list", input: "file.txt:1,3,5", wantPath: "file.txt", wantHunks: []int{1, 3, 5}},
+		{name: "range", input: "src/main.go:2-4", wantPath: "src/main.go", wantHunks: []int{2, 3, 4}},
+		{name: "mixed list and range", input: "a.go:1-3,5-7", wantPath: "a.go", wantHunks: []int{1, 2, 3, 5, 6, 7}},
+		{name: "path containing a colon splits on the last one", input: "sprint:1:2,3", wantPath: "sprint:1", wantHunks: []int{2, 3}},
+		{name: "path that looks like a hunk spec is still a path", input: "1,2:3", wantPath: "1,2", wantHunks: []int{3}},
+		{name: "no colon at all", input: "file.txt", wantErr: true},
+		{name: "no path before the colon", input: ":1,3", wantErr: true},
+		{name: "empty selection", input: "file.txt:", wantErr: true},
+		{name: "non-numeric selection", input: "file.txt:abc", wantErr: true},
+		{name: "decimal selection", input: "file.txt:1.2", wantErr: true},
+		{name: "spaced selection", input: "file.txt:1 2", wantErr: true},
 	}
 
 	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := isHunkSpec(tt.input)
-			if got != tt.want {
-				t.Errorf("isHunkSpec(%q) = %v, want %v", tt.input, got, tt.want)
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := parseHunkSelection(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("parseHunkSelection(%q) = %+v, want an error", tt.input, got)
+				}
+				// The flag's ValidateFn is the same parser, so a refusal here
+				// is a refusal at parse time rather than inside a handler.
+				if validateHunkSelection(tt.input) == nil {
+					t.Errorf("validateHunkSelection(%q) accepted what parseHunkSelection rejected", tt.input)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("parseHunkSelection(%q) failed: %v", tt.input, err)
+			}
+			if got.Path != tt.wantPath {
+				t.Errorf("parseHunkSelection(%q).Path = %q, want %q", tt.input, got.Path, tt.wantPath)
+			}
+			if !reflect.DeepEqual(got.Hunks, tt.wantHunks) {
+				t.Errorf("parseHunkSelection(%q).Hunks = %v, want %v", tt.input, got.Hunks, tt.wantHunks)
+			}
+			if err := validateHunkSelection(tt.input); err != nil {
+				t.Errorf("validateHunkSelection(%q) rejected what parseHunkSelection accepted: %v", tt.input, err)
 			}
 		})
 	}
 }
 
-func TestParseFileSpecs(t *testing.T) {
-	// parseFileSpecs calls fileExists internally; for paths that don't exist
-	// on disk it will parse hunk suffixes normally.
+// TestBuildFileSpecs replaces the old TestParseFileSpecs, whose whole subject
+// was a positional argument being reinterpreted as path-plus-hunks. It cannot
+// be: a positional path is literal, always, and the cases below pin that
+// alongside the two contradictions the combination refuses.
+func TestBuildFileSpecs(t *testing.T) {
 	tests := []struct {
-		name  string
-		files []string
-		want  []commit.FileSpec
+		name    string
+		files   []string
+		hunks   []string
+		want    []commit.FileSpec
+		wantErr bool
 	}{
 		{
 			name:  "plain file",
@@ -91,40 +125,61 @@ func TestParseFileSpecs(t *testing.T) {
 			want:  []commit.FileSpec{{Path: "file.txt", Hunks: nil}},
 		},
 		{
-			name:  "file with hunk spec",
+			name:  "a colon in a positional is part of the filename",
 			files: []string{"file.txt:1,3"},
+			want:  []commit.FileSpec{{Path: "file.txt:1,3", Hunks: nil}},
+		},
+		{
+			name:  "hunk selection comes from the flag",
+			hunks: []string{"file.txt:1,3"},
 			want:  []commit.FileSpec{{Path: "file.txt", Hunks: []int{1, 3}}},
 		},
 		{
-			name:  "file with non-hunk suffix treated as path",
-			files: []string{"file.txt:abc"},
-			want:  []commit.FileSpec{{Path: "file.txt:abc", Hunks: nil}},
-		},
-		{
-			name:  "file with range hunk spec",
-			files: []string{"src/main.go:2-4"},
-			want:  []commit.FileSpec{{Path: "src/main.go", Hunks: []int{2, 3, 4}}},
-		},
-		{
-			name:  "multiple files mixed",
-			files: []string{"a.go", "b.go:1,2"},
+			name:  "positionals first, then the selections, in the order given",
+			files: []string{"a.go"},
+			hunks: []string{"b.go:1,2", "c.go:2-3"},
 			want: []commit.FileSpec{
 				{Path: "a.go", Hunks: nil},
 				{Path: "b.go", Hunks: []int{1, 2}},
+				{Path: "c.go", Hunks: []int{2, 3}},
 			},
 		},
 		{
-			name:  "empty list",
-			files: []string{},
-			want:  []commit.FileSpec{},
+			name: "empty",
+			want: []commit.FileSpec{},
+		},
+		{
+			name:    "the same path whole and in hunks is a contradiction",
+			files:   []string{"a.go"},
+			hunks:   []string{"a.go:1"},
+			wantErr: true,
+		},
+		{
+			name:    "one path twice in hunks is a contradiction",
+			hunks:   []string{"a.go:1", "a.go:3"},
+			wantErr: true,
+		},
+		{
+			name:    "a malformed element is refused here too",
+			hunks:   []string{"a.go"},
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseFileSpecs(tt.files)
+			got, err := buildFileSpecs(tt.files, tt.hunks)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("buildFileSpecs(%v, %v) = %+v, want an error", tt.files, tt.hunks, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("buildFileSpecs(%v, %v) failed: %v", tt.files, tt.hunks, err)
+			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("parseFileSpecs(%v) = %+v, want %+v", tt.files, got, tt.want)
+				t.Errorf("buildFileSpecs(%v, %v) = %+v, want %+v", tt.files, tt.hunks, got, tt.want)
 			}
 		})
 	}
