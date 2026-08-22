@@ -438,7 +438,47 @@ func TestHookRemoveTakesTheLiveHookWhenBothStoresShareAName(t *testing.T) {
 	if _, err := os.Stat(committed); err != nil {
 		t.Errorf("hook remove deleted the committed hook: %v", err)
 	}
-	if !strings.Contains(stderr, "COMMITTED") {
-		t.Errorf("the removal must say the committed hook of that name still runs, got: %s", stderr)
+	if !strings.Contains(stderr, "still runs") || !strings.Contains(stderr, committed) {
+		t.Errorf("the removal must name the checkout-provided hook of that name and say it still runs, got: %s", stderr)
+	}
+
+	// The advisory is advice, not the command's result, so --quiet suppresses
+	// it. Re-run the same shape to check that.
+	writeHookScript(t, installed, "true")
+	_, quietErr, quietCode := runSafegit(t, dir, "--quiet", "hook", "remove", "pre-pre-push")
+	if quietCode != 0 {
+		t.Fatalf("quiet hook remove failed (%d): %s", quietCode, quietErr)
+	}
+	if strings.Contains(quietErr, "still runs") {
+		t.Errorf("--quiet did not suppress the advisory: %s", quietErr)
+	}
+}
+
+// TestHookRemoveDryRunStatesTheCheckoutProvidedHookStillRuns: a preview that
+// stopped at "would remove" would read as though the name were gone. The
+// advisory is exactly the part that says it is not, so the preview states it
+// too -- while removing nothing.
+func TestHookRemoveDryRunStatesTheCheckoutProvidedHookStillRuns(t *testing.T) {
+	dir := newRepo(t)
+
+	committed := filepath.Join(trackedHookDir(dir), "pre-pre-push")
+	writeHookScript(t, committed, "true")
+	safegitCommit(t, dir, "add a checkout-provided hook", filepath.Join(".safegit", "hooks", "pre-pre-push"))
+
+	installed := filepath.Join(localHookDir(dir), "pre-pre-push")
+	writeHookScript(t, installed, "true")
+
+	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "hook", "remove", "pre-pre-push")
+	if code != 0 {
+		t.Fatalf("dry-run hook remove failed (%d): %s", code, stderr)
+	}
+	if log := wouldDoLog(stdout); !strings.Contains(log, "remove:") {
+		t.Errorf("the would-do log must record the removal, got: %s", log)
+	}
+	if _, err := os.Stat(installed); err != nil {
+		t.Errorf("a dry run removed the live hook for real: %v", err)
+	}
+	if !strings.Contains(stderr, "still runs") {
+		t.Errorf("the preview must state that the checkout-provided hook of that name still runs, got: %s", stderr)
 	}
 }
