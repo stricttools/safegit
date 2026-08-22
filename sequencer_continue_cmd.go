@@ -239,6 +239,14 @@ func (op continueOp) renderHuman(flags globalFlags, out conclusionResult, headli
 		fmt.Printf(" %d file(s) would be committed, %d parent(s), %d declared resolution(s)\n",
 			len(out.commit.Files), len(out.commit.Parents), len(out.declared))
 		fmt.Printf(" the %s state files would then be removed\n", op.kind)
+		// Stated because it is a working-tree write the preview is not making:
+		// an executing run puts the operator's autostashed work back, and a
+		// preview that said nothing about it would be describing a smaller
+		// operation than the one it is previewing.
+		if out.state.Autostash != "" {
+			fmt.Printf(" the autostash %s would then be applied to the working tree and %s removed\n",
+				shortSHA(out.state.Autostash), sequencer.FileMergeAutostash)
+		}
 		if written, removed := worktreeEffects(out.declared); len(written)+len(removed) > 0 {
 			if len(written) > 0 {
 				fmt.Printf(" %d working-tree file(s) would be overwritten with the resolved content: %s\n", len(written), joinPaths(written))

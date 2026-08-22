@@ -332,6 +332,21 @@ Every future change that introduces a decision of this kind adds its entry here.
   just looked inside `.git` and saw it deserves to know why it does not count.
 - **Ruling:** git-like — deliberate
 
+### An autostash that cannot be applied exits nonzero
+
+- **git's idiom:** `git merge --continue` applies the autostash git set aside in
+  `.git/MERGE_AUTOSTASH` and prints `Applied autostash.`. When the apply
+  conflicts, git stores the stash commit on `refs/stash`, removes the file, says
+  the changes are safe in the stash — and **exits 0**. The merge is finished, so
+  as far as git is concerned the command succeeded.
+- **safegit:** the conclusion mirrors every part of that except the exit code.
+  The commit stands, the stash is stored as `stash@{0}`, the message names it
+  and the two commands that reach it — and `safegit merge-continue` exits
+  nonzero. A conclusion that could not put the operator's uncommitted work back
+  is a partial outcome, and a script that reads `0` will not look at the
+  message. The exit code is the only channel a caller cannot ignore.
+- **Ruling:** ours — deliberate
+
 ### A detached HEAD is refused, with the exact way back
 
 - **git's idiom:** git is happy to commit, merge, cherry-pick and revert on a

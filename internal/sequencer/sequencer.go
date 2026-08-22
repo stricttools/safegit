@@ -40,6 +40,20 @@ const (
 	FileCherryPickHead = "CHERRY_PICK_HEAD"
 	FileRevertHead     = "REVERT_HEAD"
 	FileAutoMerge      = "AUTO_MERGE"
+	// FileMergeRR is rerere's resolution index for the conflict in flight. git
+	// writes it whenever rerere is enabled and a merge-like operation conflicts,
+	// and removes it when git itself commits the resolution.
+	FileMergeRR = "MERGE_RR"
+	// FileMergeAutostash holds the object name of the stash-shaped commit git
+	// set aside before a merge began (`merge --autostash`, merge.autoStash,
+	// `pull --autostash`).
+	//
+	// It is the one file in this vocabulary that is NOT in Paths, and therefore
+	// the one Cleanup never removes: the file is a POINTER TO THE OPERATOR'S
+	// UNCOMMITTED WORK, and deleting it without applying that work loses content
+	// that exists nowhere else. It is consumed by the conclusion, which applies
+	// the stash and then removes the file -- see Autostash.
+	FileMergeAutostash = "MERGE_AUTOSTASH"
 	DirSequencer       = "sequencer"
 	DirRebaseMerge     = "rebase-merge"
 	DirRebaseApply     = "rebase-apply"
@@ -174,6 +188,16 @@ type State struct {
 	// verbatim draft: it still carries the "# Conflicts:" comment block, which
 	// a conclusion strips.
 	MessageFile string
+
+	// Autostash is the object name recorded in MERGE_AUTOSTASH: the
+	// stash-shaped commit git set aside before this merge began (KindMerge),
+	// empty when the merge carried no autostash.
+	//
+	// It is reported rather than cleaned up, because it is the only piece of
+	// this state that names content the repository holds nowhere else. What to
+	// do with it is the conclusion's decision: apply it to the working tree the
+	// way `git merge --continue` does, and only then remove the file.
+	Autostash string
 }
 
 // InProgress reports whether any operation is in flight.
@@ -248,10 +272,15 @@ func Read(gitDir string) (State, error) {
 		return State{}, err
 	}
 	if len(mergeHeads) > 0 {
+		autostash, err := readSHA(filepath.Join(gitDir, FileMergeAutostash))
+		if err != nil {
+			return State{}, err
+		}
 		return State{
 			Kind:        KindMerge,
 			MergeHeads:  mergeHeads,
 			MessageFile: existingFile(gitDir, FileMergeMsg),
+			Autostash:   autostash,
 		}, nil
 	}
 

@@ -16,15 +16,36 @@ var declaredSets = map[sequencer.Kind][]string{
 	sequencer.KindMerge: {
 		sequencer.FileMergeHead, sequencer.FileMergeMode,
 		sequencer.FileMergeMsg, sequencer.FileAutoMerge,
+		sequencer.FileMergeRR,
 	},
 	sequencer.KindCherryPick: {
 		sequencer.FileCherryPickHead, sequencer.FileMergeMsg,
-		sequencer.FileAutoMerge, sequencer.DirSequencer,
+		sequencer.FileAutoMerge, sequencer.FileMergeRR,
+		sequencer.DirSequencer,
 	},
 	sequencer.KindRevert: {
 		sequencer.FileRevertHead, sequencer.FileMergeMsg,
-		sequencer.FileAutoMerge, sequencer.DirSequencer,
+		sequencer.FileAutoMerge, sequencer.FileMergeRR,
+		sequencer.DirSequencer,
 	},
+}
+
+// TestPathsNeverOwnsTheAutostash pins the one exclusion. MERGE_AUTOSTASH names
+// the operator's uncommitted work; a set that removed it would make every
+// conclusion of an autostashed merge lose content held nowhere else, so it must
+// stay out of every set no matter what else joins them.
+func TestPathsNeverOwnsTheAutostash(t *testing.T) {
+	for _, kind := range []sequencer.Kind{
+		sequencer.KindNone, sequencer.KindMerge, sequencer.KindCherryPick,
+		sequencer.KindRevert, sequencer.KindRebase, sequencer.KindAM,
+	} {
+		for _, name := range sequencer.Paths(kind) {
+			if name == sequencer.FileMergeAutostash {
+				t.Errorf("Paths(%v) claims %s: Cleanup would delete the operator's stashed work unapplied",
+					kind, sequencer.FileMergeAutostash)
+			}
+		}
+	}
 }
 
 func TestPathsMatchesTheDeclaredSets(t *testing.T) {

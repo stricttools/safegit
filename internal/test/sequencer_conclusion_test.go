@@ -108,9 +108,18 @@ func newConflictedPickRepo(t *testing.T, verb string) pickFixture {
 // none of. The set is git's own vocabulary, spelled out here rather than read
 // from internal/sequencer so that the test states the guarantee independently
 // of the code that implements it.
+//
+// The last two are not removed the same way, and the difference is the point:
+// MERGE_RR is rerere's resolution index and is deleted with the rest, while
+// MERGE_AUTOSTASH holds a stash-shaped commit and must be CONSUMED -- applied
+// to the working tree, or stored as a real stash entry -- before it goes.
+// Deleting that one unapplied is the data loss, so its absence here is only
+// half the guarantee; the other half is asserted in sequencer_autostash_test.go,
+// where the restored content itself is checked.
 var stateFileNames = []string{
 	"MERGE_HEAD", "MERGE_MODE", "MERGE_MSG",
 	"CHERRY_PICK_HEAD", "REVERT_HEAD", "AUTO_MERGE", "sequencer",
+	"MERGE_RR", "MERGE_AUTOSTASH",
 }
 
 // assertNoSequencerResidue fails when any of git's operation state survives.

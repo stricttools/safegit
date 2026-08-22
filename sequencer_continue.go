@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -517,6 +518,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 
 	out := conclusionResult{state: state, commit: result, declared: declared, author: recorded}
 
+	exit := exitcode.OK
 	if !flags.dryRun {
 		if err := finishConclusion(ctx, gitDir, state, result, edits, sides, declared); err != nil {
 			die(exitcode.General, err.Error())
@@ -526,10 +528,96 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		if err := maybeAutoBumpParent(ctx, flags, gitDir, result.SHA, op.command, firstLine(message)); err != nil {
 			die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 		}
+
+		// LAST, and after the state files are gone: the commit is made and the
+		// operation is over, so whatever this does to the working tree can no
+		// longer leave the repository mid-merge. A failure here is reported and
+		// carried out in the exit code rather than thrown -- the commit stands
+		// either way, and the operator has to be told that it does.
+		exit = consumeAutostash(ctx, gitDir, state)
 	}
 
 	op.report(flags, out)
-	return exitcode.OK
+	return exit
+}
+
+// consumeAutostash puts back the uncommitted work git set aside before this
+// merge began, which is what `git merge --continue` does with MERGE_AUTOSTASH
+// and what safegit's conclusion owes an operator who reached the conflict
+// through `git merge --autostash` (or merge.autoStash, or `git pull
+// --autostash`).
+//
+// The file is a POINTER TO CONTENT HELD NOWHERE ELSE, which is why it is not in
+// the state-file set Cleanup removes: deleting it unapplied silently reverts the
+// operator's working tree to committed content, with nothing on screen saying
+// so. It is consumed here instead, and only ever after the apply has put the
+// work somewhere it can be reached from.
+//
+// The failure path is git's own: an apply that conflicts leaves the conflict in
+// the working tree, and the stash commit is STORED on refs/stash so it has a
+// name (`stash@{0}`) once the file goes. safegit differs from git in one thing
+// only -- git returns success there and safegit exits nonzero, because a
+// conclusion that could not restore the operator's work is not a clean outcome.
+//
+// Everything it prints goes to stderr, unconditionally: this is the same class
+// of fact as the delegation notice, --quiet is a request for less chatter rather
+// than for the whereabouts of one's own work to be withheld, and in machine mode
+// stdout belongs to the envelope.
+func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State) int {
+	if state.Kind != sequencer.KindMerge || state.Autostash == "" {
+		return exitcode.OK
+	}
+	path := filepath.Join(gitDir, sequencer.FileMergeAutostash)
+
+	gitSaid, applyErr := git.StashApply(ctx, state.Autostash)
+	if applyErr == nil {
+		if rmErr := os.Remove(path); rmErr != nil && !os.IsNotExist(rmErr) {
+			fmt.Fprintf(os.Stderr, "error: the autostash was applied but %s could not be removed: %v\n", path, rmErr)
+			fmt.Fprintf(os.Stderr, "  remove it by hand; leaving it there would make the next conclusion apply the same work twice\n")
+			return exitcode.General
+		}
+		// The apply is itself a merge, so it leaves the same residue any merge
+		// leaves -- AUTO_MERGE, and MERGE_RR where rerere is on. The conclusion
+		// ran it, so the conclusion owns what it left: the removal set is the
+		// merge set, from the one place that declares it, and it is idempotent
+		// over the members that are already gone. It is done only on a SUCCESSFUL
+		// apply; after a conflicting one that residue belongs to the conflict now
+		// sitting in the working tree.
+		if err := sequencer.Cleanup(gitDir, sequencer.KindMerge); err != nil {
+			fmt.Fprintf(os.Stderr, "error: the autostash was applied but its own leftover state could not be removed: %v\n", err)
+			return exitcode.General
+		}
+		fmt.Fprintf(os.Stderr, "Applied autostash.\n")
+		return exitcode.OK
+	}
+
+	fmt.Fprintf(os.Stderr, "error: applying the autostash resulted in conflicts; the merge commit was created and stands\n")
+	// git's own report of what it could not merge, verbatim and indented under
+	// the line above. Where git printed nothing at all, the wrapped error is the
+	// only account of the failure there is.
+	if gitSaid == "" {
+		gitSaid = applyErr.Error()
+	}
+	for _, line := range strings.Split(strings.TrimRight(gitSaid, "\n"), "\n") {
+		fmt.Fprintf(os.Stderr, "  %s\n", line)
+	}
+
+	if storeErr := git.StashStore(ctx, state.Autostash, "autostash"); storeErr != nil {
+		// Nothing was stored, so the file is the only name the work has left and
+		// it stays exactly where it is.
+		fmt.Fprintf(os.Stderr, "  it could not be stored as a stash entry either: %v\n", storeErr)
+		fmt.Fprintf(os.Stderr, "  your changes are the commit %s, still recorded in %s. Recover them with:\n", state.Autostash, path)
+		fmt.Fprintf(os.Stderr, "    git stash apply %s\n", state.Autostash)
+		return exitcode.General
+	}
+	if rmErr := os.Remove(path); rmErr != nil && !os.IsNotExist(rmErr) {
+		fmt.Fprintf(os.Stderr, "  your changes are safe in the stash, but %s could not be removed: %v\n", path, rmErr)
+		fmt.Fprintf(os.Stderr, "  remove it by hand; the work is recorded twice until you do\n")
+		return exitcode.General
+	}
+	fmt.Fprintf(os.Stderr, "  your changes are safe in the stash, as stash@{0} (commit %s).\n", state.Autostash)
+	fmt.Fprintf(os.Stderr, "  run 'git stash pop' or 'git stash drop' at any time\n")
+	return exitcode.General
 }
 
 // finishConclusion removes the concluded operation's state and puts the shared
