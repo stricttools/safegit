@@ -54,7 +54,12 @@ func ApplyIndexEditsTo(ctx context.Context, indexPath string, edits []IndexEdit)
 	if len(edits) == 0 {
 		return nil
 	}
-	repoRoot, err := git.RepoRoot(ctx)
+	// AnchorRoot, not RepoRoot: it is the declared authority for the directory a
+	// git-listed repo-relative path resolves against, and the two answers differ
+	// the moment a context carries a pin or targets another repository. They are
+	// identical for this caller today; naming the authority is what keeps them
+	// from diverging silently if one ever runs under a pinned context.
+	repoRoot, err := git.AnchorRoot(ctx)
 	if err != nil {
 		return fmt.Errorf("resolving repo root: %w", err)
 	}
