@@ -11,6 +11,7 @@ import (
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/submodule"
+	"github.com/smm-h/safegit/internal/trailer"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 
@@ -39,9 +40,13 @@ type ScrubFileResult struct {
 	NewBlobSHA  string `json:"new_blob_sha,omitempty"`
 
 	// Execute-only.
-	Rewrites          map[string]string `json:"rewrites,omitempty"`
-	Tags              []TagRewrite      `json:"tags,omitempty"`
-	CommitsRewritten  *int              `json:"commits_rewritten,omitempty"`
+	Rewrites         map[string]string `json:"rewrites,omitempty"`
+	Tags             []TagRewrite      `json:"tags,omitempty"`
+	CommitsRewritten *int              `json:"commits_rewritten,omitempty"`
+	// MessagesModified counts the commit messages this rewrite edited. A file
+	// scrub edits one thing in a message and only in --delete mode: the move
+	// records that name the erased path (see removeScrubbedMoveRecords).
+	MessagesModified  *int              `json:"messages_modified,omitempty"`
 	NewHead           string            `json:"new_head,omitempty"`
 	PreRewriteRemotes map[string]string `json:"pre_rewrite_remotes,omitempty"`
 	CleanupOK         *bool             `json:"cleanup_ok,omitempty"`
@@ -69,6 +74,7 @@ var scrubFilePayloadSchema = strictcli.SchemaObject(
 		"rewrites":            scrubRewritesSchema,
 		"tags":                scrubTagsSchema,
 		"commits_rewritten":   strictcli.SchemaType("integer"),
+		"messages_modified":   strictcli.SchemaType("integer"),
 		"new_head":            strictcli.SchemaType("string"),
 		"pre_rewrite_remotes": scrubRewritesSchema,
 		"cleanup_ok":          strictcli.SchemaType("boolean"),
@@ -78,6 +84,33 @@ var scrubFilePayloadSchema = strictcli.SchemaObject(
 	[]string{"version", "dry_run", "file", "mode", "range", "from", "commit_count", "old_head"},
 	false,
 )
+
+// removeScrubbedMoveRecords is the message half of a file scrub: the move
+// records naming the path, removed in the SAME rewrite that erases it.
+//
+// The two modes ask opposite things of a record, and the difference is not a
+// policy choice but what each mode does to the path:
+//
+//   - --delete ERASES the path from every tree in range. A record naming it --
+//     as its old side, its new side, or anywhere inside a subtree prefix that
+//     covers it -- is then a reference to something the rewrite is removing,
+//     sitting in the one place a tree rewrite does not reach. It is removed
+//     with the path, whole (see trailer.RemoveMovedRecordsNaming: half a move
+//     is not a smaller move, it is a malformed one).
+//   - --replace-with KEEPS the path and changes what it holds. A record saying
+//     content moved to that path is still exactly as true afterwards as it was
+//     before, so nothing is edited. Rewriting a message here would be the
+//     rewrite changing something nothing asked it to change.
+//
+// The caller declares the resulting message change per commit, which is what
+// keeps the rewrite's own Tier A verification -- "a rewrite may change what it
+// said it would change, and nothing else" -- able to account for it.
+func removeScrubbedMoveRecords(mode, message, filePath string) (string, bool) {
+	if mode != "remove" {
+		return message, false
+	}
+	return trailer.RemoveMovedRecordsNaming(message, filePath)
+}
 
 func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	const cmd = "scrub file"
@@ -264,6 +297,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	// only the second is an error.
 	intent := PerPathIntent()
 	targetSeen := false
+	messagesModified := 0
 
 	treeCache := make(map[string]string)
 	shaMap, rewrittenCount, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
@@ -296,6 +330,11 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		var xform CommitTransform
 		if newTreeSHA != info.Tree {
 			xform.TreeSHA = newTreeSHA
+		}
+		if newMessage, removed := removeScrubbedMoveRecords(mode, info.Message, filePath); removed {
+			xform.Message = newMessage
+			messagesModified++
+			intent.Declare(sha, nil, true)
 		}
 		return xform, nil
 	}, flags.verbose)
@@ -381,11 +420,13 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	result.CleanupOK = boolPtr(rewriteResult.CleanupOK)
 	result.CleanupErrors = nonNilStrings(rewriteResult.CleanupErrors)
 	result.SyncSkipped = rewriteResult.SyncSkipped
+	result.MessagesModified = intPtr(messagesModified)
 	flags.payload(result)
 
 	// Summary
 	infof(flags, "\nScrub complete:\n")
 	infof(flags, "  %d commits rewritten\n", *result.CommitsRewritten)
+	infof(flags, "  %d commit messages modified (move records naming the erased path)\n", messagesModified)
 	infof(flags, "  Old HEAD: %s\n", result.OldHead[:12])
 	infof(flags, "  New HEAD: %s\n", result.NewHead[:12])
 	printScopeNotice(flags, rewriteResult.Ref)
@@ -558,6 +599,7 @@ func runScrubFileInSubmodule(
 	subTreeCache := make(map[string]string)
 	subIntent := PerPathIntent()
 	subTargetSeen := false
+	subMessagesModified := 0
 	subShaMap, subRewrittenCount, err := walkAndRewrite(subCtx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 		oldBlobSHA := lookupBlobAtPath(ctx, info.Tree, subFilePath)
 		if oldBlobSHA != "" {
@@ -574,6 +616,14 @@ func runScrubFileInSubmodule(
 		var xform CommitTransform
 		if newTreeSHA != info.Tree {
 			xform.TreeSHA = newTreeSHA
+		}
+		// A submodule's commits carry their own move records, naming paths
+		// relative to the submodule root -- which is the path this walk is
+		// erasing. Same treatment, same declaration.
+		if newMessage, removed := removeScrubbedMoveRecords(mode, info.Message, subFilePath); removed {
+			xform.Message = newMessage
+			subMessagesModified++
+			subIntent.Declare(sha, nil, true)
 		}
 		return xform, nil
 	}, flags.verbose)
@@ -660,6 +710,7 @@ func runScrubFileInSubmodule(
 		result.Rewrites = map[string]string{}
 		result.Tags = subTags
 		result.CommitsRewritten = intPtr(subRewrittenCount)
+		result.MessagesModified = intPtr(subMessagesModified)
 		result.PreRewriteRemotes = nonNilStringMap(subResult.PreRewriteRemotes)
 		result.CleanupOK = boolPtr(subResult.CleanupOK)
 		result.CleanupErrors = nonNilStrings(subResult.CleanupErrors)
@@ -801,6 +852,9 @@ func runScrubFileInSubmodule(
 	result.Rewrites = rewrites
 	result.Tags = allTagRewrites
 	result.CommitsRewritten = intPtr(parentRewrittenCount + subRewrittenCount)
+	// The parent walk only moves gitlinks and never edits a message, so every
+	// message this command changed is one of the submodule's.
+	result.MessagesModified = intPtr(subMessagesModified)
 	result.NewHead = parentResult.NewHeadSHA
 	result.PreRewriteRemotes = nonNilStringMap(parentResult.PreRewriteRemotes)
 	result.CleanupOK = boolPtr(parentResult.CleanupOK)
@@ -815,6 +869,7 @@ func runScrubFileInSubmodule(
 	// Summary.
 	infof(flags, "\nScrub complete:\n")
 	infof(flags, "  %d submodule commits rewritten\n", subRewrittenCount)
+	infof(flags, "  %d submodule commit messages modified (move records naming the erased path)\n", subMessagesModified)
 	infof(flags, "  %d parent commits rewritten (gitlink updates)\n", parentRewrittenCount)
 	infof(flags, "  Old HEAD: %s\n", result.OldHead[:12])
 	infof(flags, "  New HEAD: %s\n", result.NewHead[:12])
