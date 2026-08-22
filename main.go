@@ -605,7 +605,7 @@ func newApp() *strictcli.App {
 		return strictcli.Exit(runUnlock(globalsToFlags(ctx, kwargs), ref))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
-		strictcli.WithArgs(strictcli.NewArg("ref", "the ref name (e.g. refs/heads/main) whose stale .lock file to remove", strictcli.ArgRequired())),
+		strictcli.WithArgs(strictcli.NewArg("ref", "which lock to release: a branch name (main), a full ref (refs/tags/v1), or a tool-owned lock -- safegit/rewrite for the repository-wide history-rewrite lock, safegit/operation for this worktree's operation lock", strictcli.ArgRequired())),
 	)
 	app.Command("scan", "search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(runScan(globalsToFlags(ctx, kwargs), kwargs))
