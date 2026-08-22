@@ -189,6 +189,21 @@ var (
 func newApp() *strictcli.App {
 	app := strictcli.NewApp("safegit", version, "concurrency-safe git wrapper providing 31 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
 		strictcli.WithHandshakeEnv(sessionIDEnvVar, "Claude Code session identifier set by the invoking agent session; scopes 'safegit undo' to operations this session performed and is recorded as a commit trailer"),
+		// The observe authorization, GENERATED from the git argv classification
+		// table's read view (see gitexec.ObservePrefixes) rather than written
+		// out here. An effects-handle invocation matching one of these prefixes
+		// is an observe: it executes even in a dry run and is never written to
+		// the would-do log, which is right for an invocation the table says
+		// changes nothing and wrong for anything else.
+		//
+		// Generating it is what keeps that promise. Only verbs the table
+		// declares observe-only UNCONDITIONALLY are admitted, because the match
+		// is on a PREFIX: `reflog` reads until `expire` follows it, and a
+		// prefix ending there would let a ref deletion execute in the middle of
+		// a preview. No prefix here can match a mutating argv, and
+		// TestObserveAllowlistCannotAdmitAMutation binds that to the argv
+		// runGitMutation actually builds.
+		strictcli.WithProcObserveAllowlist(gitexec.ObservePrefixes()),
 	)
 
 	// --quiet, --verbose, --dry-run and --approve-consequential are owned by

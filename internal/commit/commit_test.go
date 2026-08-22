@@ -11,14 +11,37 @@ import (
 
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
+// directRefUpdate is this package's RefUpdate for tests: it runs the same
+// `git update-ref <ref> <new> <expected>` the production implementation mints
+// through the framework's effects handle.
+//
+// A test cannot supply the real one. The handle is built by the framework
+// during a dispatch, and its result carrier cannot be constructed from outside
+// (settled-ness is unexported and every accessor panics when unsettled), so
+// this package's tests -- which call the pipeline directly rather than through
+// the CLI -- need their own. The end-to-end behaviour of the production
+// implementation, including what a dry run records, is pinned by the
+// integration tests in internal/test, which run the binary.
+type directRefUpdate struct{}
+
+func (directRefUpdate) Update(ctx context.Context, ref, newSHA, expected string) error {
+	if gitexec.InPreview(ctx) {
+		// What the production implementation does in a preview: record the
+		// invocation, perform nothing, and answer nil so the retry loop ends.
+		return nil
+	}
+	return git.UpdateRef(ctx, ref, newSHA, expected)
+}
+
 // newPipeline creates a Pipeline with default config for the given safegitDir.
 func newPipeline(sgDir string) *Pipeline {
 	cfg := repo.DefaultConfig()
-	return &Pipeline{SafegitDir: sgDir, Config: cfg}
+	return &Pipeline{SafegitDir: sgDir, Config: cfg, RefUpdate: directRefUpdate{}}
 }
 
 // commitLandsOnBranch verifies that ref points to sha.

@@ -64,6 +64,12 @@ type Pipeline struct {
 	SafegitDir string
 	Config     repo.Config
 
+	// RefUpdate performs the compare-and-swap that makes each commit real, and
+	// is the pipeline's only way to move a ref. It is required: a pipeline
+	// without one refuses rather than reaching around it, because reaching
+	// around it is exactly how a preview would move a ref for real.
+	RefUpdate RefUpdate
+
 	// PhaseADone is called (if non-nil) after Phase A completes but before
 	// the ref lock is acquired. Used by tests to inject concurrent commits.
 	PhaseADone func()
@@ -391,7 +397,67 @@ func (p *Pipeline) tryCommit(
 		p.PhaseADone()
 	}
 
-	// DryRun: return result without touching the ref
+	// --- Phase B: serialized (per-ref lock + CAS) ---
+	//
+	// A preview takes NO lock and makes no re-read: there is nothing to
+	// protect, and a lock file created by a run that promises to change nothing
+	// would be a change. It joins the executing path at the ref update itself,
+	// which it records instead of performing.
+
+	// A root commit has no parent, and the empty parentSHA used to reach
+	// update-ref as an omitted old value, which is an UNCONDITIONAL write: the
+	// re-resolve below closes nothing if a ref created in the window between it
+	// and the update is overwritten without complaint. ZeroSHA is git's "must
+	// not exist" expectation, so the create is conditional too; git refuses with
+	// "reference already exists", which isTransientRefError already classifies
+	// as retryable, so the attempt loops and re-reads the ref exactly as a
+	// losing CAS on a normal commit does.
+	expected := parentSHA
+	if isRootCommit {
+		expected = git.ZeroSHA
+	}
+
+	if !req.DryRun {
+		// Step 5: Acquire ref lock
+		lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second
+		if lockTimeout <= 0 {
+			lockTimeout = 30 * time.Second
+		}
+		refLock, err := lock.Acquire(repo.SharedSafegitDir(ctx, p.SafegitDir), p.SafegitDir, ref, "commit", lockTimeout)
+		if err != nil {
+			return nil, false, fmt.Errorf("acquiring lock on %s: %w", ref, err)
+		}
+		defer refLock.Release()
+
+		// Step 6: Re-resolve parent (CAS check)
+		if isRootCommit {
+			// For root commits, verify the ref still doesn't exist
+			if _, rerr := git.RevParse(ctx, ref); rerr == nil {
+				// Someone else created the ref while we were building -- retry
+				return nil, true, nil
+			}
+		} else {
+			currentParent, err := git.RevParse(ctx, ref)
+			if err != nil {
+				return nil, false, fmt.Errorf("re-resolving %s for CAS: %w", ref, err)
+			}
+			if currentParent != parentSHA {
+				return nil, true, nil
+			}
+		}
+	}
+
+	// Step 7: Update ref -- compare-and-swap for both cases, through the
+	// caller's RefUpdate. It is the single mint site: in an executing run it
+	// performs this very invocation, and in a preview it records it and answers
+	// nil, so the loop ends here with nothing moved.
+	if err := p.updateRef(ctx, ref, commitSHA, expected); err != nil {
+		if isTransientRefError(err) {
+			return nil, true, nil
+		}
+		return nil, false, fmt.Errorf("update-ref failed: %w", err)
+	}
+
 	if req.DryRun {
 		return &CommitResult{
 			SHA:            commitSHA,
@@ -402,57 +468,6 @@ func (p *Pipeline) tryCommit(
 			Files:          changedPaths(changed),
 			SkippedIgnored: files.skipped,
 		}, false, nil
-	}
-
-	// --- Phase B: serialized (per-ref lock + CAS) ---
-
-	// Step 5: Acquire ref lock
-	lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second
-	if lockTimeout <= 0 {
-		lockTimeout = 30 * time.Second
-	}
-	refLock, err := lock.Acquire(repo.SharedSafegitDir(ctx, p.SafegitDir), p.SafegitDir, ref, "commit", lockTimeout)
-	if err != nil {
-		return nil, false, fmt.Errorf("acquiring lock on %s: %w", ref, err)
-	}
-	defer refLock.Release()
-
-	// Step 6: Re-resolve parent (CAS check)
-	if isRootCommit {
-		// For root commits, verify the ref still doesn't exist
-		if _, rerr := git.RevParse(ctx, ref); rerr == nil {
-			// Someone else created the ref while we were building -- retry
-			return nil, true, nil
-		}
-	} else {
-		currentParent, err := git.RevParse(ctx, ref)
-		if err != nil {
-			return nil, false, fmt.Errorf("re-resolving %s for CAS: %w", ref, err)
-		}
-		if currentParent != parentSHA {
-			return nil, true, nil
-		}
-	}
-
-	// Step 7: Update ref -- compare-and-swap for both cases.
-	//
-	// A root commit has no parent, and the empty parentSHA used to reach
-	// update-ref as an omitted old value, which is an UNCONDITIONAL write: the
-	// re-resolve above closed nothing, because a ref created in the window
-	// between it and this line was overwritten without complaint. ZeroSHA is
-	// git's "must not exist" expectation, so the create is now conditional too;
-	// git refuses with "reference already exists", which isTransientRefError
-	// already classifies as retryable, so the attempt loops and re-reads the ref
-	// exactly as a losing CAS on a normal commit does.
-	expected := parentSHA
-	if isRootCommit {
-		expected = git.ZeroSHA
-	}
-	if err := git.UpdateRef(ctx, ref, commitSHA, expected); err != nil {
-		if isTransientRefError(err) {
-			return nil, true, nil
-		}
-		return nil, false, fmt.Errorf("update-ref failed: %w", err)
 	}
 
 	// Step 8: Append op log (lock released by defer).
@@ -495,6 +510,22 @@ func (p *Pipeline) tryCommit(
 		Files:          changedPaths(changed),
 		SkippedIgnored: files.skipped,
 	}, false, nil
+}
+
+// updateRef mints the commit family's ref update through the caller-supplied
+// RefUpdate, refusing outright when there is none.
+//
+// The refusal is what keeps the seam honest: a pipeline that fell back to
+// calling git itself would move refs in a preview, which is the whole thing the
+// mint exists to prevent.
+func (p *Pipeline) updateRef(ctx context.Context, ref, newSHA, expected string) error {
+	if p.RefUpdate == nil {
+		return &CommitError{
+			Code:    exitcode.General,
+			Message: "the commit pipeline was built without a RefUpdate; it has no way to move " + ref,
+		}
+	}
+	return p.RefUpdate.Update(ctx, ref, newSHA, expected)
 }
 
 // baseRev names the revision whose tree an operation is built on, or the empty

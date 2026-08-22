@@ -392,13 +392,42 @@ func WritesObjects(args []string) bool {
 	return eff.Has(MutatesObjects)
 }
 
-// IsObserveOnly reports whether an argv changes nothing at all. This is the
-// view Phase 3.3's observe allowlist reads. An argv the table does not declare
-// reports false.
+// IsObserveOnly reports whether an argv changes nothing at all. An argv the
+// table does not declare reports false.
 func IsObserveOnly(args []string) bool {
 	eff, err := EffectsOf(args)
 	if err != nil {
 		return false
 	}
 	return eff == ObserveOnly
+}
+
+// ObservePrefixes renders the table's read view as the argv PREFIXES the
+// framework's proc-observe allowlist takes: an effects-handle invocation whose
+// argv starts with one of them is an observe, which executes even in a dry run
+// and is never written to the would-do log.
+//
+// The list is GENERATED from the classification table rather than written out
+// beside it, so a verb cannot become observe-authorized without the table
+// saying it changes nothing. Two properties make the generation safe:
+//
+//   - A verb with any CONDITIONAL effect is excluded, however read-only its
+//     base is. The allowlist matches a PREFIX, so `reflog` (observe-only until
+//     `expire` follows it) would admit `reflog expire --all` -- a ref deletion
+//     executing in the middle of a dry run. Only verbs that are observe-only
+//     whatever follows them are admitted.
+//   - Each prefix carries the binary and the global prefix, because that is
+//     what an effects-handle argv literally starts with (see ArgvAny). A
+//     two-element prefix of "git" plus the global option would match every git
+//     invocation safegit makes, mutations included.
+func ObservePrefixes() [][]string {
+	var out [][]string
+	for _, v := range Verbs() {
+		if v.Base != ObserveOnly || len(v.Conditional) > 0 {
+			continue
+		}
+		prefix := append([]string{Binary}, globalPrefix...)
+		out = append(out, append(prefix, v.Name))
+	}
+	return out
 }

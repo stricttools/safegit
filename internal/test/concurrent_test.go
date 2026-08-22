@@ -420,10 +420,13 @@ func TestCommitSameBranch(t *testing.T) {
 	stdouts := make([]string, N)
 	stderrs := make([]string, N)
 
+	// Machine mode, so each process's own effect records can be read off its
+	// envelope: the ref update is minted through the effects handle from inside
+	// the compare-and-swap retry loop, and a retry must not mint a second one.
 	parallel(N, func(i int) {
 		fname := fmt.Sprintf("concurrent%02d.txt", i)
 		msg := fmt.Sprintf("concurrent commit %d", i)
-		stdout, stderr, code := runSafegit(t, dir, "commit", "-m", msg, "--", fname)
+		stdout, stderr, code := runSafegit(t, dir, "--json", "commit", "-m", msg, "--", fname)
 		stdouts[i] = stdout
 		stderrs[i] = stderr
 		codes[i] = code
@@ -447,6 +450,18 @@ func TestCommitSameBranch(t *testing.T) {
 	newCommits := afterCount - beforeCount
 	if newCommits != N {
 		t.Errorf("expected %d new commits on main, got %d", N, newCommits)
+	}
+
+	// Each process performed EXACTLY ONE ref update, however many
+	// compare-and-swap attempts it took to get there: the retry loop re-stages
+	// and re-builds, and only the attempt that wins reaches the update. A mint
+	// per attempt, or a second mint beside the loop, shows up here as a count
+	// above one.
+	for i := 0; i < N; i++ {
+		env := decodeEnvelope(t, stdouts[i])
+		if mutations := procMutations(env); len(mutations) != 1 {
+			t.Errorf("commit %d recorded %d subprocess mutations, want exactly 1: %v", i, len(mutations), env.Preview)
+		}
 	}
 
 	// Verify linear history (no merges) by checking each commit has exactly 1 parent

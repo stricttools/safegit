@@ -54,8 +54,9 @@ const (
 	ExemptGitMutation ExemptionID = "main.runGitMutation"
 	// ExemptGitPush covers main.execGitPush.
 	ExemptGitPush ExemptionID = "main.execGitPush"
-	// ExemptCommitRefUpdateRecord covers main.recordCommitRefUpdate.
-	ExemptCommitRefUpdateRecord ExemptionID = "main.recordCommitRefUpdate"
+	// ExemptCommitRefUpdate covers main.effectsRefUpdate, the commit
+	// pipeline's ref update.
+	ExemptCommitRefUpdate ExemptionID = "main.effectsRefUpdate"
 	// ExemptHistoryRewriteRecord covers main.recordHistoryRewrite.
 	ExemptHistoryRewriteRecord ExemptionID = "main.recordHistoryRewrite"
 )
@@ -109,9 +110,9 @@ var dirPinExemptions = []DirPinExemption{
 		Reason: "the push argv names a remote and refspecs only, and the effects handle starts the process so --dry-run can record it instead",
 	},
 	{
-		ID:     ExemptCommitRefUpdateRecord,
+		ID:     ExemptCommitRefUpdate,
 		Kind:   KindEffectsHandle,
-		Reason: "records the commit pipeline's ref update in a dry run; the argv names a ref and two SHAs and is never executed",
+		Reason: "the commit pipeline's compare-and-swap ref update, minted through the effects handle in both modes -- performed by it in an executing run, recorded instead of performed in a preview; the argv names a ref and two SHAs and resolves against no directory",
 	},
 	{
 		ID:     ExemptHistoryRewriteRecord,
