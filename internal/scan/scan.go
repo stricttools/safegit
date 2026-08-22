@@ -25,10 +25,19 @@ type Match struct {
 	Context       string // surrounding text with match replaced by <MATCH>
 	IsBinary      bool   // true if this was a binary blob (skipped)
 	SubmodulePath string // relative path of the submodule this match belongs to; empty for parent repo
-	// InGitDir marks a non-object match whose Path is relative to the GIT
-	// DIRECTORY rather than to the repository root. Every other coordinate in a
+	// InGitDir marks a non-object match found inside GIT'S OWN STATE rather
+	// than in the work tree -- config, COMMIT_EDITMSG, the hook directories,
+	// everything safegit keeps under .git/safegit. Every other coordinate in a
 	// scan is repo-relative, so without this flag a reader cannot tell
 	// `hooks/pre-commit` inside .git from a tracked file of that name.
+	//
+	// It is a statement about WHERE the file was found, not a promise about the
+	// shape of Path. Path is relative to the git directory whenever it sits
+	// under it, which is the ordinary case; a location git's own resolution
+	// puts OUTSIDE the git dir -- a core.hooksPath pointing somewhere else --
+	// is still git's state and still carries this flag, but its Path stays
+	// ABSOLUTE, because a relative coordinate would name a file that is not
+	// there.
 	InGitDir bool
 }
 
