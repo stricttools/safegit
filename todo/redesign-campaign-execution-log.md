@@ -1544,6 +1544,31 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
   (asserts `.git/worktrees/side/safegit` while the fixture names the
   worktree `linked-side`; vacuously true since it was written).
+## Phase 10.1 closure
+
+- All seven battery items pass: build/vet clean; gofmt-clean; full
+  -race 1571 PASS / 0 FAIL / 8 SKIP; stress run 4065 PASS / 0 FAIL /
+  5 SKIP in 12m7s (all seven opt-in scenarios x 5 iterations; both
+  former watchlist flakes green throughout); GOWORK=off run IDENTICAL
+  to the default run (resolves released strictcli v0.33.0 from the
+  module cache — no version skew); pre-checks.sh exit 0 (census
+  unchanged at 520 sites); fresh baseline snapshot 1570/0/9 at
+  a0887ec (the one-line delta vs the -race run is -short's
+  TestRunTimeout skip, as designed).
+- Baseline reconciliation vs the frozen campaign-start artifact
+  (688/67/8 at b1d1385): 120 removed lines ALL classified — 61 healed
+  reds; 59 sanctioned rewrites/renames/deletions, each cited to its
+  plan or log reference. 936 added lines (61 healed + 47 successors +
+  827 new, 583 of them new top-level test functions). Skip set 8 -> 9:
+  the original 8 all still skip (7 re-keyed to --stress as planned;
+  TestRunTimeout stays -short-keyed as recorded), plus the
+  case-insensitive mv fixture. UNEXPLAINED: ZERO.
+- The fresh snapshot lives at testdata/phase10-1-final.local-only,
+  gitignored by the *.local-only convention like its 25 siblings.
+
+10.1 COMPLETE. 10.2 per-phase fresh auditors dispatched next; 10.3
+changelog after their findings (if any) are remediated.
+
 ## Phase 10 window closure and the flake root cause
 
 - All six window items done; gofmt-clean; suite green; tree clean.
