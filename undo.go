@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -137,6 +138,10 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	liveSteps := 0
 	var targetEntry *oplog.Entry
 	var mostRecentTipSHA string // TipSHA of the most recent live undoable entry
+	// reversing is the tip each live undoable step recorded: exactly the
+	// commits this undo claims to be taking back off the branch, and what the
+	// range check below measures the branch's actual history against.
+	reversing := make(map[string]bool, count)
 
 	for i := len(entries) - 1; i >= 0; i-- {
 		e := entries[i]
@@ -167,6 +172,9 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 
 		// This is a live undoable step
 		liveSteps++
+		if tip := oplog.TipSHA(e.Extra); tip != "" {
+			reversing[tip] = true
+		}
 		if liveSteps == 1 {
 			// Record the TipSHA of the most recent live entry for CAS.
 			mostRecentTipSHA = oplog.TipSHA(e.Extra)
@@ -216,6 +224,11 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 			die(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
 		}
 	}
+
+	// The RANGE check, run before the preview as well as before the update: the
+	// arithmetic above is oplog arithmetic and has not looked at the branch
+	// once. See refuseUnaccountedRange.
+	refuseUnaccountedRange(ctx, ref, targetSHA, currentSHA, reversing, allEntries, sessionID, bypassSession)
 
 	if flags.dryRun {
 		outf(flags, "would undo %d operation(s) on %s\n", count, refShortName(ref))
@@ -310,6 +323,119 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 			fmt.Printf("  %s -> %s\n", currentSHA[:8], targetSHA[:8])
 		}
 	}
+}
+
+// refuseUnaccountedRange is the check that stands between undo's arithmetic and
+// the branch it is about to move.
+//
+// Everything above it is oplog arithmetic: count back N recorded operations,
+// take what the Nth one was built on top of, and that is the rollback target.
+// Nothing in it looks at the branch, so a commit safegit did not record --
+// a plain `git commit`, a passthrough cherry-pick, a conclusion git authored
+// for a queued sequence -- is simply in the way, and moving the ref past it
+// takes it out of the branch's history.
+//
+// The compare-and-swap alone cannot answer this. It pins the NEWEST recorded
+// tip, so it notices a foreign commit sitting on top and nothing else: one
+// safegit commit above a foreign one puts the pin back in agreement with the
+// branch, and a multi-step undo then walks the ref straight past the foreign
+// commit and reports success. That was live, and it destroyed both flavors.
+//
+// So the question asked here is the whole one: every commit the branch would
+// LOSE -- the first-parent walk from the rollback target to where the ref
+// actually stands -- must be one the oplog says this undo is reversing. The
+// walk is first-parent because a merge's other side was never made by the
+// operations being reversed: undoing a merge commit undoes the merge, not the
+// branch that was merged in.
+//
+// It refuses through die(), so the same verdict reaches a --dry-run: a preview
+// that announced a rollback the real run refuses was the third half of this
+// same defect. The compare-and-swap stays where it is as the final race guard
+// -- this check is what produces an honest message.
+func refuseUnaccountedRange(ctx context.Context, ref, targetSHA, pinnedSHA string, reversing map[string]bool, all []oplog.Entry, sessionID string, bypassSession bool) {
+	branchSHA, err := git.RevParse(ctx, ref)
+	if err != nil {
+		die(exitcode.General, fmt.Sprintf("reading where %s actually stands: %v", refShortName(ref), err))
+	}
+
+	lost, err := git.FirstParentRange(ctx, targetSHA, branchSHA)
+	if err != nil {
+		die(exitcode.General, fmt.Sprintf("listing the commits undo would move %s back over: %v", refShortName(ref), err))
+	}
+
+	var foreign []string
+	for _, sha := range lost {
+		if !reversing[sha] {
+			foreign = append(foreign, sha)
+		}
+	}
+	if len(foreign) > 0 {
+		die(exitcode.General, unaccountedRangeMessage(ctx, ref, targetSHA, foreign, all, sessionID, bypassSession))
+	}
+
+	// Nothing foreign in the range, but the branch is not where the log's last
+	// recorded operation left it: something moved it sideways or backwards --
+	// a reset, a force-update, an amend from outside safegit. The
+	// compare-and-swap would refuse this moments later with a plumbing message,
+	// and a preview would not refuse it at all.
+	if pinnedSHA != "" && branchSHA != pinnedSHA {
+		die(exitcode.General, fmt.Sprintf(
+			"%s is at %s, but safegit's log says its last recorded operation left it at %s\n"+
+				"  something moved the branch that undo has no record of -- a reset, a force-update, an amend made outside safegit.\n"+
+				"  undo will not roll back a branch it cannot account for. Inspect the branch (git log, git reflog) and move it yourself.",
+			refShortName(ref), shortSHA(branchSHA), shortSHA(pinnedSHA)))
+	}
+}
+
+// unaccountedRangeMessage renders the refusal: every commit in the way, then
+// what undo can and cannot do about it.
+func unaccountedRangeMessage(ctx context.Context, ref, targetSHA string, foreign []string, all []oplog.Entry, sessionID string, bypassSession bool) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "undo would move %s back over %d commit(s) safegit did not create:\n", refShortName(ref), len(foreign))
+	for _, sha := range foreign {
+		fmt.Fprintf(&b, "  %s\n", describeCommit(ctx, sha))
+	}
+	fmt.Fprintf(&b, "  undo reverses the operations safegit recorded in its own log, and none of the commits above is one of them.\n")
+	fmt.Fprintf(&b, "  A commit git authored -- a plain `git commit`, a passthrough cherry-pick, the conclusion of a queued\n")
+	fmt.Fprintf(&b, "  sequence git committed itself -- is outside undo's reach, and rolling %s back to %s would drop it\n",
+		refShortName(ref), rollbackTargetText(targetSHA))
+	fmt.Fprintf(&b, "  out of the branch's history. Reverse those commits with git, or move them onto a branch of their own first.")
+
+	// One of them may be safegit's after all -- another session's. That is a
+	// different situation with a real way out, so it is said rather than left
+	// under the git-authored sentence.
+	if !bypassSession {
+		if other := otherSessionCommit(foreign, all, sessionID); other != "" {
+			fmt.Fprintf(&b, "\n  (%s was recorded by another safegit session; --bypass-session widens undo to every session's operations)",
+				shortSHA(other))
+		}
+	}
+	return b.String()
+}
+
+// rollbackTargetText names where the branch would have gone, including the
+// root-undo case where the answer is "nowhere -- the ref is deleted".
+func rollbackTargetText(targetSHA string) string {
+	if targetSHA == "" {
+		return "nothing (the branch ref would be deleted)"
+	}
+	return shortSHA(targetSHA)
+}
+
+// otherSessionCommit reports the first foreign commit that IS in safegit's
+// oplog under a different session ID, or "" when none is.
+func otherSessionCommit(foreign []string, all []oplog.Entry, sessionID string) string {
+	for _, sha := range foreign {
+		for _, e := range all {
+			if e.Extra == nil || e.SessionID == sessionID {
+				continue
+			}
+			if oplog.TipSHA(e.Extra) == sha {
+				return sha
+			}
+		}
+	}
+	return ""
 }
 
 // findAssociatedParentBump scans the oplog for an "auto-bump-parent" entry

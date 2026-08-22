@@ -70,7 +70,13 @@ func TestUndoSessionScoped(t *testing.T) {
 }
 
 // TestUndoSessionScopedBranchMoved verifies that when session A tries to undo
-// after session B committed on top, the CAS detects the branch moved and fails.
+// after session B committed on top, undo refuses.
+//
+// The compare-and-swap would refuse it too, with a plumbing message that named
+// nothing. What is asserted here is the range check's answer: session B's
+// commit is in the way, it is NAMED, and -- because it is safegit's own commit
+// from another session rather than a git-authored one -- the refusal points at
+// --bypass-session, which is the way out that actually exists here.
 func TestUndoSessionScopedBranchMoved(t *testing.T) {
 	dir := newRepo(t)
 	envA := []string{"CLAUDE_CODE_SESSION_ID=session-A"}
@@ -100,8 +106,14 @@ func TestUndoSessionScopedBranchMoved(t *testing.T) {
 	if code == 0 {
 		t.Fatal("session A undo should have failed (branch moved), but exited 0")
 	}
-	if !strings.Contains(stderr, "update-ref failed") {
-		t.Errorf("expected update-ref failure in stderr, got: %s", stderr)
+	if !strings.Contains(stderr, shaBeforeUndo[:7]) {
+		t.Errorf("the refusal does not name session B's commit %s: %s", shaBeforeUndo[:7], stderr)
+	}
+	if !strings.Contains(stderr, "--bypass-session") {
+		t.Errorf("the refusal does not point at --bypass-session for another session's commit: %s", stderr)
+	}
+	if strings.Contains(stderr, "update-ref failed") {
+		t.Errorf("the refusal is the raw plumbing error rather than the named one: %s", stderr)
 	}
 
 	// HEAD should not have changed
