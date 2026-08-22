@@ -1,6 +1,7 @@
 package test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -166,7 +167,7 @@ func TestScrubSkipsWorktreeSyncWhenForeignStateAppears(t *testing.T) {
 		t.Fatalf("installing the reference-transaction hook: %v", err)
 	}
 
-	_, stderr, code := runSafegitEnv(t, dir, tierEnv, "--approve-consequential",
+	stdout, stderr, code := runSafegitEnv(t, dir, tierEnv, "--approve-consequential", "--json",
 		"scrub", "file", "--replace-with", "secret.txt",
 		"--from", initialSHA, "--reason", "foreign state mid-rewrite", "secret.txt")
 
@@ -179,6 +180,17 @@ func TestScrubSkipsWorktreeSyncWhenForeignStateAppears(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "read-tree --reset -u HEAD") {
 		t.Errorf("the operator must be told what to run; stderr: %s", stderr)
+	}
+
+	// The same fact reaches a machine reader, not only the operator's terminal.
+	var payload struct {
+		SyncSkipped bool `json:"sync_skipped"`
+	}
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &payload); err != nil {
+		t.Fatalf("parsing the payload: %v\n%s", err, stdout)
+	}
+	if !payload.SyncSkipped {
+		t.Errorf("the payload must report sync_skipped; stdout: %s", stdout)
 	}
 
 	// The foreign work is still there, untouched.
