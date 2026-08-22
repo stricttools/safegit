@@ -18,6 +18,7 @@ import (
 	"github.com/smm-h/safegit/internal/oplog"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/submodule"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
 type checkResult struct {
@@ -139,6 +140,38 @@ var doctorChecks = []doctorCheck{
 // in plaintext inside the repository the scrub was run to clean.
 const legacyScrubPolicyFile = "scrub-policies.jsonl"
 
+// printUninstallPlan enumerates what an uninstall is about to remove, one path
+// per line, before anything is removed and whether or not this is a dry run.
+//
+// Uninstall is repository-wide: from a linked worktree it takes the main
+// worktree's state and every other worktree's too. That is the part an operator
+// has no reason to expect, so those entries are marked in the line itself
+// rather than left to be inferred from the paths.
+//
+// It goes through outf: --quiet is about progress chatter, and a list of
+// directories that are about to be deleted is the command's own statement of
+// what it does. Machine mode suppresses it, where the envelope's preview
+// carries the same set.
+func printUninstallPlan(flags globalFlags, targets []repo.UninstallTarget) {
+	verb := "will remove"
+	if flags.dryRun {
+		verb = "would remove"
+	}
+	outf(flags, "safegit uninstall %s %d path(s) from this repository:\n", verb, len(targets))
+	foreign := 0
+	for _, t := range targets {
+		note := ""
+		if t.Foreign {
+			note = " -- NOT the worktree you are in"
+			foreign++
+		}
+		outf(flags, "  %s  (%s%s)\n", t.Path, t.Label, note)
+	}
+	if foreign > 0 {
+		outf(flags, "%d of these belong to other worktrees of this repository; uninstall is repository-wide.\n", foreign)
+	}
+}
+
 // runDoctor returns the process exit code. A declined confirmation is a
 // refusal, not a success: it exits nonzero so a script or agent cannot read
 // "aborted" as "done".
@@ -153,8 +186,20 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 
 	gitDir := mustGitDir()
 
-	// --uninstall: remove safegit from this repo and exit.
+	// --uninstall: remove safegit from this REPOSITORY -- every worktree's state
+	// directory and the shared store -- and exit.
 	if uninstall {
+		targets, err := repo.UninstallPlan(flags.ctx(), gitDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return exitcode.General
+		}
+		// The enumeration comes BEFORE the confirmation, because it is what the
+		// confirmation is about: an operator standing in one worktree is
+		// consenting to the removal of every other worktree's state too, and
+		// cannot consent to what they have not been shown.
+		printUninstallPlan(flags, targets)
+
 		// doctor is not consequential at command granularity -- `--action diagnose` only
 		// reads -- so the framework never prompts here and this seam is the only
 		// gate. The condition is the --uninstall flag the caller typed, so the
@@ -164,11 +209,17 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 			infof(flags, "Aborted.\n")
 			return exitcode.General
 		}
-		if err := repo.Uninstall(flags.ctx(), gitDir); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(exitcode.General)
+		// Through the effects handle, so --dry-run records each removal instead
+		// of performing it and the enumeration above is the whole of what a
+		// preview does.
+		fx := flags.effects()
+		for _, t := range targets {
+			if _, err := fx.Remove(t.Path, strictcli.Resource("safegit-state:"+t.Path)); err != nil {
+				fmt.Fprintf(os.Stderr, "error: removing %s: %v\n", t.Path, err)
+				return exitcode.General
+			}
 		}
-		if !flags.silent() {
+		if !flags.silent() && !flags.dryRun {
 			fmt.Println("safegit uninstalled")
 		}
 		return 0
