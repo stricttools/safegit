@@ -125,7 +125,7 @@ func TestCommitTree(t *testing.T) {
 	treeSHA, _, _ := Run(context.Background(), "rev-parse", "HEAD^{tree}")
 	treeSHA = strings.TrimSpace(treeSHA)
 
-	commitSHA, err := CommitTree(context.Background(), treeSHA, headSHA, "test commit")
+	commitSHA, err := CommitTree(context.Background(), treeSHA, []string{headSHA}, "test commit", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,7 +143,7 @@ func TestUpdateRef(t *testing.T) {
 	treeSHA, _, _ := Run(ctx, "rev-parse", "HEAD^{tree}")
 	treeSHA = strings.TrimSpace(treeSHA)
 
-	newCommit, _ := CommitTree(ctx, treeSHA, headSHA, "new commit")
+	newCommit, _ := CommitTree(ctx, treeSHA, []string{headSHA}, "new commit", nil)
 
 	// CAS update: expect headSHA, set to newCommit
 	err := UpdateRef(ctx, "refs/heads/main", newCommit, headSHA)
@@ -287,7 +287,7 @@ func TestParseCommitMultiLineMessage(t *testing.T) {
 	}
 }
 
-func TestCommitTreeWithAuthor(t *testing.T) {
+func TestCommitTreeWithIdentity(t *testing.T) {
 	dir := testutil.InitBareRepo(t)
 	testutil.Chdir(t, dir)
 	ctx := context.Background()
@@ -306,12 +306,12 @@ func TestCommitTreeWithAuthor(t *testing.T) {
 	author := AuthorInfo{Name: "Alice Author", Email: "alice@example.com", Date: "1700000000 +0000"}
 	committer := AuthorInfo{Name: "Bob Committer", Email: "bob@example.com", Date: "1700000001 +0100"}
 
-	newSHA, err := CommitTreeWithAuthor(ctx, treeSHA, []string{headSHA}, "custom commit", author, committer)
+	newSHA, err := CommitTree(ctx, treeSHA, []string{headSHA}, "custom commit", &CommitIdentity{Author: author, Committer: committer})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(newSHA) != 40 {
-		t.Fatalf("CommitTreeWithAuthor returned %q, want 40-char SHA", newSHA)
+		t.Fatalf("CommitTree returned %q, want 40-char SHA", newSHA)
 	}
 
 	info, err := ParseCommit(ctx, newSHA)
@@ -342,7 +342,7 @@ func TestCommitTreeWithAuthor(t *testing.T) {
 	}
 }
 
-func TestCommitTreeWithAuthorMultipleParents(t *testing.T) {
+func TestCommitTreeWithIdentityMultipleParents(t *testing.T) {
 	dir := testutil.InitBareRepo(t)
 	testutil.Chdir(t, dir)
 	ctx := context.Background()
@@ -369,7 +369,7 @@ func TestCommitTreeWithAuthorMultipleParents(t *testing.T) {
 	author := AuthorInfo{Name: "Test", Email: "test@test.com", Date: "1700000000 +0000"}
 	committer := author
 
-	newSHA, err := CommitTreeWithAuthor(ctx, treeSHA, []string{shaA, shaB}, "multi-parent", author, committer)
+	newSHA, err := CommitTree(ctx, treeSHA, []string{shaA, shaB}, "multi-parent", &CommitIdentity{Author: author, Committer: committer})
 	if err != nil {
 		t.Fatal(err)
 	}

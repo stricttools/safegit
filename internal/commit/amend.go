@@ -38,12 +38,14 @@ type AmendRequest struct {
 
 // AmendResult is the JSON-serializable output of a successful amend.
 type AmendResult struct {
-	SHA      string `json:"sha"`
-	Ref      string `json:"ref"`
-	Parent   string `json:"parent"`
-	Tree     string `json:"tree"`
-	OldSHA   string `json:"oldSha"`
-	Attempts int    `json:"attempts"`
+	SHA string `json:"sha"`
+	Ref string `json:"ref"`
+	// Parents is the parent list the amended commit inherited from the commit it
+	// replaced -- all of them, so amending a merge leaves it a merge.
+	Parents  []string `json:"parents"`
+	Tree     string   `json:"tree"`
+	OldSHA   string   `json:"oldSha"`
+	Attempts int      `json:"attempts"`
 
 	// Files lists the repo-relative paths this amend changed relative to the
 	// tip it replaced, sorted, derived from the objects themselves.
@@ -97,13 +99,20 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 		return nil, err
 	}
 
+	// One hook run per amend, not per CAS attempt -- see nativeHooks.
+	hooks, err := newNativeHooks(ctx, repoRoot, p.SafegitDir, req.DryRun)
+	if err != nil {
+		return nil, err
+	}
+	defer hooks.cleanup()
+
 	maxAttempts := p.Config.Commit.CASMaxAttempts
 	if maxAttempts <= 0 {
 		maxAttempts = 5
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryAmend(ctx, ref, repoRoot, files, req, attempt)
+		result, retry, err := p.tryAmend(ctx, ref, repoRoot, files, req, hooks, attempt)
 		if err != nil {
 			return nil, err
 		}
@@ -124,6 +133,7 @@ func (p *Pipeline) tryAmend(
 	ref, repoRoot string,
 	files *intake,
 	req AmendRequest,
+	hooks *nativeHooks,
 	attempt int,
 ) (*AmendResult, bool, error) {
 
@@ -134,21 +144,20 @@ func (p *Pipeline) tryAmend(
 		return nil, false, fmt.Errorf("resolving %s: %w", ref, err)
 	}
 
-	// Get parent of tip (ref^). For root commits, parentSHA is empty;
-	// CommitTree handles this by omitting the -p flag.
-	parentSHA, err := git.RevParse(ctx, ref+"^")
+	// The tip's parents, ALL of them, read off the commit object. `ref^` names
+	// only the first, and an amend that kept only the first parent of a merge
+	// would silently unmerge the branch that was merged in. A root commit has
+	// none, which CommitTree renders as a root commit again.
+	tip, err := git.ParseCommit(ctx, headSHA)
 	if err != nil {
-		parentSHA = ""
+		return nil, false, fmt.Errorf("reading %s: %w", headSHA, err)
 	}
+	parents := tip.Parents
 
 	// Determine message: use provided or reuse existing
 	message := req.Message
 	if message == "" {
-		msg, err := git.CommitMessage(ctx, ref)
-		if err != nil {
-			return nil, false, fmt.Errorf("reading %s commit message: %w", ref, err)
-		}
-		message = msg
+		message = strings.TrimRight(tip.Message, "\n")
 	}
 
 	// --- Phase A: create tmp index from the resolved tip and stage new files ---
@@ -168,6 +177,12 @@ func (p *Pipeline) tryAmend(
 	defer tmpIdx.Cleanup()
 
 	if err := p.stageAll(ctx, tmpIdx.IndexPath, repoRoot, files); err != nil {
+		return nil, false, err
+	}
+
+	// The repository's pre-commit hook, against what this amend stages; skipped
+	// under --dry-run and run once per amend rather than once per CAS attempt.
+	if err := hooks.preCommit(ctx, tmpIdx.IndexPath); err != nil {
 		return nil, false, err
 	}
 
@@ -193,10 +208,15 @@ func (p *Pipeline) tryAmend(
 		return nil, false, unmatchedSourceError(src, ref)
 	}
 
-	// Create new commit with parent = HEAD^ (replacing HEAD),
-	// injecting user trailers and session trailer.
-	msg := trailer.AppendCustom(message, req.Trailers)
-	commitSHA, err := git.CommitTree(ctx, treeSHA, parentSHA, trailer.Inject(msg))
+	// The commit-msg hook, on the message with the user's own trailers on it and
+	// before safegit's session trailer goes on.
+	msg, err := hooks.commitMsg(ctx, tmpIdx.IndexPath, trailer.AppendCustom(message, req.Trailers))
+	if err != nil {
+		return nil, false, err
+	}
+
+	// Create the replacement commit on the replaced commit's own parents.
+	commitSHA, err := git.CommitTree(ctx, treeSHA, parents, trailer.Inject(msg), nil)
 	if err != nil {
 		return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
 	}
@@ -205,7 +225,7 @@ func (p *Pipeline) tryAmend(
 		return &AmendResult{
 			SHA:            commitSHA,
 			Ref:            ref,
-			Parent:         parentSHA,
+			Parents:        parents,
 			Tree:           treeSHA,
 			OldSHA:         headSHA,
 			Attempts:       attempt,
@@ -249,7 +269,7 @@ func (p *Pipeline) tryAmend(
 		Extra: map[string]interface{}{
 			"ref":      ref,
 			"tree":     treeSHA,
-			"parent":   parentSHA,
+			"parent":   firstParent(parents),
 			"sha":      commitSHA,
 			"oldSha":   headSHA,
 			"attempts": attempt,
@@ -265,10 +285,13 @@ func (p *Pipeline) tryAmend(
 		}
 	}
 
+	// The post-commit hook, once the amended commit is the branch's tip.
+	hooks.postCommit(ctx)
+
 	return &AmendResult{
 		SHA:            commitSHA,
 		Ref:            ref,
-		Parent:         parentSHA,
+		Parents:        parents,
 		Tree:           treeSHA,
 		OldSHA:         headSHA,
 		Attempts:       attempt,
@@ -292,12 +315,14 @@ type RewordRequest struct {
 
 // RewordResult is the JSON-serializable output of a successful reword.
 type RewordResult struct {
-	SHA      string `json:"sha"`
-	Ref      string `json:"ref"`
-	Parent   string `json:"parent"`
-	Tree     string `json:"tree"`
-	OldSHA   string `json:"oldSha"`
-	Attempts int    `json:"attempts"`
+	SHA string `json:"sha"`
+	Ref string `json:"ref"`
+	// Parents is the parent list the reworded commit inherited, all of it: a
+	// reword changes a message and nothing else, least of all what is merged.
+	Parents  []string `json:"parents"`
+	Tree     string   `json:"tree"`
+	OldSHA   string   `json:"oldSha"`
+	Attempts int      `json:"attempts"`
 }
 
 // Reword rewrites only the commit message of the tip of the current branch.
@@ -330,13 +355,26 @@ func (p *Pipeline) Reword(ctx context.Context, req RewordRequest) (*RewordResult
 		}
 	}
 
+	repoRoot, err := git.RepoRoot(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolving repo root: %w", err)
+	}
+
+	// A reword is a commit as far as the repository's hooks are concerned, so it
+	// runs the same three, once each -- see nativeHooks.
+	hooks, err := newNativeHooks(ctx, repoRoot, p.SafegitDir, req.DryRun)
+	if err != nil {
+		return nil, err
+	}
+	defer hooks.cleanup()
+
 	maxAttempts := p.Config.Commit.CASMaxAttempts
 	if maxAttempts <= 0 {
 		maxAttempts = 5
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryReword(ctx, ref, req, attempt)
+		result, retry, err := p.tryReword(ctx, ref, req, hooks, attempt)
 		if err != nil {
 			return nil, err
 		}
@@ -356,6 +394,7 @@ func (p *Pipeline) tryReword(
 	ctx context.Context,
 	ref string,
 	req RewordRequest,
+	hooks *nativeHooks,
 	attempt int,
 ) (*RewordResult, bool, error) {
 
@@ -364,18 +403,43 @@ func (p *Pipeline) tryReword(
 		return nil, false, fmt.Errorf("resolving %s: %w", ref, err)
 	}
 
-	treeSHA, err := git.RevParse(ctx, ref+"^{tree}")
+	// Tree and parents come off the commit object being reworded, all the
+	// parents of it: a reword of a merge commit is still a merge commit.
+	tip, err := git.ParseCommit(ctx, headSHA)
 	if err != nil {
-		return nil, false, fmt.Errorf("resolving %s tree: %w", ref, err)
+		return nil, false, fmt.Errorf("reading %s: %w", headSHA, err)
+	}
+	treeSHA, parents := tip.Tree, tip.Parents
+
+	// A reword stages nothing, so the content the hooks inspect is the tip's own
+	// tree. It is materialized as an index only when a hook that would read one
+	// still has to run.
+	hookIndex := ""
+	if hooks.wantsIndex() {
+		idxBase, idxBaseCleanup, err := p.indexBaseDir(req.DryRun)
+		if err != nil {
+			return nil, false, err
+		}
+		defer idxBaseCleanup()
+
+		tmpIdx, err := index.New(ctx, idxBase, treeSHA)
+		if err != nil {
+			return nil, false, fmt.Errorf("creating tmp index: %w", err)
+		}
+		defer tmpIdx.Cleanup()
+		hookIndex = tmpIdx.IndexPath
 	}
 
-	parentSHA, err := git.RevParse(ctx, ref+"^")
-	if err != nil {
-		parentSHA = ""
+	if err := hooks.preCommit(ctx, hookIndex); err != nil {
+		return nil, false, err
 	}
 
-	msg := trailer.AppendCustom(req.Message, req.Trailers)
-	commitSHA, err := git.CommitTree(ctx, treeSHA, parentSHA, trailer.Inject(msg))
+	msg, err := hooks.commitMsg(ctx, hookIndex, trailer.AppendCustom(req.Message, req.Trailers))
+	if err != nil {
+		return nil, false, err
+	}
+
+	commitSHA, err := git.CommitTree(ctx, treeSHA, parents, trailer.Inject(msg), nil)
 	if err != nil {
 		return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
 	}
@@ -384,7 +448,7 @@ func (p *Pipeline) tryReword(
 		return &RewordResult{
 			SHA:      commitSHA,
 			Ref:      ref,
-			Parent:   parentSHA,
+			Parents:  parents,
 			Tree:     treeSHA,
 			OldSHA:   headSHA,
 			Attempts: attempt,
@@ -433,10 +497,13 @@ func (p *Pipeline) tryReword(
 		}
 	}
 
+	// The post-commit hook, once the reworded commit is the branch's tip.
+	hooks.postCommit(ctx)
+
 	return &RewordResult{
 		SHA:      commitSHA,
 		Ref:      ref,
-		Parent:   parentSHA,
+		Parents:  parents,
 		Tree:     treeSHA,
 		OldSHA:   headSHA,
 		Attempts: attempt,

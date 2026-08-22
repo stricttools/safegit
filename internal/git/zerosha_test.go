@@ -89,7 +89,7 @@ func TestZeroSHAMeansCreateOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	newCommit, err := CommitTree(ctx, strings.TrimSpace(other), headSHA, "second")
+	newCommit, err := CommitTree(ctx, strings.TrimSpace(other), []string{headSHA}, "second", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

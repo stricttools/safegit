@@ -356,8 +356,8 @@ func TestAmend(t *testing.T) {
 	}
 
 	// Parent should be the same as the original commit's parent
-	if amendResult.Parent != firstResult.Parent {
-		t.Errorf("parent changed: got %s, want %s", amendResult.Parent, firstResult.Parent)
+	if firstParent(amendResult.Parents) != firstParent(firstResult.Parents) {
+		t.Errorf("parent changed: got %s, want %s", firstParent(amendResult.Parents), firstParent(firstResult.Parents))
 	}
 
 	// OldSHA should be the first commit
@@ -459,8 +459,8 @@ func TestReword(t *testing.T) {
 	}
 
 	// Parent should be unchanged
-	if rewordResult.Parent != firstResult.Parent {
-		t.Errorf("parent changed: got %s, want %s", rewordResult.Parent, firstResult.Parent)
+	if firstParent(rewordResult.Parents) != firstParent(firstResult.Parents) {
+		t.Errorf("parent changed: got %s, want %s", firstParent(rewordResult.Parents), firstParent(firstResult.Parents))
 	}
 
 	// OldSHA should be the first commit
@@ -835,8 +835,8 @@ func TestInitialCommit(t *testing.T) {
 	treeHasFile(t, result.SHA, "hello.txt")
 
 	// Verify it's a root commit (no parent)
-	if result.Parent != "" {
-		t.Errorf("Parent = %q, want empty (root commit)", result.Parent)
+	if len(result.Parents) != 0 {
+		t.Errorf("Parents = %v, want none (root commit)", result.Parents)
 	}
 
 	// Double-check: git log should show exactly one commit
@@ -850,3 +850,125 @@ func TestInitialCommit(t *testing.T) {
 	}
 }
 
+// The repository's hooks run once per commit, not once per compare-and-swap
+// attempt. The loop can run Phase A several times when another session moves
+// the ref underneath it, and a hook that ran per attempt would lint, notify or
+// rewrite twice for one commit.
+func TestCommitHooksRunOncePerCommitAcrossCASRetries(t *testing.T) {
+	dir, gitDir, sgDir := testutil.InitRepo(t, repo.Init)
+	testutil.Chdir(t, dir)
+
+	hooksDir := filepath.Join(gitDir, "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(dir, "hook-runs.txt")
+	for _, name := range []string{"pre-commit", "commit-msg"} {
+		script := "#!/bin/sh\necho " + name + " >> \"" + marker + "\"\n"
+		if err := os.WriteFile(filepath.Join(hooksDir, name), []byte(script), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "ours.txt"), []byte("ours\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// One racing commit on the first attempt, which costs exactly one CAS miss.
+	var once sync.Once
+	p := newPipeline(sgDir)
+	p.PhaseADone = func() {
+		once.Do(func() {
+			os.WriteFile(filepath.Join(dir, "race.txt"), []byte("race\n"), 0644)
+			// --no-verify: the racing commit is fixture machinery, and its own
+			// hook runs would be indistinguishable from safegit's.
+			for _, args := range [][]string{{"add", "race.txt"}, {"commit", "--no-verify", "-m", "racing commit"}} {
+				cmd := exec.Command("git", args...)
+				cmd.Dir = dir
+				cmd.Run()
+			}
+		})
+	}
+
+	result, err := p.Execute(context.Background(), CommitRequest{
+		Message: "our commit",
+		Files:   []string{"ours.txt"},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Attempts < 2 {
+		t.Fatalf("Attempts = %d, want >= 2 -- the fixture did not force a CAS retry", result.Attempts)
+	}
+
+	data, err := os.ReadFile(marker)
+	if err != nil {
+		t.Fatalf("the hooks left no marker at all: %v", err)
+	}
+	counts := map[string]int{}
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		counts[strings.TrimSpace(line)]++
+	}
+	for _, name := range []string{"pre-commit", "commit-msg"} {
+		if counts[name] != 1 {
+			t.Errorf("%s ran %d time(s) for one commit that took %d attempts, want exactly 1",
+				name, counts[name], result.Attempts)
+		}
+	}
+}
+
+// The shared-index base is what a conclusion commit will use: whatever is
+// staged in .git/index becomes the commit's content, without the caller having
+// to name any of it.
+func TestCommitFromSharedIndexBase(t *testing.T) {
+	dir, _, sgDir := testutil.InitRepo(t, repo.Init)
+	testutil.Chdir(t, dir)
+
+	// Staged in the SHARED index and named nowhere on the command line.
+	if err := os.WriteFile(filepath.Join(dir, "staged.txt"), []byte("staged\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	add := exec.Command("git", "add", "staged.txt")
+	add.Dir = dir
+	if out, err := add.CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "named.txt"), []byte("named\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := newPipeline(sgDir).Execute(context.Background(), CommitRequest{
+		Message:   "conclusion",
+		Files:     []string{"named.txt"},
+		IndexBase: IndexBaseSharedIndex,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+
+	treeHasFile(t, result.SHA, "staged.txt")
+	treeHasFile(t, result.SHA, "named.txt")
+
+	// The default base does not carry the shared index's staged work: the two
+	// modes are different answers, not the same answer twice.
+	if err := os.WriteFile(filepath.Join(dir, "other.txt"), []byte("other\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "alsostaged.txt"), []byte("also\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	add = exec.Command("git", "add", "alsostaged.txt")
+	add.Dir = dir
+	if out, err := add.CombinedOutput(); err != nil {
+		t.Fatalf("git add: %v\n%s", err, out)
+	}
+	plain, err := newPipeline(sgDir).Execute(context.Background(), CommitRequest{
+		Message: "ordinary",
+		Files:   []string{"other.txt"},
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	treeHasFile(t, plain.SHA, "other.txt")
+	treeLacksFile(t, plain.SHA, "alsostaged.txt")
+}

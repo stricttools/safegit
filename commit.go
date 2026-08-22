@@ -95,13 +95,25 @@ var commitPayloadSchema = strictcli.SchemaObject(
 	false,
 )
 
-// parentList renders the pipeline's single parent as the payload's list form.
-// An unborn ref has no parent, which is an empty list and not a null entry.
-func parentList(parent string) []string {
-	if parent == "" {
-		return []string{}
+// joinMessages composes the commit message from repeated -m values, separating
+// them with a BLANK line -- `-m subject -m body` is a subject and a body, which
+// is what `git commit -m ... -m ...` means and what every reader of a git log
+// assumes. Joined with a single newline instead, git reads the whole thing as
+// one subject and `git log --oneline` prints every paragraph on one line.
+//
+// commit, amend and reword all compose their message here, so the three cannot
+// disagree about what repeating -m means.
+func joinMessages(messages []string) string {
+	return strings.Join(messages, "\n\n")
+}
+
+// firstOr returns the list's first element, or "" for an empty list: the
+// commit's first parent, which is also the value its ref moved away from.
+func firstOr(list []string) string {
+	if len(list) == 0 {
+		return ""
 	}
-	return []string{parent}
+	return list[0]
 }
 
 // realSHA reports the commit SHA a run actually created, and nothing under a
@@ -163,7 +175,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		die(exitcode.Usage, "no files specified (use -- file1 file2 ..., --hunks path:1,3 or --untrack path)")
 	}
 
-	msg := strings.Join(messages, "\n")
+	msg := joinMessages(messages)
 
 	fileSpecs, err := buildFileSpecs(files, hunks)
 	if err != nil {
@@ -174,6 +186,13 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
 		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
+	}
+
+	// Before the pipeline runs at all: a submodule commit moves the parent's
+	// gitlink, and a parent that has not answered the auto-bump question is a
+	// refusal, not a commit followed by one.
+	if err := requireAutoBumpDecision(flags.ctx(), flags); err != nil {
+		die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 	}
 
 	// Outermost, around the pipeline's whole run: the in-flight-operation check
@@ -214,7 +233,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	if flags.verbose {
 		fmt.Fprintf(os.Stderr, "  ref: %s\n", result.Ref)
 		fmt.Fprintf(os.Stderr, "  tree: %s\n", result.Tree)
-		fmt.Fprintf(os.Stderr, "  parent: %s\n", result.Parent)
+		fmt.Fprintf(os.Stderr, "  parents: %s\n", strings.Join(result.Parents, " "))
 		fmt.Fprintf(os.Stderr, "  sha: %s\n", result.SHA)
 	}
 
@@ -222,11 +241,11 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 	}
 
-	recordCommitRefUpdate(flags, result.Ref, result.SHA, result.Parent)
+	recordCommitRefUpdate(flags, result.Ref, result.SHA, firstOr(result.Parents))
 
 	flags.payload(commitPayload{
 		Ref:            result.Ref,
-		Parents:        parentList(result.Parent),
+		Parents:        orEmpty(result.Parents),
 		Tree:           result.Tree,
 		SHA:            realSHA(flags, result.SHA),
 		OldSHA:         nil,
@@ -283,6 +302,13 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
 	}
 
+	// Same refusal the plain commit path makes, for both the amend and the
+	// reword below: an unanswered auto-bump question in the parent stops the
+	// operation before it rewrites anything.
+	if err := requireAutoBumpDecision(flags.ctx(), flags); err != nil {
+		die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+	}
+
 	// Same ordering as the plain commit path: operation lock outermost, the
 	// pipeline's per-ref CAS lock inside it.
 	release, code := acquireOperationLock(flags, gitDir, "amend")
@@ -297,7 +323,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		// Amend: add new files to the tip commit
 		var msg string
 		if len(messages) > 0 {
-			msg = strings.Join(messages, "\n")
+			msg = joinMessages(messages)
 		}
 
 		fileSpecs, err := buildFileSpecs(files, hunks)
@@ -331,7 +357,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		if flags.verbose {
 			fmt.Fprintf(os.Stderr, "  ref: %s\n", result.Ref)
 			fmt.Fprintf(os.Stderr, "  tree: %s\n", result.Tree)
-			fmt.Fprintf(os.Stderr, "  parent: %s\n", result.Parent)
+			fmt.Fprintf(os.Stderr, "  parents: %s\n", strings.Join(result.Parents, " "))
 			fmt.Fprintf(os.Stderr, "  old: %s\n", result.OldSHA)
 			fmt.Fprintf(os.Stderr, "  sha: %s\n", result.SHA)
 		}
@@ -344,7 +370,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 
 		flags.payload(commitPayload{
 			Ref:            result.Ref,
-			Parents:        parentList(result.Parent),
+			Parents:        orEmpty(result.Parents),
 			Tree:           result.Tree,
 			SHA:            realSHA(flags, result.SHA),
 			OldSHA:         &result.OldSHA,
@@ -376,7 +402,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			die(exitcode.Usage, "commit message required (-m) when using --amend without files")
 		}
 
-		msg := strings.Join(messages, "\n")
+		msg := joinMessages(messages)
 
 		if flags.verbose {
 			fmt.Fprintf(os.Stderr, "  reword message: %s\n", firstLine(msg))
@@ -411,7 +437,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		// list is empty by construction rather than by measurement.
 		flags.payload(commitPayload{
 			Ref:            result.Ref,
-			Parents:        parentList(result.Parent),
+			Parents:        orEmpty(result.Parents),
 			Tree:           result.Tree,
 			SHA:            realSHA(flags, result.SHA),
 			OldSHA:         &result.OldSHA,

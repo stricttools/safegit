@@ -23,28 +23,35 @@ type TmpIndex struct {
 	IndexPath string // Dir + "/index"
 }
 
-// New creates a temporary index directory under baseDir/tmp/ and seeds the
-// index from the given treeish. The directory name is <pid>-<random> where
-// random is 4 bytes hex. baseDir is .git/safegit for an executing run; a
-// preview passes an OS temp directory so that nothing is written inside .git/.
-func New(ctx context.Context, baseDir string, treeish string) (*TmpIndex, error) {
-	tmpBase := filepath.Join(baseDir, "tmp")
-
+// newDir creates the per-invocation directory every constructor here hands
+// back, named <pid>-<random> so GarbageCollect can tell whose it is, and
+// returns the directory and the index path inside it. baseDir is .git/safegit
+// for an executing run; a preview passes an OS temp directory so that nothing
+// is written inside .git/.
+func newDir(baseDir string) (dir, indexPath string, err error) {
 	// Generate 4 random bytes -> 8 hex chars
 	var rndBytes [4]byte
 	if _, err := rand.Read(rndBytes[:]); err != nil {
-		return nil, fmt.Errorf("generating random suffix: %w", err)
+		return "", "", fmt.Errorf("generating random suffix: %w", err)
 	}
 	rnd := hex.EncodeToString(rndBytes[:])
 
 	dirName := fmt.Sprintf("%d-%s", os.Getpid(), rnd)
-	dir := filepath.Join(tmpBase, dirName)
+	dir = filepath.Join(baseDir, "tmp", dirName)
 
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("creating tmp index dir: %w", err)
+		return "", "", fmt.Errorf("creating tmp index dir: %w", err)
 	}
+	return dir, filepath.Join(dir, "index"), nil
+}
 
-	indexPath := filepath.Join(dir, "index")
+// New creates a temporary index directory under baseDir/tmp/ and seeds the
+// index from the given treeish.
+func New(ctx context.Context, baseDir string, treeish string) (*TmpIndex, error) {
+	dir, indexPath, err := newDir(baseDir)
+	if err != nil {
+		return nil, err
+	}
 
 	// Seed from the given treeish via git read-tree
 	if err := git.ReadTree(ctx, indexPath, treeish); err != nil {
@@ -60,23 +67,44 @@ func New(ctx context.Context, baseDir string, treeish string) (*TmpIndex, error)
 // Used for root commits in repos with no prior commits. baseDir has the same
 // meaning as in New.
 func NewEmpty(baseDir string) (*TmpIndex, error) {
-	tmpBase := filepath.Join(baseDir, "tmp")
-
-	var rndBytes [4]byte
-	if _, err := rand.Read(rndBytes[:]); err != nil {
-		return nil, fmt.Errorf("generating random suffix: %w", err)
+	dir, indexPath, err := newDir(baseDir)
+	if err != nil {
+		return nil, err
 	}
-	rnd := hex.EncodeToString(rndBytes[:])
-
-	dirName := fmt.Sprintf("%d-%s", os.Getpid(), rnd)
-	dir := filepath.Join(tmpBase, dirName)
-
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("creating tmp index dir: %w", err)
-	}
-
-	indexPath := filepath.Join(dir, "index")
 	// Empty index: just create the dir, git add will initialize the index file
+	return &TmpIndex{Dir: dir, IndexPath: indexPath}, nil
+}
+
+// NewFromFile creates a temporary index directory whose index starts as a byte
+// copy of an existing index file -- in practice the repository's shared
+// .git/index, which is where git records a conflict resolution the operator has
+// staged. Copying is what keeps safegit's promise never to write to that file:
+// the copy is what gets staged into and written out as a tree, and the original
+// is only ever read.
+//
+// The copy carries whatever the source held, unmerged stage entries included; a
+// caller that copies a conflicted index and then asks for a tree gets git's own
+// refusal to write one, which is the honest answer.
+func NewFromFile(baseDir, srcIndexPath string) (*TmpIndex, error) {
+	dir, indexPath, err := newDir(baseDir)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := os.ReadFile(srcIndexPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// No index file at all is git's empty index, not a failure.
+			return &TmpIndex{Dir: dir, IndexPath: indexPath}, nil
+		}
+		os.RemoveAll(dir)
+		return nil, fmt.Errorf("reading %s: %w", srcIndexPath, err)
+	}
+	if err := os.WriteFile(indexPath, data, 0644); err != nil {
+		os.RemoveAll(dir)
+		return nil, fmt.Errorf("copying %s: %w", srcIndexPath, err)
+	}
+
 	return &TmpIndex{Dir: dir, IndexPath: indexPath}, nil
 }
 

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	mrand "math/rand"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -91,6 +90,21 @@ type CommitRequest struct {
 	// is a hard error rather than a silent no-op.
 	Untrack []string
 
+	// ExtraParents names parents BEYOND the branch tip, in order, for a commit
+	// with more than one -- a merge conclusion, whose second parent is the side
+	// being merged in.
+	//
+	// The tip is always parent 0 and is resolved by the pipeline itself, because
+	// it is also the value every compare-and-swap is made against: a caller that
+	// supplied the whole parent list would be supplying a tip that another
+	// session may have moved since it read it. So a caller names only what the
+	// pipeline cannot resolve for itself.
+	ExtraParents []string
+
+	// IndexBase selects what the commit's temporary index starts from. The zero
+	// value is the parent tree, which is every ordinary commit.
+	IndexBase IndexBase
+
 	// Sequencer declares that this caller is the conclusion path for an
 	// operation git has in flight. Nil -- which is every ordinary caller --
 	// means the commit is refused whenever git is mid-merge, mid-cherry-pick,
@@ -100,13 +114,39 @@ type CommitRequest struct {
 	Sequencer *coord.SequencerContext
 }
 
+// IndexBase selects what a commit's temporary index starts from.
+//
+// It is an explicit input rather than something inferred, because the two
+// answers mean different things about where the commit's content came from:
+// the parent tree plus the paths the caller named, or a resolution the operator
+// already staged.
+type IndexBase int
+
+const (
+	// IndexBaseParentTree seeds the temporary index from the tree of the commit
+	// being built on -- the branch tip, or an empty index on an unborn ref. It
+	// is the zero value and what every ordinary commit uses: the commit contains
+	// the parent's content with the named paths applied over it.
+	IndexBaseParentTree IndexBase = iota
+
+	// IndexBaseSharedIndex seeds the temporary index from a copy of the
+	// repository's shared index (.git/index), so that whatever is staged there
+	// becomes the commit's content. It exists for the conclusion of an operation
+	// git has in flight, where the conflict resolution the operator staged lives
+	// in that index and nowhere else. The copy is a copy: the shared index is
+	// read and never written.
+	IndexBaseSharedIndex
+)
+
 // CommitResult is the JSON-serializable output of a successful commit.
 type CommitResult struct {
-	SHA      string `json:"sha"`
-	Ref      string `json:"ref"`
-	Parent   string `json:"parent"`
-	Tree     string `json:"tree"`
-	Attempts int    `json:"attempts"`
+	SHA string `json:"sha"`
+	Ref string `json:"ref"`
+	// Parents is the commit's parent list in order, empty for a root commit and
+	// longer than one for a merge.
+	Parents  []string `json:"parents"`
+	Tree     string   `json:"tree"`
+	Attempts int      `json:"attempts"`
 
 	// Files lists the repo-relative paths this commit changed relative to its
 	// parent, sorted, derived from the objects themselves. It is what every
@@ -169,13 +209,21 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 		return nil, err
 	}
 
+	// The repository's own hooks, prepared once for the whole operation: they
+	// run at most once each no matter how many attempts the CAS loop takes.
+	hooks, err := newNativeHooks(ctx, repoRoot, p.SafegitDir, req.DryRun)
+	if err != nil {
+		return nil, err
+	}
+	defer hooks.cleanup()
+
 	maxAttempts := p.Config.Commit.CASMaxAttempts
 	if maxAttempts <= 0 {
 		maxAttempts = 5
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryCommit(ctx, ref, repoRoot, files, req, attempt)
+		result, retry, err := p.tryCommit(ctx, ref, repoRoot, files, req, hooks, attempt)
 		if err != nil {
 			return nil, err
 		}
@@ -210,6 +258,27 @@ func (p *Pipeline) indexBaseDir(dryRun bool) (base string, cleanup func(), err e
 	return dir, func() { os.RemoveAll(dir) }, nil
 }
 
+// newTmpIndex creates the per-invocation index a commit stages into, from
+// whichever base the request selected. baseDir is where the index directory
+// itself lives (see indexBaseDir); base is what its content starts as.
+func (p *Pipeline) newTmpIndex(ctx context.Context, baseDir string, base IndexBase, isRootCommit bool, parentSHA string) (*index.TmpIndex, error) {
+	switch base {
+	case IndexBaseSharedIndex:
+		gitDir, err := git.GitDir(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("resolving git dir: %w", err)
+		}
+		return index.NewFromFile(baseDir, filepath.Join(gitDir, "index"))
+	case IndexBaseParentTree:
+		if isRootCommit {
+			return index.NewEmpty(baseDir)
+		}
+		return index.New(ctx, baseDir, parentSHA)
+	default:
+		return nil, fmt.Errorf("unknown index base %d", int(base))
+	}
+}
+
 // tryCommit runs one attempt of the two-phase pipeline.
 // Returns (result, false, nil) on success, (nil, true, nil) on CAS miss,
 // or (nil, false, err) on hard failure.
@@ -218,6 +287,7 @@ func (p *Pipeline) tryCommit(
 	ref, repoRoot string,
 	files *intake,
 	req CommitRequest,
+	hooks *nativeHooks,
 	attempt int,
 ) (*CommitResult, bool, error) {
 
@@ -244,12 +314,7 @@ func (p *Pipeline) tryCommit(
 	}
 	defer idxBaseCleanup()
 
-	var tmpIdx *index.TmpIndex
-	if isRootCommit {
-		tmpIdx, err = index.NewEmpty(idxBase)
-	} else {
-		tmpIdx, err = index.New(ctx, idxBase, parentSHA)
-	}
+	tmpIdx, err := p.newTmpIndex(ctx, idxBase, req.IndexBase, isRootCommit, parentSHA)
 	if err != nil {
 		return nil, false, fmt.Errorf("creating tmp index: %w", err)
 	}
@@ -262,16 +327,11 @@ func (p *Pipeline) tryCommit(
 		return nil, false, err
 	}
 
-	// Step 2.5: Run pre-commit hook (if present) against the tmp index.
-	// Skipped for --dry-run and --force (matching git's --no-verify).
-	if !req.DryRun {
-		gitDir, err := git.GitDir(ctx)
-		if err != nil {
-			return nil, false, fmt.Errorf("resolving git dir: %w", err)
-		}
-		if err := runPreCommitHook(ctx, gitDir, tmpIdx.IndexPath, repoRoot); err != nil {
-			return nil, false, err
-		}
+	// Step 2.5: the repository's pre-commit hook, against the tmp index so it
+	// sees exactly what this commit stages. Skipped under --dry-run, and run
+	// only on the first attempt -- see nativeHooks.
+	if err := hooks.preCommit(ctx, tmpIdx.IndexPath); err != nil {
+		return nil, false, err
 	}
 
 	// Step 3: Build tree
@@ -306,9 +366,21 @@ func (p *Pipeline) tryCommit(
 		return nil, false, fmt.Errorf("nothing to commit (tree unchanged); use --allow-empty to override")
 	}
 
-	// Step 4: Build commit object (with user trailers and session trailer)
-	msg := trailer.AppendCustom(req.Message, req.Trailers)
-	commitSHA, err := git.CommitTree(ctx, treeSHA, parentSHA, trailer.Inject(msg))
+	// Step 3.6: the commit-msg hook, on the user's message before safegit's own
+	// session trailer goes on, adopting whatever the hook left in the file. It
+	// comes after the refusals above so that a commit safegit is about to refuse
+	// never sets an operator's message hook running -- the same order git uses,
+	// which stops at "nothing to commit" before it asks for a message.
+	message, err := hooks.commitMsg(ctx, tmpIdx.IndexPath, trailer.AppendCustom(req.Message, req.Trailers))
+	if err != nil {
+		return nil, false, err
+	}
+
+	// Step 4: Build commit object. The tip is parent 0 -- it is also what every
+	// CAS below is made against -- and a caller concluding a merge names the
+	// other side in ExtraParents.
+	parents := commitParents(parentSHA, req.ExtraParents)
+	commitSHA, err := git.CommitTree(ctx, treeSHA, parents, trailer.Inject(message), nil)
 	if err != nil {
 		return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
 	}
@@ -323,7 +395,7 @@ func (p *Pipeline) tryCommit(
 		return &CommitResult{
 			SHA:            commitSHA,
 			Ref:            ref,
-			Parent:         parentSHA,
+			Parents:        parents,
 			Tree:           treeSHA,
 			Attempts:       attempt,
 			Files:          changedPaths(changed),
@@ -409,10 +481,14 @@ func (p *Pipeline) tryCommit(
 		}
 	}
 
+	// Step 10: the post-commit hook, once the commit is real and nothing can
+	// take it back.
+	hooks.postCommit(ctx)
+
 	return &CommitResult{
 		SHA:            commitSHA,
 		Ref:            ref,
-		Parent:         parentSHA,
+		Parents:        parents,
 		Tree:           treeSHA,
 		Attempts:       attempt,
 		Files:          changedPaths(changed),
@@ -496,30 +572,24 @@ func isTransientRefError(err error) bool {
 	return strings.Contains(msg, "cannot lock ref") || strings.Contains(msg, "Unable to create")
 }
 
-// runPreCommitHook runs .git/hooks/pre-commit with GIT_INDEX_FILE pointing
-// at the tmp index so the hook sees the correct staged files. Returns nil if
-// no hook exists (matching git's behavior). Returns an error if the hook
-// exits non-zero, which aborts the commit.
-func runPreCommitHook(ctx context.Context, gitDir, indexPath, repoRoot string) error {
-	hookPath := filepath.Join(gitDir, "hooks", "pre-commit")
-	info, err := os.Stat(hookPath)
-	if err != nil {
-		// No hook file -- nothing to run
-		return nil
+// commitParents renders the parent list a commit object is written with: the
+// tip first, because that is also the value the ref update is made against,
+// then whatever else the caller named. An empty tip is an unborn ref, which has
+// no parents at all.
+func commitParents(tipSHA string, extra []string) []string {
+	var parents []string
+	if tipSHA != "" {
+		parents = append(parents, tipSHA)
 	}
-	if info.Mode()&0111 == 0 {
-		// Hook exists but is not executable -- skip (matches git behavior)
-		return nil
-	}
+	return append(parents, extra...)
+}
 
-	cmd := exec.CommandContext(ctx, hookPath)
-	cmd.Dir = repoRoot
-	cmd.Env = append(os.Environ(), "GIT_INDEX_FILE="+indexPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("pre-commit hook failed: %w", err)
+// firstParent is the parent list's head, or "" for a root commit. It is what
+// the oplog records: undo needs the value the ref is put back to, which is the
+// first parent and never the others.
+func firstParent(parents []string) string {
+	if len(parents) == 0 {
+		return ""
 	}
-	return nil
+	return parents[0]
 }

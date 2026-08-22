@@ -241,7 +241,7 @@ func newApp() *strictcli.App {
 			Kind:   strictcli.ProcMutate,
 		}),
 		strictcli.WithFlags(
-			strictcli.StringFlag("m", "commit message line; can be repeated to build multi-line messages", strictcli.Short("m"), strictcli.Repeatable(), strictcli.Unique(false), strictcli.Optional()),
+			strictcli.StringFlag("m", "commit message paragraph; repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body", strictcli.Short("m"), strictcli.Repeatable(), strictcli.Unique(false), strictcli.Optional()),
 			strictcli.StringFlag("F", "read the full commit message body from a file instead of --m flags", strictcli.Short("F"), strictcli.Optional()),
 			strictcli.StringFlag("branch", "commit the staged files onto a different branch without switching to it", strictcli.Optional()),
 			strictcli.BoolFlag("amend", "amend the current HEAD commit by replacing it with updated content; omitted means a new commit", strictcli.Optional()),
