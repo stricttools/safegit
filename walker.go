@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -62,6 +63,14 @@ func walkAndRewrite(ctx context.Context, shas []string, transform TransformFunc,
 		// Ask the caller what to change.
 		xform, err := transform(ctx, sha, info, remappedParents, shaMap)
 		if err != nil {
+			// A refusal is already a complete statement about a specific
+			// commit -- it names the commit, what it found there and what to do
+			// about it -- so it travels verbatim. Framing it as a failure to
+			// transform would be a second, weaker account of the same verdict.
+			var refusal *rewriteRefusal
+			if errors.As(err, &refusal) {
+				return nil, 0, err
+			}
 			return nil, 0, fmt.Errorf("transforming commit %s: %w", sha, err)
 		}
 

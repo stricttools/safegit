@@ -11,6 +11,7 @@ import (
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/oplog"
+	"github.com/smm-h/safegit/internal/trailer"
 )
 
 // TierAFunc is a command's own pre-refs verification. It runs while the
@@ -120,10 +121,45 @@ func refuse(headline string, findings []string) error {
 	return &rewriteRefusal{msg: b.String()}
 }
 
-// dieFinalize exits with the exit code a Finalize failure calls for: a Tier A
-// refusal says nothing happened (RewriteRefused), anything else is a failure
-// partway through the shared pipeline (General). prefix names the repository
-// the failure belongs to when a command finalizes more than one.
+// refuseCorruptRecord is the refusal for a message transform that would write a
+// move record nothing can read (see trailer.RecordTransformError).
+//
+// It is the same verdict Tier A gives and it is given at the same guarantee: it
+// happens while the walk is still writing unreachable objects, so no ref has
+// moved, no tag has moved and no journal record exists. An error that is not a
+// record-transform refusal is passed through untouched.
+//
+// The record is never written broken and never dropped either. Dropping it
+// would delete a claim the operator never retracted, and writing it would leave
+// a line the decoder refuses -- inert, so nothing would ever report it again.
+func refuseCorruptRecord(sha string, err error) error {
+	var bad *trailer.RecordTransformError
+	if !errors.As(err, &bad) {
+		return err
+	}
+	return refuse(fmt.Sprintf("refusing to rewrite: on commit %s the substitution would turn a move record "+
+		"into a line nothing can read.", sha), []string{
+		"the record as written:  " + bad.Line,
+		"the transform's result: " + bad.Result,
+		"which is not a move:    " + bad.Err.Error(),
+		"",
+		"A record is a whole claim, so it is neither written broken nor dropped in silence. Either:",
+		"  - choose a replacement that leaves the pair a move: two different paths, both or neither",
+		"    ending in a slash, and neither of them empty;",
+		"  - erase the path from history with 'safegit scrub file --delete <path>', which removes the",
+		"    records naming it as part of that rewrite; or",
+		"  - retract the record in a commit of its own first, so this rewrite has nothing to transform.",
+	})
+}
+
+// dieFinalize exits with the exit code a rewrite failure calls for: a refusal
+// says nothing happened (RewriteRefused), anything else is a failure partway
+// through the shared pipeline (General). prefix names the repository the
+// failure belongs to when a command rewrites more than one.
+//
+// Both seams that can refuse route through here -- the walk, which refuses a
+// commit message it cannot transform without breaking a record, and Finalize's
+// own Tier A.
 func dieFinalize(prefix string, err error) {
 	msg := err.Error()
 	if prefix != "" {

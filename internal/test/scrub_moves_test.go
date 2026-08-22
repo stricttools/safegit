@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/testutil"
 	"github.com/smm-h/safegit/internal/trailer"
 )
@@ -177,5 +178,100 @@ func TestScrubFileDeleteLeavesUnrelatedRecordsAlone(t *testing.T) {
 	}
 	if records := movedRecordsIn(t, commitMessageOf(t, dir, notes)); len(records) != 1 {
 		t.Errorf("an unrelated record was removed: %v", records)
+	}
+}
+
+// TestScrubMatchRefusesATransformThatBreaksARecord is the limit of the
+// trailer-aware transform, and the refusal it produces.
+//
+// Rewriting the DECODED paths and re-encoding them keeps the QUOTING readable
+// whatever the substitution did -- but the pair still has to be a move. Three
+// substitution shapes leave something that is not one: both sides mapped onto a
+// single path, a subtree marker eaten on one side only, and an emptied token.
+// The line that would be written is one the decoder refuses, and because a
+// malformed record is skipped by every reader, it would sit inert in the
+// rewritten history with nothing ever reporting it again.
+//
+// So the whole rewrite is refused, at the same guarantee Tier A gives: exit 30,
+// before any ref moves, with the original history exactly as it was.
+func TestScrubMatchRefusesATransformThatBreaksARecord(t *testing.T) {
+	cases := []struct {
+		name       string
+		move       string
+		pattern    string
+		replace    string
+		wantResult string // the pair the refusal says would have been written
+	}{
+		{
+			name:       "both paths become one",
+			move:       "z.txt -> a.txt",
+			pattern:    `[az]\.txt`,
+			replace:    "q.txt",
+			wantResult: "q.txt -> q.txt",
+		},
+		{
+			name:       "the subtree marker survives on one side only",
+			move:       "src/ -> lib/",
+			pattern:    `src/`,
+			replace:    "src",
+			wantResult: "src -> lib/",
+		},
+		{
+			name:       "a token is emptied",
+			move:       "z.txt -> a.txt",
+			pattern:    `z\.txt`,
+			replace:    "",
+			wantResult: `"" -> a.txt`,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := newRepo(t)
+			testutil.WriteFile(t, dir, "z.txt", "z\n")
+			testutil.WriteFile(t, dir, "src/one.txt", "1\n")
+			if _, stderr, code := runSafegit(t, dir, "commit", "-m", "seed", "--", "z.txt", "src"); code != 0 {
+				t.Fatalf("seed commit failed (code %d): %s", code, stderr)
+			}
+			if _, stderr, code := runSafegit(t, dir, "mv", "-m", "declare the move", c.move); code != 0 {
+				t.Fatalf("mv failed (code %d): %s", code, stderr)
+			}
+			head := testutil.Rev(t, dir, "HEAD")
+			record := movedRecordsIn(t, commitMessageOf(t, dir, "HEAD"))
+			if len(record) != 1 {
+				t.Fatalf("the fixture declared no record: %v", record)
+			}
+			recordLine := "Moved: " + record[0][0] + " " + record[0][1]
+
+			stdout, stderr, code := runSafegit(t, dir, "scrub", "match", "--approve-consequential",
+				"--pattern", c.pattern, "--replace", c.replace, "--entire-history",
+				"--reason", "a substitution that does not survive the record")
+			if code != exitcode.RewriteRefused {
+				t.Fatalf("a transform that breaks a record must exit %d (RewriteRefused), got %d\nstdout=%s\nstderr=%s",
+					exitcode.RewriteRefused, code, stdout, stderr)
+			}
+
+			// The refusal names the commit, the record as written, and what the
+			// transform would have produced.
+			for _, want := range []string{head, recordLine, c.wantResult, "Nothing was changed"} {
+				if !strings.Contains(stderr, want) {
+					t.Errorf("the refusal does not name %q:\n%s", want, stderr)
+				}
+			}
+
+			// Nothing moved, and the record is exactly the one the commit
+			// carried: no corrupt line was written anywhere.
+			if got := testutil.Rev(t, dir, "HEAD"); got != head {
+				t.Errorf("HEAD moved to %s, want %s: the refusal is supposed to precede every ref update", got, head)
+			}
+			msg := commitMessageOf(t, dir, "HEAD")
+			moves := trailer.ReadMoves(msg)
+			if len(moves.Malformed) != 0 {
+				t.Errorf("a malformed record was written into history: %v\n%s", moves.Malformed, msg)
+			}
+			if len(moves.Records) != 1 || trailer.RecordLine(moves.Records[0]) != recordLine {
+				t.Errorf("the original record did not survive intact:\n%s", msg)
+			}
+		})
 	}
 }

@@ -1,6 +1,7 @@
 package trailer
 
 import (
+	"errors"
 	"regexp"
 	"strings"
 	"testing"
@@ -112,9 +113,12 @@ func TestRewriteMessageKeepsQuotingIntact(t *testing.T) {
 	message := "subject SECRET\n\nbody SECRET\n\n" + RecordLine(original) + "\n"
 
 	pat := regexp.MustCompile(`words|quoted|SECRET`)
-	got := RewriteMessage(message, func(s string) string {
+	got, err := RewriteMessage(message, func(s string) string {
 		return pat.ReplaceAllString(s, "X")
 	})
+	if err != nil {
+		t.Fatalf("a transform whose result is still a move must not be refused: %v", err)
+	}
 
 	moves := ReadMoves(got)
 	if len(moves.Malformed) != 0 {
@@ -140,20 +144,111 @@ func TestRewriteMessageKeepsQuotingIntact(t *testing.T) {
 
 func TestRewriteMessageLeavesEverythingElseVerbatim(t *testing.T) {
 	message := "subject\n\nSigned-off-by: A SECRET <a@b>\n"
-	got := RewriteMessage(message, func(s string) string {
+	got, err := RewriteMessage(message, func(s string) string {
 		return strings.ReplaceAll(s, "SECRET", "X")
 	})
+	if err != nil {
+		t.Fatalf("rewriting a message with no move record must not be refused: %v", err)
+	}
 	if got != "subject\n\nSigned-off-by: A X <a@b>\n" {
 		t.Errorf("non-move trailer rewrite is %q", got)
 	}
 
 	// A message with no trailer block is transformed whole, exactly as it was
 	// before the trailer split existed.
-	plain := RewriteMessage("only a SECRET subject\n", func(s string) string {
+	plain, err := RewriteMessage("only a SECRET subject\n", func(s string) string {
 		return strings.ReplaceAll(s, "SECRET", "X")
 	})
+	if err != nil {
+		t.Fatalf("rewriting a message with no trailer block must not be refused: %v", err)
+	}
 	if plain != "only a X subject\n" {
 		t.Errorf("plain message rewrite is %q", plain)
+	}
+}
+
+// TestRewriteMessageRefusesATransformThatBreaksTheRecord is the other half of
+// the trailer-aware transform. Re-encoding through the one encoder keeps the
+// QUOTING readable whatever the substitution did, but the pair itself still has
+// to be a move: two different paths, both or neither naming a subtree, neither
+// of them empty. A transform can break each of those, and the record it would
+// write is one the decoder refuses -- so the transform refuses instead, and the
+// caller turns that into a rewrite that never starts.
+func TestRewriteMessageRefusesATransformThatBreaksTheRecord(t *testing.T) {
+	const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+
+	cases := []struct {
+		name    string
+		record  Record
+		pattern string
+		replace string
+		wantOld string
+		wantNew string
+	}{
+		{
+			name:    "both paths become one",
+			record:  Record{ID: id, Old: "z.txt", New: "a.txt"},
+			pattern: `[az]\.txt`,
+			replace: "q.txt",
+			wantOld: "q.txt",
+			wantNew: "q.txt",
+		},
+		{
+			name:    "the subtree marker survives on one side only",
+			record:  Record{ID: id, Old: "src/", New: "lib/"},
+			pattern: `src/`,
+			replace: "src",
+			wantOld: "src",
+			wantNew: "lib/",
+		},
+		{
+			name:    "a token is emptied",
+			record:  Record{ID: id, Old: "z.txt", New: "a.txt"},
+			pattern: `z\.txt`,
+			replace: "",
+			wantOld: "",
+			wantNew: "a.txt",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			line := RecordLine(c.record)
+			message := "a subject\n\n" + line + "\n"
+			pat := regexp.MustCompile(c.pattern)
+
+			got, err := RewriteMessage(message, func(s string) string {
+				return pat.ReplaceAllString(s, c.replace)
+			})
+			if err == nil {
+				t.Fatalf("the transform produced %q instead of refusing", got)
+			}
+			if got != "" {
+				t.Errorf("a refused rewrite must produce no message, got %q", got)
+			}
+
+			var bad *RecordTransformError
+			if !errors.As(err, &bad) {
+				t.Fatalf("error is %T (%v), want a *RecordTransformError", err, err)
+			}
+			if bad.Line != line {
+				t.Errorf("the refusal names the record as %q, want %q", bad.Line, line)
+			}
+			if bad.Old != c.wantOld || bad.New != c.wantNew {
+				t.Errorf("the transformed pair is %q -> %q, want %q -> %q", bad.Old, bad.New, c.wantOld, c.wantNew)
+			}
+			if !strings.Contains(bad.Result, id) {
+				t.Errorf("the refusal does not carry the line the transform would have written: %q", bad.Result)
+			}
+			if bad.Err == nil || ValidatePair(c.wantOld, c.wantNew) == nil {
+				t.Errorf("the fixture pair %q -> %q is valid; it cannot demonstrate a refusal", c.wantOld, c.wantNew)
+			}
+			// The message the caller holds is untouched: nothing was written
+			// half-transformed for a later reader to find.
+			if moves := ReadMoves(message); len(moves.Records) != 1 || len(moves.Malformed) != 0 {
+				t.Errorf("the original message no longer reads as one record: %+v", moves)
+			}
+		})
 	}
 }
 
