@@ -23,7 +23,21 @@ import (
 // safegitBin is the path to the built safegit binary, set in TestMain.
 var safegitBin string
 
+// TestMain does nothing but exit on what runSuite returns, and that is the
+// point: os.Exit runs no deferred function, so anything that needs cleaning up
+// has to live in a function that RETURNS. It did not, once -- the build
+// directory below was removed by a `defer` sitting directly above
+// `os.Exit(m.Run())`, so it was never removed at all and every run of this
+// package leaked its built binary into $TMPDIR permanently, until the
+// filesystem quota ran out and unrelated tests began failing on their own
+// writes. TestNoDeferredCleanupIsStrandedByAProcessExit keeps the shape.
 func TestMain(m *testing.M) {
+	os.Exit(runSuite(m))
+}
+
+// runSuite builds the safegit binary the whole package runs as a subprocess,
+// runs the suite, and removes the build directory on every path out.
+func runSuite(m *testing.M) int {
 	// Register the stress opt-in before m.Run parses the command line. The
 	// long-running scenarios in stress_test.go skip without it, so a bare
 	// `go test ./internal/test/` is fast and needs no generic -short.
@@ -33,7 +47,7 @@ func TestMain(m *testing.M) {
 	tmpDir, err := os.MkdirTemp("", "safegit-test-bin-*")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create temp dir: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 	defer os.RemoveAll(tmpDir)
 
@@ -42,11 +56,11 @@ func TestMain(m *testing.M) {
 	cmd.Dir = projectRoot()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to build safegit: %v\n%s\n", err, out)
-		os.Exit(1)
+		return 1
 	}
 
 	safegitBin = binPath
-	os.Exit(m.Run())
+	return m.Run()
 }
 
 // projectRoot returns the absolute path to the safegit project root.

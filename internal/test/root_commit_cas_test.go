@@ -261,22 +261,18 @@ func TestRootCommitZeroOldValueRefusesExistingRef(t *testing.T) {
 // commits as a child of the winner. This is what bounds the defect above to
 // writers that do not take safegit's lock.
 //
-// FLAKE WATCHLIST -- certified load-sensitive, not racy.
+// It spent time on the flake watchlist for failing spuriously under load. The
+// cause was never in what it pins; it was this package's own TestMain leaking
+// its build directory into $TMPDIR on every run, because the removal was a
+// `defer` in a function that ends in os.Exit. After enough runs the filesystem
+// quota was gone, and then any write a racing safegit makes -- the
+// per-invocation temp index, a loose object, the lock file, the oplog -- could
+// fail with EDQUOT, which this test reports as "racer N failed". The leak is
+// fixed and TestNoDeferredCleanupIsStrandedByAProcessExit keeps it fixed; a
+// failure here is now first a question about free space and quota on $TMPDIR.
 //
-// This test has failed spuriously under load. The cause is the shared temporary
-// filesystem, not anything it pins. Every repository this package builds lives
-// under $TMPDIR, and TestMain links the safegit binary there too. On a machine
-// whose /tmp is a tmpfs sized against RAM, several concurrent `go test`
-// processes exhaust it: that was reproduced here as
-// "link: mapping output file failed: disk quota exceeded" out of the TestMain
-// build, with eight concurrent runs sharing a 12 GB tmpfs already 80% full. The
-// same exhaustion reaches a RUNNING racer as an errno on any write safegit makes
-// -- the per-invocation temp index, a loose object, the lock file, the oplog --
-// and safegit then exits nonzero, which is exactly the shape this test reports
-// as "racer N failed".
-//
-// A lost update or a lock defect is not reachable by interleaving here: the lock
-// file is created O_CREAT|O_EXCL so exactly one racer ever holds the ref,
+// A lost update or a lock defect was never reachable by interleaving here: the
+// lock file is created O_CREAT|O_EXCL so exactly one racer ever holds the ref,
 // staleness is decided by the holder's pid liveness rather than by any age or
 // deadline (internal/lock.staleFromFields), and the loser's ref re-check plus the
 // ZeroSHA CAS send it back through Phase A with the winner's commit as its
@@ -286,11 +282,10 @@ func TestRootCommitZeroOldValueRefusesExistingRef(t *testing.T) {
 // final round of 600 across six concurrent processes -- including 400 pinned to
 // two CPUs against sixteen spinning load generators (about a tenfold slowdown,
 // against a 30-second lock acquisition timeout) and four full-package race runs
-// under eight-way load. Pointing $TMPDIR off the tmpfs removed every failure
-// that was seen.
+// under eight-way load. The only failures ever reproduced were quota failures,
+// and pointing $TMPDIR at an unexhausted filesystem removed all of them.
 //
-// So do not weaken these assertions and do not add a retry. A failure here is
-// first a question about free space on $TMPDIR.
+// So do not weaken these assertions and do not add a retry.
 func TestRootCommitConcurrentSafegitBothLand(t *testing.T) {
 	dir := rootCasNewUnbornRepo(t)
 
