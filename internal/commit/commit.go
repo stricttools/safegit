@@ -591,6 +591,16 @@ func (p *Pipeline) tryCommit(
 	// caller's RefUpdate. It is the single mint site: in an executing run it
 	// performs this very invocation, and in a preview it records it and answers
 	// nil, so the loop ends here with nothing moved.
+	//
+	// This mint must stay the LAST effects action on the dry path, and the
+	// return below must stay immediately after it. Under --dry-run a minted
+	// mutation is RECORDED rather than performed, so every carrier it hands back
+	// -- the effects result, and the repository state a later step would read
+	// back through git -- describes a world in which the ref never moved. Any
+	// observe placed after this point on the dry path would therefore read stale
+	// state and report it as though it were the outcome. Everything the preview
+	// returns (the SHA, the tree, the parents, the changed paths) is computed
+	// BEFORE the mint, which is what makes it honest.
 	if err := p.updateRef(ctx, ref, commitSHA, expected); err != nil {
 		if isTransientRefError(err) {
 			return nil, true, nil

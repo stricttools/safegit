@@ -459,6 +459,14 @@ func TestPassthroughDryRunArgvCarriesTheGlobalPrefix(t *testing.T) {
 // the rewritten head would mean performing the rewrite -- so it carries a
 // placeholder there, while the value it moves AWAY from is the real current
 // head, which the preview did read.
+//
+// All four recorded argv carry the --no-optional-locks prefix, and that is
+// pinned here for the same reason the passthrough family pins it above: this
+// recorder is a dry-mode-only description written BESIDE the execute path
+// rather than by it, so the one thing keeping the two from drifting is that
+// both build their argv through internal/gitexec. A recorded command missing
+// the prefix would be the first sign that this one had gone back to building
+// argv by hand.
 func TestHistoryRewriteDryRunRecordsNoInventedSHA(t *testing.T) {
 	dir, initialSHA := newRawSecretRepo(t)
 	head := testutil.Rev(t, dir, "HEAD")
@@ -474,10 +482,10 @@ func TestHistoryRewriteDryRunRecordsNoInventedSHA(t *testing.T) {
 		t.Fatalf("a rewrite preview must render a would-do log, got: %s", stdout)
 	}
 	for _, want := range []string{
-		"update-ref refs/heads/main <rewritten> " + head,
-		"reflog expire",
-		"repack",
-		"prune",
+		"run: git " + noOptionalLocks + " update-ref refs/heads/main <rewritten> " + head,
+		"run: git " + noOptionalLocks + " reflog expire --expire=now --all",
+		"run: git " + noOptionalLocks + " repack -a -d --unpack-unreachable=now",
+		"run: git " + noOptionalLocks + " prune --expire=now",
 	} {
 		if !strings.Contains(log, want) {
 			t.Errorf("the would-do log must record %q, got: %s", want, log)
