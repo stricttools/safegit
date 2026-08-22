@@ -15,16 +15,18 @@ Every safegit command accepts these global flags, which control output verbosity
 |------|---------|-------------|
 | `--quiet` | `false` | Suppress informational output, only showing errors and results |
 | `--verbose` | `false` | Enable verbose output with detailed progress and diagnostic info |
-| `--dry-run` | `false` | Preview what would happen without writing any changes to disk |
+| `--dry-run` | `false` | Preview what would happen without changing the repository |
 | `--approve-consequential` | `false` | Approve a consequential command up front instead of being asked |
 | `--json` | `false` | Select machine mode: stdout carries the framework's envelope and nothing else |
 | `--config-file` | optional | Path to a custom safegit config file; omitted means the default location |
 
-The first five are owned by the CLI framework, not by safegit. Three consequences follow:
+The first five are owned by the CLI framework, not by safegit. Five consequences follow:
 
 - **They have no short forms.** `-q`, `-n` and `-y` are gone; write `--quiet`, `--dry-run` and `--approve-consequential`. The approval flag is deliberately unwieldy so it cannot decay into muscle memory.
 - **They are recognized anywhere in the command line.** `safegit --dry-run push` and `safegit push --dry-run` are the same run. (`--config-file` is safegit's own and stays before the subcommand.)
-- **Only *consequential* commands ask before they run.** Classification (`read_only` / `mutating`) decides what a dry run records; it does not decide what prompts. A command prompts only when it declares itself **consequential**, and in safegit exactly four do: `scrub file`, `scrub match`, `scrub run` and `author rewrite` -- the operations that rewrite history irreversibly. Each prompts `about to run consequential command '<name>'. Proceed? [y/N]` on a terminal, and refuses outright with `error: stdin is not interactive; a consequential command must be confirmed at a terminal` when there is no terminal to ask at. **Everything else -- `commit`, `push`, `pull`, `undo`, `config set` and the guarded passthroughs -- runs bare, with nothing added to the command line.**
+- **Only *consequential* commands ask before they run.** Classification (`read_only` / `mutating`) decides what a dry run records; it does not decide what prompts. A command prompts only when it declares itself **consequential**, and in safegit exactly four do: `scrub file`, `scrub match`, `scrub run` and `author rewrite` -- the operations that rewrite history irreversibly. Each prompts `about to run consequential command '<name>'. Proceed? [y/N]` on a terminal, and refuses outright with `error: stdin is not interactive; a consequential command must be confirmed at a terminal` when there is no terminal to ask at. **Everything else -- `commit`, `mv`, `push`, `pull`, `undo`, `config set` and the guarded passthroughs -- runs bare, with nothing added to the command line.**
+- **Three conditions ask on their own, and each owns its consent.** They are conditions the framework cannot see, so they are safegit's own seams rather than a fifth, sixth and seventh consequential command: `doctor --action uninstall` and `push --force-with-lease` are answered by `--approve-consequential` (the condition IS the flag the caller typed), while a `backup backup` to a remote that is public -- or whose visibility safegit cannot determine -- is answered ONLY by `--allow-public-remote`, because that fact is discovered at run time and the caller may not know it. `--json` answers none of them and refuses instead; a declined confirmation always exits nonzero.
+- **Every prompt is written to stderr, and `--quiet` never suppresses one.** That holds for the framework's own confirmation and for safegit's three run-time seams (`doctor --action uninstall`, `push --force-with-lease`, and a `backup backup` to a remote safegit cannot prove is private). stdout is a structured channel -- a command's own result, and under `--json` exactly one document -- so a question written there would interleave with the answer to a different one, and a prompt a quiet run hid would be a prompt that hangs.
 
 `--json` does **not** imply `--quiet`, and it never implies approval. The two are independent: `--quiet` governs the human stream, and the envelope is not written through the writers `--quiet` can reach, so `--json --quiet` still emits the complete document. `--json` says how to answer; it says nothing about consent. Adding it to a command line can therefore never destroy or publish anything on its own.
 
@@ -36,6 +38,11 @@ DRY RUN — no changes were made. Would do:
 ```
 
 The log is never suppressed by `--quiet`. In machine mode it is not printed as text at all: the same records ride the envelope's `preview` member, so a machine-readable dry run's stdout is still exactly one JSON document. Parse it whole.
+
+Two things a dry run does do, stated because "changes nothing" is a promise about the repository and not about the machine:
+
+- **A preview of a commit still builds objects, into a throwaway quarantine.** `commit`, `mv` and the conclusion commands stage, write the tree and build the commit object exactly as the real run would, but every git subprocess writes its objects into a temporary directory outside the repository that is deleted when the command exits. `.git/safegit` is left alone -- a dry run does not even create it in a repository where safegit has never run -- and no lock file, oplog line or ref update happens at all.
+- **A preview still READS, including over the network where the command reads over the network.** `push --dry-run` contacts the remote to observe the refs it would publish, because the leases it would send are pinned to what is actually there; the preview then records the push instead of performing it. The one command whose preview is deliberately local-only is `backup backup` (see its section).
 
 ## commit
 
@@ -58,6 +65,7 @@ Use `safegit commit` instead of `git add` + `git commit` whenever multiple sessi
 | `--hunks` | | optional; omitted means every named file is committed whole | Commit only the selected hunks of one file, as `path:1,3` or `path:2-4`; repeatable, once per path |
 | `--untrack` | | optional; omitted means nothing is untracked | Stop tracking a path, leaving the file on disk: the commit records its removal from the index (repeatable) |
 | `--moved` | | optional; omitted means the commit declares no moves | Declare that content moved, as `'old -> new'` (repeatable). End BOTH paths with a slash for a whole subtree. The old path must be tracked in the commit's parent and gone from disk, and the new one must exist |
+| `--moved-retract` | | optional; omitted means the commit retracts nothing | Retract a move record declared earlier in this branch's history, by its id -- the token a `Moved:` trailer begins with (repeatable, one id each). The id must name a record that exists and is not already retracted in the history this commit is built on; one that does not is refused (exit 19) rather than written, and every bad id is named. `--trailer 'Moved-Retract: <id>'` writes an unchecked retraction instead |
 
 ### Arguments
 
@@ -128,9 +136,67 @@ safegit commit --allow-empty -m "trigger CI rebuild"
 
 - **Atomic staging**: Each commit uses a per-invocation temporary index. The shared `.git/index` is never written to during the staging phase, so concurrent commits cannot leak files into each other.
 - **CAS ref updates**: Branch refs are updated using `git update-ref` with the expected old value. If another session committed between staging and ref update, the CAS fails and the operation retries (up to `commit.casMaxAttempts`, default 5).
-- **Per-ref locking**: A lock file is acquired for the target ref before the CAS update, with PID liveness checks to detect and recover from stale locks left by crashed processes.
+- **Two locks, in one fixed order**: `commit` takes the worktree operation lock around the whole invocation (a second safegit process in the same worktree waits `lock.acquireTimeoutSeconds` and then exits **8** naming the holder), and the per-ref lock for the target ref inside it, immediately before the CAS update. Nothing takes them the other way round. A lock whose holder is genuinely gone is reclaimed automatically; a lock a live process still holds is never taken from it.
 - **Oplog recording**: Every commit, amend, and reword is logged to an append-only operation log, enabling `safegit undo`.
-- **Declared moves, never detected**: safegit never infers a rename from file contents and never stages a path the caller did not name. A move is stated with `--moved 'old -> new'`, checked against the repository (the old path tracked in the commit's parent and gone from disk, the new one present), and written into the commit message as a `Moved:` record with its own identifier. Both halves of the move are still ordinary arguments -- committing the deletion of the old path is naming it. A record that turns out to be wrong is corrected by RETRACTING it (`Moved-Retract: <id>` in a later commit), never by editing it.
+- **Declared moves, never detected**: safegit never infers a rename from file contents and never stages a path the caller did not name. A move is stated with `--moved 'old -> new'`, checked against the repository (the old path tracked in the commit's parent and gone from disk, the new one present), and written into the commit message as a `Moved:` record with its own identifier. A declaration the repository does not bear out is refused with exit **19**, and nothing is committed. Both halves of the move are still ordinary arguments -- committing the deletion of the old path is naming it. Where the move has not happened yet, `safegit mv` does the rename, the record and the commit in one step instead.
+- **Two declarations that speak about each other are refused**: a set of `--moved` pairs is one statement, so two pairs may not NEST (one path inside another pair's path, in either direction) and may not CHAIN (`a -> b` beside `b -> c`, whose result would depend on the order they were performed in). Both are argument-against-argument contradictions and exit **2**, before the repository is consulted. `safegit mv` refuses the same two shapes through the same check.
+- **Retraction, not editing**: a record that turns out to be wrong is corrected by RETRACTING it -- `--moved-retract <id>`, which verifies the id against the history the commit is built on -- never by editing it, because editing the commit that carries it rewrites history. A replacement is a retraction and a new `--moved` in one commit.
+
+## mv
+
+Move tracked paths and commit the moves with their records in one operation. `--moved` is a DECLARATION about a move somebody already made; `mv` is the other half -- it performs the rename, mints the record for what it renamed, and commits the result, so the move and its record can never be out of step.
+
+### When to Use
+
+Use `safegit mv` when the move has not happened yet. Use `safegit commit --moved` when it already has (the files are at their new paths and the record is missing).
+
+### Flags
+
+| Flag | Presence | Description |
+|------|----------|-------------|
+| `-m` | required; repeatable, no default | Commit message paragraph. Repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body. There is no default message: a message the framework chose would be a message the framework wrote into history |
+
+### Arguments
+
+| Name | Required | Description |
+|------|----------|-------------|
+| `pairs` | Yes (variadic) | One move each, written `'old -> new'`. End BOTH paths with a slash to move a whole directory. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself |
+
+### The three steps: validate, rename, commit
+
+1. **Validate, before the first file is touched.** Every pair is checked against the repository and against the other pairs: the source must be tracked in HEAD and present on disk, the destination must be free (on disk and in the tree), a directory must be written in subtree form and a file in file form, and no two pairs may nest or chain. A set of moves is one statement, so a set with one bad pair in it never leaves the working tree half-moved -- and every failing pair is reported at once rather than one command at a time.
+2. **Rename.** Each path is moved on disk through the effects handle, so `--dry-run` records the renames instead of performing them. A missing destination directory is created (`git mv` refuses instead); a rollback removes the topmost directory this invocation created and nothing that was already there.
+3. **Commit.** One commit carrying the renames and their `Moved:` records.
+
+### The commit is the rename and nothing else
+
+Each moved path is carried across as the exact blob its parent commit held, through index edits rather than by staging from disk. That is what `git mv` followed by a commit produces, and it is what makes the preview and the execution compute the same tree. **Uncommitted content changes at a moved path stay uncommitted** and are a separate commit -- a move is a move. Case-only renames fall out of the same mechanism.
+
+A directory pair produces ONE subtree record however many files it holds, while the commit itself changes every path under it.
+
+### Examples
+
+```bash
+# Move one file and commit the move with its record
+safegit mv -m "move the parser" 'src/parse.go -> internal/parse/parse.go'
+
+# Move a whole directory: both sides end in a slash, and it is one record
+safegit mv -m "move src to lib" 'src/ -> lib/'
+
+# Several moves as one statement -- all of them, or none
+safegit mv -m "regroup the loaders" 'a.go -> load/a.go' 'b.go -> load/b.go'
+
+# Preview: the renames are recorded, not performed
+safegit --dry-run mv -m "move the parser" 'src/parse.go -> internal/parse/parse.go'
+```
+
+### Safety Guarantees
+
+- **Nothing moves until everything checks out**: a pair the repository does not bear out exits **19** naming every failing pair, with nothing moved and nothing committed. A contradiction between the arguments themselves -- an unparseable pair, two pairs claiming one path, a nesting or a chain -- exits **2** before the repository is read at all.
+- **Rollback on a filesystem failure**: when a rename the checks could not foresee fails part-way through, every move this invocation had already made is put back, and nothing is committed.
+- **A commit failure leaves the files moved**: the renames stand, the message says so, and `safegit commit --moved` commits them where they are once the cause is fixed.
+- **Serialized like every other tree mutation**: `mv` takes the worktree operation lock around the whole operation -- renames and commit are one step -- and refuses (exit **5**) when git has a merge, cherry-pick, revert, rebase or mailbox application in flight. That check is made inside the lock and BEFORE the first rename.
+- **Undo reverses the commit, never the working tree**: `safegit undo` on an `mv` moves the ref back and says so -- the files are still at their new paths. Move them back by hand, or re-commit them where they are with `safegit commit --moved`.
 
 ## undo
 
@@ -169,6 +235,7 @@ safegit --dry-run undo
 - **CAS ref updates**: The undo uses the oplog's recorded tip SHA as the expected old value in `git update-ref`. If the branch has moved since the oplog entry was written (e.g., another session committed), the CAS fails and the undo is rejected.
 - **History rewrite barrier**: If a `scrub` or `rewrite-author` operation is found in the oplog while scanning for undoable operations, the undo is blocked with an error. History rewrites invalidate all prior SHAs, making earlier oplog entries unsafe to undo.
 - **Root commit undo**: Undoing the root commit (the first commit in the repo) deletes the branch ref entirely, leaving the branch in an unborn state.
+- **Undo moves a ref; it never moves the working tree**: undoing a `safegit mv` reverses the COMMIT and leaves the files at their new paths, and says so on stderr. Undoing a conclusion (`merge-continue`, `cherry-pick-continue`, `revert-continue`) gives back the pre-conclusion tip but does NOT restore git's operation state -- `MERGE_HEAD`, the message draft and the conflict stages are gone -- so the repository is idle rather than mid-merge. Both notices print whatever `--quiet` says: they are facts about what the undo did not do.
 - **Oplog recording**: The undo itself is logged to the oplog, enabling redo-like workflows and audit trails.
 
 ## push
@@ -237,8 +304,11 @@ safegit push --refs both
 - **Pinned per-ref leases**: `--force-with-lease` sends one expectation per ref, `--force-with-lease=<remoteRef>:<sha>`, pinned to the SHA safegit itself observed on the remote -- or the empty expectation ("this ref must not exist yet") for a ref the remote does not have. A bare `--force-with-lease` would compare against the remote-tracking ref instead, which tags do not have at all: git zeroes the expectation there and refuses to move any tag the remote already carries, which made pushing rewritten tags impossible.
 - **Atomic multi-ref pushes**: a push of more than one ref is `--atomic`. One refused ref leaves the remote exactly as it was, never half-published.
 - **Terminal lease rejection**: when the remote moved between safegit reading it and the push reaching it, git refuses and safegit exits 41 without retrying. Retrying would re-read the other session's ref, pin the lease to it, and perform exactly the overwrite the lease prevented. Fetch, look at what arrived, and decide again.
-- **Consent for forcing**: an ordinary push prompts for nothing. `--force-with-lease` overwrites remote refs, so it is confirmed at the terminal before any network contact; `--approve-consequential` answers the confirmation in advance, `--json` answers nothing and refuses, and a declined confirmation exits nonzero.
-- **Oplog recording**: Every push is logged with the pushed refs, remote, and hook results.
+- **Consent for forcing**: an ordinary push prompts for nothing. `--force-with-lease` overwrites remote refs, so it is confirmed at the terminal before any network contact; the prompt goes to stderr and `--quiet` does not suppress it. `--approve-consequential` answers the confirmation in advance, `--json` answers nothing and refuses, and a declined confirmation exits nonzero.
+- **A dry run still reads the remote**: `--dry-run` records the push instead of performing it, but it resolves the refs first, which means an `ls-remote`. The preview would otherwise be unable to say which refs it would publish or what each lease would pin to. The pre-pre-push hooks are the part a preview never runs.
+- **Order of operations**: the force-push confirmation comes first, before any network contact, so a declined force reaches nothing. Then the refs are resolved -- which reads the remote with `ls-remote` -- and only then do the pre-pre-push hooks run, on the ref set that read produced. The hooks' input and the push set are decided once: a retry that finds a LOCAL ref has moved since refuses (exit **40**) rather than publishing on the strength of a hook run that never saw it.
+- **Oplog recording**: one `push` entry is appended after the push succeeds, recording the remote, the pushed refs and how many hooks ran. Failed attempts and retries are not separate entries, and a hook timeout writes none.
+- **git's push output arrives at the end**: safegit captures git's stdout and stderr rather than streaming them, because classifying a transport error from a verdict needs git's stderr as data. Progress therefore appears when the attempt finishes instead of live. Under `--json` git's stdout is re-routed to stderr, so the envelope stays the only document on stdout.
 
 ### Exit Codes
 
@@ -287,7 +357,7 @@ safegit pull --merge-strategy ff-only origin main
 
 ### Safety Guarantees
 
-- **Coordination guard**: Refuses to pull if another safegit operation is in progress on the worktree.
+- **Coordination guard, both layers**: the worktree operation lock (a second safegit process in this worktree waits, then exits **8** naming the holder) and then the dirty-tree check (exit **5**). See "The guarded passthroughs and their two coordination layers".
 - **Explicit merge strategy**: No implicit default merge behavior -- you must choose `ff`, `ff-only`, or `no-ff`.
 - **Two-phase**: Runs `git fetch` then `git merge` as separate steps for clarity and control.
 - **git's own exit code**: When either step fails, safegit exits with the code that git returned, and the index is left exactly as git left it.
@@ -363,10 +433,10 @@ git merge --ff-only FETCH_HEAD
 - **Ancestry check before every backup**: the slot is fetched first, and a slot holding commits that are not reachable from the local HEAD is a hard error (exit code 22) naming both SHAs. Overwriting it requires `--overwrite-remote-backup`.
 - **Leased push**: the push is pinned with `--force-with-lease` to the SHA observed moments earlier -- or, for a first backup, to "this ref must not exist". A backup pushed from another machine in between is rejected, never clobbered.
 - **Public-remote confirmation**: a real backup to a public repository (or to a networked remote whose visibility cannot be determined) asks first, before any network contact. That question is about the target, not the command, and safegit only learns the answer by probing the remote at run time -- so only `--allow-public-remote` answers it. The blanket `--approve-consequential` does not, and under `--json` the backup refuses instead. A declined confirmation exits nonzero -- a refusal never reports success.
-- **Dry runs never touch the network**: `--dry-run` builds its preview from local state alone -- no `ls-remote`, no `fetch`, no prompt -- so previewing against an unreachable remote succeeds. The slot's current SHA, the ancestry check against it, and the lease pinned to it are all resolved when the backup actually runs.
+- **A backup dry run never touches the network**: this command's `--dry-run` builds its preview from local state alone -- no `ls-remote`, no `fetch`, no prompt -- so previewing against an unreachable remote succeeds. The slot's current SHA, the ancestry check against it, and the lease pinned to it are all resolved when the backup actually runs.
 - **Hooks bypassed on purpose**: backup pushes run with `--no-verify`. `refs/backups` is a tool-owned namespace, and pre-push policies exist to police branches and tags.
 - **Restore never discards work**: the restore is `merge --ff-only`, so a branch carrying commits the backup lacks is refused with the range to inspect.
-- **Coordination guard on restore**: a restore refuses to run while another safegit operation holds the worktree.
+- **Coordination guard on restore**: a restore checks the working tree first and refuses (exit **5**) when it is dirty, naming what is uncommitted -- or, when git has an operation in flight, naming that operation and the command that ends it. It does not take the worktree operation lock; the `--ff-only` merge is git's own.
 - **Oplog recording**: every backup and restore is logged with the remote, slot ref, previous SHA, and new SHA.
 
 ### Exit Codes
@@ -425,7 +495,7 @@ safegit --json scan --pattern "token" --entire-history
 
 ## scrub file
 
-Replace or remove a specific file across all commits in repository history, rewriting each affected commit tree to either substitute the file contents with those of a sanitized file or delete the file entirely from every historical snapshot.
+Replace or remove a specific file across every commit in a selected range of history, rewriting each affected commit tree to either substitute the file contents with those of a sanitized file or delete the file entirely from every snapshot in that range. The range is a required choice -- `--from <commit>` or `--entire-history` -- so "all commits" is one of the two answers, never the default.
 
 ### When to Use
 
@@ -481,10 +551,12 @@ safegit scrub file --delete --from abc1234 --reason "leaked key" --remap-shas-in
 - **Post-rewrite cleanup**: Expires tainted reflog entries, repacks objects, and prunes unreachable objects.
 - **Rewrite maps**: Persists crash-safe rewrite maps to `.git/safegit/rewrite-maps.jsonl`.
 - **Submodule support**: Automatically detects if the target file is inside a submodule and rewrites both the submodule's history and the parent's gitlinks.
+- **`--delete` removes the move records naming the path; `--replace-with` edits no message.** A record is a claim about a path, and it lives in a commit message, which is the one place a tree rewrite does not reach. When the path is being ERASED, every `Moved:` record naming it -- as its old side, as its new side, or inside a subtree prefix covering it -- is removed in the same rewrite, whole (half a move is not a smaller move, it is a malformed one), on the top-level walk and inside a submodule alike. When the path is being REPLACED it still exists, so a record saying content moved there is exactly as true afterwards and nothing is edited. A retraction naming a removed record's id is left where it is; the projection already treats it as inert.
+- **The scope is stated on completion**: a successful rewrite prints which ref's history it followed and says that other refs were not rewritten. "Scrub complete" reads as "the content is gone from this repository" and it is not: a branch, a tag or a stale remote-tracking ref reaching commits the walk never visited still holds every one of them.
 
 ## scrub match
 
-Replace all occurrences of a regex pattern across every blob, commit message, and tag annotation in repository history, rewriting commit trees so that sensitive values like secrets and credentials are permanently removed from all historical snapshots.
+Replace every occurrence of a regex pattern in the blobs, commit messages and tag annotations of a selected range of history, rewriting commit trees so that sensitive values like secrets and credentials are permanently removed from the snapshots in that range. Like `scrub file`, the range is a required choice -- `--from <sha>` or `--entire-history`.
 
 ### When to Use
 
@@ -548,11 +620,12 @@ safegit scrub match --pattern "secret_value" --replace "REDACTED" \
 - **Post-scrub verification**: Re-scans the entire object store to confirm no matches survive.
 - **Rotation notice**: The completion output states that rewriting history cannot un-leak a secret that was ever pushed, tells you to rotate the credential, and prints the `scrub verify --pattern` command that re-checks this repository later.
 - **No pattern retention**: Neither the pattern nor the replacement text is written anywhere under `.git/safegit`. The oplog entry keeps metadata only (operation, reason, scope, mode, counts).
-- **Submodule support**: Scans and rewrites submodule histories, then updates parent gitlinks.
+- **Submodule support**: Scans and rewrites submodule histories, then updates parent gitlinks. A rewrite that touched a submodule names that history in the scope line too.
+- **Move records are rewritten as records, not as text**: a `Moved:` trailer holds two C-quoted paths, so a substitution inside one is applied to the DECODED paths and the pair is re-encoded through the one encoder. The output therefore always parses, and the quoting stays correct whatever the replacement contained. Two consequences follow. A pattern written to match the ESCAPED spelling matches nothing, so it changes nothing. And a substitution whose result is no longer a move -- both paths equal, one of them empty, one side a subtree marker and the other not -- is a **hard refusal, exit 30, before any ref moves**: the commit, the record and the invalid result are named, and the record is neither written broken nor silently dropped. The refusal suggests the three ways out: a replacement that leaves the pair a move, `scrub file --delete <path>` (which removes the records naming it), or retracting the record in a commit of its own first.
 
 ## scrub run
 
-Execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological ordering, overlap detection, and automatic post-scrub verification.
+Execute a multi-operation scrub recipe from a TOML file, applying all of its pattern replacements across the selected range of history in a single coordinated pass with topological ordering, overlap detection, and automatic post-scrub verification.
 
 ### When to Use
 
@@ -627,7 +700,8 @@ safegit scrub run --diff --limit 20 --entire-history -- recipe.toml
 - **Topological ordering**: Operations are sorted by dependency graph (Kahn's algorithm). Independent operations are applied simultaneously against the original content; dependent operations match against post-dependency content.
 - **Overlap detection**: Overlapping byte ranges across independent operations are a hard error.
 - **Cycle detection**: Circular dependencies in the recipe's `depends_on` graph are detected and rejected at parse time.
-- **Rotation notice**: The completion output prints the same rotation warning `scrub match` does, with `safegit scrub verify <recipe>` as the re-check command — the recipe file is the durable record of what was scrubbed.
+- **Rotation notice and scope line**: The completion output prints the same rotation warning and the same scope line `scrub match` does, with `safegit scrub verify <recipe>` as the re-check command — the recipe file is the durable record of what was scrubbed.
+- **Move records**: the same record-aware rewriting `scrub match` performs, including the exit-**30** refusal for a substitution that would turn a move record into a line nothing can read.
 
 ## scrub verify
 
@@ -693,17 +767,32 @@ Exactly one value, and there is no default: a doctor invocation that does not sa
 |-------|-------------|
 | `diagnose` | Run all health checks and report results without fixing |
 | `fix` | Run all health checks and automatically repair issues found |
-| `uninstall` | Remove all safegit hooks and metadata from this repository |
+| `uninstall` | Remove safegit's state from this repository -- every worktree's, not only the one you are standing in |
 
 ### Health Checks
 
-1. **initialized**: Is safegit initialized in this repo?
-2. **tmp_dirs**: Are there orphan temporary index directories?
-3. **stale_locks**: Are there stale lock files from crashed processes?
-4. **config**: Is the config file readable with a valid schema version?
-5. **bypass_detect**: Does the branch tip match the last oplog entry? (Detects raw `git commit` bypassing safegit.)
-6. **filesystem**: Is the repo on a network filesystem (NFS/SMB) that may not support atomic operations?
-7. **hook_perms**: Are all hook scripts executable?
+| Check | Severity | Question |
+|-------|----------|----------|
+| `initialized` | error | Is safegit initialized in this repository? |
+| `tmp_dirs` | warn | Are there orphan temporary index directories? |
+| `stale_locks` | warn | Are there lock files whose holder is gone -- and orphaned lock-publication temporaries? |
+| `config` | warn | Is the config file readable with a valid schema version? |
+| `oplog` | error | Does the oplog read completely, with no unparseable lines? |
+| `bypass_detect` | warn | Does the branch tip match the last oplog entry? (Detects a raw `git commit` bypassing safegit.) |
+| `filesystem` | warn | Is the repository on a network filesystem (NFS/SMB) that may not support atomic operations? |
+| `hook_perms` | warn | Are all hook scripts executable? |
+| `hooks_migrated` | error | Are safegit's pre-pre-push hooks out of the pre-migration `.git/hooks` location? (While they are not, every push refuses with exit 24.) |
+| `native_hooks` | warn | Are there git hooks in `.git/hooks` that safegit's own commit path does not run? |
+| `git_version` | warn | Is the installed git new enough for the features safegit uses? |
+| `legacy_scrub_policies` | error | Is the pre-0.2 scrub-policy file -- which stored scrubbed patterns in plaintext inside the repository -- gone? |
+
+**Exit code 50.** `diagnose` exits `50` when at least one **error**-severity check fails; warnings alone exit `0`. After `--action fix` the code reflects what the fix LEFT: an error-severity finding that is still there keeps the exit nonzero.
+
+### Uninstall is repository-wide
+
+`--action uninstall` removes safegit's state for the whole repository: the invoking worktree's `.git/safegit`, the shared store (locks and the live hook store), and **every other worktree's state directory too**, including that of a worktree that was deleted without being pruned. Run from a linked worktree it reaches the main worktree's state.
+
+Because that is the part an operator has no reason to expect, the command enumerates every path it is about to remove, one per line, marking the ones outside the worktree you are in -- and it does so BEFORE asking, since you cannot consent to what you have not been shown. The enumeration is a statement of what the command does, so `--quiet` does not hide it; machine mode carries the same set in the envelope. The confirmation is answered by `--approve-consequential`, declining exits nonzero, and `--dry-run` prints the same enumeration and removes nothing.
 
 ### Examples
 
@@ -723,19 +812,25 @@ safegit doctor --action uninstall
 
 ### What `--action fix` Repairs
 
-- Removes orphan temporary index directories
+- Removes orphan temporary index directories (identified by the dead PID in the directory name)
 - Removes the legacy queue directory (from safegit v0.1)
-- Removes stale lock files (only those whose owning process is dead)
-- Rotates the oplog if it exceeds the configured max size (default 100 MB)
-- Cleans up submodule safegit directories
+- Removes the legacy scrub-policy file, whose content is exactly what should not be sitting on disk
+- Reclaims lock files whose holder is genuinely gone, and removes orphaned lock-publication temporaries a kill left behind
+- Cleans up submodule safegit directories the same way
+
+It does not rotate or truncate the oplog. The oplog is an append-only audit trail and is complete by design; there is no size limit and nothing prunes it silently.
 
 ## unlock
 
-Release a stale `.lock` file left behind by a crashed git or safegit process, after verifying that the lock's owning process is actually dead via PID liveness checks to prevent releasing locks held by live processes.
+Release one of **safegit's own** lock files -- a per-ref lock, the worktree operation lock, or the repository-wide rewrite lock -- after verifying that the lock's owning process is genuinely gone.
+
+It has nothing to do with git's `.git/index.lock` or any other lock git takes for itself: those are git's to clean up, and safegit never writes into that namespace.
 
 ### When to Use
 
-Use `safegit unlock` when a safegit or git operation crashed and left a lock file behind, preventing new operations on that ref. The command checks that the lock's owning process is actually dead before releasing it.
+Use `safegit unlock` when a safegit process was killed while holding a lock and the lock file is still there, blocking new operations. Ordinarily nothing needs it: a lock whose holder is gone is reclaimed automatically by the next contender, and `safegit doctor --action fix` sweeps them unattended. This command is the last-resort path for the case where that reclamation cannot work -- a filesystem where `flock(2)` does not, on which contenders time out instead of reclaiming.
+
+The staleness check still stands in front of it: a lock a live process holds is refused, naming the holder's PID. What the weaker stance gives up is only the narrow window in which another process reclaims the same stale lock between the check and the removal, which is why `doctor` -- which sweeps by the hundred and unattended -- takes the strict, identity-checked path instead.
 
 ### Arguments
 
@@ -766,8 +861,8 @@ safegit --dry-run unlock main
 
 ### Safety Guarantees
 
-- **Liveness check**: Refuses to release locks held by live processes. If the owning process is still running, the unlock fails with an error suggesting you kill the process or wait.
-- **PID verification**: Parses the lock file to determine the owning PID and checks if that process is alive.
+- **Liveness check**: Refuses to release a lock a live process holds. If the owning process is still running, the unlock fails with an error naming its PID and suggesting you kill it or wait.
+- **Identity, not just the PID**: the lock file records the holder's PID, hostname and process start identity. A PID the kernel has recycled fails the start-identity comparison and the lock is judged stale; a lock taken on a different machine (a differing `host=`) is never judged stale at all, because a PID from another machine's namespace means nothing here. Where either side of a comparison is unavailable the check fails closed and the lock is left alone.
 
 ## author list
 
@@ -880,6 +975,17 @@ safegit --dry-run author rewrite --old-name "alice" --new-name "Alice Smith"
 - **Tag rewriting**: Annotated tag objects are rewritten when their tagger name/email matches the old identity.
 - **AND/OR matching**: When both `--old-name` and `--old-email` are specified, a commit must match both to be rewritten (AND). When only one is specified, any commit matching that field is rewritten (OR).
 
+## The guarded passthroughs and their two coordination layers
+
+`checkout`, `pull`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick` and `revert` hand their arguments to git after two separate checks, in this order. Both are meant where the per-command sections below say "coordination guard".
+
+1. **The worktree operation lock** answers "is anyone else already working here?" for the WHOLE operation. It is taken first and held for the full duration of the git command, an interactive `rebase -i`'s editor session included. A second safegit process in the same worktree waits `lock.acquireTimeoutSeconds` (default 30) and then exits **8**, naming the holder and printing the `safegit unlock safegit/operation` recovery command; it never runs concurrently. The lock is worktree-local, so two worktrees of one repository proceed independently. A `--dry-run` takes no lock -- a command that promises to change nothing must not write a file into `.git/safegit`.
+2. **The dirty-tree check** then answers "is it safe to start?" at that instant: any tracked modification (`git diff HEAD`, never the possibly-stale shared index) or any untracked file refuses the command with exit **5**, listing what is uncommitted. When git has an operation in flight, the same dirt is that operation's conflict markers and staged result, so the refusal names the operation and the command that ends it instead of advising a commit nobody can make.
+
+The second check is only worth anything because of the first: without the lock, another process could put the repository mid-merge in the window between the check and the ref update.
+
+An in-flight operation does NOT by itself refuse a passthrough. The passthroughs are how an operator reaches `rebase --continue` and `merge --abort`; refusing on state alone would refuse the way out.
+
 ## checkout
 
 Checkout a branch or ref with working-tree safety guards that prevent checking out while another safegit operation is in progress, and recording the operation in the oplog.
@@ -902,7 +1008,7 @@ safegit checkout v1.0.0
 
 ### Safety Guarantees
 
-- **Coordination guard**: Checks for in-progress safegit operations before proceeding.
+- **Coordination guard, both layers**: the worktree operation lock first (a second safegit process in this worktree waits, then exits **8** naming the holder), then the dirty-tree check (exit **5**). See "The guarded passthroughs and their two coordination layers".
 - **git's own exit code**: When `git checkout` fails, safegit exits with the code git returned.
 - **The index is git's**: safegit does not touch the index after the checkout; whatever git left there is what remains.
 - **Oplog recording**: Logs the checkout with old and new HEAD SHAs.
@@ -928,7 +1034,7 @@ safegit merge --no-ff feature-branch
 
 ### Safety Guarantees
 
-- **Coordination guard**: Refuses to merge if another safegit operation is in progress.
+- **Coordination guard, both layers**: the worktree operation lock, then the dirty-tree check. See "The guarded passthroughs and their two coordination layers".
 - **git's own exit code**: When `git merge` fails -- including a conflicted merge -- safegit exits with the code git returned.
 - **The index is git's**: a conflicted merge keeps its unmerged entries and a `--no-commit` merge keeps its staged result; safegit does not touch the index after the merge.
 - **Oplog recording**: Logs the merge with branch name and result SHA.
@@ -954,7 +1060,7 @@ safegit rebase --interactive HEAD~5
 
 ### Safety Guarantees
 
-- **Coordination guard**: Refuses to rebase if another safegit operation is in progress.
+- **Coordination guard, both layers**: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included -- and then the dirty-tree check. See "The guarded passthroughs and their two coordination layers".
 - **git's own exit code**: When `git rebase` stops or fails, safegit exits with the code git returned.
 - **The index is git's**: a rebase stopped at a conflict keeps its unmerged entries; safegit does not touch the index after the rebase.
 - **Oplog recording**: Logs the rebase with the upstream ref.
@@ -983,7 +1089,7 @@ safegit reset --hard HEAD~3
 
 ### Safety Guarantees
 
-- **Selective guard**: Only `--hard` resets trigger the coordination check.
+- **Selective guard**: the worktree operation lock is taken for every reset; only `--hard` additionally goes through the dirty-tree check, because only `--hard` mutates the working tree.
 - **git's own exit code**: When `git reset` fails, safegit exits with the code git returned.
 - **The index is git's**: safegit does not touch the index after the reset, so a `--soft` or `--mixed` reset leaves exactly what git staged.
 - **Oplog recording**: Logs the reset with all arguments.
@@ -1011,7 +1117,7 @@ safegit bisect reset
 
 ### Safety Guarantees
 
-- **Selective guard**: Only tree-moving subcommands (`good`, `bad`, `old`, `new`, `reset`, `start`) trigger the coordination check.
+- **Selective guard**: the worktree operation lock is taken for every `bisect` invocation; only the tree-moving subcommands (`good`, `bad`, `old`, `new`, `reset`, `start`) additionally go through the dirty-tree check.
 - **git's own exit code**: When `git bisect` fails, safegit exits with the code git returned.
 - **The index is git's**: safegit does not touch the index after the bisect step.
 
@@ -1036,7 +1142,7 @@ safegit cherry-pick abc1234 def5678
 
 ### Safety Guarantees
 
-- **Coordination guard**: Checks for in-progress operations before proceeding.
+- **Coordination guard, both layers**: the worktree operation lock, then the dirty-tree check. See "The guarded passthroughs and their two coordination layers".
 - **git's own exit code**: safegit exits with the code `git cherry-pick` returned.
 - **The index is git's**: a conflicted pick keeps its unmerged entries, `.git/sequencer` and `CHERRY_PICK_HEAD`, and a `--no-commit` pick keeps its staged result, so `git cherry-pick --continue` sees exactly what it would after plain git.
 - **Oplog recording**: Logs the operation.
@@ -1060,9 +1166,28 @@ safegit revert abc1234
 safegit revert HEAD~3..HEAD
 ```
 
+### One commit is safegit's; more than one is git's
+
+Reverting a SINGLE commit is not a plain passthrough. safegit splits the operation where git itself splits it: `git revert --no-commit` computes the inverse patch and stages it, and safegit's own conclusion engine turns that staged result into the commit. So a single revert is pipeline-authored -- safegit's trailers are on it, the repository's `commit-msg` hook runs, git's state files (`REVERT_HEAD`, `MERGE_MSG`, `AUTO_MERGE`) are cleaned up afterwards, and `safegit undo` can reverse it. The identity is deliberately git's own semantics: a revert is a new change of the reverter's, so the OPERATOR is the author, not the author of the commit being reverted.
+
+Reverting MORE THAN ONE commit is git's sequencer, and git authors those commits.
+
+**The move-record asymmetry follows from that split, and it is deliberate:**
+
+| | Single revert | Queued revert (a range, or several commits) |
+|---|---|---|
+| Who writes the commit | safegit's pipeline | git's sequencer |
+| safegit trailers | yes | none |
+| Move records | the INVERSE of every `Moved:` record the reverted commit declared, each with a fresh id | none at all |
+| `safegit undo` | reverses it | does not reverse it |
+
+Undoing a move is a move, so the inverse records are minted through both doors -- a clean computed revert and a conflicted one concluded with `safegit revert-continue` declare the same thing. Retractions are not inverted, and an inverse is still minted for a record some later commit retracted: the inverse describes this revert commit's own tree delta, and the trees arbitrate any wrong claim.
+
+Where the restructure cannot honor an option -- `--edit`, `--no-commit`, `--gpg-sign`, `--cleanup`, the sequencer verbs -- the command line stays an ordinary passthrough rather than having anything silently dropped.
+
 ### Safety Guarantees
 
-Same safety guarantees as the cherry-pick command: the coordination guard checks for in-progress safegit operations before proceeding to prevent data loss in shared worktrees, `git revert`'s own exit code and index are passed through untouched (a conflicted or `--no-commit` revert keeps its unmerged entries, staged inverse patch and `REVERT_HEAD`), and the operation is recorded in the oplog for audit trail and undo purposes.
+Otherwise the same guarantees as the cherry-pick command: both coordination layers before anything runs, `git revert`'s own exit code and index passed through untouched (a conflicted or `--no-commit` revert keeps its unmerged entries, staged inverse patch and `REVERT_HEAD`), the way out named when git stops mid-operation, and the operation recorded in the oplog.
 
 ## config show
 
@@ -1204,17 +1329,26 @@ git     git version 2.47.0
 
 ## Configuration Reference
 
-All safegit configuration is stored in `.git/safegit/config.json` and managed via the `config show`, `config get`, and `config set` subcommands. The configuration controls commit CAS retry behavior, lock acquisition timeouts, pre-pre-push hook execution timeouts, push retry attempts for transport errors, and oplog rotation size limits. The following keys are available with their default values:
+All safegit configuration is stored in `.git/safegit/config.json` and managed via the `config show`, `config get`, and `config set` subcommands. The configuration controls commit CAS retry behavior, lock acquisition timeouts, pre-pre-push hook execution timeouts, push retry attempts for transport errors, and the submodule auto-bump decision. The following keys are available with their default values:
 
 | Key | Default | Description |
 |-----|---------|-------------|
 | `schemaVersion` | `1` | Config file schema version |
 | `commit.casMaxAttempts` | `5` | Maximum CAS retry attempts for commits |
-| `commit.autoBumpParent` | `nil` | Auto-bump parent repo's submodule pointer on commit |
-| `lock.acquireTimeoutSeconds` | `30` | Timeout for acquiring ref locks |
+| `commit.autoBumpParent` | (unset -- and an unset one is a refusal, see below) | Whether a commit in a submodule also commits the parent's moved gitlink |
+| `lock.acquireTimeoutSeconds` | `30` | Timeout for acquiring a lock (per-ref, operation, or rewrite) |
 | `hooks.preprepush.timeoutSeconds` | `1800` | Timeout for pre-pre-push hooks (30 minutes) |
 | `push.retryAttempts` | `3` | Number of push retry attempts on transport errors |
-| `log.maxSizeMB` | `100` | Maximum oplog size before rotation |
+
+**`commit.autoBumpParent` has no working default, and its PRESENCE is mandatory.** It is read from the PARENT repository's config, and it only applies inside a submodule. `true` means bump the parent's gitlink, `false` means deliberately do not -- and absent means nobody has decided, which safegit refuses rather than guessing at, because either guess is wrong in somebody's repository. The refusal happens BEFORE anything is committed (a dry run validates it too, reading the parent's config and creating nothing there), and it names the command that settles it:
+
+```
+safegit config set commit.autoBumpParent true    # run in the PARENT repository
+```
+
+Reaching that refusal after the commit was what the pre-commit validation replaced: it left the submodule with a commit whose parent pointer was never updated and a nonzero exit. `undo` is the one path that still meets it late, because it can only discover the question after the rollback it is undoing.
+
+There is no oplog size or rotation setting. The oplog is append-only and complete by design; the exclusive lock held across each append is what makes concurrent appends atomic, and nothing truncates or rotates the file. `log.maxSizeMB` was removed -- writing it now reports an unknown config key.
 
 ## Exit Code Reference
 
