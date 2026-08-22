@@ -370,6 +370,51 @@ existing entries are never rewritten.
   before any push in the observation-failure arms) with the table
   regenerated.
 
+## Ratified 6.2 decisions and the suite-green milestone
+
+- THE SPECIFICATION SUITE IS FULLY GREEN as of 6.2 — zero campaign reds
+  remain. Everything after this point is additive (6.3-6.6, Phase 7)
+  plus docs/verification/release.
+- Engine/pipeline seam: IndexEdits (Kind Blob|Worktree|Remove, no
+  conflict vocabulary) applied inside tryCommit per CAS attempt — gains
+  quarantine coverage, retry re-application, and never-touch-shared
+  properties an engine-side pre-staged copy could not have. Keyword
+  meaning decided ONCE in the engine against the shared index's stages.
+- Reconcile ordering: cleanup -> apply edits to the shared index ->
+  ReconcileMainIndex(firstParent, HEAD) — reconciling first would
+  replay the just-resolved conflict (ReconcileMainIndex preserves
+  unmerged stages by design). The pipeline's internal reconcile fires
+  redundantly first; harmless under the lock, no suppression flag.
+- Exit 17 ConclusionUnresolved (omission and stray are one situation);
+  wrong-command and nothing-in-progress reuse 5; detached HEAD, queued
+  refusal, empty pick/revert reuse 1; duplicate resolution 2.
+- PLAN CORRECTIONS (probe-verified): git switch -c is REFUSED
+  mid-operation — the working detached-HEAD remedy is git branch +
+  git symbolic-ref (test executes it end-to-end and pins that switch -c
+  still fails); a CONFLICTED octopus cannot exist (git's octopus aborts
+  without parking MERGE_HEAD) — 6.3's octopus scope is empty for
+  conflicts; only clean octopus conclusions occur.
+- RE-RULING (was 6.2's flagged open decision): resolution keywords
+  align with git's own idiom — ours/theirs write the resolved content
+  to the WORKING TREE too (like checkout --ours/--theirs) and delete
+  removes the file from disk (like git rm); worktree takes disk content
+  by definition. 6.2 as built was index-only with a loud warning; the
+  footgun (a later commit of the marker-carrying file) outweighs the
+  conservatism. Dispatched with the 6.3 implementor.
+- AUTO_MERGE-alongside-different-state is SUBSUMED by the wrong-command
+  refusal (a standalone check would fire on every conflicted rebase,
+  whose AUTO_MERGE is legitimate). Lone AUTO_MERGE mentioned
+  informationally per the earlier ruling.
+- Auto-bump wired into conclusions (a conclusion in a submodule moves
+  the parent gitlink). announceWayOut prints for merge, cherry-pick and
+  revert passthrough failures, unconditionally (the tail of a failure).
+- The command-count number is deleted from the app description; the pin
+  now asserts NO count is stated.
+- Upstream todos FILED in the framework repo by the orchestrator: the
+  dict-flag ValidateFn silent skip, and the five effects-Run gaps
+  (stdin, settled-ness probe + Completed constructability, tee,
+  observe-under-dry-run non-uniformity).
+
 ## Ratified 6.1 decisions and probe facts (binding on 6.2/6.3/6.4)
 
 - BOTH delegation probes hold: git revert --continue AND git rebase
