@@ -133,3 +133,49 @@ func TestUnlockNonexistentLock(t *testing.T) {
 		t.Errorf("expected stderr to contain 'no lock held', got %q", stderr)
 	}
 }
+
+// The full-ref arm of the naming grammar: an argument that already starts with
+// refs/ is taken as written rather than prefixed again, so `unlock
+// refs/heads/main` reaches the same lock as `unlock main`, and a ref outside
+// refs/heads (which has no shorthand at all) is reachable by its full name.
+func TestUnlockAcceptsFullRefNames(t *testing.T) {
+	hostname, err := os.Hostname()
+	if err != nil {
+		t.Fatalf("os.Hostname: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name        string
+		arg         string
+		lockRelDir  []string
+		lockBase    string
+		wantDisplay string
+	}{
+		{"branch by full ref", "refs/heads/main", []string{"refs", "heads"}, "main.lock", "main"},
+		{"a ref with no shorthand", "refs/notes/commits", []string{"refs", "notes"}, "commits.lock", "refs/notes/commits"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := newRepo(t)
+			lockDir := filepath.Join(append([]string{dir, ".git", "safegit", "locks"}, tc.lockRelDir...)...)
+			if err := os.MkdirAll(lockDir, 0755); err != nil {
+				t.Fatalf("creating lock dir: %v", err)
+			}
+			lockFile := filepath.Join(lockDir, tc.lockBase)
+			content := fmt.Sprintf("pid=999999999\nts=2026-01-01T00:00:00Z\nop=commit\nhost=%s\n", hostname)
+			if err := os.WriteFile(lockFile, []byte(content), 0644); err != nil {
+				t.Fatalf("writing lock file: %v", err)
+			}
+
+			stdout, stderr, code := runSafegit(t, dir, "unlock", tc.arg)
+			if code != 0 {
+				t.Fatalf("unlock %s exited %d; stdout=%q stderr=%q", tc.arg, code, stdout, stderr)
+			}
+			if !strings.Contains(stdout, "lock on "+tc.wantDisplay+" released") {
+				t.Errorf("unlock %s must report the released lock as %q, got %q", tc.arg, tc.wantDisplay, stdout)
+			}
+			if _, err := os.Stat(lockFile); !os.IsNotExist(err) {
+				t.Errorf("the lock file survived unlock %s (err=%v)", tc.arg, err)
+			}
+		})
+	}
+}
