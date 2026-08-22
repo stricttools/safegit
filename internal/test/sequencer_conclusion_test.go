@@ -749,3 +749,77 @@ func TestTwoSessionsRacingAConclusion(t *testing.T) {
 	}
 	assertNoSequencerResidue(t, fx.dir, "after a raced conclusion")
 }
+
+// A conclusion is a COMMIT as far as the repository is concerned, and nothing
+// about it being the end of a merge exempts it from what an ordinary commit
+// goes through: the caller's own --trailer values reach the message, safegit's
+// session trailer is injected, and the repository's pre-commit and commit-msg
+// hooks both run. Nothing else asserts any of this on the conclusion route --
+// the hook tests all go through `safegit commit`, so a conclusion that quietly
+// skipped the repository's policy would have gone unnoticed.
+func TestMergeConclusionCarriesTrailersAndRunsNativeHooks(t *testing.T) {
+	fx := newConflictedMergeRepo(t, conflictedMergeOpts{env: conclusionSession, cleanSideFile: true, resolveInTree: true})
+
+	marker := filepath.Join(fx.dir, "conclusion-hooks.txt")
+	installHook(t, fx.dir, "pre-commit", "#!/bin/sh\necho pre-commit >> \""+marker+"\"\n")
+	installHook(t, fx.dir, "commit-msg", "#!/bin/sh\necho commit-msg >> \""+marker+"\"\n")
+
+	if _, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession, "merge-continue",
+		"--trailer", "Reviewed-by: Alice",
+		"--resolve", "conflicted.txt=worktree"); code != 0 {
+		t.Fatalf("merge-continue failed (code %d): %s", code, stderr)
+	}
+
+	ran := hookMarkerLines(t, marker)
+	for _, want := range []string{"pre-commit", "commit-msg"} {
+		if !testutil.Contains(ran, want) {
+			t.Errorf("%s did not run on the conclusion; hooks that ran: %v", want, ran)
+		}
+	}
+
+	msg := commitMessageOf(t, fx.dir, "HEAD")
+	if !strings.Contains(msg, "Reviewed-by: Alice") {
+		t.Errorf("the caller's own trailer did not survive the conclusion:\n%s", msg)
+	}
+	if !strings.Contains(msg, "Claude-Code-Session-Id: conclusion-test") {
+		t.Errorf("the conclusion carries no session trailer:\n%s", msg)
+	}
+	assertNoSequencerResidue(t, fx.dir, "merge conclusion with hooks")
+}
+
+// The other half: a commit-msg hook that refuses is the repository saying no,
+// and a conclusion obeys it the way a commit does. Nothing is committed, and
+// the merge is left exactly as it was -- still parked, still concludable --
+// rather than half-concluded or cleared.
+func TestMergeConclusionAbortsOnACommitMsgRejection(t *testing.T) {
+	fx := newConflictedMergeRepo(t, conflictedMergeOpts{env: conclusionSession, cleanSideFile: true, resolveInTree: true})
+	before := testutil.Rev(t, fx.dir, "HEAD")
+
+	hookPath := filepath.Join(fx.dir, ".git", "hooks", "commit-msg")
+	installHook(t, fx.dir, "commit-msg", "#!/bin/sh\necho 'commit-msg: nope' >&2\nexit 1\n")
+
+	stdout, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession,
+		"merge-continue", "--resolve", "conflicted.txt=worktree")
+	if code != exitcode.CommitHookRejected {
+		t.Fatalf("exit %d, want %d (a hook refusal)\nstdout=%s stderr=%s",
+			code, exitcode.CommitHookRejected, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "commit-msg") {
+		t.Errorf("the refusal does not name the hook: %s", stderr)
+	}
+
+	if head := testutil.Rev(t, fx.dir, "HEAD"); head != before {
+		t.Errorf("HEAD moved to %s despite the hook refusal (was %s)", head, before)
+	}
+	testutil.AssertMergeHead(t, fx.dir, fx.featureSHA, "the merge must survive a refused conclusion")
+
+	// And the merge is still concludable once the hook stops refusing.
+	if err := os.Remove(hookPath); err != nil {
+		t.Fatalf("removing the hook: %v", err)
+	}
+	if _, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession,
+		"merge-continue", "--resolve", "conflicted.txt=worktree"); code != 0 {
+		t.Fatalf("the refusal left the merge unconcludable (code %d): %s", code, stderr)
+	}
+	assertNoSequencerResidue(t, fx.dir, "after a refused then accepted conclusion")
+}
