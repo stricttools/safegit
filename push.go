@@ -218,6 +218,10 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	}
 	hookStdin := []byte(strings.Join(stdinLines, "\n") + "\n")
 
+	// The set the hooks are shown, kept for the retry check below. `refs` is
+	// reassigned on every retry; this is what the run committed to pushing.
+	validated := refs
+
 	// Run pre-pre-push hooks (unless disabled). A dry run never runs them:
 	// a hook is an arbitrary user script, so executing one is a mutation, and
 	// hooks.RunAll feeds it stdin -- something the effects handle's closed
@@ -347,6 +351,24 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 			}
 			if len(fresh) == 0 {
 				die(exitcode.PushFailed, "nothing to push (no matching refs) when re-reading the remote before a retry")
+				return exitcode.PushFailed
+			}
+			// The re-read re-resolves the LOCAL side too, and that is a second
+			// window: the push set was decided once, before the pre-pre-push hooks
+			// ran, and the hooks were handed those exact SHAs. A local ref that
+			// moved since would be published on the strength of a hook run that
+			// never saw it. safegit does not re-run the hooks mid-retry -- a hook
+			// is an arbitrary script and running it again is a second mutation the
+			// operator did not ask for -- so it refuses instead. Fail closed: the
+			// operator re-runs the push, which validates and publishes what is
+			// actually there now.
+			if change, moved := localRefsMoved(validated, fresh); moved {
+				die(exitcode.PushFailed, fmt.Sprintf(
+					"push refused: %s moved locally while the push was being retried\n"+
+						"  safegit resolved %s before pushing; it is now %s\n"+
+						"  the push set and the pre-pre-push hooks' input are decided once, and safegit does not re-run the hooks mid-retry\n"+
+						"  re-run the push to validate and publish the refs as they stand",
+					change.ref, change.was, change.now))
 				return exitcode.PushFailed
 			}
 			refs = fresh
@@ -567,6 +589,44 @@ func getRemoteSHA(ctx context.Context, remote, ref string) (string, error) {
 		return parts[0], nil
 	}
 	return nullSHA, nil
+}
+
+// localRefMove names one local ref whose SHA is not what an earlier resolution
+// saw. An absent side is spelled "(absent)" rather than left blank, so a
+// message naming it reads as a sentence either way.
+type localRefMove struct {
+	ref string
+	was string
+	now string
+}
+
+// localRefsMoved compares the LOCAL side of two resolutions of the same push
+// and reports the first difference: a SHA that changed, a ref that appeared, or
+// one that went away. Order is the earlier resolution's, so the message a
+// caller builds is stable rather than map-ordered.
+func localRefsMoved(before, after []pushRefInfo) (localRefMove, bool) {
+	const absent = "(absent)"
+	now := make(map[string]string, len(after))
+	for _, r := range after {
+		now[r.LocalRef] = r.LocalSHA
+	}
+	seen := make(map[string]bool, len(before))
+	for _, r := range before {
+		seen[r.LocalRef] = true
+		sha, ok := now[r.LocalRef]
+		if !ok {
+			return localRefMove{ref: r.LocalRef, was: r.LocalSHA, now: absent}, true
+		}
+		if sha != r.LocalSHA {
+			return localRefMove{ref: r.LocalRef, was: r.LocalSHA, now: sha}, true
+		}
+	}
+	for _, r := range after {
+		if !seen[r.LocalRef] {
+			return localRefMove{ref: r.LocalRef, was: absent, now: r.LocalSHA}, true
+		}
+	}
+	return localRefMove{}, false
 }
 
 // leaseExpectation is the value safegit pins a ref's lease to: the SHA it
