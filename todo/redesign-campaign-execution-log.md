@@ -370,6 +370,53 @@ existing entries are never rewritten.
   before any push in the observation-failure arms) with the table
   regenerated.
 
+## Ratified 6.3 decisions (two plan corrections, evidence-forced)
+
+- LAYER INVERSION: the plan's region-primary/structural-secondary
+  ordering was wrong — AUTO_MERGE holds the WHOLE file git wrote,
+  including marker-shaped content copied through from a side, so
+  treating all its regions as emitted refused a legitimate conclusion
+  (a real defect found by the parental-content test). As built: the
+  structural complete-block check plus the counting differential is THE
+  VERDICT; region survival is ATTRIBUTION (message wording naming which
+  blocks git itself created). The emitted set itself passes through the
+  differential.
+- NO hard refusal for absent AUTO_MERGE (the drafted exit 19 was
+  removed before commit): with the differential the structural layer is
+  a complete decision procedure — an absent AUTO_MERGE degrades only
+  the MESSAGE, never the verdict, so the plan's "hard-refuse rather
+  than verify less" premise does not hold (nothing is verified less);
+  and the trigger is undetectable anyway (a legitimate -s resolve merge
+  records no AUTO_MERGE and random temp-name labels — probe-verified).
+- Differential base for non-conflicted paths is EVERY parent, not the
+  first (a file arriving wholesale from the incoming side is absent
+  from the first parent; first-parent-only refused importing a fixture
+  carrying marker-shaped lines — the exact thing the differential
+  permits).
+- add/add is IN region coverage (git writes it to AUTO_MERGE normally —
+  probe-corrected from the plan's exclusion list); only delete/modify,
+  binary and custom-driver paths have nothing emitted.
+- Exemption is the UNSET attribute form (-safegit-conflict-markers),
+  resolved from the first parent via --attr-source: a typo can never
+  silently exempt; every rejection prints the exact committed line
+  needed. Exit 18 ConclusionMarkerSurvived (17 stays one situation).
+- Worktree materialization is the LAST step of finishConclusion —
+  reached only after a real commit, so never-on-refusal/never-in-dry-run
+  is structural; mode-aware (exec bit, symlink, gitlink skipped);
+  failure names the one path. Property matrix: 36 rows, labels via
+  production calls for pick/revert and test-supplied for merge (the
+  side that typed it), non-vacuity proven by label substitution.
+- Known limit documented: CRLF checkouts' regions are found (trailing
+  CR tolerated) but attribution stays byte-exact; filter+marker-content
+  repos need the exemption.
+- Facts for future sessions: the git-execution boundary guard scans the
+  WHOLE tree including gitignored files (a scratch probe repo under
+  build/ tripped it); one non-reproducible transient in
+  TestStagesReportsADeleteModifyConflictAsOneSided (5x re-run green) —
+  watch for recurrence. Small item queued: ApplyIndexEditsTo anchors
+  with git.RepoRoot where AnchorRoot is the declared authority
+  (identical under the pin; unify at the next fixer window).
+
 ## Ratified 6.2 decisions and the suite-green milestone
 
 - THE SPECIFICATION SUITE IS FULLY GREEN as of 6.2 — zero campaign reds
