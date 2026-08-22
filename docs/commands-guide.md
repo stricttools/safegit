@@ -172,8 +172,8 @@ Use `safegit push` instead of `git push` to benefit from pre-pre-push hooks (cus
 
 | Flag | Presence | Description |
 |------|----------|-------------|
-| `--pre-push-hook` / `--no-pre-push-hook` | optional; omitted means the hooks run | Run pre-pre-push hook scripts before pushing |
-| `--force-with-lease` / `--no-force-with-lease` | optional; omitted means an ordinary push | Force push using `--force-with-lease` to prevent overwriting others' work |
+| `--pre-push-hook` / `--no-pre-push-hook` | optional; omitted means the hooks run | Run pre-pre-push hook scripts before pushing. Under `--dry-run` they are never run whatever this says -- a hook is an arbitrary script, so running one is a mutation a preview may not perform -- and the preview says so on stderr and in the payload's `pre_pre_push_hooks_skipped` member |
+| `--force-with-lease` / `--no-force-with-lease` | optional; omitted means an ordinary push | Force push, pinning each ref to the SHA safegit just observed on the remote. Forcing is consequential: it is confirmed at the terminal, and `--approve-consequential` answers it in advance |
 
 ### Required Choice: `--refs`
 
@@ -204,8 +204,11 @@ safegit push --refs head upstream
 # Push all tags
 safegit push --refs tags
 
-# Force push with lease (safe force push)
+# Force push with lease (safe force push); confirmed at the terminal
 safegit push --refs head --force-with-lease
+
+# The same, from a script or an agent, consenting in advance
+safegit push --refs tags --force-with-lease --approve-consequential
 
 # Push without running pre-pre-push hooks
 safegit push --refs head --no-pre-push-hook
@@ -218,8 +221,11 @@ safegit push --refs both
 
 - **Pre-pre-push hooks**: Hooks installed in `.git/safegit/hooks/` (or `.git/hooks/pre-pre-push.d/`) run before any network I/O. A failing hook aborts the push (exit code 20). A timed-out hook aborts with exit code 21.
 - **Submodule hook cascading**: When pushing from inside a submodule, hooks from the parent repo are discovered and run first, then the submodule's own hooks.
-- **Automatic retry**: Transport errors (connection refused, DNS failure, TLS errors, broken pipe) trigger automatic retries with exponential backoff (1s, 2s, 4s). Non-transport errors (non-fast-forward, permission denied) are not retried. Default: 3 attempts, configurable via `push.retryAttempts`.
-- **Force-with-lease**: The `--force-with-lease` flag uses git's built-in mechanism to refuse the push if the remote has commits the local repo does not know about.
+- **Automatic retry**: Transport errors (connection refused, DNS failure, TLS errors, broken pipe) are classified from git's own stderr and trigger automatic retries with exponential backoff (1s, 2s, 4s). Every retry re-reads the remote and re-pins the leases, so an expectation is never carried over from a failed attempt. Non-transport errors (non-fast-forward, permission denied, a stale lease) are not retried. Default: 3 attempts, configurable via `push.retryAttempts`.
+- **Pinned per-ref leases**: `--force-with-lease` sends one expectation per ref, `--force-with-lease=<remoteRef>:<sha>`, pinned to the SHA safegit itself observed on the remote -- or the empty expectation ("this ref must not exist yet") for a ref the remote does not have. A bare `--force-with-lease` would compare against the remote-tracking ref instead, which tags do not have at all: git zeroes the expectation there and refuses to move any tag the remote already carries, which made pushing rewritten tags impossible.
+- **Atomic multi-ref pushes**: a push of more than one ref is `--atomic`. One refused ref leaves the remote exactly as it was, never half-published.
+- **Terminal lease rejection**: when the remote moved between safegit reading it and the push reaching it, git refuses and safegit exits 41 without retrying. Retrying would re-read the other session's ref, pin the lease to it, and perform exactly the overwrite the lease prevented. Fetch, look at what arrived, and decide again.
+- **Consent for forcing**: an ordinary push prompts for nothing. `--force-with-lease` overwrites remote refs, so it is confirmed at the terminal before any network contact; `--approve-consequential` answers the confirmation in advance, `--json` answers nothing and refuses, and a declined confirmation exits nonzero.
 - **Oplog recording**: Every push is logged with the pushed refs, remote, and hook results.
 
 ### Exit Codes
@@ -227,9 +233,11 @@ safegit push --refs both
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
+| 1 | A declined force-push confirmation |
 | 20 | Pre-pre-push hook failed |
 | 21 | Pre-pre-push hook timed out |
 | 40 | Git push failed |
+| 41 | A `--force-with-lease` expectation no longer matched: the remote ref moved after safegit observed it |
 
 ## pull
 
@@ -1201,6 +1209,7 @@ coordination guard, an uninitialized repository, a rejected argument).
 | 22 | The remote backup slot holds work missing from the local history |
 | 23 | The branch has no backup slot on the remote |
 | 40 | Git push failed |
+| 41 | The remote ref moved after safegit observed it, so the --force-with-lease expectation no longer matched |
 | 70 | Internal invariant violated (a bug) |
 
 <!-- END generated exit-code table -->

@@ -335,8 +335,8 @@ func newApp() *strictcli.App {
 			},
 		),
 		strictcli.WithFlags(
-			strictcli.BoolFlag("pre-push-hook", "run pre-pre-push hook scripts before pushing to remote; omitted means the hooks run", strictcli.Optional()),
-			strictcli.BoolFlag("force-with-lease", "force push using --force-with-lease to prevent overwriting others' work; omitted means an ordinary push", strictcli.Optional()),
+			strictcli.BoolFlag("pre-push-hook", "run pre-pre-push hook scripts before pushing to remote; omitted means the hooks run. Under --dry-run they are never run whatever this says -- a hook is an arbitrary script, so running one is a mutation a preview may not perform -- and the preview says so on stderr and in the payload's pre_pre_push_hooks_skipped member", strictcli.Optional()),
+			strictcli.BoolFlag("force-with-lease", "force push, pinning each ref to the SHA safegit just observed on the remote (--force-with-lease=<remoteRef>:<sha>, or the empty expectation for a ref the remote does not have yet), so a ref somebody else moved in the meantime is refused rather than overwritten; forcing is consequential, so it is confirmed at the terminal and --approve-consequential answers it in advance; omitted means an ordinary push", strictcli.Optional()),
 			// One required choice replaces the four mode bools the mutex group
 			// held. A bool member could be negated (`--no-only-tags` pushed
 			// everything), and the negation had nowhere honest to go; a value
@@ -351,6 +351,7 @@ func newApp() *strictcli.App {
 		strictcli.WithArgs(
 			strictcli.NewArg("remote", "name of the remote repository to push to (defaults to origin)", strictcli.ArgOptional()),
 		),
+		strictcli.PayloadSchema(pushPayloadSchema),
 	)
 	app.Command("pull", "fetch from remote and merge, defaulting to fast-forward-only mode", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		gf := globalsToFlags(ctx, kwargs)

@@ -40,6 +40,103 @@ type pushRefInfo struct {
 	RemoteSHA string
 }
 
+// pushPayloadRef is one ref as the machine payload reports it.
+type pushPayloadRef struct {
+	LocalRef  string `json:"local_ref"`
+	LocalSHA  string `json:"local_sha"`
+	RemoteRef string `json:"remote_ref"`
+	// RemoteSHA is what safegit observed on the remote, and null when the ref
+	// is not there yet. The internal all-zero marker never leaves the process:
+	// a machine consumer reading 0000... would have to know the convention.
+	RemoteSHA *string `json:"remote_sha"`
+	// Lease is the expectation pinned onto this ref, and null when the push is
+	// not forcing and therefore sends no lease. The empty string is a real
+	// value, not an absent one: it is git's spelling for "this ref must not
+	// exist yet".
+	Lease *string `json:"lease"`
+}
+
+// pushPayload is what `push` puts in the envelope's payload.
+//
+// The hook members are the reason it exists. A dry run does NOT run the
+// pre-pre-push hooks -- a hook is an arbitrary script, so running one is a
+// mutation a preview may not perform -- and a machine consumer reading a
+// preview would otherwise have no way to tell "the hooks passed" from "the
+// hooks were never asked".
+type pushPayload struct {
+	Remote string           `json:"remote"`
+	Refs   []pushPayloadRef `json:"refs"`
+	// ForceWithLease reports that every ref carried a pinned lease.
+	ForceWithLease bool `json:"force_with_lease"`
+	// Atomic reports that the push was all-or-nothing, which safegit turns on
+	// for every multi-ref push.
+	Atomic bool `json:"atomic"`
+	// PrePrePushHooksRun is how many pre-pre-push hooks actually ran.
+	PrePrePushHooksRun int `json:"pre_pre_push_hooks_run"`
+	// PrePrePushHooksSkipped says WHY none ran: "dry-run" when the run is a
+	// preview, "disabled" when --no-pre-push-hook was passed, and null when the
+	// hooks were asked (whether or not any were installed).
+	PrePrePushHooksSkipped *string `json:"pre_pre_push_hooks_skipped"`
+	DryRun                 bool    `json:"dry_run"`
+}
+
+// pushPayloadSchema declares what `push` puts in the envelope's payload. The
+// framework validates the value against it at emission, so the declaration and
+// the struct above cannot drift.
+var pushPayloadSchema = strictcli.SchemaObject(
+	map[string]interface{}{
+		"remote": strictcli.SchemaType("string"),
+		"refs": strictcli.SchemaArray(strictcli.SchemaObject(
+			map[string]interface{}{
+				"local_ref":  strictcli.SchemaType("string"),
+				"local_sha":  strictcli.SchemaType("string"),
+				"remote_ref": strictcli.SchemaType("string"),
+				"remote_sha": strictcli.SchemaType("string", "null"),
+				"lease":      strictcli.SchemaType("string", "null"),
+			},
+			[]string{"local_ref", "local_sha", "remote_ref", "remote_sha", "lease"},
+			false,
+		)),
+		"force_with_lease":           strictcli.SchemaType("boolean"),
+		"atomic":                     strictcli.SchemaType("boolean"),
+		"pre_pre_push_hooks_run":     strictcli.SchemaType("integer"),
+		"pre_pre_push_hooks_skipped": strictcli.SchemaType("string", "null"),
+		"dry_run":                    strictcli.SchemaType("boolean"),
+	},
+	[]string{"remote", "refs", "force_with_lease", "atomic", "pre_pre_push_hooks_run", "pre_pre_push_hooks_skipped", "dry_run"},
+	false,
+)
+
+// hookSkipDryRun is the notice a preview owes the operator, in the one spelling
+// the help text, the human preview output and the payload all use.
+const hookSkipDryRun = "dry-run"
+
+// buildPushPayload renders what actually happened into the machine payload.
+func buildPushPayload(flags globalFlags, remote string, refs []pushRefInfo, force bool, hooksRun int, hooksSkipped *string) pushPayload {
+	out := make([]pushPayloadRef, 0, len(refs))
+	for _, r := range refs {
+		entry := pushPayloadRef{LocalRef: r.LocalRef, LocalSHA: r.LocalSHA, RemoteRef: r.RemoteRef}
+		if r.RemoteSHA != nullSHA {
+			sha := r.RemoteSHA
+			entry.RemoteSHA = &sha
+		}
+		if force {
+			lease := leaseExpectation(r)
+			entry.Lease = &lease
+		}
+		out = append(out, entry)
+	}
+	return pushPayload{
+		Remote:                 remote,
+		Refs:                   out,
+		ForceWithLease:         force,
+		Atomic:                 len(refs) > 1,
+		PrePrePushHooksRun:     hooksRun,
+		PrePrePushHooksSkipped: hooksSkipped,
+		DryRun:                 flags.dryRun,
+	}
+}
+
 func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote string, mode pushMode) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
@@ -61,6 +158,27 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	if err != nil {
 		die(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
 		return exitcode.General
+	}
+
+	// A force-push is consequential; an ordinary push is not. The command is
+	// therefore consequential CONDITIONALLY, which strictcli cannot yet declare
+	// (a todo is filed upstream), so the condition is asked at safegit's own
+	// confirmation seam instead -- and asked here, in front of every network
+	// read the push would otherwise do, so a declined force contacts nothing.
+	//
+	// --approve-consequential is the right consent because the condition IS the
+	// flag the caller typed: nothing is discovered at run time, so a caller
+	// composing the command line already knows it is forcing.
+	//
+	// A dry run asks nothing: it overwrites no ref, so there is nothing to
+	// consent to.
+	if forceFlag && !flags.dryRun {
+		c := consent{granted: flags.approved, flag: "--approve-consequential"}
+		if !confirmDeliberate(flags, c,
+			"Force-push to %s (%s), overwriting whatever each ref's lease expectation does not cover?", remote, remoteURL) {
+			infof(flags, "Aborted.\n")
+			return exitcode.General
+		}
 	}
 
 	// Resolve refs to push
@@ -93,10 +211,26 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	// a hook is an arbitrary user script, so executing one is a mutation, and
 	// hooks.RunAll feeds it stdin -- something the effects handle's closed
 	// method set has no way to express (see docs/dry-run notes).
-	var hookResults []hooks.HookResult
-	if !noPrePrePush && flags.dryRun && !flags.silent() {
-		fmt.Fprintln(os.Stderr, "  pre-pre-push hooks are not run under --dry-run")
+	//
+	// The skip is stated in three places, because three different readers have
+	// to see it: --help (before the run), the preview's own output (during it),
+	// and the payload's pre_pre_push_hooks_skipped member (for a machine
+	// consumer, which sees neither of the other two). A preview that silently
+	// omitted the hooks would read exactly like a preview whose hooks passed.
+	var hooksSkipped *string
+	switch {
+	case noPrePrePush:
+		reason := "disabled"
+		hooksSkipped = &reason
+	case flags.dryRun:
+		reason := hookSkipDryRun
+		hooksSkipped = &reason
+		if !flags.silent() {
+			fmt.Fprintln(os.Stderr, "  pre-pre-push hooks are not run under --dry-run; the real push will run them")
+		}
 	}
+
+	var hookResults []hooks.HookResult
 	if !noPrePrePush && !flags.dryRun {
 		timeoutSec := cfg.Hooks.PrePrePush.TimeoutSeconds
 		if timeoutSec <= 0 {
@@ -154,20 +288,31 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		retryAttempts = 3
 	}
 
-	// Build explicit refspecs from resolved refs
-	refspecs := make([]string, len(refs))
-	for i, r := range refs {
-		refspecs[i] = r.LocalRef + ":" + r.RemoteRef
-	}
-	pushArgs := buildGitPushArgs(remote, refspecs, forceFlag)
+	pushArgs := buildGitPushArgs(remote, refs, forceFlag)
 	var pushErr error
 	for attempt := 1; attempt <= retryAttempts; attempt++ {
-		pushErr = execGitPush(flags, pushArgs)
+		var gitStderr string
+		gitStderr, pushErr = execGitPush(flags, pushArgs)
 		if pushErr == nil {
 			break
 		}
-		// Only retry on transport errors (not on rejected pushes like non-fast-forward)
-		if !isTransportError(pushErr) {
+		// A rejected lease is TERMINAL. It is not a flaky connection: somebody
+		// moved the ref between safegit observing it and the push reaching it,
+		// and the lease is what stopped their commits from being overwritten.
+		// Retrying would re-observe THEIR ref, pin the lease to it, and quietly
+		// do the overwriting the lease just prevented -- so the retry loop must
+		// never see it.
+		if leaseRejected(gitStderr) {
+			fmt.Fprintf(os.Stderr,
+				"push refused: the remote moved after safegit read it, so the --force-with-lease expectation no longer matches\n"+
+					"  somebody else pushed to %s between the read and the push, and the lease kept their work\n"+
+					"  fetch and look at what arrived (git fetch %s), then decide again\n",
+				remote, remote)
+			return exitcode.PushLeaseRejected
+		}
+		// Everything else that is not transport -- non-fast-forward, permission
+		// denied -- is a verdict too, and equally not worth repeating.
+		if !isTransportError(gitStderr) {
 			break
 		}
 		if attempt < retryAttempts {
@@ -179,6 +324,22 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 				fmt.Fprintf(os.Stderr, "transport error, retrying in %v (attempt %d/%d)...\n", backoff, attempt+1, retryAttempts)
 			}
 			time.Sleep(backoff)
+			// Re-observe the remote and re-pin every lease before trying again.
+			// An expectation describes the remote at a moment; after a failed
+			// attempt and a wait, that moment has passed, and a retry carrying
+			// the old expectation would refuse a ref that is now fine (or, on a
+			// partially-applied push, assert something safegit never saw).
+			fresh, err := resolveRefsForPush(ctx, remote, mode)
+			if err != nil {
+				die(exitcode.PushFailed, fmt.Sprintf("re-reading %s before retrying the push: %v", remote, err))
+				return exitcode.PushFailed
+			}
+			if len(fresh) == 0 {
+				die(exitcode.PushFailed, "nothing to push (no matching refs) when re-reading the remote before a retry")
+				return exitcode.PushFailed
+			}
+			refs = fresh
+			pushArgs = buildGitPushArgs(remote, refs, forceFlag)
 		}
 	}
 
@@ -209,6 +370,8 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 			},
 		})
 	}
+
+	flags.payload(buildPushPayload(flags, remote, refs, forceFlag, len(hookResults), hooksSkipped))
 
 	// Output result
 	if !flags.silent() && !flags.dryRun {
@@ -357,23 +520,66 @@ func getRemoteSHA(ctx context.Context, remote, ref string) string {
 	return nullSHA
 }
 
-func buildGitPushArgs(remote string, refspecs []string, force bool) []string {
+// leaseExpectation is the value safegit pins a ref's lease to: the SHA it
+// observed on the remote, or the EMPTY string when the ref is not there yet.
+//
+// The empty expectation is git's spelling for "this ref must not exist", and it
+// is what the internal all-zero "absent" marker has to become. Sending the
+// literal 0000... instead would be an expectation no ref can ever satisfy, so
+// every first push of a ref would be refused.
+func leaseExpectation(r pushRefInfo) string {
+	if r.RemoteSHA == nullSHA {
+		return ""
+	}
+	return r.RemoteSHA
+}
+
+// buildGitPushArgs composes the `git push` argv for one attempt.
+//
+// The lease is PER REF and pinned to the SHA safegit itself observed a moment
+// earlier: `--force-with-lease=<remoteRef>:<observedSHA>`. A BARE
+// `--force-with-lease` means something different -- compare the remote ref
+// against the remote-TRACKING ref for it -- and that is a value safegit never
+// resolved. For tags it is a value that does not exist at all: tags have no
+// remote-tracking refs, so git zeroes the expectation and refuses to move any
+// tag the remote already carries. That refusal is what made safegit's own
+// post-scrub instruction ("push the rewritten tags") unsatisfiable.
+//
+// `--atomic` goes on every multi-ref push, forced or not: one refused ref must
+// leave the remote exactly as it was rather than half-published.
+func buildGitPushArgs(remote string, refs []pushRefInfo, force bool) []string {
 	args := []string{"push"}
+	if len(refs) > 1 {
+		args = append(args, "--atomic")
+	}
 	if force {
-		args = append(args, "--force-with-lease")
+		for _, r := range refs {
+			args = append(args, "--force-with-lease="+r.RemoteRef+":"+leaseExpectation(r))
+		}
 	}
 	args = append(args, remote)
-	args = append(args, refspecs...)
+	for _, r := range refs {
+		args = append(args, r.LocalRef+":"+r.RemoteRef)
+	}
 	return args
 }
 
-// execGitPush runs git push through the effects handle, streaming
-// stdout/stderr to the user. Routing it here is what makes `--dry-run` honest:
-// the push is recorded in the would-do log and nothing reaches the remote.
-func execGitPush(flags globalFlags, args []string) error {
+// execGitPush runs git push through the effects handle and returns git's own
+// stderr along with an error when the push did not succeed. Routing it here is
+// what makes `--dry-run` honest: the push is recorded in the would-do log and
+// nothing reaches the remote.
+//
+// git's output is CAPTURED and written back out rather than streamed straight
+// through, because the caller has to read it: a lease rejection, a
+// non-fast-forward and a dropped connection are all the same nonzero exit code
+// and differ only in what git said. The framework's error string carries the
+// argv and the code, never the child's stderr, so classifying on it is
+// impossible. The cost is that a long push's progress arrives at the end
+// instead of live -- strictcli's Run streams or captures, with no tee.
+func execGitPush(flags globalFlags, args []string) (stderrText string, err error) {
 	argv, err := gitexec.ArgvAny(gitexec.ExemptGitPush, args...)
 	if err != nil {
-		return err
+		return "", err
 	}
 	grant := "push"
 	for _, a := range args {
@@ -382,12 +588,38 @@ func execGitPush(flags globalFlags, args []string) error {
 			break
 		}
 	}
-	_, err = flags.effects().Run(argv,
-		strictcli.Stream(true),
+	done, err := flags.effects().Run(argv,
+		strictcli.Check(false),
 		strictcli.UseGrant(grant),
 		strictcli.Resource("remote-refs:"+remoteOf(args)),
 	)
-	return err
+	if err != nil {
+		return "", err
+	}
+	if flags.dryRun {
+		// The invocation was recorded instead of performed, so the Completed is
+		// unsettled and reading it would panic (the same reasoning, and the same
+		// flag-keyed test, as runGitMutation's dry-run branch).
+		return "", nil
+	}
+
+	if out := done.Stdout(); out != "" {
+		// Machine mode owns stdout: the envelope is the only document there, so
+		// git's own stdout joins its stderr instead of corrupting it.
+		w := os.Stdout
+		if flags.json {
+			w = os.Stderr
+		}
+		fmt.Fprint(w, out)
+	}
+	stderrText = done.Stderr()
+	if stderrText != "" {
+		fmt.Fprint(os.Stderr, stderrText)
+	}
+	if code := done.ExitCode(); code != 0 {
+		return stderrText, fmt.Errorf("git push exited %d", code)
+	}
+	return stderrText, nil
 }
 
 // remoteOf extracts the remote name from a built `git push` argv.
@@ -401,13 +633,38 @@ func remoteOf(args []string) string {
 	return "origin"
 }
 
-// isTransportError heuristically determines if a push error is a network/transport issue
-// (worth retrying) vs. a logical rejection (non-fast-forward, permission denied).
-func isTransportError(err error) bool {
-	if err == nil {
+// leaseRejected reports that git refused the push because a --force-with-lease
+// expectation did not match what was on the remote.
+//
+// The signature, probed against a local bare remote with git 2.54.0 and pinned
+// by TestGitBareLeaseCannotForcePushAMovedTag so a git release that respells it
+// fails loudly instead of turning every lease rejection into a retried
+// transport error:
+//
+//	To /path/to/remote
+//	 ! [rejected]        v1.0 -> v1.0 (stale info)
+//	error: failed to push some refs to '/path/to/remote'
+//
+// Under --atomic the refs that were fine read `(atomic push failed)` on their
+// own lines; the rejected one still reads `(stale info)`, so one marker
+// classifies the whole push.
+func leaseRejected(stderrText string) bool {
+	return strings.Contains(stderrText, "stale info")
+}
+
+// isTransportError heuristically determines if a push failure is a
+// network/transport issue (worth retrying) vs. a logical rejection
+// (non-fast-forward, permission denied, a stale lease).
+//
+// It reads GIT'S OWN stderr, which is the only place those words ever appear.
+// It used to be handed the error the effects handle returns -- a formatted
+// string carrying the argv and the exit code and nothing of the child's output
+// -- so no pattern here could ever match and the retry loop was dead.
+func isTransportError(stderrText string) bool {
+	if stderrText == "" {
 		return false
 	}
-	msg := err.Error()
+	msg := stderrText
 	transportPatterns := []string{
 		"Could not resolve host",
 		"Connection refused",
