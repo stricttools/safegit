@@ -234,6 +234,17 @@ func namesThroughLink(arg string) bool {
 	return strings.HasSuffix(arg, "/") || strings.HasSuffix(arg, string(filepath.Separator))
 }
 
+// CanonicalRel is canonicalRel for a caller outside this package.
+//
+// It exists for `safegit mv`, whose arguments are paths a person typed at a
+// shell prompt exactly as a positional path is, and which must therefore mean
+// the same thing from a subdirectory as from the root. One canonicalizer, so a
+// path named in a `mv` argument and the same path named anywhere else in the
+// commit family resolve to the same repo-relative spelling.
+func CanonicalRel(repoRoot, arg string, followFinal bool) (string, error) {
+	return canonicalRel(repoRoot, arg, followFinal)
+}
+
 // canonicalRel turns one caller-typed argument into its canonical
 // repo-relative form. A relative argument resolves against the process working
 // directory -- the caller's own shell -- not against the repository root.

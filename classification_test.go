@@ -27,10 +27,15 @@ import (
 // object store, the config file or the remote's ref list and writes nothing;
 // `backup list` is a network read (git ls-remote) but still a read.
 //
-// Mutating and NOT consequential (23):
+// Mutating and NOT consequential (24):
 //
 //   - commit -- creates a commit and moves a ref. The routine operation this
 //     tool exists for, and `safegit undo` reverses it from the oplog.
+//   - mv -- renames tracked paths and commits the moves with their records.
+//     It is `commit` plus the renames themselves: every pair is checked before
+//     the first file is touched, a mid-sequence failure puts back what it had
+//     already moved, and `safegit undo` reverses the commit. Nothing here is
+//     worth an unconditional interruption that `commit` is not.
 //   - merge-continue, cherry-pick-continue, revert-continue -- conclude an
 //     operation git stopped before committing. Each creates one commit and
 //     moves one ref, exactly as commit does, and then removes the state files
@@ -87,6 +92,7 @@ var classification = map[string]struct {
 	passthrough     bool
 }{
 	"commit":               {strictcli.EffectMutating, false, true, false},
+	"mv":                   {strictcli.EffectMutating, false, true, false},
 	"merge-continue":       {strictcli.EffectMutating, false, true, false},
 	"cherry-pick-continue": {strictcli.EffectMutating, false, true, false},
 	"revert-continue":      {strictcli.EffectMutating, false, true, false},

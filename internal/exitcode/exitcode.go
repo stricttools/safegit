@@ -72,9 +72,11 @@ const (
 	// Usage is a command line safegit itself rejects after strictcli has
 	// accepted it: mutually exclusive flags, a missing message, a hunk spec
 	// that does not parse, an empty file list, a non-positive --count, a
-	// malformed glob or --target value. Produced by commit, undo, scan, scrub
-	// file/match/run, author check, and the three guarded passthroughs that
-	// take a bare positional argument (checkout, merge, rebase). Note that a
+	// malformed glob or --target value, a `mv` pair that does not parse or that
+	// speaks for a path another pair already claims. Produced by commit, mv,
+	// undo, scan, scrub file/match/run, author check, and the three guarded
+	// passthroughs that take a bare positional argument (checkout, merge,
+	// rebase). Note that a
 	// refusal by the framework's own parser exits General (1) instead -- see
 	// the package comment.
 	Usage = 2
@@ -217,9 +219,16 @@ const (
 	// Nothing is committed when it fires. Produced by commit, including its
 	// --amend and reword forms.
 	//
+	// `mv` produces it for the same class of verdict read the other way round:
+	// a pair whose source is untracked or absent from disk, whose destination
+	// is already occupied, or whose file/subtree spelling disagrees with what
+	// the path actually is. The refusal names EVERY pair that is wrong, and
+	// nothing has been moved or committed when it fires.
+	//
 	// Two declarations that contradict EACH OTHER -- nested sources, nested
-	// destinations -- exit Usage instead, which is where every other
-	// argument-against-argument contradiction in the commit family exits.
+	// destinations, one pair chaining into another -- exit Usage instead, which
+	// is where every other argument-against-argument contradiction in the
+	// commit family exits.
 	MoveNotBorneOut = 19
 
 	// PushHookFailed means a pre-pre-push hook exited nonzero, so no network

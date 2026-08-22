@@ -25,6 +25,7 @@ import (
 // reverse (see conclusionOps).
 var undoableOps = map[string]string{
 	"commit":               "parent",
+	"mv":                   "parent",
 	"amend":                "oldSha",
 	"reword":               "oldSha",
 	"merge-continue":       "parent",
@@ -279,6 +280,17 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	// parent-bump note below -- it is a fact about what this undo did NOT do,
 	// and withholding it under --quiet would let an operator believe the merge
 	// is waiting to be concluded again.
+	// A move's undo is partial in the other direction: undo reverses the
+	// COMMIT, and it has never touched the working tree. The files are still at
+	// the paths `safegit mv` put them at, which is the honest half of the
+	// operation to leave standing -- and saying so is the difference between an
+	// operator who knows where their files are and one who does not.
+	if targetEntry.Op == mvOplogOp {
+		fmt.Fprintf(os.Stderr, "note: the commit is reversed, but the files are still at their new paths -- undo moves\n")
+		fmt.Fprintf(os.Stderr, "      a ref and never the working tree. Move them back yourself, or re-commit them\n")
+		fmt.Fprintf(os.Stderr, "      where they are with 'safegit commit --moved'.\n")
+	}
+
 	if operation, isConclusion := conclusionOps[targetEntry.Op]; isConclusion {
 		fmt.Fprintf(os.Stderr, "note: %s is reversed, but git's %s state is NOT restored -- MERGE_HEAD, the message draft\n", targetEntry.Op, operation)
 		fmt.Fprintf(os.Stderr, "      and the conflict stages are gone, so the repository is idle rather than mid-%s.\n", operation)
