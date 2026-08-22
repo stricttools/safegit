@@ -109,7 +109,18 @@ var doctorChecks = []doctorCheck{
 	{Name: "filesystem", Severity: "warn", Fn: checkFilesystemRegistered},
 	{Name: "hook_perms", Severity: "warn", RequiresInit: true, Fn: checkHookPerms},
 	{Name: "git_version", Severity: "warn", Fn: checkGitVersion},
+	{Name: "legacy_scrub_policies", Severity: "error", RequiresInit: true, Fn: checkLegacyScrubPolicies},
 }
+
+// legacyScrubPolicyFile is the JSONL policy log older published safegit
+// versions wrote under .git/safegit/ after every `scrub match` and `scrub run`.
+//
+// Nothing reads it any more -- `scrub verify` is stateless and takes its
+// patterns from the command line -- but a repository that was scrubbed by one
+// of those versions still has the file, and every line of it holds the regex
+// that scrub was given, which for a secret scrub is the secret itself, sitting
+// in plaintext inside the repository the scrub was run to clean.
+const legacyScrubPolicyFile = "scrub-policies.jsonl"
 
 // runDoctor returns the process exit code. A declined confirmation is a
 // refusal, not a success: it exits nonzero so a script or agent cannot read
@@ -361,8 +372,23 @@ func checkGitVersion(env doctorEnv) doctorFinding {
 	return findingOK(fmt.Sprintf("git %s (highest feature floor: %s for %s)", v, highest.Floor, highest.Name))
 }
 
-// doctorFix performs cleanup: orphan tmp dirs, legacy queue dir and stale
-// locks. With --dry-run it only reports what would be done.
+// checkLegacyScrubPolicies reports a leftover scrub-policies.jsonl.
+//
+// It is an error rather than a warning because of what the file CONTAINS: one
+// verbatim scrub pattern per line. A repository that was scrubbed to remove a
+// credential is very likely holding that credential in this file, so leaving it
+// in place keeps the leak the scrub was run to end.
+func checkLegacyScrubPolicies(env doctorEnv) doctorFinding {
+	p := filepath.Join(env.sgDir, legacyScrubPolicyFile)
+	if _, err := os.Stat(p); err != nil {
+		return findingNone()
+	}
+	return findingFail("%s is left over from an older safegit; nothing reads it and every line holds a verbatim scrub pattern, which for a secret scrub is the secret itself (run 'safegit doctor --action fix' to delete it)", p)
+}
+
+// doctorFix performs cleanup: orphan tmp dirs, legacy queue dir, the legacy
+// scrub-policy file and stale locks. With --dry-run it only reports what would
+// be done.
 func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 	sgDir := repo.SafegitDir(gitDir)
 
@@ -380,6 +406,13 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 			hasLegacyQueue = true
 		}
 
+		// Check for the legacy scrub-policy file.
+		legacyPolicies := filepath.Join(sgDir, legacyScrubPolicyFile)
+		hasLegacyPolicies := false
+		if _, err := os.Stat(legacyPolicies); err == nil {
+			hasLegacyPolicies = true
+		}
+
 		// Both lock trees: the shared one and this worktree's own.
 		found := scanLocks(lockTrees(ctx, gitDir))
 
@@ -387,6 +420,9 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 			fmt.Printf("would remove %d orphan tmp dir(s)\n", len(orphanDirs))
 			if hasLegacyQueue {
 				fmt.Println("would remove legacy queue directory")
+			}
+			if hasLegacyPolicies {
+				fmt.Printf("would remove legacy scrub-policy file %s\n", legacyPolicies)
 			}
 			if len(found.Stale) > 0 {
 				fmt.Printf("would remove %d stale lock(s): %s\n", len(found.Stale), strings.Join(found.Stale, ", "))
@@ -411,6 +447,19 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 			queueRemoved = true
 		}
 
+		// Delete the legacy scrub-policy file. It is removed rather than
+		// migrated: nothing reads it, and its content is exactly what should
+		// not be sitting on disk.
+		legacyPolicies := filepath.Join(sgDir, legacyScrubPolicyFile)
+		policiesRemoved := false
+		if _, err := os.Stat(legacyPolicies); err == nil {
+			if rmErr := os.Remove(legacyPolicies); rmErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: removing %s: %v\n", legacyPolicies, rmErr)
+			} else {
+				policiesRemoved = true
+			}
+		}
+
 		// Both lock trees: the shared one and this worktree's own.
 		cleaned := cleanLocks(lockTrees(ctx, gitDir))
 
@@ -418,6 +467,9 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 			fmt.Printf("removed %d orphan tmp dir(s)\n", removed)
 			if queueRemoved {
 				fmt.Println("removed legacy queue directory")
+			}
+			if policiesRemoved {
+				fmt.Printf("removed legacy scrub-policy file %s\n", legacyPolicies)
 			}
 			if len(cleaned.Stale) > 0 {
 				fmt.Printf("removed %d stale lock(s): %s\n", len(cleaned.Stale), strings.Join(cleaned.Stale, ", "))
