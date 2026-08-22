@@ -82,7 +82,9 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	}
 	defer previewCleanup()
 
-	repoRoot, err := git.RepoRoot(ctx)
+	// AnchorRoot, not RepoRoot: the same anchoring authority the commit pipeline
+	// uses, for the same filesystem work (see Pipeline.Execute).
+	repoRoot, err := git.AnchorRoot(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolving repo root: %w", err)
 	}
@@ -443,7 +445,9 @@ func (p *Pipeline) Reword(ctx context.Context, req RewordRequest) (*RewordResult
 		}
 	}
 
-	repoRoot, err := git.RepoRoot(ctx)
+	// AnchorRoot, not RepoRoot: the same anchoring authority the commit pipeline
+	// uses (see Pipeline.Execute).
+	repoRoot, err := git.AnchorRoot(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolving repo root: %w", err)
 	}

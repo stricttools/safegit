@@ -509,7 +509,11 @@ func (r *RewriteResult) recordTierB(finding string) {
 // pushHintForRepo returns the appropriate push hint based on whether the repo
 // is managed by rlsbl (release tooling).
 func pushHintForRepo(ctx context.Context) string {
-	root, err := git.RepoRoot(ctx)
+	// AnchorRoot, not RepoRoot: the hint is decided by a filesystem probe
+	// (.rlsbl/ under the root), and the repository that probe belongs to is the
+	// one this context targets -- a submodule's own rewrite must read the
+	// submodule's root, not whatever repository the process happens to stand in.
+	root, err := git.AnchorRoot(ctx)
 	if err != nil {
 		// Can't determine repo root; fall back to default hint.
 		return "To update the remote:\n  safegit push --refs both --force-with-lease"
