@@ -96,6 +96,108 @@ func TestCommitSymlink_LinkToCommittedFile(t *testing.T) {
 	}
 }
 
+// TestCommitSymlinkEscapingTargetIsCommittedWithANotice: a symlink whose
+// target leaves the repository is committable -- git records the link text and
+// nothing else, so there is no content to leak and nothing to refuse -- but the
+// object that gets written resolves to nothing in anyone else's checkout, so
+// safegit says so once on stderr.
+func TestCommitSymlinkEscapingTargetIsCommittedWithANotice(t *testing.T) {
+	dir := newRepo(t)
+
+	if err := os.Symlink("../elsewhere/secret.txt", filepath.Join(dir, "escapes")); err != nil {
+		t.Fatalf("creating symlink: %v", err)
+	}
+
+	stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "add escaping link", "--", "escapes")
+	if code != 0 {
+		t.Fatalf("committing an escaping symlink was refused (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	if mode := treeEntryMode(t, dir, "escapes"); mode != "120000" {
+		t.Errorf("expected HEAD entry %q with mode 120000, got mode %q; tree:\n%s", "escapes", mode, lsTreeHEAD(t, dir))
+	}
+	if target := catFileBlob(t, dir, "escapes"); target != "../elsewhere/secret.txt" {
+		t.Errorf("symlink blob = %q, want the link text %q", target, "../elsewhere/secret.txt")
+	}
+	if !strings.Contains(stderr, "escapes") || !strings.Contains(stderr, "outside the repository") {
+		t.Errorf("expected a one-line stderr notice naming the link and saying its target is outside the repository, got:\n%s", stderr)
+	}
+}
+
+// TestCommitSymlinkInsideTargetIsSilent is the control for the notice above: a
+// symlink whose target stays inside the repository is ordinary and says
+// nothing.
+func TestCommitSymlinkInsideTargetIsSilent(t *testing.T) {
+	dir := newRepo(t)
+
+	if err := os.Symlink("seed.txt", filepath.Join(dir, "inside")); err != nil {
+		t.Fatalf("creating symlink: %v", err)
+	}
+
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add inside link", "--", "inside")
+	if code != 0 {
+		t.Fatalf("committing an in-repository symlink failed (code %d): %s", code, stderr)
+	}
+	if strings.Contains(stderr, "outside the repository") {
+		t.Errorf("a symlink that stays inside the repository must produce no notice, got:\n%s", stderr)
+	}
+}
+
+// TestCommitDirectorySymlinkBareNameCommitsTheLink and its trailing-slash twin
+// below are the two halves of the disambiguation: the spelling of the argument,
+// and nothing on disk, decides whether a directory symlink means the link
+// object or the directory it points at.
+func TestCommitDirectorySymlinkBareNameCommitsTheLink(t *testing.T) {
+	dir := newRepo(t)
+
+	testutil.WriteFile(t, dir, "real/inner.txt", "inner\n")
+	if err := os.Symlink("real", filepath.Join(dir, "linkdir")); err != nil {
+		t.Fatalf("creating directory symlink: %v", err)
+	}
+
+	stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "commit the link itself", "--", "linkdir")
+	if code != 0 {
+		t.Fatalf("committing a bare directory-symlink name failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+
+	if mode := treeEntryMode(t, dir, "linkdir"); mode != "120000" {
+		t.Errorf("expected HEAD entry %q with mode 120000, got mode %q; tree:\n%s", "linkdir", mode, lsTreeHEAD(t, dir))
+	}
+	if target := catFileBlob(t, dir, "linkdir"); target != "real" {
+		t.Errorf("symlink blob = %q, want %q", target, "real")
+	}
+	if _, ok := testutil.Show(t, dir, "HEAD", "real/inner.txt"); ok {
+		t.Error("naming the link itself must not commit anything through it")
+	}
+}
+
+// TestCommitDirectorySymlinkTrailingSlashCommitsThroughIt: the same argument
+// with a trailing separator means the directory the link points at, and the
+// paths committed are that directory's own -- not names invented under the
+// link, which no checkout could reproduce.
+func TestCommitDirectorySymlinkTrailingSlashCommitsThroughIt(t *testing.T) {
+	dir := newRepo(t)
+
+	testutil.WriteFile(t, dir, "real/inner.txt", "inner\n")
+	if err := os.Symlink("real", filepath.Join(dir, "linkdir")); err != nil {
+		t.Fatalf("creating directory symlink: %v", err)
+	}
+
+	stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "commit through the link", "--", "linkdir/")
+	if code != 0 {
+		t.Fatalf("committing through a directory symlink failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+
+	if _, ok := testutil.Show(t, dir, "HEAD", "real/inner.txt"); !ok {
+		t.Errorf("real/inner.txt missing from HEAD; tree:\n%s", lsTreeHEAD(t, dir))
+	}
+	if mode := treeEntryMode(t, dir, "linkdir"); mode != "" {
+		t.Errorf("the link object itself must not be committed by the trailing-slash form, got mode %q", mode)
+	}
+	if _, ok := testutil.Show(t, dir, "HEAD", "linkdir/inner.txt"); ok {
+		t.Error("a path under the link name was committed; expansion must produce the target directory's own paths")
+	}
+}
+
 // TestCommitSymlink_MixedWithRegularFile checks a commit that mixes one new
 // regular file with one new symlink: both must be in the commit, and the
 // reported file count must match what was actually committed.

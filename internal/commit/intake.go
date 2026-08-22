@@ -167,10 +167,27 @@ func (t *treeIndex) under(prefix string) ([]string, error) {
 	return out, nil
 }
 
+// namesThroughLink reports whether an argument was written with a trailing
+// separator, which is how a caller says "through the final component" rather
+// than "the final component itself".
+//
+// It is the whole disambiguation for a directory symlink: `link` is the link
+// object, `link/` is the directory it points at. Nothing on disk is consulted
+// to decide which was meant -- the spelling decides, so the same argument means
+// the same thing in every repository and from every directory.
+func namesThroughLink(arg string) bool {
+	return strings.HasSuffix(arg, "/") || strings.HasSuffix(arg, string(filepath.Separator))
+}
+
 // canonicalRel turns one caller-typed argument into its canonical
 // repo-relative form. A relative argument resolves against the process working
 // directory -- the caller's own shell -- not against the repository root.
-func canonicalRel(repoRoot, arg string) (string, error) {
+//
+// followFinal comes from namesThroughLink: with it false the FINAL component is
+// never resolved, so a symlink named on the command line stays that symlink and
+// is committed as the 120000 object it is rather than collapsing into whatever
+// it points at.
+func canonicalRel(repoRoot, arg string, followFinal bool) (string, error) {
 	var absPath string
 	if filepath.IsAbs(arg) {
 		absPath = filepath.Clean(arg)
@@ -182,12 +199,19 @@ func canonicalRel(repoRoot, arg string) (string, error) {
 		}
 	}
 
-	// Resolve symlinks so absPath matches repoRoot, which comes from
-	// git rev-parse --show-toplevel (git resolves symlinks). On macOS,
+	// Resolve the PARENT components so absPath matches repoRoot, which comes
+	// from git rev-parse --show-toplevel (git resolves symlinks). On macOS,
 	// /var is a symlink to /private/var, so without this, filepath.Rel
 	// produces a path starting with ".." and the file is rejected as
-	// outside the repository.
-	absPath = resolveSymlinks(absPath)
+	// outside the repository. The final component is left alone: resolving it
+	// is what used to make a symlink argument uncommittable.
+	absPath = resolveParentSymlinks(absPath)
+
+	if followFinal {
+		if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
+			absPath = resolved
+		}
+	}
 
 	rel, err := filepath.Rel(repoRoot, absPath)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
@@ -202,6 +226,72 @@ func canonicalRel(repoRoot, arg string) (string, error) {
 	return rel, nil
 }
 
+// resolveParentSymlinks resolves every symlink ABOVE the final component and
+// leaves the final component itself untouched, existing or not.
+//
+// The predecessor resolved the whole path, final component included, which is
+// why a symlink handed to safegit was committed as its target's content -- or,
+// when the target was already committed unchanged, produced no commit at all.
+// A symlink is an object in its own right; only its parents are directories
+// whose spelling has to be reconciled with the one git reports.
+func resolveParentSymlinks(absPath string) string {
+	dir, base := filepath.Split(absPath)
+	if base == "" {
+		// A path that is nothing but separators (the filesystem root). There is
+		// no final component to preserve.
+		if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
+			return resolved
+		}
+		return absPath
+	}
+	resolvedDir, err := filepath.EvalSymlinks(filepath.Clean(dir))
+	if err != nil {
+		return absPath
+	}
+	return filepath.Join(resolvedDir, base)
+}
+
+// escapingLinkTarget returns the target text of a symlink that points outside
+// the repository, and the empty string for anything else -- a regular file, a
+// symlink that stays inside, or a path that is not there at all.
+//
+// Such a link is committable: git records the link text and nothing more, and
+// refusing it would make safegit stricter than git for no safety it can
+// actually provide. What safegit does instead is say so once, because the
+// object it just wrote resolves to nothing in anyone else's checkout.
+func escapingLinkTarget(repoRoot, rel string) string {
+	abs := git.Anchor(repoRoot, rel)
+	info, err := os.Lstat(abs)
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return ""
+	}
+	target, err := os.Readlink(abs)
+	if err != nil {
+		return ""
+	}
+	resolved := target
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(filepath.Dir(abs), target)
+	}
+	resolved = filepath.Clean(resolved)
+	within, err := filepath.Rel(repoRoot, resolved)
+	if err != nil || within == ".." || strings.HasPrefix(within, ".."+string(filepath.Separator)) {
+		return target
+	}
+	return ""
+}
+
+// noticeEscapingLinks writes one stderr line per staged symlink whose target
+// leaves the repository. It runs once per operation, after intake has settled,
+// so a CAS retry cannot repeat it.
+func noticeEscapingLinks(repoRoot string, paths []string) {
+	for _, path := range paths {
+		if target := escapingLinkTarget(repoRoot, path); target != "" {
+			fmt.Fprintf(os.Stderr, "notice: %s is a symlink to %s, which is outside the repository; the commit records the link text, which will not resolve in another checkout\n", path, target)
+		}
+	}
+}
+
 // resolveFiles turns the caller's file specs into the canonical set of paths to
 // stage, against the tree the commit is actually built on.
 //
@@ -214,9 +304,10 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 	tree := newTreeIndex(ctx, baseRev)
 	seen := make(map[string]bool)
 	skipped := make(map[string]bool)
+	var links []string
 
 	for _, spec := range specs {
-		rel, err := canonicalRel(repoRoot, spec.Path)
+		rel, err := canonicalRel(repoRoot, spec.Path, namesThroughLink(spec.Path))
 		if err != nil {
 			return nil, err
 		}
@@ -232,9 +323,10 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 		in.sources = append(in.sources, src)
 
 		if !isDir {
-			if err := p.validateNamedPath(ctx, repoRoot, rel, baseRev, spec.Path); err != nil {
+			if err := p.validateNamedPath(ctx, repoRoot, rel, baseRev, spec); err != nil {
 				return nil, err
 			}
+			links = append(links, rel)
 			if !seen[rel] {
 				seen[rel] = true
 				in.entries = append(in.entries, intakeEntry{path: rel, hunks: spec.Hunks, src: srcIdx})
@@ -242,24 +334,25 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 			continue
 		}
 
-		members, ignored, err := p.expandDirectory(ctx, repoRoot, rel, tree)
+		expanded, err := p.expandDirectory(ctx, repoRoot, rel, tree)
 		if err != nil {
 			return nil, err
 		}
-		for _, ig := range ignored {
+		for _, ig := range expanded.ignored {
 			if !skipped[ig] {
 				skipped[ig] = true
 				in.skipped = append(in.skipped, ig)
 			}
 		}
-		if len(members) == 0 {
+		links = append(links, expanded.links...)
+		if len(expanded.members) == 0 {
 			return nil, &CommitError{
 				Code: exitcode.PathMatchedNothing,
 				Message: fmt.Sprintf("nothing to commit for %s: the directory holds no files on disk "+
 					"and no paths in %s", spec.Path, describeBase(baseRev)),
 			}
 		}
-		for _, m := range members {
+		for _, m := range expanded.members {
 			if !seen[m] {
 				seen[m] = true
 				in.entries = append(in.entries, intakeEntry{path: m, src: srcIdx})
@@ -268,6 +361,7 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 	}
 
 	sort.Strings(in.skipped)
+	noticeEscapingLinks(repoRoot, links)
 	return in, nil
 }
 
@@ -322,8 +416,19 @@ func (p *Pipeline) namesADirectory(ctx context.Context, repoRoot, rel string, ha
 
 // validateNamedPath applies the rules that hold for a path the caller named
 // explicitly (as opposed to one an expansion produced).
-func (p *Pipeline) validateNamedPath(ctx context.Context, repoRoot, rel, baseRev, arg string) error {
+func (p *Pipeline) validateNamedPath(ctx context.Context, repoRoot, rel, baseRev string, spec FileSpec) error {
+	arg := spec.Path
 	abs := git.Anchor(repoRoot, rel)
+	if info, err := os.Lstat(abs); err == nil && info.Mode()&os.ModeSymlink != 0 && spec.Hunks != nil {
+		// A symlink's content is its target path: one line, produced by the
+		// filesystem, with no hunks to choose between. git reports no diff
+		// hunks for it either, so a selection could only ever select nothing.
+		return &CommitError{
+			Code: exitcode.SymlinkHunkSpec,
+			Message: fmt.Sprintf("%s is a symlink, which has no hunks to select: a symlink is committed whole, "+
+				"as the link text it holds", arg),
+		}
+	}
 	if _, err := os.Lstat(abs); os.IsNotExist(err) {
 		// Absent from disk: the only coherent reading is a deletion, which
 		// requires the path to be in the tree the commit is built on.
@@ -350,22 +455,29 @@ func (p *Pipeline) validateNamedPath(ctx context.Context, repoRoot, rel, baseRev
 	return nil
 }
 
+// expansion is what a directory argument produced: the paths to stage, the
+// gitignored paths passed over, and the symlinks seen on the way, which are the
+// only members worth asking about an escaping target.
+type expansion struct {
+	members []string
+	ignored []string
+	links   []string
+}
+
 // expandDirectory returns every path under a directory prefix that the commit
 // should stage: the union of what is on disk and what the base tree holds, so
 // that a file deleted from disk is included as the deletion it is.
-//
-// It also returns the gitignored paths it passed over.
-func (p *Pipeline) expandDirectory(ctx context.Context, repoRoot, prefix string, tree *treeIndex) (members, ignored []string, err error) {
+func (p *Pipeline) expandDirectory(ctx context.Context, repoRoot, prefix string, tree *treeIndex) (*expansion, error) {
 	found := make(map[string]bool)
 
 	fromTree, err := tree.under(prefix)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	for _, path := range fromTree {
 		entry, ok, eerr := tree.entry(path)
 		if eerr != nil {
-			return nil, nil, eerr
+			return nil, eerr
 		}
 		// A gitlink under the prefix is a submodule boundary: naming a
 		// directory above it must not move another repository's pointer.
@@ -375,20 +487,29 @@ func (p *Pipeline) expandDirectory(ctx context.Context, repoRoot, prefix string,
 		found[path] = true
 	}
 
-	fromDisk, ignoredOnDisk, err := walkForCommit(ctx, repoRoot, prefix)
+	walked, err := walkForCommit(ctx, repoRoot, prefix)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	for _, path := range fromDisk {
+	for _, path := range walked.files {
 		found[path] = true
 	}
 
-	members = make([]string, 0, len(found))
+	members := make([]string, 0, len(found))
 	for path := range found {
 		members = append(members, path)
 	}
 	sort.Strings(members)
-	return members, ignoredOnDisk, nil
+	return &expansion{members: members, ignored: walked.ignored, links: walked.links}, nil
+}
+
+// diskWalk is what one directory walk saw: the files to stage, the gitignored
+// paths skipped, and which of the files are symlinks (known from the directory
+// listing, so recording them costs no extra syscall).
+type diskWalk struct {
+	files   []string
+	ignored []string
+	links   []string
 }
 
 // walkForCommit lists the files on disk under a repo-relative directory prefix,
@@ -399,7 +520,8 @@ func (p *Pipeline) expandDirectory(ctx context.Context, repoRoot, prefix string,
 // listing at once, so an ignored directory is answered for as a directory and
 // never descended into -- which is both what git does and the difference
 // between one question and one per file inside a build output tree.
-func walkForCommit(ctx context.Context, repoRoot, prefix string) (files, ignored []string, err error) {
+func walkForCommit(ctx context.Context, repoRoot, prefix string) (*diskWalk, error) {
+	walk := &diskWalk{}
 	queue := []string{prefix}
 	for len(queue) > 0 {
 		dir := queue[0]
@@ -416,7 +538,7 @@ func walkForCommit(ctx context.Context, repoRoot, prefix string) (files, ignored
 				// there.
 				continue
 			}
-			return nil, nil, fmt.Errorf("reading directory %s: %w", absDir, rerr)
+			return nil, fmt.Errorf("reading directory %s: %w", absDir, rerr)
 		}
 
 		candidates := make([]string, 0, len(listing))
@@ -435,13 +557,22 @@ func walkForCommit(ctx context.Context, repoRoot, prefix string) (files, ignored
 
 		excluded, ierr := git.FilterIgnored(ctx, candidates)
 		if ierr != nil {
-			return nil, nil, ierr
+			return nil, ierr
 		}
 
 		for i, e := range kept {
 			path := candidates[i]
 			if excluded[path] {
-				ignored = append(ignored, path)
+				walk.ignored = append(walk.ignored, path)
+				continue
+			}
+			// A symlink is never descended into, whatever it points at: it is
+			// one object, and following it would sweep another part of the
+			// filesystem into this directory's expansion under names that do
+			// not exist there.
+			if e.Type()&os.ModeSymlink != 0 {
+				walk.files = append(walk.files, path)
+				walk.links = append(walk.links, path)
 				continue
 			}
 			if e.IsDir() {
@@ -451,10 +582,10 @@ func walkForCommit(ctx context.Context, repoRoot, prefix string) (files, ignored
 				queue = append(queue, path)
 				continue
 			}
-			files = append(files, path)
+			walk.files = append(walk.files, path)
 		}
 	}
-	return files, ignored, nil
+	return walk, nil
 }
 
 // isNestedRepository reports whether a directory carries its own .git, which
