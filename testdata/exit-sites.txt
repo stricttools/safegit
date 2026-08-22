@@ -1,4 +1,4 @@
-== exit non-literal (407 sites)
+== exit non-literal (415 sites)
    author_check.go:76  return in runAuthorCheck  code=exitcode.Usage  | return exitcode.Usage
    author_check.go:85  die in runAuthorCheck  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("reading git log: %v", err))
    author_check.go:142  return in runAuthorCheck  code=exitcode.General  | return exitcode.General
@@ -353,39 +353,47 @@
    scrub_run.go:520  die in scrubRunDryRun  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("scanning objects for operation %d: %v", i, err))
    scrub_run.go:529  die in scrubRunDryRun  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("adding attribution for operation %d: %v", i, err))
    scrub_run.go:539  die in scrubRunDryRun  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
-   sequencer_continue.go:302  return in runContinue  code=exitcode.NotInitialized  | return exitcode.NotInitialized
-   sequencer_continue.go:310  return in runContinue  code=exitcode.Usage  | return exitcode.Usage
-   sequencer_continue.go:317  return in runContinue  code=exitcode.General  | return exitcode.General
-   sequencer_continue.go:325  return in runContinue  code=exitcode.General  | return exitcode.General
-   sequencer_continue.go:333  return in runContinue  code=code  | return code
-   sequencer_continue.go:342  return in runContinue  code=exitcode.General  | return exitcode.General
-   sequencer_continue.go:345  return in runContinue  code=code  | return code
-   sequencer_continue.go:348  return in runContinue  code=delegateQueuedSequence(op, state)  | return delegateQueuedSequence(op, state)
-   sequencer_continue.go:351  return in runContinue  code=op.refuseDetachedHead(state)  | return op.refuseDetachedHead(state)
-   sequencer_continue.go:359  return in runContinue  code=exitcode.General  | return exitcode.General
-   sequencer_continue.go:362  return in runContinue  code=code  | return code
-   sequencer_continue.go:368  return in runContinue  code=exitcode.General  | return exitcode.General
-   sequencer_continue.go:374  return in runContinue  code=exitcode.Usage  | return exitcode.Usage
-   sequencer_continue.go:382  return in runContinue  code=exitcode.General  | return exitcode.General
-   sequencer_continue.go:412  return in runContinue  code=op.refuseEmptyConclusion()  | return op.refuseEmptyConclusion()
-   sequencer_continue.go:414  die in runContinue  code=pipelineExitCode(err)  | die(pipelineExitCode(err), err.Error())
-   sequencer_continue.go:421  die in runContinue  code=exitcode.General  | die(exitcode.General, err.Error())
-   sequencer_continue.go:426  die in runContinue  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
-   sequencer_continue.go:431  return in runContinue  code=exitcode.OK  | return exitcode.OK
-   sequencer_continue.go:491  return in refuseWrongState  code=exitcode.CoordinationBusy  | return exitcode.CoordinationBusy
-   sequencer_continue.go:505  return in refuseWrongState  code=exitcode.CoordinationBusy  | return exitcode.CoordinationBusy
-   sequencer_continue.go:544  return in refuseDetachedHead  code=exitcode.General  | return exitcode.General
-   sequencer_continue.go:562  return in refuseEmptyConclusion  code=exitcode.General  | return exitcode.General
-   sequencer_continue.go:574  return in delegateQueuedSequence  code=exitcode.General  | return exitcode.General
-   sequencer_continue.go:603  return in checkCompleteness  code=exitcode.ConclusionUnresolved  | return exitcode.ConclusionUnresolved
-   sequencer_continue.go:621  return in checkCompleteness  code=exitcode.ConclusionUnresolved  | return exitcode.ConclusionUnresolved
-   sequencer_continue_cmd.go:251  strictcli.Exit in continueHandler.func  code=runContinue(gf,
+   sequencer_continue.go:303  return in runContinue  code=exitcode.NotInitialized  | return exitcode.NotInitialized
+   sequencer_continue.go:311  return in runContinue  code=exitcode.Usage  | return exitcode.Usage
+   sequencer_continue.go:318  return in runContinue  code=exitcode.General  | return exitcode.General
+   sequencer_continue.go:326  return in runContinue  code=exitcode.General  | return exitcode.General
+   sequencer_continue.go:334  return in runContinue  code=code  | return code
+   sequencer_continue.go:343  return in runContinue  code=exitcode.General  | return exitcode.General
+   sequencer_continue.go:346  return in runContinue  code=code  | return code
+   sequencer_continue.go:349  return in runContinue  code=delegateQueuedSequence(op, state)  | return delegateQueuedSequence(op, state)
+   sequencer_continue.go:352  return in runContinue  code=op.refuseDetachedHead(state)  | return op.refuseDetachedHead(state)
+   sequencer_continue.go:360  return in runContinue  code=exitcode.General  | return exitcode.General
+   sequencer_continue.go:363  return in runContinue  code=code  | return code
+   sequencer_continue.go:368  return in runContinue  code=code  | return code
+   sequencer_continue.go:374  return in runContinue  code=exitcode.General  | return exitcode.General
+   sequencer_continue.go:380  return in runContinue  code=exitcode.Usage  | return exitcode.Usage
+   sequencer_continue.go:388  return in runContinue  code=exitcode.General  | return exitcode.General
+   sequencer_continue.go:418  return in runContinue  code=op.refuseEmptyConclusion()  | return op.refuseEmptyConclusion()
+   sequencer_continue.go:420  die in runContinue  code=pipelineExitCode(err)  | die(pipelineExitCode(err), err.Error())
+   sequencer_continue.go:427  die in runContinue  code=exitcode.General  | die(exitcode.General, err.Error())
+   sequencer_continue.go:432  die in runContinue  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+   sequencer_continue.go:437  return in runContinue  code=exitcode.OK  | return exitcode.OK
+   sequencer_continue.go:611  return in refuseWrongState  code=exitcode.CoordinationBusy  | return exitcode.CoordinationBusy
+   sequencer_continue.go:625  return in refuseWrongState  code=exitcode.CoordinationBusy  | return exitcode.CoordinationBusy
+   sequencer_continue.go:664  return in refuseDetachedHead  code=exitcode.General  | return exitcode.General
+   sequencer_continue.go:682  return in refuseEmptyConclusion  code=exitcode.General  | return exitcode.General
+   sequencer_continue.go:694  return in delegateQueuedSequence  code=exitcode.General  | return exitcode.General
+   sequencer_continue.go:723  return in checkCompleteness  code=exitcode.ConclusionUnresolved  | return exitcode.ConclusionUnresolved
+   sequencer_continue.go:741  return in checkCompleteness  code=exitcode.ConclusionUnresolved  | return exitcode.ConclusionUnresolved
+   sequencer_continue_cmd.go:270  strictcli.Exit in continueHandler.func  code=runContinue(gf,
 			op,
 			kwargsStrSlice(kwargs["m"]),
 			kwargsStrSlice(kwargs["trailer"]),
 			kwargsStrSlice(kwargs["resolve"]),
 			optStr(kwargs["resolve_file"], ""),
 		)  | return strictcli.Exit(runContinue(gf,
+   sequencer_markers.go:95  return in verifyMarkers  code=exitcode.General  | return exitcode.General
+   sequencer_markers.go:107  return in verifyMarkers  code=exitcode.General  | return exitcode.General
+   sequencer_markers.go:112  return in verifyMarkers  code=exitcode.General  | return exitcode.General
+   sequencer_markers.go:118  return in verifyMarkers  code=exitcode.General  | return exitcode.General
+   sequencer_markers.go:129  return in verifyMarkers  code=exitcode.General  | return exitcode.General
+   sequencer_markers.go:135  return in verifyMarkers  code=op.refuseSurvivingMarkers(violations)  | return op.refuseSurvivingMarkers(violations)
+   sequencer_markers.go:483  return in refuseSurvivingMarkers  code=exitcode.ConclusionMarkerSurvived  | return exitcode.ConclusionMarkerSurvived
    undo.go:60  die in runUndo  code=exitcode.Usage  | die(exitcode.Usage, fmt.Sprintf("--count must be positive, got %d", count))
    undo.go:65  die in runUndo  code=exitcode.NotInitialized  | die(exitcode.NotInitialized, err.Error())
    undo.go:72  die in runUndo  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("loading config: %v", err))
@@ -413,4 +421,4 @@
    unlock.go:104  return in runUnlock  code=exitcode.General  | return exitcode.General
    unlock.go:128  return in runUnlock  code=exitcode.General  | return exitcode.General
 
-total exit sites: 407 across 1 distinct codes
+total exit sites: 415 across 1 distinct codes
