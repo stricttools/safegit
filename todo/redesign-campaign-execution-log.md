@@ -370,6 +370,27 @@ existing entries are never rewritten.
   before any push in the observation-failure arms) with the table
   regenerated.
 
+## Phase 6 remediation closure and small-item rulings
+
+- All seven audit items done red-first; suite 1438 PASS / 0 FAIL / 8
+  SKIP. Undo range validation is first-parent by definition (an
+  all-parents walk would refuse every undo of a merge conclusion —
+  pinned); the pin-mismatch second refusal fires only where the CAS
+  would fail anyway; --bypass-session hint appears only when the
+  foreign commit belongs to another session's oplog. git var declared
+  ObserveOnly (the operator-identity source under dry-run).
+  stopped_again required on both queueable payload shapes. The
+  delegation-authorship note prints unconditionally on stderr with a
+  note: prefix (survives --quiet and machine mode).
+- NEW QUEUED ITEM: the stopped-again delegated path creates commits but
+  never calls maybeAutoBumpParent — a submodule conclusion that stops
+  mid-queue does not bump the parent gitlink. Next fixer window.
+- SMALL-ITEM RULINGS: the lock-cleanup signal handler adopts 128+signum
+  (the Unix convention), documented as a carve-out beside the
+  git-passthrough carve-out, not a registry row. The 61 bare
+  `return 0` sites are DECLARED FINE (success needs no constant; the
+  guard's scope note already states the boundary honestly).
+
 ## Phase 6 closing-audit outcome and rulings
 
 - Full suite 1424 PASS / 0 FAIL / 8 SKIP under -race; stress green;
