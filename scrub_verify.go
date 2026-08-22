@@ -59,8 +59,8 @@ func verifyScrubbedFileContent(ctx context.Context, shaMap map[string]string, fi
 }
 
 // verifyPatternAbsentFromTips is the Tier A pattern check: it scans exactly the
-// objects the rewritten history is made of -- reached from the tips the ref
-// update plan is about to publish -- and refuses when the pattern is still
+// objects the rewritten history is made of -- reached from the tips the WALK
+// produced (RefUpdatePlan.WalkedTips) -- and refuses when the pattern is still
 // there.
 //
 // It runs BEFORE any ref moves, which is the whole point: the rewritten
@@ -69,6 +69,13 @@ func verifyScrubbedFileContent(ctx context.Context, shaMap map[string]string, fi
 // history that has not been pruned yet". Scanning the new tips asks only about
 // the history that is about to become the repository's, and a failure costs
 // nothing because nothing has moved.
+//
+// The tips are the walked ones and no others. A secret sitting on a branch or a
+// stale remote-tracking ref the walk never visited is not a defect in what this
+// rewrite produced, so refusing over it would abort a correct rewrite and blame
+// it for objects it never touched. That content is still in the repository,
+// which is Tier B's whole-store question -- and Tier B names the refs holding
+// it.
 //
 // When scope is set, blob matches outside it are expected to survive (the
 // operation never claimed to touch them); commit messages and tag annotations
@@ -118,7 +125,8 @@ func verifyPatternAbsentFromTips(ctx context.Context, pattern *regexp.Regexp, sc
 
 // verifySecretRemoved re-scans all git objects for the given pattern after a
 // scrub rewrite and cleanup. If any matches survive, it returns an error
-// listing where they were found. A nil return means the secret is fully gone.
+// listing where they were found, naming the refs that still reach them. A nil
+// return means the secret is fully gone.
 func verifySecretRemoved(ctx context.Context, pattern *regexp.Regexp) error {
 	results, err := scan.ScanObjects(ctx, pattern, scan.ScanOpts{EntireHistory: true})
 	if err != nil {
@@ -127,18 +135,108 @@ func verifySecretRemoved(ctx context.Context, pattern *regexp.Regexp) error {
 	if len(results.Matches) == 0 {
 		return nil
 	}
+	return fmt.Errorf("%s", describeSurvivingMatches(ctx, results.Matches))
+}
 
+// describeSurvivingMatches is Tier B's rendering of what still holds the
+// pattern after the rewrite: the object lines, plus the refs that still reach
+// each reachable object.
+//
+// Naming the refs is the whole point of the tier split. The rewrite walked one
+// history; anything the pattern survives on lives on refs the walk never
+// visited, and the operator cannot act on "blob 2b12e0c6 survived" but can act
+// on "refs/heads/old still holds it".
+func describeSurvivingMatches(ctx context.Context, matches []scan.Match) string {
+	wanted := make(map[string]bool)
+	for _, m := range matches {
+		if m.Reachable {
+			wanted[m.SHA] = true
+		}
+	}
+	refsBySHA, attributionErr := refsHoldingObjects(ctx, wanted)
+	return renderSurvivingMatches(matches, refsBySHA, attributionErr)
+}
+
+// renderSurvivingMatches formats surviving matches, one line per match, each
+// followed by the refs that reach it when refsBySHA knows any. attributionErr
+// is stated rather than swallowed: "no refs listed" must never be readable as
+// "no ref holds it" when the lookup is what failed.
+func renderSurvivingMatches(matches []scan.Match, refsBySHA map[string][]string, attributionErr error) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("secret still present in %d object(s):\n", len(results.Matches)))
-	for _, m := range results.Matches {
+	fmt.Fprintf(&sb, "secret still present in %d object(s):\n", len(matches))
+	holders := make(map[string]bool)
+	for _, m := range matches {
 		reachable := "unreachable"
 		if m.Reachable {
 			reachable = "reachable"
 		}
-		sb.WriteString(fmt.Sprintf("  %s %s (%s, line %d): %s\n",
-			m.ObjectType, shortSHA(m.SHA), reachable, m.Line, m.Context))
+		fmt.Fprintf(&sb, "  %s %s (%s, line %d): %s\n",
+			m.ObjectType, shortSHA(m.SHA), reachable, m.Line, m.Context)
+		refs := refsBySHA[m.SHA]
+		if len(refs) > 0 {
+			fmt.Fprintf(&sb, "    still reachable from: %s\n", strings.Join(refs, ", "))
+			for _, r := range refs {
+				holders[r] = true
+			}
+		}
 	}
-	return fmt.Errorf("%s", sb.String())
+	if attributionErr != nil {
+		fmt.Fprintf(&sb, "  (could not determine which refs still hold this content: %v)\n", attributionErr)
+	}
+	if len(holders) > 0 {
+		names := make([]string, 0, len(holders))
+		for r := range holders {
+			names = append(names, r)
+		}
+		sort.Strings(names)
+		fmt.Fprintf(&sb, "This content is still on history this rewrite did not walk: %s\n", strings.Join(names, ", "))
+		sb.WriteString("The rewrite covered this history only; scrub each of those refs as well.\n")
+	}
+	return sb.String()
+}
+
+// refsHoldingObjects answers, for a set of object SHAs, which refs still reach
+// them: one `rev-list --objects` per ref, intersected with the set.
+//
+// It runs only on the failure path -- Tier B has already found surviving
+// content -- so walking every ref once is paid exactly when there is something
+// to report. Symbolic remote HEADs are skipped for the same reason the ref plan
+// skips them: they name another ref that is listed on its own.
+func refsHoldingObjects(ctx context.Context, wanted map[string]bool) (map[string][]string, error) {
+	if len(wanted) == 0 {
+		return nil, nil
+	}
+	out, _, err := git.Run(ctx, "for-each-ref", "--format=%(refname)", "refs/heads/", "refs/tags/", "refs/remotes/")
+	if err != nil {
+		return nil, fmt.Errorf("listing refs: %w", err)
+	}
+
+	byShA := make(map[string][]string)
+	for _, refname := range git.SplitNonEmpty(out) {
+		if strings.HasPrefix(refname, "refs/remotes/") && strings.HasSuffix(refname, "/HEAD") {
+			continue
+		}
+		objects, _, err := git.Run(ctx, "rev-list", "--objects", refname)
+		if err != nil {
+			return byShA, fmt.Errorf("listing the objects %s reaches: %w", refname, err)
+		}
+		seen := make(map[string]bool)
+		for _, line := range strings.Split(objects, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			sha := line
+			if idx := strings.IndexByte(line, ' '); idx > 0 {
+				sha = line[:idx]
+			}
+			if wanted[sha] && !seen[sha] {
+				seen[sha] = true
+				byShA[sha] = append(byShA[sha], refname)
+			}
+		}
+	}
+	return byShA, nil
 }
 
 // verifyOldBlobsRemoved checks that each of the given old blob SHAs no longer

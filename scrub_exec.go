@@ -458,7 +458,7 @@ func executeScrubRecipe(
 		infof(flags, "Checking the rewritten history for surviving matches...\n")
 		for i, op := range recipe.Operations {
 			pat := recipe.Patterns[i]
-			if err := verifyPatternAbsentFromTips(ctx, pat, opScope(&op), plan.NewTips); err != nil {
+			if err := verifyPatternAbsentFromTips(ctx, pat, opScope(&op), plan.WalkedTips); err != nil {
 				return fmt.Errorf("operation %d (pattern %q): %v", i, op.Pattern, err)
 			}
 		}
