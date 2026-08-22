@@ -225,6 +225,13 @@ func TestPreviewMatchesTheRealOperation(t *testing.T) {
 	}
 }
 
+// datedEnv pins a spawned safegit's author and committer dates, so a fixture
+// can put commits in a deliberate chronological order rather than the
+// same-second ties a fast test otherwise produces.
+func datedEnv(when string) []string {
+	return []string{"GIT_AUTHOR_DATE=" + when, "GIT_COMMITTER_DATE=" + when}
+}
+
 // previewTree reads the tree object name a clean preview reported.
 func previewTree(t *testing.T, stdout string) string {
 	t.Helper()
@@ -380,4 +387,134 @@ func TestPreviewOfAQueueStopsWhereGitWouldStop(t *testing.T) {
 	if !strings.Contains(testutil.Git(t, dir, "diff", "--name-only", "--diff-filter=U"), "b.txt") {
 		t.Error("the real run stopped on a different path than the preview predicted")
 	}
+}
+
+// TestPreviewReplaysAQueueInGitsOwnOrder: the order a queue is replayed in
+// decides which commit the preview names as the stopping point, so it has to be
+// git's order and not a plausible-looking one.
+//
+// The fixture is built so that the two orders give DIFFERENT answers: the
+// commit typed first conflicts, the one typed second does not. Replaying
+// newest-first -- which is what `rev-list --no-walk` yields by default -- would
+// report the clean commit as the one that stops the queue.
+//
+// Both shapes are covered, because git treats them differently: individual
+// revisions are processed in the order typed, and a RANGE is walked, which a
+// cherry-pick replays oldest-first and a revert newest-first.
+func TestPreviewReplaysAQueueInGitsOwnOrder(t *testing.T) {
+	t.Run("individual revisions keep the typed order", func(t *testing.T) {
+		dir := newRepo(t)
+		testutil.WriteFile(t, dir, "a.txt", "base\n")
+		testutil.WriteFile(t, dir, "b.txt", "base\n")
+		safegitCommit(t, dir, "base", "a.txt", "b.txt")
+
+		testutil.Git(t, dir, "branch", "side")
+		testutil.WriteFile(t, dir, "a.txt", "main\n")
+		safegitCommit(t, dir, "main edits a", "a.txt")
+
+		testutil.Git(t, dir, "switch", "side")
+		// The two side commits get DISTINCT commit dates, with the CONFLICTING
+		// one older, and it is typed first below. That is what makes the typed
+		// order and the reverse-chronological order different answers: with
+		// same-second timestamps the sort is a tie that silently agrees with
+		// the typed order, and reading the list the wrong way would go
+		// unnoticed. `rev-list --no-walk` sorts reverse-chronologically unless
+		// asked for the unsorted mode.
+		testutil.WriteFile(t, dir, "a.txt", "side a\n")
+		conflicting := safegitCommitEnv(t, dir, datedEnv("2001-01-01T00:00:00"), "side edits a", "a.txt")
+		testutil.WriteFile(t, dir, "b.txt", "side b\n")
+		clean := safegitCommitEnv(t, dir, datedEnv("2002-01-01T00:00:00"), "side edits b cleanly", "b.txt")
+		testutil.Git(t, dir, "switch", "main")
+
+		// Typed conflicting-first, so the queue stops immediately. Replayed in
+		// the other order it would apply the clean one first and name it.
+		stdout, stderr, code := runSafegit(t, dir, "--dry-run", "cherry-pick", conflicting, clean)
+		if code != 0 {
+			t.Fatalf("the preview failed (code %d): %s", code, stderr)
+		}
+		if !strings.Contains(stdout, "side edits a") {
+			t.Errorf("the preview names the wrong commit as the stopping point:\n%s", stdout)
+		}
+		if strings.Contains(stdout, "would cherry-pick 1 commit") {
+			t.Errorf("the preview claims a commit was applied before the first one conflicted:\n%s", stdout)
+		}
+
+		// The real run stops on the same commit.
+		if _, stderr, code := runSafegit(t, dir, "cherry-pick", conflicting, clean); code == 0 {
+			t.Fatalf("the real queue did not stop: %s", stderr)
+		}
+		if head := testutil.Rev(t, dir, "CHERRY_PICK_HEAD"); head != conflicting {
+			t.Errorf("the real run stopped on %s, the preview predicted %s", head, conflicting)
+		}
+	})
+
+	t.Run("a cherry-picked range is replayed oldest first", func(t *testing.T) {
+		// `git cherry-pick A..C` applies the OLDEST commit of the range first,
+		// which is the reverse of the order a walk yields. The fixture makes
+		// the two orders give different answers: the older commit of the range
+		// conflicts, the newer one does not, so replaying newest-first would
+		// report one commit applied before the stop.
+		dir := newRepo(t)
+		testutil.WriteFile(t, dir, "a.txt", "base\n")
+		testutil.WriteFile(t, dir, "b.txt", "base\n")
+		safegitCommit(t, dir, "base", "a.txt", "b.txt")
+
+		testutil.Git(t, dir, "branch", "side")
+		testutil.WriteFile(t, dir, "a.txt", "main\n")
+		safegitCommit(t, dir, "main edits a", "a.txt")
+
+		testutil.Git(t, dir, "switch", "side")
+		from := testutil.Rev(t, dir, "HEAD")
+		testutil.WriteFile(t, dir, "a.txt", "side a\n")
+		conflicting := safegitCommit(t, dir, "side edits a", "a.txt")
+		testutil.WriteFile(t, dir, "b.txt", "side b\n")
+		safegitCommit(t, dir, "side edits b cleanly", "b.txt")
+		testutil.Git(t, dir, "switch", "main")
+
+		stdout, stderr, code := runSafegit(t, dir, "--dry-run", "cherry-pick", from+"..side")
+		if code != 0 {
+			t.Fatalf("the range cherry-pick preview failed (code %d): %s", code, stderr)
+		}
+		if !strings.Contains(stdout, "side edits a") || !strings.Contains(stdout, "CONFLICT") {
+			t.Errorf("the preview does not stop at the range's oldest commit:\n%s", stdout)
+		}
+		if strings.Contains(stdout, "would cherry-pick 1 commit") {
+			t.Errorf("the preview replayed the range newest-first:\n%s", stdout)
+		}
+
+		// The real run stops on the same commit.
+		if _, stderr, code := runSafegit(t, dir, "cherry-pick", from+"..side"); code == 0 {
+			t.Fatalf("the real range cherry-pick did not stop: %s", stderr)
+		}
+		if head := testutil.Rev(t, dir, "CHERRY_PICK_HEAD"); head != conflicting {
+			t.Errorf("the real run stopped on %s, the preview predicted %s", head, conflicting)
+		}
+	})
+
+	t.Run("a range is replayed the way each verb walks it", func(t *testing.T) {
+		dir := newRepo(t)
+		testutil.WriteFile(t, dir, "a.txt", "base\n")
+		testutil.WriteFile(t, dir, "b.txt", "base\n")
+		safegitCommit(t, dir, "base", "a.txt", "b.txt")
+		from := testutil.Rev(t, dir, "HEAD")
+		testutil.WriteFile(t, dir, "a.txt", "second\n")
+		safegitCommit(t, dir, "edits a", "a.txt")
+		testutil.WriteFile(t, dir, "b.txt", "third\n")
+		safegitCommit(t, dir, "edits b", "b.txt")
+
+		// A revert of the range undoes the NEWEST first, so the preview must
+		// name the newest commit -- and, being clean, must report both.
+		stdout, stderr, code := runSafegit(t, dir, "--dry-run", "revert", "--no-edit", from+"..HEAD")
+		if code != 0 {
+			t.Fatalf("the range revert preview failed (code %d): %s", code, stderr)
+		}
+		if !strings.Contains(stdout, "2 commit(s) cleanly") {
+			t.Errorf("the preview does not report the whole range:\n%s", stdout)
+		}
+		// The LAST commit of a revert walk is the oldest one, so that is what
+		// the preview ends at. Reversed, it would end at the newest.
+		if !strings.Contains(stdout, "edits a") {
+			t.Errorf("the revert preview ends at the wrong commit of the range:\n%s", stdout)
+		}
+	})
 }

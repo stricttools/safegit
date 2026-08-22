@@ -198,7 +198,7 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs) int {
 // is what makes the chain possible, and it costs nothing outside the preview --
 // the object goes into the quarantine with everything else merge-tree writes.
 func previewReplay(flags globalFlags, ctx context.Context, verb string, parsed gitArgs) int {
-	commits, err := revListNoWalk(ctx, parsed.Revisions)
+	commits, err := replayOrder(ctx, verb, parsed.Revisions)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: resolving the commits to %s: %v\n", verb, err)
 		return exitcode.General
@@ -313,12 +313,29 @@ func describeCommit(ctx context.Context, sha string) string {
 	return described
 }
 
-// revListNoWalk resolves the commits an operation would process, in the order
-// git would process them: `--no-walk` shows the named commits and has no effect
-// on a range, which is walked -- the same reading `git cherry-pick` and
-// `git revert` give their own arguments.
-func revListNoWalk(ctx context.Context, revisions []string) ([]string, error) {
-	out, _, err := git.Run(ctx, append([]string{"rev-list", "--no-walk"}, revisions...)...)
+// replayOrder resolves the commits an operation would process, IN THE ORDER it
+// would process them.
+//
+// The order is not incidental: a preview that replays a queue backwards names
+// the wrong commit as the one the operation would stop on, and computes every
+// step on the wrong predecessor. git's own rule was probed rather than assumed
+// (the probes are in this package's tests), and it has two halves:
+//
+//   - Individual revisions are processed in the order they were typed, for both
+//     verbs. `rev-list --no-walk=unsorted` reproduces exactly that; the sorted
+//     default does NOT -- it is reverse-chronological, which silently agrees
+//     with the typed order only when the commits happen to be listed
+//     newest-first.
+//   - A RANGE is walked, and a walk yields newest-first. That is already
+//     revert's order (`git revert A..C` undoes C, then B), and it is the
+//     reverse of cherry-pick's (`git cherry-pick A..C` applies B, then C).
+//
+// Which of the two happened is asked of git rather than of the argument
+// strings: a walk is what produced MORE commits than there were revision
+// arguments. Matching them by counting means a future range spelling safegit
+// has never seen is still classified correctly.
+func replayOrder(ctx context.Context, verb string, revisions []string) ([]string, error) {
+	out, _, err := git.Run(ctx, append([]string{"rev-list", "--no-walk=unsorted"}, revisions...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -326,6 +343,12 @@ func revListNoWalk(ctx context.Context, revisions []string) ([]string, error) {
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			commits = append(commits, line)
+		}
+	}
+
+	if verb == "cherry-pick" && len(commits) > len(revisions) {
+		for i, j := 0, len(commits)-1; i < j; i, j = i+1, j-1 {
+			commits[i], commits[j] = commits[j], commits[i]
 		}
 	}
 	return commits, nil
