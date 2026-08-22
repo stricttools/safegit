@@ -589,11 +589,15 @@ safegit push --refs both
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | A declined force-push confirmation |
+| 1 | A declined force-push confirmation, or a local ref or remote URL that would not resolve |
 | 20 | Pre-pre-push hook failed |
 | 21 | Pre-pre-push hook timed out |
-| 40 | Git push failed |
+| 24 | Hooks are still in the pre-migration `.git/hooks` location; run `safegit hook migrate` |
+| 25 | A hook the checkout provides in `.safegit/hooks` is not executable |
+| 40 | The push did not get through: `git push` failed after the retry policy was exhausted, the remote could not be observed, or a local ref moved since the hooks saw it |
 | 41 | A `--force-with-lease` expectation no longer matched: the remote ref moved after safegit observed it |
+
+Codes 24 and 25 fire during hook discovery, before any network contact -- `hook run` produces both for the same reason.
 
 ## pull
 
@@ -718,10 +722,12 @@ git merge --ff-only FETCH_HEAD
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | General error, including a declined public-remote confirmation -- a refusal never reports success |
+| 1 | General error, including a declined public-remote confirmation and a detached HEAD (slots are per branch) -- a refusal never reports success |
+| 5 | `backup restore` refused: the working tree is dirty, or git has an operation in flight |
 | 22 | The remote slot holds work missing from the local history |
 | 23 | The branch has no backup slot on the remote |
-| 40 | Git push failed |
+| 40 | The push did not get through |
+| 41 | Another machine wrote this branch's slot between safegit observing it and the push reaching it, so the `--force-with-lease` expectation no longer matched |
 
 ## scan
 
