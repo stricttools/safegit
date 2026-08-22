@@ -130,7 +130,7 @@ started=2026-04-26T11:39:42.120Z
 
 The full sequence for `safegit commit -m "msg" -- file1 file2 ...`. The pipeline is split into a parallel-safe phase (object construction) and a serialized phase (ref update). A complete file list is required (no implicit "stage everything").
 
-Four commands reach this pipeline and produce commits through it: `commit` (including `--amend` and reword), `mv`, the three conclusion commands (`merge-continue`, `cherry-pick-continue`, `revert-continue`), and a single-commit `revert`. They differ in what they put into the request -- index edits, extra parents, an author to pin, move records -- and share everything below.
+Six commands reach this pipeline and produce commits through it: `commit` (including `--amend` and reword), `mv`, the three conclusion commands (`merge-continue`, `cherry-pick-continue`, `revert-continue`), and a single-commit `revert`. They differ in what they put into the request -- index edits, extra parents, an author to pin, move records -- and share everything below.
 
 ### Before either phase (once per invocation)
 
@@ -219,12 +219,22 @@ Staleness itself needs positive evidence:
 | `git commit-tree` fails | no | 0 | exit code 10 |
 | `git update-ref` fails transiently after the lock is held | yes | `commit.casMaxAttempts` (rare; usually a stale parent) | retry the whole attempt |
 
+### Concluding an operation git stopped
+
+A merge, cherry-pick or revert that git parked on a conflict is finished by `merge-continue`, `cherry-pick-continue` or `revert-continue`, which reach the pipeline with three things set: `IndexBaseSharedIndex` (the thing being committed IS the operation's staged result, so the tmp index is seeded from the shared index rather than from the parent tree), the state file's commits as extra parents, and the declared resolutions as index edits. A verified `SequencerContext` is what lets them past the mid-operation refusal that every other commit hits; it is checked against the state on disk, never taken on trust.
+
+Two checks stand in front of the pipeline, both refusing before anything is staged: the declared resolutions must name exactly the paths git left unmerged (exit 17), and the content they name must carry no conflict block that no side of the conflict -- and no base commit of the operation -- already had (exit 18, with a `safegit-conflict-markers` attribute read from the first parent's tree as the only exemption). Afterwards, in this order: the operation's whole state-file set is removed, the resolutions are applied to the shared index and it is reconciled with the new tip, and the working tree is written to match. The working tree goes last because its failure is the only one that leaves nothing inconsistent behind.
+
+**A QUEUED cherry-pick or revert does not reach the pipeline at all.** `git cherry-pick <a> <b>` puts a list of commands in git's sequencer, and a conclusion removes the operation's whole state-file set -- which for a queue includes the queue. Concluding one step natively would therefore throw the remaining commands away. So safegit runs the same resolution parsing and the same two checks, stages the resolutions into a COPY of the shared index (`internal/index`, exactly as the pipeline's tmp index is made), writes the working tree to match, and hands the rest of the queue to git's own `<verb> --continue --no-edit` with `GIT_INDEX_FILE` pointing at the copy.
+
+That is the one place git is given an index to COMMIT from, and it does not weaken the invariant: safegit's promise is that it never writes `.git/index` during staging, and here it does not -- git writes safegit's copy. What git leaves in that copy afterwards (HEAD's tree when the queue finished, the next conflict's stages when it stopped again) is then adopted as the shared index, in both outcomes and before anything is reported, because the file git was handed IS the index for the operation it just performed. The commits are git's, so they carry none of safegit's trailers, safegit's `commit-msg` handling never runs, and the oplog entry is recorded under a name outside `undo`'s registry (`<command>-delegated`) so undo skips it rather than pretending it can reconstruct them.
+
 ## Declared moves and their records
 
 safegit never infers a rename from file contents. A move is DECLARED, checked against the repository, and written into the commit message as a `Moved:` record carrying its own identifier and the two C-quoted paths.
 
 - **`safegit commit --moved 'old -> new'`** states that a move already happened: the old path must be tracked in the commit's parent and gone from disk, the new one must be present. A declaration the repository does not bear out exits **19** and commits nothing.
-- **`safegit mv 'old -> new'`** is the other half: it performs the rename, mints the record for what it renamed, and commits, in one invocation, so the move and its record cannot be out of step. It is the fourth commit-producing path through the pipeline, and its shape is validate -> rename -> commit: every pair is checked before the first filesystem mutation, the renames are minted through the effects handle (so a dry run records them), a failure part-way through puts back everything already moved, and the commit carries each moved path across as the exact blob the parent tree held -- the rename and nothing else.
+- **`safegit mv 'old -> new'`** is the other half: it performs the rename, mints the record for what it renamed, and commits, in one invocation, so the move and its record cannot be out of step. It is one of the six commit-producing paths through the pipeline, and its shape is validate -> rename -> commit: every pair is checked before the first filesystem mutation, the renames are minted through the effects handle (so a dry run records them), a failure part-way through puts back everything already moved, and the commit carries each moved path across as the exact blob the parent tree held -- the rename and nothing else.
 - **Both spellings share one grammar and one overlap check.** Two pairs may not nest and may not chain (`a -> b` beside `b -> c`), because the result would depend on the order they were performed in; both are argument-against-argument contradictions and exit 2.
 - **A record is never edited, only retracted.** `--moved-retract <id>` writes a `Moved-Retract:` trailer after verifying the id names a record that exists and is not already retracted in the history the commit is built on. A replacement is a retraction plus a new declaration in one commit.
 - **A single `safegit revert` mints the INVERSE of every record the reverted commit declared**, through both doors (a clean computed revert and one concluded after a conflict). A queued revert is git's own sequencer, so those commits carry no records at all.
@@ -232,7 +242,7 @@ safegit never infers a rename from file contents. A move is DECLARED, checked ag
 
 ## Hunk Staging
 
-> **Note:** Standalone `safegit stage` and `safegit unstage` commands were not implemented. Hunk-level staging is available via `safegit commit -- file:hunk-spec` syntax (e.g., `safegit commit -m "msg" -- file.txt:1,3`).
+> **Note:** Standalone `safegit stage` and `safegit unstage` commands were not implemented. Hunk-level staging lives in the `--hunks` flag (e.g., `safegit commit -m "msg" --hunks 'file.txt:1,3'`). A positional path is always the literal name of a file, never a hunk selection -- see "Staging API surface" below.
 
 ### Hunk extraction
 
