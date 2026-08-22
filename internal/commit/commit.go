@@ -103,6 +103,12 @@ type CommitResult struct {
 	Tree     string `json:"tree"`
 	Attempts int    `json:"attempts"`
 
+	// Files lists the repo-relative paths this commit changed relative to its
+	// parent, sorted, derived from the objects themselves. It is what every
+	// count safegit reports comes from: the arguments say what was asked for,
+	// this says what the commit holds.
+	Files []string `json:"files"`
+
 	// SkippedIgnored lists the gitignored repo-relative paths a directory
 	// expansion passed over. Nil when nothing was skipped.
 	SkippedIgnored []string `json:"skippedIgnored,omitempty"`
@@ -315,6 +321,7 @@ func (p *Pipeline) tryCommit(
 			Parent:         parentSHA,
 			Tree:           treeSHA,
 			Attempts:       attempt,
+			Files:          changedPaths(changed),
 			SkippedIgnored: files.skipped,
 		}, false, nil
 	}
@@ -403,6 +410,7 @@ func (p *Pipeline) tryCommit(
 		Parent:         parentSHA,
 		Tree:           treeSHA,
 		Attempts:       attempt,
+		Files:          changedPaths(changed),
 		SkippedIgnored: files.skipped,
 	}, false, nil
 }

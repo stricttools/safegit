@@ -231,6 +231,8 @@ func newApp() *strictcli.App {
 		return strictcli.Exit(exitcode.OK)
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
+		strictcli.WithTags("json"),
+		strictcli.PayloadSchema(commitPayloadSchema),
 		strictcli.WithGrants(strictcli.Grant{
 			Name:   "parent-bump",
 			Reason: "committing in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
