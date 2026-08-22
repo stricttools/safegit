@@ -674,7 +674,9 @@ Use `safegit unlock` when a safegit or git operation crashed and left a lock fil
 
 | Name | Required | Description |
 |------|----------|-------------|
-| `ref` | Yes | The ref name whose stale lock file to remove (e.g., `main` or `refs/heads/main`) |
+| `ref` | Yes | Which lock to release: a branch name (`main`), a full ref (`refs/tags/v1`), or a tool-owned lock name (`safegit/rewrite`, `safegit/operation`) |
+
+The naming grammar has three arms. A name starting with `safegit/` is one of the tool-owned locks, which are not refs: `safegit/rewrite` is the repository-wide history-rewrite lock (shared by every worktree), `safegit/operation` is this worktree's operation lock. A name starting with `refs/` is a full ref. Anything else is a branch shorthand. An unknown `safegit/` name is refused with the known ones listed.
 
 ### Examples
 
@@ -684,6 +686,12 @@ safegit unlock main
 
 # Release using full ref name
 safegit unlock refs/heads/feature-branch
+
+# Release the rewrite lock a crashed scrub left behind
+safegit unlock safegit/rewrite
+
+# Release this worktree's operation lock
+safegit unlock safegit/operation
 
 # Dry run
 safegit --dry-run unlock main
