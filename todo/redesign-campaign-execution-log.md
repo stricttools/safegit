@@ -1544,6 +1544,43 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
   (asserts `.git/worktrees/side/safegit` while the fixture names the
   worktree `linked-side`; vacuously true since it was written).
+## Phase 7 remediation closure — PHASE 7 CLOSED
+
+- All seven items done red-first; eight commits; full -race green; tree
+  clean. Item 1 as ruled: RewriteMessage returns an error, a
+  RecordTransformError names original line / would-be line / verdict,
+  refuseCorruptRecord rides the standard refuse() tail, and the two
+  walk-error exits route through dieFinalize (now 30, was 1) — the
+  refusal lands during the walk, before prepareAll/publishAll, nothing
+  moves. Item 2: trailer.Overlap is the single overlap authority
+  (NoOverlap/SameSource/SameDestination/Chained); internal/commit's
+  private overlap deleted; --moved chaining exits Usage on commit and
+  amend. Item 3: submoduleScopeRefs is the one spelling of the
+  submodule scope line, shared by both completions.
+- Item 4's premise was STALE against the tree: the declined force-push
+  already routed "Aborted." through infof; the audit's bare-stdout
+  reading was wrong. Deliverable became a regression pin.
+- Ratified internals: dieFinalize broadened with its doc updated (name
+  kept); refusal guidance rendered as trailing findings (refuse() has no
+  guidance slot); the vacuous-precondition fix derives the path from
+  filepath.Base(wt) so helper and assertion cannot drift; Nests stays
+  exported behind Overlap; the new exported trailer surface (Pair,
+  OverlapKind + constants, Overlap, RecordTransformError) was
+  implementor-shaped. RepoRoot->AnchorRoot unified at Pipeline.Execute,
+  Amend, Reword, and pushHintForRepo; main.go's repoRootOrEmpty stays
+  RepoRoot (it IS discovery, the one thing the pin cannot consult).
+- Queued for the Phase 10 window: globalFlags.printf duplicates infof
+  (two spellings of one job — unify); scrub_match.go's inner subResults
+  shadowing trap; the hand-rolled silent-check printf blocks in
+  push.go/backup.go convert only if the printf unification happens.
+- saferm archives from agent scratch: 17194 (34 MB), 17195 (178 MB) —
+  left alone; purging is the user's call alone.
+- Phase 9 rows: scrub match/run prose must name the exit-30 refusal for
+  a substitution that would break a move record; the declared-moves note
+  gains the chaining refusal alongside nesting.
+
+PHASE 7 IS CLOSED (implemented, audited, remediated).
+
 ## Phase 7 closing-audit outcome and rulings (covers 7.1-7.5 + the six fixer items)
 
 - All 26 audited requirements addressed; suite fully green under -race
