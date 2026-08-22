@@ -26,8 +26,11 @@ teammates, CI, and code review tools see nothing unusual.
 From source (requires the Go version `go.mod` declares -- currently 1.25.7):
 
 ```
-go install github.com/smm-h/safegit@latest
+go install github.com/smm-h/safegit@v0
 ```
+
+`@v0`, not `@latest`: safegit issues no 1.x tags, so `@latest` cannot resolve to
+a real release. Pin an exact version (`@v0.28.0`) when you need one.
 
 Pre-built binaries are available on
 [GitHub Releases](https://github.com/smm-h/safegit/releases) via goreleaser.
@@ -53,6 +56,15 @@ asking you to confirm.
 
 Tree-mutating commands (`checkout`, `pull`, `merge`, `rebase`, `reset`,
 `bisect`, `cherry-pick`, `revert`) are passed through with coordination guards.
+Reverting a single commit is the exception: git computes the inverse patch and
+safegit commits it, so it carries safegit's trailers and `safegit undo` reverses
+it.
+
+When git parks a merge, cherry-pick or revert on a conflict, safegit finishes it
+rather than git: `merge-continue`, `cherry-pick-continue` and `revert-continue`
+take one `--resolve 'path=ours|theirs|worktree|delete'` per conflicted path and
+write the commit themselves, refusing a declaration that does not match the
+conflict or content that still holds a conflict block.
 
 ## How it works
 
