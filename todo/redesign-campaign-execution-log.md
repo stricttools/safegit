@@ -370,6 +370,42 @@ existing entries are never rewritten.
   before any push in the observation-failure arms) with the table
   regenerated.
 
+## Ratified Phase 5 decisions
+
+- Exit codes 24 HooksNotMigrated, 25 TrackedHookNotExecutable, 50
+  DoctorFindings (error-severity findings only; warnings never affect;
+  post-fix the code reflects what the fix LEFT). TestDoctorReportsCorruptedOplog's
+  exit assertion 0 -> 50 was forced by the ruling.
+- submodule.DetectParent returns a Parent{GitDir, WorkTree,
+  SubmodulePath} struct (the cascade needs the parent's work tree for
+  the tracked store).
+- hooks_migrated is an ERROR-severity doctor check with no RequiresInit
+  (every push refuses while hooks sit in the legacy location, so doctor
+  must not call the repo healthy) — an unmigrated repo exits 50 from
+  diagnose.
+- hook list prints the listing FIRST, then exits 24 on legacy hooks
+  (the operator must see the files the refusal names).
+- hook remove on a name in BOTH stores removes the live one and states
+  the committed one still runs (refusing outright would make the live
+  hook unremovable by name); a committed-only name is the explanatory
+  hard error; both non-removals exit General.
+- Tracked-store membership is the .safegit/hooks DIRECTORY on disk, not
+  git-tracked-ness: an uncommitted hook there runs on the next push. A
+  tracked-ness probe would make an uncommitted hook silently invisible,
+  and a writer of the worktree could equally write the local store —
+  no additional trust boundary exists to enforce.
+- Scan sweeps all of .git/safegit except rewrite-maps.jsonl; git-dir
+  matches carry in_git_dir with gitdir-relative coordinates; a
+  core.hooksPath-escaping path stays absolute.
+- Native-hook resolution is git.HooksDir (rev-parse --git-path hooks),
+  shared by the commit family and doctor — one resolution, cannot
+  disagree; core.hooksPath and linked worktrees now honored
+  (red-proved both).
+- Phase 9 additions from Phase 5: Appendix row 7 needs the two-store
+  text; command tables lack hook migrate/hook remove; docs/cli-index.md
+  says "31 commands" while the pinned app description says 33; scan's
+  in_git_dir and doctor's new checks and exit 50 need sentences.
+
 ## Phase 4 remediation ratifications
 
 - Tier A scope is WalkedTips: refs whose object the SHA map covers,
