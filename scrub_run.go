@@ -57,6 +57,10 @@ type ScrubRunResult struct {
 	PreRewriteRemotes map[string]string `json:"pre_rewrite_remotes,omitempty"`
 	CleanupOK         *bool             `json:"cleanup_ok,omitempty"`
 	CleanupErrors     []string          `json:"cleanup_errors,omitempty"`
+	// SyncSkipped is true when the working-tree sync was deliberately not
+	// performed because work that was not this rewrite's appeared while the
+	// refs were moving. The refs still moved; the working tree was left alone.
+	SyncSkipped bool `json:"sync_skipped,omitempty"`
 }
 
 // scrubRunPayloadSchema declares what `scrub run` puts in the envelope's
@@ -119,6 +123,7 @@ var scrubRunPayloadSchema = strictcli.SchemaObject(
 		"pre_rewrite_remotes": scrubRewritesSchema,
 		"cleanup_ok":          strictcli.SchemaType("boolean"),
 		"cleanup_errors":      strictcli.SchemaArray(strictcli.SchemaType("string")),
+		"sync_skipped":        strictcli.SchemaType("boolean"),
 	},
 	[]string{"version", "dry_run", "operation_count"},
 	false,
@@ -337,6 +342,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 			PreRewriteRemotes: nonNilStringMap(result.PreRewriteRemotes),
 			CleanupOK:         boolPtr(result.CleanupOK),
 			CleanupErrors:     nonNilStrings(result.CleanupErrors),
+			SyncSkipped:       result.SyncSkipped,
 		})
 
 		infof(flags, "\nScrub complete:\n")
