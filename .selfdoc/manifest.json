@@ -2458,11 +2458,6 @@
         },
         {
           "level": 3,
-          "text": "`CommonGitDir`",
-          "anchor": "commongitdir"
-        },
-        {
-          "level": 3,
           "text": "`CommonGitDirOf`",
           "anchor": "commongitdirof"
         },
@@ -2610,6 +2605,16 @@
           "level": 3,
           "text": "`MergeTree`",
           "anchor": "mergetree"
+        },
+        {
+          "level": 3,
+          "text": "`StashApply`",
+          "anchor": "stashapply"
+        },
+        {
+          "level": 3,
+          "text": "`StashStore`",
+          "anchor": "stashstore"
         },
         {
           "level": 3,
@@ -3078,11 +3083,6 @@
         },
         {
           "level": 3,
-          "text": "`Uninstall`",
-          "anchor": "uninstall"
-        },
-        {
-          "level": 3,
           "text": "`UninstallPlan`",
           "anchor": "uninstallplan"
         },
@@ -3230,13 +3230,13 @@
     },
     {
       "path": "divergences.md",
-      "title": "Where safegit follows git, and where it deliberately does not",
+      "title": "Divergences",
       "type": "doc",
       "headings": [
         {
           "level": 1,
           "text": "Where safegit follows git, and where it deliberately does not",
-          "anchor": "where-safegit-follows-git-and-where-it-deliberately-does-not"
+          "anchor": "divergences"
         },
         {
           "level": 2,
@@ -3367,6 +3367,16 @@
           "level": 3,
           "text": "A lone `AUTO_MERGE` file is residue, not evidence",
           "anchor": "a-lone-auto_merge-file-is-residue-not-evidence"
+        },
+        {
+          "level": 3,
+          "text": "A conclusion does not teach rerere the resolution it just made",
+          "anchor": "a-conclusion-does-not-teach-rerere-the-resolution-it-just-made"
+        },
+        {
+          "level": 3,
+          "text": "An autostash that cannot be applied exits nonzero",
+          "anchor": "an-autostash-that-cannot-be-applied-exits-nonzero"
         },
         {
           "level": 3,
@@ -4858,11 +4868,6 @@
         },
         {
           "level": 3,
-          "text": "`CommonGitDir`",
-          "anchor": "commongitdir"
-        },
-        {
-          "level": 3,
           "text": "`CommonGitDirOf`",
           "anchor": "commongitdirof"
         },
@@ -5010,6 +5015,16 @@
           "level": 3,
           "text": "`MergeTree`",
           "anchor": "mergetree"
+        },
+        {
+          "level": 3,
+          "text": "`StashApply`",
+          "anchor": "stashapply"
+        },
+        {
+          "level": 3,
+          "text": "`StashStore`",
+          "anchor": "stashstore"
         },
         {
           "level": 3,
@@ -5874,11 +5889,6 @@
         },
         {
           "level": 3,
-          "text": "`Uninstall`",
-          "anchor": "uninstall"
-        },
-        {
-          "level": 3,
           "text": "`UninstallPlan`",
           "anchor": "uninstallplan"
         },
@@ -6020,6 +6030,16 @@
           "level": 3,
           "text": "`FileAutoMerge`",
           "anchor": "fileautomerge"
+        },
+        {
+          "level": 3,
+          "text": "`FileMergeRR`",
+          "anchor": "filemergerr"
+        },
+        {
+          "level": 3,
+          "text": "`FileMergeAutostash`",
+          "anchor": "filemergeautostash"
         },
         {
           "level": 3,
@@ -7286,6 +7306,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-22T18:52:00.280909+00:00",
+  "last_gen": "2026-08-22T22:07:19.400759+00:00",
   "theme": "minimal"
 }
