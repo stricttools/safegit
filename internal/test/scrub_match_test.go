@@ -1185,3 +1185,73 @@ func TestScrubMatchDryRunRangeFilter(t *testing.T) {
 		t.Error("expected at least 1 match for LEAKED_SECRET_456 in range")
 	}
 }
+
+// TestScrubMatchPublishesASubmoduleWhenTheParentHasNothingToRewrite covers the
+// branch where the parent repository turns out to have nothing to do while a
+// submodule rewrite is already written and waiting to be published.
+//
+// It is reachable because a submodule rewrite need not move a single commit: a
+// pattern that lives only in a submodule's TAG ANNOTATION rewrites the tag
+// object and nothing else, so no gitlink changes and the parent has no work.
+// The submodule's rewrite is still real, and it is verified and published on
+// its own -- there is no primary rewrite to hold it back for.
+func TestScrubMatchPublishesASubmoduleWhenTheParentHasNothingToRewrite(t *testing.T) {
+	parentDir, _ := newRepoWithSubmodule(t)
+	subDir := filepath.Join(parentDir, "mysub")
+	subSgDir := filepath.Join(submoduleGitDir(t, subDir), "safegit")
+
+	for _, args := range [][]string{
+		{"config", "user.email", "test@test.com"},
+		{"config", "user.name", "Test"},
+		{"tag", "-a", "sub-rel", "-m", "submodule release with SUBTAG_SECRET"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = subDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v in the submodule: %v\n%s", args, err, out)
+		}
+	}
+
+	parentHeadBefore := testutil.Rev(t, parentDir, "HEAD")
+	subHeadBefore := testutil.Rev(t, subDir, "HEAD")
+
+	stdout, stderr, code := runSafegitEnv(t, parentDir, scrubMatchEnv,
+		"--approve-consequential", "scrub", "match",
+		"--pattern", "SUBTAG_SECRET", "--replace", "REDACTED",
+		"--reason", "submodule-only tag annotation", "--entire-history")
+	if code != 0 {
+		t.Fatalf("scrub match failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "0 commits contained the pattern") {
+		t.Errorf("the parent had nothing to rewrite and should say so; stdout: %s", stdout)
+	}
+
+	// The submodule's rewrite was published: the tag annotation is clean and the
+	// submodule's journal records the whole rewrite.
+	cmd := exec.Command("git", "tag", "-l", "-n99", "sub-rel")
+	cmd.Dir = subDir
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git tag -l -n99 in the submodule: %v", err)
+	}
+	if strings.Contains(string(out), "SUBTAG_SECRET") {
+		t.Errorf("the submodule tag annotation still holds the secret: %s", out)
+	}
+	if !strings.Contains(string(out), "REDACTED") {
+		t.Errorf("the submodule tag annotation does not carry the replacement: %s", out)
+	}
+	if phases := journalPhases(readRewriteMapsAt(t, subSgDir)); !samePhases(phases, "start", "refs", "complete") {
+		t.Errorf("submodule journal phases = %v, want start/refs/complete (the rewrite was published)", phases)
+	}
+
+	// Neither repository's commits moved: no commit held the pattern.
+	if got := testutil.Rev(t, subDir, "HEAD"); got != subHeadBefore {
+		t.Errorf("the submodule's HEAD moved: %s -> %s", subHeadBefore, got)
+	}
+	if got := testutil.Rev(t, parentDir, "HEAD"); got != parentHeadBefore {
+		t.Errorf("the parent's HEAD moved even though it had nothing to rewrite: %s -> %s", parentHeadBefore, got)
+	}
+	if lines := readRewriteMaps(t, parentDir); len(lines) != 0 {
+		t.Errorf("the parent journal must be empty, got %v", journalPhases(lines))
+	}
+}
