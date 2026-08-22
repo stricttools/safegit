@@ -376,6 +376,20 @@ func dedupePaths(paths []string) []string {
 // The invocation is not built by Command because safegit does not start it: the
 // effects handle does, in the process working directory. exempt names the
 // declared reason that is acceptable.
+//
+// It takes no context, so the context-carried overrides Command applies -- the
+// object quarantine among them -- cannot reach these invocations. That is not a
+// hole, because no argv built here can write objects during a preview:
+//
+//   - An argv matching an allowlisted observe prefix EXECUTES even in dry mode,
+//     but ObservePrefixes admits only verbs the classification table declares
+//     observe-only unconditionally, which by definition write nothing.
+//   - Every other argv is RECORDED in dry mode and never started, whatever it
+//     names -- which is how `repack` and `prune` appear in a rewrite preview's
+//     would-do log without ever running.
+//
+// Outside a preview there is no quarantine to reach in the first place: an
+// executing run writes its objects into the repository on purpose.
 func ArgvAny(exempt ExemptionID, args ...string) ([]interface{}, error) {
 	if err := Validate(args); err != nil {
 		return nil, err
