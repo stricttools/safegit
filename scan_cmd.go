@@ -39,10 +39,17 @@ type ScanMatchJSON struct {
 	Line       int    `json:"line"`
 	Reachable  bool   `json:"reachable"`
 	Context    string `json:"context"`
-	// InGitDir says Path is relative to the git directory rather than to the
-	// repository root. It is present only on file matches, and only on the ones
-	// inside the git dir, so a reader never has to guess which coordinate
-	// system a path is in.
+	// InGitDir says the file was found inside git's own state -- the config,
+	// COMMIT_EDITMSG, the hook directories, safegit's own .git/safegit -- rather
+	// than in the work tree, so a reader never has to guess which coordinate
+	// system a path is in. It is present only on file matches, and only on the
+	// ones in git's state; every other path is repo-relative.
+	//
+	// Path is git-dir-relative whenever the file sits under the git directory.
+	// One case does not: a location git resolves OUTSIDE it, which today means
+	// a core.hooksPath pointing elsewhere. That is still git's state, so the
+	// flag is still true, but the path stays ABSOLUTE -- rendered relative it
+	// would name a file that is not there.
 	InGitDir bool `json:"in_git_dir,omitempty"`
 }
 
@@ -50,6 +57,13 @@ type ScanMatchJSON struct {
 // sha, path and commit_sha are omitempty on ScanMatchJSON -- a non-object match
 // has no SHA, an unattributed blob has no path -- so they are declared without
 // being required.
+//
+// in_git_dir is the coordinate marker and is likewise omitempty: absent means
+// `path` is repo-relative, true means the file was found inside git's own state
+// and `path` is relative to the git directory -- except for a location git
+// resolves outside it (a redirected core.hooksPath), where `path` is absolute.
+// The declared subset carries types only, so this comment is where that meaning
+// is written down; ScanMatchJSON.InGitDir says the same thing at the field.
 var scanMatchSchema = strictcli.SchemaObject(
 	map[string]interface{}{
 		"sha":         strictcli.SchemaType("string"),

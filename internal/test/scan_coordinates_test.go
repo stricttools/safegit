@@ -141,6 +141,50 @@ func TestScanSeesUncommittedCommittedStoreHooks(t *testing.T) {
 	}
 }
 
+// TestScanReadsGitsOwnConfigAndCommitEditmsg: the two files git itself keeps
+// that a secret most often lands in -- the config, which carries remote URLs
+// and therefore embedded credentials, and COMMIT_EDITMSG, which holds the last
+// message anyone typed. Both are members of the git-dir sweep and both report
+// their git-dir coordinate.
+func TestScanReadsGitsOwnConfigAndCommitEditmsg(t *testing.T) {
+	dir := newRepo(t)
+
+	const configSecret = "SCANCOORD_CONFIG_SECRET"
+	const messageSecret = "SCANCOORD_EDITMSG_SECRET"
+
+	// A remote URL with an embedded credential is the realistic shape, and it
+	// lands in .git/config without contacting anything.
+	testutil.Git(t, dir, "remote", "add", "leaky", "https://user:"+configSecret+"@example.invalid/repo.git")
+
+	// git writes COMMIT_EDITMSG on every `git commit`; safegit never does (it
+	// uses a per-invocation message file), so the fixture writes it directly.
+	if err := os.WriteFile(filepath.Join(dir, ".git", "COMMIT_EDITMSG"),
+		[]byte("wip: "+messageSecret+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct{ secret, want string }{
+		{configSecret, "config"},
+		{messageSecret, "COMMIT_EDITMSG"},
+	} {
+		matches := scanFileMatches(t, dir, tc.secret)
+		var found *scanFileMatch
+		for i := range matches {
+			if matches[i].Path == tc.want {
+				found = &matches[i]
+				break
+			}
+		}
+		if found == nil {
+			t.Errorf("the sweep missed the secret in %s; matches: %+v", tc.want, matches)
+			continue
+		}
+		if !found.InGitDir {
+			t.Errorf("%s was not marked as living in the git directory", tc.want)
+		}
+	}
+}
+
 // TestScanSkipsTheRewriteJournal: the journal holds object names and nothing
 // else -- a scrub's replacement never reaches it -- and it grows without bound
 // in a repository that rewrites often, so the sweep leaves it alone. The

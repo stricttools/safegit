@@ -293,6 +293,54 @@ func TestUninstallRemovesLiveAndLegacyHooksButNotCommittedOnes(t *testing.T) {
 	}
 }
 
+// TestHookListRendersStateAndOrigin: the listing exists for the hook that is
+// NOT running, so what it says about each entry is the point. A file without an
+// execute bit reads NOT EXECUTABLE, and one whose NAME disqualifies it -- a
+// dot-file, an editor backup -- says so instead, since neither has ever been a
+// hook and neither is a permissions problem to fix.
+func TestHookListRendersStateAndOrigin(t *testing.T) {
+	dir := newRepo(t)
+
+	// Executable, non-executable, and two entries that are not hooks by name.
+	writeHookScript(t, filepath.Join(localHookDir(dir), "pre-pre-push"), "true")
+	nonExec := filepath.Join(localHookDir(dir), "pre-pre-push.d", "20-unarmed")
+	writeHookScript(t, nonExec, "true")
+	if err := os.Chmod(nonExec, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	writeHookScript(t, filepath.Join(localHookDir(dir), "pre-pre-push.d", ".hidden"), "true")
+	writeHookScript(t, filepath.Join(localHookDir(dir), "pre-pre-push.d", "30-edited~"), "true")
+
+	stdout, stderr, code := runSafegit(t, dir, "hook", "list")
+	if code != 0 {
+		t.Fatalf("hook list failed (%d): %s", code, stderr)
+	}
+
+	for _, want := range []string{
+		"pre-pre-push  [local, executable]",
+		"pre-pre-push.d/20-unarmed  [local, NOT EXECUTABLE]",
+		"pre-pre-push.d/.hidden  [local, not a hook",
+		"pre-pre-push.d/30-edited~  [local, not a hook",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("hook list did not render %q:\n%s", want, stdout)
+		}
+	}
+	if !strings.Contains(stdout, "4 hook(s)") {
+		t.Errorf("hook list did not count every location:\n%s", stdout)
+	}
+
+	// The non-executable one is skipped with a warning rather than refused:
+	// that is git's stance for its own hooks and safegit's for the live store.
+	_, runErr, runCode := runSafegit(t, dir, "hook", "run")
+	if runCode != 0 {
+		t.Fatalf("hook run failed (%d): %s", runCode, runErr)
+	}
+	if !strings.Contains(runErr, "not executable") || !strings.Contains(runErr, "20-unarmed") {
+		t.Errorf("the skip must be warned about by name, got: %s", runErr)
+	}
+}
+
 // TestHookRemoveDeletesInstalledHooks: remove-by-name over the tool-owned store,
 // addressed either by the store-relative path or by the base name alone.
 func TestHookRemoveDeletesInstalledHooks(t *testing.T) {
