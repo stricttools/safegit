@@ -802,8 +802,15 @@ func scrubMatchExecute(
 		// Context-scoped git directory for this submodule's ref updates.
 		subCtx := git.WithDir(ctx, sr.sub.GitDir, sr.sub.WorkTreePath)
 
-		// Capture old HEAD before refs are updated.
-		subOldHead, _ := git.RevParse(subCtx, "HEAD")
+		// Capture old HEAD before refs are updated. The error is fatal like at
+		// every sibling site: this SHA is the baseline the submodule's
+		// cleanliness check compares against and the old_head its journal
+		// record carries, and a rewrite that cannot name where it started from
+		// must not run.
+		subOldHead, err := git.RevParse(subCtx, "HEAD")
+		if err != nil {
+			die(exitcode.General, fmt.Sprintf("submodule %s: resolving HEAD: %v", sr.sub.RelativePath, err))
+		}
 
 		// Tier A for the submodule: the pattern must be absent from the
 		// submodule history that is about to be published.

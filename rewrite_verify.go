@@ -284,8 +284,13 @@ func verifyRefsRemapped(ctx context.Context, shaMap map[string]string) []string 
 // committed value at exactly this moment. That is the rewrite's own doing, not
 // foreign work.
 func foreignWorktreeState(ctx context.Context, baseline string) ([]string, error) {
+	// An empty baseline is not "nothing to compare against": every caller
+	// resolves the pre-rewrite HEAD, so an empty one means that resolution
+	// failed and was dropped. Answering "nothing foreign" to it would disable
+	// this check silently, which is exactly how a submodule rewrite once ran
+	// with no cleanliness check at all.
 	if baseline == "" {
-		return nil, nil
+		return nil, fmt.Errorf("re-checking the working tree: no baseline commit -- the rewrite did not record the commit it started from")
 	}
 
 	var found []string

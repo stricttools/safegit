@@ -180,3 +180,21 @@ func TestFinalizeRefusesAnUndeclaredIntent(t *testing.T) {
 		t.Errorf("the refusal must write no journal record, got %d", len(lines))
 	}
 }
+
+// TestForeignWorktreeStateRefusesAnEmptyBaseline pins the fail-closed half of
+// the cleanliness check. The baseline is the commit the rewrite started from,
+// and every caller has one; an empty one can only mean the caller failed to
+// resolve HEAD and did not say so. Answering "nothing foreign here" to that
+// question silently disables the check that stands between a concurrent
+// session's work and a published rewrite, so it is a hard error instead.
+func TestForeignWorktreeStateRefusesAnEmptyBaseline(t *testing.T) {
+	_, ctx := initTestRepo(t)
+
+	found, err := foreignWorktreeState(ctx, "")
+	if err == nil {
+		t.Fatalf("an empty baseline must be refused, got findings=%v and no error", found)
+	}
+	if !strings.Contains(err.Error(), "baseline") {
+		t.Errorf("the error must say what was missing; got: %v", err)
+	}
+}
