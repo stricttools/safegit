@@ -256,10 +256,11 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	})
 
 	if !flags.silent() {
-		fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msg))
 		if flags.dryRun {
+			fmt.Println(wouldWriteHeader("commit", result.Ref, result.Tree, firstLine(msg)))
 			fmt.Printf(" %d file(s) would be committed", len(result.Files))
 		} else {
+			fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msg))
 			fmt.Printf(" %d file(s) committed", len(result.Files))
 		}
 		if result.Attempts > 1 {
@@ -267,6 +268,20 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		}
 		fmt.Println()
 	}
+}
+
+// wouldWriteHeader is a preview's answer to the `[branch sha]` line a real
+// commit prints, and it deliberately does not look like one.
+//
+// A preview cannot know the commit SHA: the commit object a real run builds
+// carries the committer timestamp, so the object the preview could name is
+// never the object that will exist. What it CAN state is read off objects the
+// preview really computed -- the branch the commit would go on and the tree it
+// would carry -- so those are what it prints. The line does not start with `[`,
+// which is what the submodule auto-bump reads a child's commit SHA out of: a
+// preview line can therefore never be parsed as one.
+func wouldWriteHeader(verb, ref, tree, subject string) string {
+	return fmt.Sprintf("would %s on %s (tree %s): %s", verb, refShortName(ref), shortSHA(tree), subject)
 }
 
 // runCommitAmend handles the --amend path: amend with files, or reword without.
@@ -385,11 +400,12 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			if msgDisplay == "" {
 				msgDisplay = "(message preserved)"
 			}
-			fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msgDisplay))
 			if flags.dryRun {
-				fmt.Printf(" %d file(s) would be amended (was %s)", len(result.Files), result.OldSHA[:8])
+				fmt.Println(wouldWriteHeader("amend", result.Ref, result.Tree, firstLine(msgDisplay)))
+				fmt.Printf(" %d file(s) would be amended (was %s)", len(result.Files), shortSHA(result.OldSHA))
 			} else {
-				fmt.Printf(" %d file(s) amended (was %s)", len(result.Files), result.OldSHA[:8])
+				fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msgDisplay))
+				fmt.Printf(" %d file(s) amended (was %s)", len(result.Files), shortSHA(result.OldSHA))
 			}
 			if result.Attempts > 1 {
 				fmt.Printf(" (%d CAS retries)", result.Attempts-1)
@@ -424,7 +440,11 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		if flags.verbose {
 			fmt.Fprintf(os.Stderr, "  ref: %s\n", result.Ref)
 			fmt.Fprintf(os.Stderr, "  old: %s\n", result.OldSHA)
-			fmt.Fprintf(os.Stderr, "  sha: %s\n", result.SHA)
+			// A preview of a reword builds no commit object, so there is no
+			// SHA to name; the line is omitted rather than printed empty.
+			if result.SHA != "" {
+				fmt.Fprintf(os.Stderr, "  sha: %s\n", result.SHA)
+			}
 		}
 
 		if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "reword", firstLine(msg)); err != nil {
@@ -448,11 +468,12 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		})
 
 		if !flags.silent() {
-			fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msg))
 			if flags.dryRun {
-				fmt.Printf(" would reword (was %s)\n", result.OldSHA[:8])
+				fmt.Println(wouldWriteHeader("reword", result.Ref, result.Tree, firstLine(msg)))
+				fmt.Printf(" would reword (was %s)\n", shortSHA(result.OldSHA))
 			} else {
-				fmt.Printf(" reworded (was %s)\n", result.OldSHA[:8])
+				fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msg))
+				fmt.Printf(" reworded (was %s)\n", shortSHA(result.OldSHA))
 			}
 		}
 	}

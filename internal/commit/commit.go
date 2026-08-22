@@ -168,6 +168,15 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 		return nil, err
 	}
 
+	// The preview area, opened before any object-writing call: from here on
+	// every git subprocess this operation builds writes its objects into the
+	// quarantine instead of into the repository.
+	ctx, previewArea, previewCleanup, err := beginPreview(ctx, req.DryRun)
+	if err != nil {
+		return nil, err
+	}
+	defer previewCleanup()
+
 	repoRoot, err := git.RepoRoot(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolving repo root: %w", err)
@@ -223,7 +232,7 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryCommit(ctx, ref, repoRoot, files, req, hooks, attempt)
+		result, retry, err := p.tryCommit(ctx, ref, repoRoot, previewArea, files, req, hooks, attempt)
 		if err != nil {
 			return nil, err
 		}
@@ -241,21 +250,19 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 }
 
 // indexBaseDir returns the directory the per-invocation temp index is created
-// under, plus a cleanup for that directory itself. An executing run uses
-// .git/safegit, whose tmp/ subdirectory the doctor garbage-collects. A dry run
-// promises to change nothing, so its temp index goes to an OS temp directory
-// instead: the preview still stages, writes the tree and builds the commit
-// object exactly as the real run would, and .git/safegit is left alone --
-// including not being created at all in a repo where safegit has never run.
-func (p *Pipeline) indexBaseDir(dryRun bool) (base string, cleanup func(), err error) {
-	if !dryRun {
-		return p.SafegitDir, func() {}, nil
+// under. An executing run uses .git/safegit, whose tmp/ subdirectory the doctor
+// garbage-collects. A dry run stages inside the preview area beginPreview
+// opened instead: the preview still stages, writes the tree and builds the
+// commit object exactly as the real run would, and .git/safegit is left alone
+// -- including not being created at all in a repo where safegit has never run.
+//
+// The area is removed by the caller that opened it, once, when the operation
+// ends; the temp index inside it is still cleaned up per attempt.
+func (p *Pipeline) indexBaseDir(previewArea string) string {
+	if previewArea != "" {
+		return previewArea
 	}
-	dir, err := os.MkdirTemp("", "safegit-preview-")
-	if err != nil {
-		return "", nil, fmt.Errorf("creating preview index dir: %w", err)
-	}
-	return dir, func() { os.RemoveAll(dir) }, nil
+	return p.SafegitDir
 }
 
 // newTmpIndex creates the per-invocation index a commit stages into, from
@@ -284,7 +291,7 @@ func (p *Pipeline) newTmpIndex(ctx context.Context, baseDir string, base IndexBa
 // or (nil, false, err) on hard failure.
 func (p *Pipeline) tryCommit(
 	ctx context.Context,
-	ref, repoRoot string,
+	ref, repoRoot, previewArea string,
 	files *intake,
 	req CommitRequest,
 	hooks *nativeHooks,
@@ -308,13 +315,7 @@ func (p *Pipeline) tryCommit(
 
 	// Step 1: Create per-invocation tmp index. For root commits, use an
 	// empty tree; otherwise seed from the resolved parent.
-	idxBase, idxBaseCleanup, err := p.indexBaseDir(req.DryRun)
-	if err != nil {
-		return nil, false, err
-	}
-	defer idxBaseCleanup()
-
-	tmpIdx, err := p.newTmpIndex(ctx, idxBase, req.IndexBase, isRootCommit, parentSHA)
+	tmpIdx, err := p.newTmpIndex(ctx, p.indexBaseDir(previewArea), req.IndexBase, isRootCommit, parentSHA)
 	if err != nil {
 		return nil, false, fmt.Errorf("creating tmp index: %w", err)
 	}

@@ -108,8 +108,19 @@ func repoRootOrEmpty() string {
 //
 // The sites that cannot take the pin are not decided here: they are enumerated
 // in internal/gitexec's declared directory-pin exemption table.
+// A dry run additionally marks the context as a PREVIEW, which is what lets
+// the boundary refuse an object-writing git invocation that is running without
+// an object quarantine. The mark is set here, for every command at once,
+// because every command's dry run makes the same promise; installing the
+// quarantine itself stays with the commands that actually write objects in a
+// preview (see internal/commit's beginPreview), since only they know when the
+// throwaway store can be created and cleaned up.
 func (g globalFlags) ctx() context.Context {
-	return gitexec.WithRoot(context.Background(), g.root.resolve())
+	ctx := gitexec.WithRoot(context.Background(), g.root.resolve())
+	if g.dryRun {
+		ctx = gitexec.WithPreview(ctx)
+	}
+	return ctx
 }
 
 // effects returns the effects handle for this dispatch. Handlers mint every
