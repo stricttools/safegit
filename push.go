@@ -131,7 +131,7 @@ func buildPushPayload(flags globalFlags, remote string, refs []pushRefInfo, forc
 		Remote:                 remote,
 		Refs:                   out,
 		ForceWithLease:         force,
-		Atomic:                 len(refs) > 1,
+		Atomic:                 pushIsAtomic(refs),
 		PrePrePushHooksRun:     hooksRun,
 		PrePrePushHooksSkipped: hooksSkipped,
 		DryRun:                 flags.dryRun,
@@ -317,7 +317,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		// Retrying would re-observe THEIR ref, pin the lease to it, and quietly
 		// do the overwriting the lease just prevented -- so the retry loop must
 		// never see it.
-		if leaseRejected(gitStderr) {
+		if leaseRejected(gitStderr, forceFlag) {
 			fmt.Fprintf(os.Stderr,
 				"push refused: the remote moved after safegit read it, so the --force-with-lease expectation no longer matches\n"+
 					"  somebody else pushed to %s between the read and the push, and the lease kept their work\n"+
@@ -629,6 +629,15 @@ func localRefsMoved(before, after []pushRefInfo) (localRefMove, bool) {
 	return localRefMove{}, false
 }
 
+// pushIsAtomic is the one place the all-or-nothing rule is decided: safegit
+// makes every multi-ref push atomic, so one refused ref leaves the remote
+// exactly as it was rather than half-published.
+//
+// buildGitPushArgs asks it before adding --atomic, and buildPushPayload asks it
+// before reporting the fact, so the argv git ran and the payload a machine
+// consumer reads cannot disagree about what the push was.
+func pushIsAtomic(refs []pushRefInfo) bool { return len(refs) > 1 }
+
 // leaseExpectation is the value safegit pins a ref's lease to: the SHA it
 // observed on the remote, or the EMPTY string when the ref is not there yet.
 //
@@ -658,7 +667,7 @@ func leaseExpectation(r pushRefInfo) string {
 // leave the remote exactly as it was rather than half-published.
 func buildGitPushArgs(remote string, refs []pushRefInfo, force bool) []string {
 	args := []string{"push"}
-	if len(refs) > 1 {
+	if pushIsAtomic(refs) {
 		args = append(args, "--atomic")
 	}
 	if force {
@@ -757,8 +766,21 @@ func remoteOf(args []string) string {
 // Under --atomic the refs that were fine read `(atomic push failed)` on their
 // own lines; the rejected one still reads `(stale info)`, so one marker
 // classifies the whole push.
-func leaseRejected(stderrText string) bool {
-	return strings.Contains(stderrText, "stale info")
+//
+// Both anchors are deliberate. The PARENTHESES are part of git's per-ref status
+// marker rather than decoration, so matching them keeps the words "stale info"
+// appearing anywhere else -- a commit subject echoed back, remote-side prose --
+// from being read as a rejection. And only a push that SENT a lease can be
+// refused for one, so an unforced push is never classified here; without that
+// anchor a plain non-fast-forward could exit PushLeaseRejected with a message
+// about an expectation safegit never pinned.
+//
+// A miss is safe in the direction that counts: an unrecognized rejection falls
+// through to isTransportError, which does not match it either, so the loop
+// breaks out and the push fails terminally. What a miss cannot do is cause a
+// retry that overwrites somebody else's work.
+func leaseRejected(stderrText string, forced bool) bool {
+	return forced && strings.Contains(stderrText, "(stale info)")
 }
 
 // isTransportError heuristically determines if a push failure is a
@@ -769,26 +791,63 @@ func leaseRejected(stderrText string) bool {
 // It used to be handed the error the effects handle returns -- a formatted
 // string carrying the argv and the exit code and nothing of the child's output
 // -- so no pattern here could ever match and the retry loop was dead.
+//
+// Every pattern is a MULTI-WORD PHRASE one of the three layers below actually
+// emits. That is not a style preference: git's stderr echoes REF NAMES (the
+// `! [rejected] <ref> -> <ref>` lines), a ref name cannot contain a space, and
+// so a phrase cannot be one. The list used to carry bare `EOF`, `SSL`, `TLS`
+// and `transport`, which made a branch called `transport-refactor` classify its
+// own non-fast-forward rejection as a dropped connection and retry it.
+//
+// The retry direction is the dangerous one. A transport failure misread as a
+// verdict costs one lost retry; a verdict misread as a transport failure
+// re-observes the remote, re-pins the lease to whatever is there now, and
+// pushes again.
 func isTransportError(stderrText string) bool {
 	if stderrText == "" {
 		return false
 	}
-	msg := stderrText
+	// Captured from git 2.54.0 against unreachable remotes, except where noted;
+	// the samples are in push_classify_test.go's gitTransportFailures, which is
+	// what re-derives this list if a git or curl release respells anything.
 	transportPatterns := []string{
+		// curl (https) and OpenSSH resolver failures. The ssh spelling is
+		// "Could not resolve hostname", which this covers as a prefix.
 		"Could not resolve host",
+		// OpenSSH; also the tail of git's native transport line,
+		// "127.0.0.1[0: 127.0.0.1]: errno=Connection refused".
 		"Connection refused",
+		// strerror, reached through curl ("Recv failure: Connection reset by
+		// peer") and through ssh.
 		"Connection reset",
 		"Connection timed out",
 		"Network is unreachable",
-		"failed to connect",
-		"SSL",
-		"TLS",
-		"EOF",
-		"broken pipe",
-		"transport",
+		"Transport endpoint is not connected",
+		// curl's two connect failures, both on one line of a real refusal.
+		"Failed to connect to",
+		"Could not connect to server",
+		// git's own native (git://) transport.
+		"unable to connect to",
+		// curl's TLS layer, and the OpenSSL error strings behind it. GnuTLS
+		// builds of curl report gnutls_handshake instead.
+		"TLS connect error",
+		"SSL connect error",
+		"SSL certificate problem",
+		"SSL routines",
+		"gnutls_handshake",
+		// A transfer that was cut off mid-pack. Not from the local probe --
+		// staging a connection that dies mid-transfer is not cheap -- but these
+		// are git's long-standing spellings, and "unexpected EOF" is also
+		// OpenSSL's.
+		"early EOF",
+		"unexpected EOF",
+		"the remote end hung up unexpectedly",
+		"RPC failed",
+		// strerror again, via git's own write error and curl's send failure.
+		"Broken pipe",
 	}
 	for _, p := range transportPatterns {
-		if strings.Contains(msg, p) {
+		if strings.Contains(stderrText, p) {
 			return true
 		}
 	}
