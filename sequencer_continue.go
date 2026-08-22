@@ -42,8 +42,8 @@ import (
 //     shared index -- every conflicted path named, and nothing else named.
 //  5. Runs the commit pipeline with the shared index as its base, the state
 //     file's commits as extra parents, and the resolutions as index edits.
-//  6. Removes the operation's whole state-file set and reconciles the shared
-//     index.
+//  6. Removes the operation's whole state-file set, reconciles the shared
+//     index, and puts the WORKING TREE in step with the resolutions.
 
 // resolutionChoice is one of the four things a conflicted path may be resolved
 // to. The keywords are defined BY INDEX STAGE, not by operation folklore.
@@ -60,9 +60,8 @@ const (
 	resolveTheirs resolutionChoice = "theirs"
 	// resolveWorktree is the working-tree file's current content.
 	resolveWorktree resolutionChoice = "worktree"
-	// resolveDelete removes the path from the commit. The working-tree file is
-	// left alone: no safegit command deletes a file from the working tree, and
-	// an operator who wants it gone removes it.
+	// resolveDelete removes the path from the commit AND from the working tree,
+	// which is what `git rm` does and what an operator who says "delete" means.
 	resolveDelete resolutionChoice = "delete"
 )
 
@@ -417,7 +416,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	out := conclusionResult{state: state, commit: result, declared: declared, author: author}
 
 	if !flags.dryRun {
-		if err := finishConclusion(ctx, gitDir, state, result, edits); err != nil {
+		if err := finishConclusion(ctx, gitDir, state, result, edits, sides, declared); err != nil {
 			die(exitcode.General, err.Error())
 		}
 		out.cleared = true
@@ -432,7 +431,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 }
 
 // finishConclusion removes the concluded operation's state and puts the shared
-// index back in step with the new tip.
+// index and the working tree back in step with the new tip.
 //
 // The order is deliberate. The state files go first: the operation is over the
 // moment its commit exists, and a crash between here and the reconcile leaves a
@@ -447,7 +446,12 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 // conflict. Applying the same edits first turns each of those paths into an
 // ordinary stage-0 entry that the new tip's tree already explains, which the
 // reconcile then folds away.
-func finishConclusion(ctx context.Context, gitDir string, state sequencer.State, result *commit.CommitResult, edits []commit.IndexEdit) error {
+//
+// The working tree goes LAST, because it is the only step whose failure leaves
+// nothing inconsistent behind: the commit is real, the state is gone and the
+// index matches it, so a file that could not be written is one named error
+// about one path rather than a repository stuck mid-operation.
+func finishConclusion(ctx context.Context, gitDir string, state sequencer.State, result *commit.CommitResult, edits []commit.IndexEdit, sides map[string]conflict.Sides, declared []resolution) error {
 	if err := sequencer.Cleanup(gitDir, state.Kind); err != nil {
 		return fmt.Errorf("commit %s was created, but removing the %s state files failed: %w", shortSHA(result.SHA), state.Kind, err)
 	}
@@ -459,8 +463,117 @@ func finishConclusion(ctx context.Context, gitDir string, state sequencer.State,
 	if err := git.ReconcileMainIndex(ctx, firstParentOf(result), "HEAD"); err != nil {
 		return fmt.Errorf("commit %s was created, but reconciling the shared index failed: %w", shortSHA(result.SHA), err)
 	}
+
+	if err := materializeResolutions(ctx, sides, declared); err != nil {
+		return fmt.Errorf("commit %s was created, but %w", shortSHA(result.SHA), err)
+	}
 	return nil
 }
+
+// materializeResolutions writes each declared resolution into the WORKING TREE,
+// so the file on disk holds what was just committed.
+//
+// This is git's own idiom, and the reason it is not optional: `git checkout
+// --ours <path>` replaces the file on disk, `git rm <path>` deletes it, and an
+// operator who says `--resolve x=ours` means the same thing by it. A conclusion
+// that resolved only the index would leave the marker-carrying file sitting in
+// the working tree, one `safegit commit -- x` away from committing the very
+// conflict markers the conclusion just resolved away.
+//
+// It runs on a SUCCEEDED conclusion only, never on a refusal and never under
+// --dry-run, because it is called from finishConclusion, which itself runs
+// nowhere else. A preview says what it would write instead.
+//
+// `worktree` is exempt by definition -- the file on disk IS the resolution --
+// and a gitlink is skipped because a submodule's working-tree state is the
+// submodule's own checkout, not a blob this repository can write.
+func materializeResolutions(ctx context.Context, sides map[string]conflict.Sides, declared []resolution) error {
+	if len(declared) == 0 {
+		return nil
+	}
+	root, err := git.RepoRoot(ctx)
+	if err != nil {
+		return fmt.Errorf("resolving the repository root to write the resolved files: %w", err)
+	}
+
+	for _, r := range declared {
+		s := sides[r.Path]
+		abs := git.Anchor(root, r.Path)
+		var writeErr error
+		switch r.Choice {
+		case resolveWorktree:
+			continue
+		case resolveDelete:
+			writeErr = removeWorktreeFile(abs)
+		case resolveOurs:
+			writeErr = writeStageToWorktree(ctx, abs, s.Ours)
+		case resolveTheirs:
+			writeErr = writeStageToWorktree(ctx, abs, s.Theirs)
+		default:
+			return fmt.Errorf("internal: %s carries an unrecognized resolution %q", r.Path, r.Choice)
+		}
+		if writeErr != nil {
+			return fmt.Errorf("writing the resolved content of %s into the working tree failed: %w", r.Path, writeErr)
+		}
+	}
+	return nil
+}
+
+// writeStageToWorktree puts one stage's blob on disk. An ABSENT stage is the
+// side that deleted the path, so resolving to it removes the file -- exactly
+// what the same absent stage does to the index entry.
+func writeStageToWorktree(ctx context.Context, abs string, e *git.UnmergedEntry) error {
+	if e == nil {
+		return removeWorktreeFile(abs)
+	}
+	switch e.Mode {
+	case gitlinkMode:
+		// A submodule's own checkout, not this repository's to write.
+		return nil
+	case symlinkMode:
+		target, err := git.CatFileBlob(ctx, e.SHA)
+		if err != nil {
+			return err
+		}
+		if err := removeWorktreeFile(abs); err != nil {
+			return err
+		}
+		return os.Symlink(string(target), abs)
+	}
+
+	content, err := git.CatFileBlob(ctx, e.SHA)
+	if err != nil {
+		return err
+	}
+	perm := os.FileMode(0644)
+	if e.Mode == executableMode {
+		perm = 0755
+	}
+	if err := os.WriteFile(abs, content, perm); err != nil {
+		return err
+	}
+	// WriteFile leaves an existing file's mode alone, and a conflict can change
+	// the executable bit, so the mode is set explicitly rather than inherited
+	// from whatever the conflicted file happened to be.
+	return os.Chmod(abs, perm)
+}
+
+// removeWorktreeFile deletes a path from disk, treating an already-absent file
+// as done. Empty parent directories are deliberately left behind: removing them
+// could take a directory another session is using.
+func removeWorktreeFile(abs string) error {
+	if err := os.Remove(abs); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+// The index modes a resolution can carry, spelled once.
+const (
+	executableMode = "100755"
+	symlinkMode    = "120000"
+	gitlinkMode    = "160000"
+)
 
 // firstParentOf is the tip the conclusion was built on: the value the shared
 // index was last in step with.
@@ -634,7 +747,8 @@ func (op continueOp) conflictListing(ctx context.Context, state sequencer.State,
 		fmt.Fprintf(&b, "      --resolve '%s=ours'      %s\n", path, sideText(s.Ours != nil, oursText))
 		fmt.Fprintf(&b, "      --resolve '%s=theirs'    %s\n", path, sideText(s.Theirs != nil, theirsText))
 		fmt.Fprintf(&b, "      --resolve '%s=worktree'  the file as it stands in your working tree right now\n", path)
-		fmt.Fprintf(&b, "      --resolve '%s=delete'    leave the path out of the commit (the file on disk is not touched)\n", path)
+		fmt.Fprintf(&b, "      --resolve '%s=delete'    leave the path out of the commit and delete the file from disk\n", path)
+		fmt.Fprintf(&b, "      (ours and theirs write the chosen content into the working tree too, as git's own checkout --ours does)\n")
 	}
 	return b.String()
 }
