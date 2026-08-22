@@ -8,15 +8,24 @@ import (
 	"github.com/smm-h/safegit/internal/exitcode"
 )
 
+// heldLock is one lock this process still holds: where it is, and which file
+// it published there. The identity travels with the path so that the
+// no-unwind exit paths remove locks under the same rule RefLock.Release does
+// -- see releaseIfOurs.
+type heldLock struct {
+	path      string
+	published os.FileInfo
+}
+
 var (
-	cleanupMu   sync.Mutex
-	pendingLocks []string
-	sigOnce     sync.Once
+	cleanupMu    sync.Mutex
+	pendingLocks []heldLock
+	sigOnce      sync.Once
 )
 
-func registerCleanup(path string) {
+func registerCleanup(path string, published os.FileInfo) {
 	cleanupMu.Lock()
-	pendingLocks = append(pendingLocks, path)
+	pendingLocks = append(pendingLocks, heldLock{path: path, published: published})
 	cleanupMu.Unlock()
 
 	sigOnce.Do(func() {
@@ -41,11 +50,15 @@ func registerCleanup(path string) {
 // itself can prevent.
 //
 // It is safe to call when no lock is held, and safe to call twice.
+//
+// Each removal is identity-checked exactly as RefLock.Release is: a lock this
+// process was force-released out of, and which another process has since
+// re-taken, is left alone rather than deleted out from under its new holder.
 func ReleasePending() {
 	cleanupMu.Lock()
 	defer cleanupMu.Unlock()
-	for _, p := range pendingLocks {
-		os.Remove(p)
+	for _, held := range pendingLocks {
+		_ = releaseIfOurs(held.path, held.published)
 	}
 	pendingLocks = nil
 }
@@ -53,7 +66,7 @@ func ReleasePending() {
 func unregisterCleanup(path string) {
 	cleanupMu.Lock()
 	for i, p := range pendingLocks {
-		if p == path {
+		if p.path == path {
 			pendingLocks = append(pendingLocks[:i], pendingLocks[i+1:]...)
 			break
 		}
