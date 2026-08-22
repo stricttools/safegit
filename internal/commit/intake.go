@@ -367,11 +367,35 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 		return nil, err
 	}
 
-	for _, spec := range specs {
+	// Every argument is canonicalized up front, because the staging loop needs
+	// to know which paths a --hunks element claims BEFORE it expands a
+	// directory that may sweep one of them up. Explicit beats expanded: the
+	// hunk selection is a statement about one file's content, the directory
+	// argument names a directory and says nothing about the file, so the
+	// expansion passes that path over and the selection stands. Deciding it by
+	// arrival order instead is how `--hunks sub/b.go:1 -- sub` used to commit
+	// sub/b.go whole -- the expansion reached the dedup set first and the
+	// explicit entry was dropped without a word.
+	//
+	// This is the precedence --untrack already has against an expansion above
+	// it, and it is scoped the same way: a contradiction between two EXPLICIT
+	// arguments is still refused, by conflictingSpellings below, which never
+	// sees a name an expansion produced.
+	rels := make([]string, len(specs))
+	hunkSelected := make(map[string]bool)
+	for i, spec := range specs {
 		rel, err := canonicalRel(repoRoot, spec.Path, namesThroughLink(spec.Path))
 		if err != nil {
 			return nil, err
 		}
+		rels[i] = rel
+		if spec.Hunks != nil {
+			hunkSelected[rel] = true
+		}
+	}
+
+	for i, spec := range specs {
+		rel := rels[i]
 
 		srcIdx := len(in.sources)
 		src := intakeSource{arg: spec.Path, path: rel}
@@ -429,6 +453,12 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 			}
 		}
 		for _, m := range expanded.members {
+			if hunkSelected[m] {
+				// A --hunks element claims this path. The expansion passes it
+				// over so the explicit selection is what gets staged, whichever
+				// argument came first.
+				continue
+			}
 			if !seen[m] {
 				seen[m] = true
 				in.entries = append(in.entries, intakeEntry{path: m, src: srcIdx})
