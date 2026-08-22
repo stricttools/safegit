@@ -1,4 +1,4 @@
-== exit non-literal (356 sites)
+== exit non-literal (351 sites)
    author_check.go:76  return in runAuthorCheck  code=exitcode.Usage  | return exitcode.Usage
    author_check.go:85  die in runAuthorCheck  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("reading git log: %v", err))
    author_check.go:142  return in runAuthorCheck  code=exitcode.General  | return exitcode.General
@@ -263,25 +263,20 @@
    scrub.go:669  die in runScrubFileInSubmodule  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("parent walk and rewrite: %v", err))
    scrub.go:758  return in runScrubFileInSubmodule  code=parentResult.TierBExit(prior)  | return parentResult.TierBExit(prior)
    scrub_exec.go:58  die in readReplacementSource  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("reading the replacement file %q (paths given to --replace-with resolve against your current directory): %v", path, err))
-   scrub_exec.go:88  die in scrubFileCommitCount  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("counting commits: %v", err))
-   scrub_exec.go:92  die in scrubFileCommitCount  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("parsing commit count: %v", err))
-   scrub_exec.go:94  return in scrubFileCommitCount  code=n  | return n
-   scrub_exec.go:98  die in scrubFileCommitCount  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("counting commits: %v", err))
-   scrub_exec.go:102  die in scrubFileCommitCount  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("parsing commit count: %v", err))
-   scrub_exec.go:104  return in scrubFileCommitCount  code=n + 1  | return n + 1 // inclusive of fromSHA
-   scrub_exec.go:113  die in scrubFileCommitRange  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
-   scrub_exec.go:119  die in scrubFileCommitRange  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
-   scrub_exec.go:169  die in executeScrubRecipe  code=exitcode.Usage  | die(exitcode.Usage, fmt.Sprintf("compiling combined pattern: %v", err))
-   scrub_exec.go:185  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
-   scrub_exec.go:201  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("building scoped blob set: %v", err))
-   scrub_exec.go:254  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
-   scrub_exec.go:269  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("building blob map: %v", err))
-   scrub_exec.go:288  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
-   scrub_exec.go:296  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
-   scrub_exec.go:302  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
-   scrub_exec.go:376  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, err.Error())
-   scrub_exec.go:479  return in estimateCommitCount  code=n  | return n
-   scrub_exec.go:486  return in estimateCommitCount  code=n + 1  | return n + 1 // inclusive of fromSHA
+   scrub_exec.go:89  die in scrubFileCommitCount  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("counting the commits in range: %v", err))
+   scrub_exec.go:91  return in scrubFileCommitCount  code=n  | return n
+   scrub_exec.go:100  die in scrubFileCommitRange  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
+   scrub_exec.go:106  die in scrubFileCommitRange  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
+   scrub_exec.go:156  die in executeScrubRecipe  code=exitcode.Usage  | die(exitcode.Usage, fmt.Sprintf("compiling combined pattern: %v", err))
+   scrub_exec.go:172  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
+   scrub_exec.go:188  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("building scoped blob set: %v", err))
+   scrub_exec.go:241  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
+   scrub_exec.go:256  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("building blob map: %v", err))
+   scrub_exec.go:275  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
+   scrub_exec.go:283  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
+   scrub_exec.go:289  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
+   scrub_exec.go:363  die in executeScrubRecipe  code=exitcode.General  | die(exitcode.General, err.Error())
+   scrub_exec.go:490  return in estimateCommitCount  code=n  | return n
    scrub_match.go:128  die in runScrubMatch  code=exitcode.Usage  | die(exitcode.Usage, fmt.Sprintf("invalid --scope glob: %v", err))
    scrub_match.go:140  die in runScrubMatch  code=exitcode.NotInitialized  | die(exitcode.NotInitialized, err.Error())
    scrub_match.go:155  die in runScrubMatch  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("resolving --from %q: %v", *from, err))
@@ -356,4 +351,4 @@
    unlock.go:104  return in runUnlock  code=exitcode.General  | return exitcode.General
    unlock.go:128  return in runUnlock  code=exitcode.General  | return exitcode.General
 
-total exit sites: 356 across 1 distinct codes
+total exit sites: 351 across 1 distinct codes

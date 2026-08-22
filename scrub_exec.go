@@ -80,28 +80,15 @@ func scrubRangeSummary(fromSHA string, entireHistory bool) string {
 	return fromSHA + "..HEAD (inclusive)"
 }
 
-// scrubFileCommitCount counts the commits the elected range covers.
+// scrubFileCommitCount counts the commits the elected range covers, dying on a
+// failure: the count is a figure `scrub file` prints and puts in its payload,
+// and printing a wrong one is worse than refusing.
 func scrubFileCommitCount(ctx context.Context, fromSHA string, entireHistory bool) int {
-	if entireHistory {
-		out, _, err := git.Run(ctx, "rev-list", "--count", "HEAD")
-		if err != nil {
-			die(exitcode.General, fmt.Sprintf("counting commits: %v", err))
-		}
-		n, err := strconv.Atoi(strings.TrimSpace(out))
-		if err != nil {
-			die(exitcode.General, fmt.Sprintf("parsing commit count: %v", err))
-		}
-		return n
-	}
-	out, _, err := git.Run(ctx, "rev-list", "--count", fromSHA+"..HEAD")
+	n, err := commitCountInRange(ctx, fromSHA, entireHistory)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("counting commits: %v", err))
+		die(exitcode.General, fmt.Sprintf("counting the commits in range: %v", err))
 	}
-	n, err := strconv.Atoi(strings.TrimSpace(out))
-	if err != nil {
-		die(exitcode.General, fmt.Sprintf("parsing commit count: %v", err))
-	}
-	return n + 1 // inclusive of fromSHA
+	return n
 }
 
 // scrubFileCommitRange lists the commits to walk, oldest first, for the elected
@@ -466,27 +453,41 @@ func executeScrubRecipe(
 	return result.TierBExit(exitcode.OK), &result
 }
 
-// estimateCommitCount returns the number of commits in the rewrite range.
-// For entireHistory, it counts all commits reachable from HEAD. For range mode,
-// it counts commits in fromSHA..HEAD plus one (inclusive of fromSHA).
-// Returns 0 if the count cannot be determined.
-func estimateCommitCount(ctx context.Context, fromSHA string, entireHistory bool) int {
-	if entireHistory {
-		out, _, err := git.Run(ctx, "rev-list", "--count", "HEAD")
-		if err == nil {
-			var n int
-			fmt.Sscanf(strings.TrimSpace(out), "%d", &n)
-			return n
+// commitCountInRange counts the commits an elected range covers: every commit
+// reachable from HEAD for the whole history, or fromSHA..HEAD plus one for a
+// range, because --from is inclusive. It is the single answer to "how many
+// commits does this rewrite cover", which the preview and the execution both
+// print.
+func commitCountInRange(ctx context.Context, fromSHA string, entireHistory bool) (int, error) {
+	spec := "HEAD"
+	inclusive := 0
+	if !entireHistory {
+		if fromSHA == "" {
+			return 0, fmt.Errorf("no --from commit to count from")
 		}
-	} else if fromSHA != "" {
-		out, _, err := git.Run(ctx, "rev-list", "--count", fromSHA+"..HEAD")
-		if err == nil {
-			var n int
-			fmt.Sscanf(strings.TrimSpace(out), "%d", &n)
-			return n + 1 // inclusive of fromSHA
-		}
+		spec = fromSHA + "..HEAD"
+		inclusive = 1
 	}
-	return 0
+	out, _, err := git.Run(ctx, "rev-list", "--count", spec)
+	if err != nil {
+		return 0, err
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(out))
+	if err != nil {
+		return 0, fmt.Errorf("parsing the commit count %q: %w", strings.TrimSpace(out), err)
+	}
+	return n + inclusive, nil
+}
+
+// estimateCommitCount is the preview's reading of the same count: a figure it
+// reports about a rewrite it is not performing, so a failure yields 0 rather
+// than aborting a read-only command.
+func estimateCommitCount(ctx context.Context, fromSHA string, entireHistory bool) int {
+	n, err := commitCountInRange(ctx, fromSHA, entireHistory)
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // TagBodyTransformFunc transforms the body of an annotated tag. It receives the
