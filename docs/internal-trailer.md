@@ -1,7 +1,8 @@
 ---
 title: internal/trailer
-description: "Package trailer injects git trailers (key-value metadata lines) into commit messages for AI agent traceability and session attribution."
+description: "Package trailer reads and writes the key-value metadata lines at the end of a commit message: the session attribution safegit injects, and the move records a commit declares."
 generated: true
+seeded: true
 nav_group: "API Reference"
 nav_order: 21
 ---
