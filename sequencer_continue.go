@@ -39,7 +39,9 @@ import (
 //  3. Refuses the three states it cannot conclude: nothing in flight, another
 //     operation in flight, a detached HEAD.
 //  4. Checks the declared resolutions against the conflict actually in the
-//     shared index -- every conflicted path named, and nothing else named.
+//     shared index -- every conflicted path named, and nothing else named --
+//     and then verifies that the content they name carries no surviving
+//     conflict marker.
 //  5. Runs the commit pipeline with the shared index as its base, the state
 //     file's commits as extra parents, and the resolutions as index edits.
 //  6. Removes the operation's whole state-file set, reconciles the shared
@@ -358,6 +360,11 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		return exitcode.General
 	}
 	if code := op.checkCompleteness(ctx, state, sides, declared); code != 0 {
+		return code
+	}
+	// The resolutions name the right paths; now the content those paths carry
+	// has to be free of the conflict itself. See sequencer_markers.go.
+	if code := op.verifyMarkers(ctx, state, sides, declared); code != 0 {
 		return code
 	}
 

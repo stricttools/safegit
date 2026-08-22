@@ -1248,6 +1248,7 @@ coordination guard, an uninitialized repository, a rejected argument).
 | 15 | Hunk spec given for a symlink, which has no hunks to select |
 | 16 | A pre-commit or commit-msg hook refused the commit |
 | 17 | A conclusion's declared resolutions do not match the conflicted paths in the index |
+| 18 | A conclusion's content still holds a complete conflict region |
 | 20 | Pre-pre-push hook failed |
 | 21 | Pre-pre-push hook timed out |
 | 22 | The remote backup slot holds work missing from the local history |
