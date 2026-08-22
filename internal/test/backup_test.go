@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
@@ -502,4 +503,62 @@ func TestApproveConsequentialDoesNotConsentToAnUnprovenRemote(t *testing.T) {
 			t.Errorf("the consented backup must reach the remote, got: %s", stderr)
 		}
 	})
+}
+
+// TestBackupRestoreMidMergeNamesTheOperation pins what `backup restore` owes an
+// operator whose working tree is dirty because git has a merge in flight, not
+// because they have uncommitted work of their own.
+//
+// The restore is a `merge --ff-only` onto the current branch, so the
+// coordination guard refuses it while an operation owns the tree. The guard
+// reads git's OWN in-flight state (MERGE_HEAD, .git/sequencer, rebase-merge/)
+// out of the git directory: handed the safegit directory instead it found
+// nothing in flight and printed the ordinary "commit your work" suggestion,
+// which mid-merge cannot be followed -- committing the conflict is the one
+// thing safegit refuses to do.
+func TestBackupRestoreMidMergeNamesTheOperation(t *testing.T) {
+	dir, _ := newRepoWithRemote(t)
+
+	// A conflicted merge, built with plain git so the fixture owes nothing to
+	// safegit's own commit path.
+	testutil.WriteFile(t, dir, "conflicted.txt", "line1\nbase\nline3\n")
+	testutil.Git(t, dir, "add", "conflicted.txt")
+	testutil.Git(t, dir, "commit", "-m", "base")
+	testutil.Git(t, dir, "branch", "feature")
+	testutil.Git(t, dir, "switch", "feature")
+	testutil.WriteFile(t, dir, "conflicted.txt", "line1\nfeature\nline3\n")
+	testutil.Git(t, dir, "add", "conflicted.txt")
+	testutil.Git(t, dir, "commit", "-m", "feature edit")
+	testutil.Git(t, dir, "switch", "main")
+	testutil.WriteFile(t, dir, "conflicted.txt", "line1\nmain\nline3\n")
+	testutil.Git(t, dir, "add", "conflicted.txt")
+	testutil.Git(t, dir, "commit", "-m", "main edit")
+	if out, code := testutil.GitTry(t, dir, "merge", "feature"); code == 0 {
+		t.Fatalf("fixture is wrong: the merge did not conflict: %s", oneLine(out))
+	}
+	head := testutil.Rev(t, dir, "HEAD")
+
+	_, stderr, code := runSafegit(t, dir, "backup", "restore", "origin")
+
+	if code != exitcode.CoordinationBusy {
+		t.Errorf("backup restore mid-merge exited %d, want %d (CoordinationBusy); stderr: %s",
+			code, exitcode.CoordinationBusy, oneLine(stderr))
+	}
+	if !strings.Contains(stderr, "merge is in progress") &&
+		!strings.Contains(stderr, "a merge") {
+		t.Errorf("the refusal must name the merge that owns the tree, got: %s", oneLine(stderr))
+	}
+	if !strings.Contains(stderr, "git merge --abort") {
+		t.Errorf("the refusal must name a way out of the merge, got: %s", oneLine(stderr))
+	}
+	if strings.Contains(stderr, "safegit commit -m") {
+		t.Errorf("mid-merge the ordinary commit-your-work advice cannot be followed, "+
+			"so the refusal must not print it, got: %s", oneLine(stderr))
+	}
+	if got := testutil.Rev(t, dir, "HEAD"); got != head {
+		t.Errorf("HEAD moved to %s despite the refusal (was %s)", got, head)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".git", "MERGE_HEAD")); err != nil {
+		t.Errorf("the merge must still be in flight after the refusal: %v", err)
+	}
 }
