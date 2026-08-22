@@ -38,12 +38,24 @@ All safegit-specific state lives under `.git/safegit/`. Nothing escapes that dir
     tmp/
       <pid>-<random>/        per-invocation scratch (index file, synthetic patches)
                              deleted when the invocation exits
+    hooks/
+      pre-pre-push           single-file hook (executable, optional)
+      pre-pre-push.d/        directory of hooks (run in lexical order, optional)
   hooks/
-    pre-pre-push             single-file hook (executable, optional)
-    pre-pre-push.d/          directory of hooks (run in lexical order, optional)
+    pre-pre-push             PRE-MIGRATION location; nothing runs from here
+    pre-pre-push.d/          PRE-MIGRATION location; nothing runs from here
 ```
 
-There is no `.safegit/` repo-tracked directory. All hooks live in `.git/hooks/` only.
+### The two hook stores
+
+Pre-pre-push hooks live in two stores, and they are not interchangeable:
+
+- The **live store**, `.git/safegit/hooks/`, is safegit's own. `safegit hook install` writes here, and it is keyed on the repository's **common** git dir -- the same anchor as the ref locks -- so a hook installed from a linked worktree is the hook every worktree of the repository runs.
+- The **checkout-provided store**, `.safegit/hooks/` in the work tree, is repository content, so everyone who clones the repository gets it. It is per-worktree by nature, because it *is* the checkout. Membership is the directory on disk, never git's tracking: an uncommitted -- even gitignored -- executable file there runs on the next push exactly like a committed one, and a tracking probe would instead make a hook an operator just wrote silently invisible while it kept running.
+
+The consequence, stated plainly: **cloning a repository and pushing from that checkout runs the repository's committed scripts.** Execution happens only on `safegit push` and `safegit hook run` -- an operator action with push intent -- never on clone, fetch, checkout or any inspection command, and `safegit hook list` names every location with its origin so the set can be read before anything is pushed.
+
+Git's own `.git/hooks/` is the third location safegit knows about, and only as history: it is where safegit kept its pre-pre-push hooks before the live store existed. Nothing runs from there any more. `pre-pre-push` and `pre-pre-push.d/` sitting there make every push and every `hook run` refuse (exit 24) until `safegit hook migrate` relocates them, which it does unconditionally, since those two names are the only ones safegit ever wrote into git's directory. Because git's hook directory is common to every worktree, so are that refusal and that migration.
 
 ### Per-invocation tmp index
 
@@ -264,16 +276,18 @@ Git's built-in `pre-push` hook fires AFTER the network connection to the remote 
 
 safegit does NOT install git hooks that block raw `git commit` / `git push` invocations. Enforcement is at the Claude Code `settings.json` layer (Bash permission rules) and via convention. Agents that bypass safegit by running `git` directly are responsible for the consequences; `safegit doctor` will surface bypasses by detecting `HEAD` movements that have no corresponding op log entry.
 
-The only safegit-installed hook is `.git/hooks/pre-pre-push`, which is a wrapper that lets the user define long-running pre-push validators that run before the network connection opens. It is informational, not coercive.
+The hooks safegit does install are its own pre-pre-push scripts, in its own store (`.git/safegit/hooks/`, see "The two hook stores"): a place for the user to define long-running pre-push validators that run before the network connection opens. They are informational, not coercive, and they are not git hooks -- git never runs them.
 
 ### Hook discovery
 
-safegit discovers pre-pre-push hooks from two locations: a single-file hook and a directory of hooks. All discovered hooks are executed in a deterministic order, and the first non-zero exit code aborts the push before any network connection is opened. Non-executable files in the directory are skipped with a warning that `safegit doctor` surfaces during health checks.
+safegit discovers pre-pre-push hooks by walking both stores in full, at any depth, in a deterministic order: the checkout-provided store first, then the live store, each sorted by its store-relative name. The first non-zero exit code aborts the push before any network connection is opened.
 
-1. `.git/hooks/pre-pre-push` (single file)
-2. `.git/hooks/pre-pre-push.d/*` (lexical order, `*` skips files starting with `.` or ending in `~`)
+1. `.safegit/hooks/**` -- the checkout-provided store (work tree)
+2. `.git/safegit/hooks/**` -- the live store (common git dir)
 
-A hook must be executable (`chmod +x`). Non-executable files in `.d/` are skipped with a warning (`safegit doctor` reports them).
+Within each store the traditional two shapes are just names: `pre-pre-push` is the single-file hook and `pre-pre-push.d/*` the directory of them, and anything else in the store is a hook too. Files starting with `.` or ending in `~` are not hooks by name and are never run.
+
+A hook must be executable (`chmod +x`). A non-executable hook in the LIVE store is skipped with a warning (`safegit doctor` reports it, and git takes the same stance for its own hooks). A non-executable hook in the CHECKOUT-PROVIDED store is a refusal instead (exit 25): such a hook is disabled by deleting it and committing that, so a lost mode bit -- a checkout on a filesystem without modes, a patch tool that dropped it -- must not silently stop the repository's checks.
 
 Standard git hooks live in `.git/hooks/` as usual. safegit builds commits from git plumbing rather than by invoking `git commit`, so it runs the commit family itself: `pre-commit` against the per-invocation index, `commit-msg` on the composed message before safegit's own session trailer is added (a rewrite by the hook is adopted), and `post-commit` after the ref has moved. Each runs once per commit, amend or reword, whatever the compare-and-swap loop does, and a `--dry-run` runs none of them and says so. `prepare-commit-msg` never runs: safegit never opens an editor, so there is no message-preparation step for it to act on.
 

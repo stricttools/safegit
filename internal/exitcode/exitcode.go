@@ -181,17 +181,20 @@ const (
 	// them from there would make the store safegit executes from depend on
 	// where a file happened to be left, and skipping them would stop an
 	// operator's checks in silence, so discovery refuses. The remedy is one
-	// command: `safegit hook migrate`. Produced by push, `hook run` and
-	// `hook list`.
+	// command: `safegit hook migrate`. Produced by push, `hook run`,
+	// `hook list` and `hook remove` -- remove reaches it when the named hook
+	// exists only in the legacy location, where it is not this command's to
+	// delete until migration has moved it.
 	HooksNotMigrated = 24
 
-	// TrackedHookNotExecutable means a hook committed to the repository's
-	// .safegit/hooks store is not executable. A committed hook is disabled by
-	// committing its DELETION, never by dropping its mode, so a lost executable
-	// bit is treated as the accident it almost always is rather than as an
-	// intentional disabling that would stop the checks in silence. The remedy
-	// is `chmod +x` plus a commit of the mode change. Produced by push and
-	// `hook run`.
+	// TrackedHookNotExecutable means a hook the CHECKOUT provides, in the
+	// repository's .safegit/hooks store, is not executable. Such a hook is
+	// disabled by DELETING it and committing that, never by dropping its mode,
+	// so a lost executable bit is treated as the accident it almost always is
+	// rather than as an intentional disabling that would stop the checks in
+	// silence. (Membership of that store is the directory itself, not git's
+	// tracking: an uncommitted file there runs too.) The remedy is `chmod +x`
+	// plus a commit of the mode change. Produced by push and `hook run`.
 	TrackedHookNotExecutable = 25
 
 	// RewriteRefused means a history rewrite was refused by the verification
@@ -302,7 +305,7 @@ func All() []Entry {
 		{BackupDiverged, "BackupDiverged", "The remote backup slot holds work missing from the local history"},
 		{BackupNoSlot, "BackupNoSlot", "The branch has no backup slot on the remote"},
 		{HooksNotMigrated, "HooksNotMigrated", "Hooks are still in the pre-migration .git/hooks location (run `safegit hook migrate`)"},
-		{TrackedHookNotExecutable, "TrackedHookNotExecutable", "A hook committed to .safegit/hooks is not executable"},
+		{TrackedHookNotExecutable, "TrackedHookNotExecutable", "A hook the checkout provides in .safegit/hooks is not executable"},
 		{RewriteRefused, "RewriteRefused", "A history rewrite was refused before any ref moved (nothing changed)"},
 		{RewriteIncomplete, "RewriteIncomplete", "A history rewrite stands, but post-rewrite verification found residue or skipped the working-tree sync"},
 		{PushFailed, "PushFailed", "The push did not get through: git push failed, or the refs could not be safely re-read around it"},

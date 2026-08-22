@@ -219,7 +219,8 @@ safegit push --refs both
 
 ### Safety Guarantees
 
-- **Pre-pre-push hooks**: Hooks installed in `.git/safegit/hooks/` (or `.git/hooks/pre-pre-push.d/`) run before any network I/O. A failing hook aborts the push (exit code 20). A timed-out hook aborts with exit code 21.
+- **Pre-pre-push hooks**: Hooks in the live store under the repository's common `.git/safegit/hooks/`, and hooks the checkout provides in `.safegit/hooks/`, run before any network I/O. A failing hook aborts the push (exit code 20). A timed-out hook aborts with exit code 21. Hooks still sitting in the pre-migration location, `.git/hooks/pre-pre-push` and `.git/hooks/pre-pre-push.d/`, do **not** run at all: every push and every `hook run` refuses with exit code 24 until `safegit hook migrate` moves them.
+- **Where hooks run from, and who can put one there**: the live store is keyed on the **common** git dir, so a hook installed from a linked worktree is the hook every worktree of the repository runs -- the same anchor the ref locks use. The checkout-provided store is per-worktree, because it is checkout content: a file is in it because it sits in `.safegit/hooks/`, whether or not git tracks it, so an uncommitted script there runs on the next push. That means **cloning a repository and pushing from that checkout runs the repository's committed scripts**. Execution happens only on `safegit push` and `safegit hook run` -- an operator action with push intent -- never on clone, fetch, checkout or any inspection command, and `safegit hook list` names every location with its origin so the set can be read before anything is pushed.
 - **Submodule hook cascading**: When pushing from inside a submodule, hooks from the parent repo are discovered and run first, then the submodule's own hooks.
 - **Automatic retry**: Transport errors (connection refused, DNS failure, TLS errors, broken pipe) are classified from git's own stderr and trigger automatic retries with exponential backoff (1s, 2s, 4s). Every retry re-reads the remote and re-pins the leases, so an expectation is never carried over from a failed attempt. Non-transport errors (non-fast-forward, permission denied, a stale lease) are not retried. Default: 3 attempts, configurable via `push.retryAttempts`.
 - **Pinned per-ref leases**: `--force-with-lease` sends one expectation per ref, `--force-with-lease=<remoteRef>:<sha>`, pinned to the SHA safegit itself observed on the remote -- or the empty expectation ("this ref must not exist yet") for a ref the remote does not have. A bare `--force-with-lease` would compare against the remote-tracking ref instead, which tags do not have at all: git zeroes the expectation there and refuses to move any tag the remote already carries, which made pushing rewritten tags impossible.
@@ -1104,7 +1105,19 @@ Configuration is stored in `.git/safegit/config.json`.
 
 ## hook list
 
-List all pre-pre-push hooks currently installed in the `.git/safegit/hooks/` directory, showing each hook's name, file path, and whether it is executable, so you can audit which checks run before every push.
+List every pre-pre-push hook location safegit knows about, showing each hook's store-relative name, origin, file path, and whether it is executable, so you can audit which checks run before every push.
+
+### The three origins
+
+| Origin | Where | Runs when |
+|--------|-------|-----------|
+| `local` | The tool-owned live store under the repository's **common** `.git/safegit/hooks/`, which `hook install` writes to and every worktree shares | Every `safegit push` and `safegit hook run`. A non-executable one is skipped with a warning |
+| `tracked` | The hooks the **checkout** provides, in `.safegit/hooks/` in the work tree | Every `safegit push` and `safegit hook run`, before the local ones. A non-executable one is a refusal (exit code 25), never a silent skip |
+| `legacy` | The pre-migration location in git's own `.git/hooks/` (`pre-pre-push` and `pre-pre-push.d/`) | Never. Their presence makes every push and `hook run` refuse with exit code 24 until `safegit hook migrate` relocates them |
+
+Membership of the checkout-provided store is the directory, not git: an uncommitted -- even gitignored -- executable file in `.safegit/hooks/` runs on the next push exactly like a committed one. So cloning a repository and pushing from that checkout runs the repository's scripts; that execution happens only on push and `hook run`, never on clone or inspection, and this listing is how the set is read beforehand.
+
+Non-executable entries, dot-files and editor backups are listed too, because the hook an operator is asking about is usually the one that is *not* running. A dot-prefixed or `~`-suffixed entry is shown as `not a hook`, and anything without an execute bit as `NOT EXECUTABLE`.
 
 ### Examples
 
@@ -1112,7 +1125,7 @@ List all pre-pre-push hooks currently installed in the `.git/safegit/hooks/` dir
 safegit hook list
 ```
 
-Shows each hook's name and file path.
+Shows each hook's name, origin, state and file path, then exits 24 if any legacy-location hook was listed.
 
 ## hook run
 
@@ -1144,7 +1157,7 @@ pretending. Use `safegit hook list` to see which scripts a push would run.
 
 ## hook install
 
-Install a pre-pre-push hook by copying a script file into the `.git/safegit/hooks/` directory and making it executable, so it will run automatically before every `safegit push` operation performs any network I/O.
+Install a pre-pre-push hook by copying a script file into the live store under the repository's common `.git/safegit/hooks/` directory and making it executable, so it will run automatically before every `safegit push` operation performs any network I/O. Because the store is keyed on the common git dir, a hook installed from a linked worktree is the same hook every worktree of the repository runs. An existing destination is refused rather than overwritten: upgrading a hook is `safegit hook remove <name>` followed by an install.
 
 ### Arguments
 
@@ -1239,7 +1252,7 @@ coordination guard, an uninitialized repository, a rejected argument).
 | 22 | The remote backup slot holds work missing from the local history |
 | 23 | The branch has no backup slot on the remote |
 | 24 | Hooks are still in the pre-migration .git/hooks location (run `safegit hook migrate`) |
-| 25 | A hook committed to .safegit/hooks is not executable |
+| 25 | A hook the checkout provides in .safegit/hooks is not executable |
 | 30 | A history rewrite was refused before any ref moved (nothing changed) |
 | 31 | A history rewrite stands, but post-rewrite verification found residue or skipped the working-tree sync |
 | 40 | The push did not get through: git push failed, or the refs could not be safely re-read around it |
