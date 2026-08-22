@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -107,15 +108,6 @@ func joinMessages(messages []string) string {
 	return strings.Join(messages, "\n\n")
 }
 
-// firstOr returns the list's first element, or "" for an empty list: the
-// commit's first parent, which is also the value its ref moved away from.
-func firstOr(list []string) string {
-	if len(list) == 0 {
-		return ""
-	}
-	return list[0]
-}
-
 // realSHA reports the commit SHA a run actually created, and nothing under a
 // dry run.
 func realSHA(flags globalFlags, sha string) *string {
@@ -216,7 +208,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		}
 	}
 
-	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg}
+	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
 	result, err := p.Execute(flags.ctx(), commit.CommitRequest{
 		Message:    msg,
 		FileSpecs:  fileSpecs,
@@ -240,8 +232,6 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "commit", firstLine(msg)); err != nil {
 		die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 	}
-
-	recordCommitRefUpdate(flags, result.Ref, result.SHA, firstOr(result.Parents))
 
 	flags.payload(commitPayload{
 		Ref:            result.Ref,
@@ -300,29 +290,56 @@ func wouldWriteHeader(verb, ref, tree, subject string) string {
 // same thing on the history-rewrite side.
 const previewCommitPlaceholder = "<new-commit>"
 
-// recordCommitRefUpdate puts the commit pipeline's ref move into the
-// framework's would-do log.
+// effectsRefUpdate is the commit pipeline's ref update, minted through the
+// framework's effects handle.
 //
-// The pipeline (internal/commit) owns its own dry-run seam: it builds the tree
-// and the commit object, then returns WITHOUT the compare-and-swap ref update
-// that would make the commit real. That seam predates the effects regime and
-// cannot move onto the handle without breaking the CAS retry loop the update
-// sits inside, so the mint here is deliberately dry-mode-only -- in a real run
-// the pipeline performs the update itself. Without it a `commit --dry-run`
-// would print an empty would-do log, which reads as "this would change
-// nothing".
-func recordCommitRefUpdate(flags globalFlags, ref, newSHA, oldSHA string) {
-	if !flags.dryRun {
-		return
+// It is the pipeline's ONLY way to move a ref, and it is one mint site rather
+// than two: a handler-side record alongside the pipeline's own update would
+// fire twice per commit, and the second would describe a move that had already
+// happened. The pipeline calls this from inside its compare-and-swap retry
+// loop, holding the ref lock, with the argv that loop needs -- so an executing
+// run performs exactly this invocation, retries included, and a preview records
+// it and performs nothing.
+//
+// Check(false) is what lets a failure keep its meaning: the framework's checked
+// form turns a nonzero child into a formatted string with git's own stderr
+// dropped, and the pipeline reads that stderr to tell a transient ref-lock
+// contention ("cannot lock ref") from a real refusal.
+type effectsRefUpdate struct{ flags globalFlags }
+
+func (u effectsRefUpdate) Update(_ context.Context, ref, newSHA, expected string) error {
+	if expected == "" {
+		expected = git.ZeroSHA
 	}
-	if oldSHA == "" {
-		oldSHA = git.ZeroSHA
+	// A preview cannot name the commit it would create, so the record carries
+	// the placeholder; the ref and the expected value are real.
+	recorded := newSHA
+	if u.flags.dryRun {
+		recorded = previewCommitPlaceholder
 	}
-	argv, err := gitexec.ArgvAny(gitexec.ExemptCommitRefUpdateRecord, "update-ref", ref, previewCommitPlaceholder, oldSHA)
+
+	argv, err := gitexec.ArgvAny(gitexec.ExemptCommitRefUpdate, "update-ref", ref, recorded, expected)
 	if err != nil {
-		return
+		return err
 	}
-	_, _ = flags.effects().Run(argv, strictcli.Resource("ref:"+ref))
+	done, err := u.flags.effects().Run(argv, strictcli.Resource("ref:"+ref), strictcli.Check(false))
+	if err != nil {
+		// A framework-level refusal: no child ran, and the message is the
+		// framework's own.
+		return err
+	}
+	if u.flags.dryRun {
+		// Recorded instead of performed. No child process ran, so the carrier
+		// is unsettled and asking it anything would panic -- and there is
+		// nothing to ask: the pipeline reads nil as "the ref did not move",
+		// which is exactly what happened.
+		return nil
+	}
+	if code := done.ExitCode(); code != 0 {
+		return fmt.Errorf("update-ref %s %s %s: exit %d: %s",
+			ref, newSHA, expected, code, strings.TrimSpace(done.Stderr()))
+	}
+	return nil
 }
 
 func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch string, trailers []string, files []string, hunks []string, untrack []string) {
@@ -347,7 +364,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 	}
 	defer release()
 
-	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg}
+	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
 
 	if len(files) > 0 || len(hunks) > 0 || len(untrack) > 0 {
 		// Amend: add new files to the tip commit
@@ -395,8 +412,6 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "amend", firstLine(msg)); err != nil {
 			die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 		}
-
-		recordCommitRefUpdate(flags, result.Ref, result.SHA, result.OldSHA)
 
 		flags.payload(commitPayload{
 			Ref:            result.Ref,
@@ -465,8 +480,6 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "reword", firstLine(msg)); err != nil {
 			die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 		}
-
-		recordCommitRefUpdate(flags, result.Ref, result.SHA, result.OldSHA)
 
 		// A reword replaces a message and nothing else, so its changed-path
 		// list is empty by construction rather than by measurement.

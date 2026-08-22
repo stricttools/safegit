@@ -84,6 +84,73 @@
   "name": "safegit",
   "version": "0.28.0",
   "help": "concurrency-safe git wrapper providing 31 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
+  "proc_observe_allowlist": [
+    [
+      "git",
+      "--no-optional-locks",
+      "--version"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
+      "cat-file"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
+      "check-ignore"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
+      "diff"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
+      "diff-tree"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
+      "for-each-ref"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
+      "log"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
+      "ls-files"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
+      "ls-tree"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
+      "merge-base"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
+      "rev-list"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
+      "rev-parse"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
+      "status"
+    ]
+  ],
   "global_flags": [
     {
       "name": "config-file",
@@ -99,10 +166,69 @@
       "name": "commit",
       "help": "stage and commit specified files in a single atomic operation",
       "effect": "mutating",
+      "payload_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "old_sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "parents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "skipped_ignored": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tree": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "parents",
+          "tree",
+          "sha",
+          "old_sha",
+          "files",
+          "skipped_ignored",
+          "attempts",
+          "dry_run"
+        ],
+        "type": "object"
+      },
       "flags": [
         {
           "name": "m",
-          "help": "commit message line; can be repeated to build multi-line messages",
+          "help": "commit message paragraph; repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body",
           "value_schema": {
             "type": "array",
             "items": {
@@ -157,12 +283,36 @@
             }
           },
           "presence": "optional"
+        },
+        {
+          "name": "hunks",
+          "help": "commit only the selected hunks of one file, as 'path:1,3' or 'path:2-4' (the split is on the last colon, so a path containing colons stays intact); repeatable, once per path; omitted means every named file is committed whole",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "optional",
+          "unique": true
+        },
+        {
+          "name": "untrack",
+          "help": "stop tracking a path, leaving the file itself on disk: the commit records its removal from the index (repeatable, one path each); the path must be tracked in the commit's parent; omitted means nothing is untracked",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "optional",
+          "unique": true
         }
       ],
       "args": [
         {
           "name": "files",
-          "help": "files to commit (supports hunk specs: file.go:1,3)",
+          "help": "files to commit, taken literally -- a colon in an argument is part of the filename, and hunk selection is --hunks",
           "value_schema": {
             "type": "array",
             "items": {
@@ -172,6 +322,9 @@
           "presence": "optional",
           "variadic": true
         }
+      ],
+      "tags": [
+        "json"
       ],
       "grants": [
         {

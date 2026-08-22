@@ -224,6 +224,39 @@ func (p *Pipeline) tryAmend(
 		return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
 	}
 
+	// --- Phase B: lock and CAS update ---
+	//
+	// A preview takes no lock and re-reads nothing; it joins here, at the ref
+	// update, which it records instead of performing.
+	if !req.DryRun {
+		lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second
+		if lockTimeout <= 0 {
+			lockTimeout = 30 * time.Second
+		}
+		refLock, err := lock.Acquire(repo.SharedSafegitDir(ctx, p.SafegitDir), p.SafegitDir, ref, "amend", lockTimeout)
+		if err != nil {
+			return nil, false, fmt.Errorf("acquiring lock on %s: %w", ref, err)
+		}
+		defer refLock.Release()
+
+		// CAS: ref must still point at headSHA (the commit we're replacing)
+		currentTip, err := git.RevParse(ctx, ref)
+		if err != nil {
+			return nil, false, fmt.Errorf("re-resolving %s for CAS: %w", ref, err)
+		}
+		if currentTip != headSHA {
+			return nil, true, nil // CAS miss, retry
+		}
+	}
+
+	// Update ref: old = headSHA, new = commitSHA
+	if err := p.updateRef(ctx, ref, commitSHA, headSHA); err != nil {
+		if isTransientRefError(err) {
+			return nil, true, nil
+		}
+		return nil, false, fmt.Errorf("update-ref CAS failed: %w", err)
+	}
+
 	if req.DryRun {
 		return &AmendResult{
 			SHA:            commitSHA,
@@ -235,34 +268,6 @@ func (p *Pipeline) tryAmend(
 			Files:          changedPaths(changed),
 			SkippedIgnored: files.skipped,
 		}, false, nil
-	}
-
-	// --- Phase B: lock and CAS update ---
-	lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second
-	if lockTimeout <= 0 {
-		lockTimeout = 30 * time.Second
-	}
-	refLock, err := lock.Acquire(repo.SharedSafegitDir(ctx, p.SafegitDir), p.SafegitDir, ref, "amend", lockTimeout)
-	if err != nil {
-		return nil, false, fmt.Errorf("acquiring lock on %s: %w", ref, err)
-	}
-	defer refLock.Release()
-
-	// CAS: ref must still point at headSHA (the commit we're replacing)
-	currentTip, err := git.RevParse(ctx, ref)
-	if err != nil {
-		return nil, false, fmt.Errorf("re-resolving %s for CAS: %w", ref, err)
-	}
-	if currentTip != headSHA {
-		return nil, true, nil // CAS miss, retry
-	}
-
-	// Update ref: old = headSHA, new = commitSHA
-	if err := git.UpdateRef(ctx, ref, commitSHA, headSHA); err != nil {
-		if isTransientRefError(err) {
-			return nil, true, nil
-		}
-		return nil, false, fmt.Errorf("update-ref CAS failed: %w", err)
 	}
 
 	// Oplog, recorded before the index is reconciled: a reconciliation failure
@@ -453,7 +458,42 @@ func (p *Pipeline) tryReword(
 	// depends on the committer timestamp and so cannot be the SHA the real run
 	// will produce. Building the object anyway would write it into the
 	// repository (or, since the quarantine, into a throwaway store) to compute
-	// a number nothing may report. So the preview stops here.
+	// a number nothing may report. So a preview builds nothing, locks nothing
+	// and re-reads nothing; it joins the executing path at the ref update,
+	// which it records instead of performing.
+	commitSHA := ""
+	if !req.DryRun {
+		commitSHA, err = git.CommitTree(ctx, treeSHA, parents, trailer.Inject(msg), nil)
+		if err != nil {
+			return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
+		}
+
+		lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second
+		if lockTimeout <= 0 {
+			lockTimeout = 30 * time.Second
+		}
+		refLock, err := lock.Acquire(repo.SharedSafegitDir(ctx, p.SafegitDir), p.SafegitDir, ref, "reword", lockTimeout)
+		if err != nil {
+			return nil, false, fmt.Errorf("acquiring lock on %s: %w", ref, err)
+		}
+		defer refLock.Release()
+
+		currentTip, err := git.RevParse(ctx, ref)
+		if err != nil {
+			return nil, false, fmt.Errorf("re-resolving %s for CAS: %w", ref, err)
+		}
+		if currentTip != headSHA {
+			return nil, true, nil
+		}
+	}
+
+	if err := p.updateRef(ctx, ref, commitSHA, headSHA); err != nil {
+		if isTransientRefError(err) {
+			return nil, true, nil
+		}
+		return nil, false, fmt.Errorf("update-ref CAS failed: %w", err)
+	}
+
 	if req.DryRun {
 		return &RewordResult{
 			Ref:      ref,
@@ -462,36 +502,6 @@ func (p *Pipeline) tryReword(
 			OldSHA:   headSHA,
 			Attempts: attempt,
 		}, false, nil
-	}
-
-	commitSHA, err := git.CommitTree(ctx, treeSHA, parents, trailer.Inject(msg), nil)
-	if err != nil {
-		return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
-	}
-
-	lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second
-	if lockTimeout <= 0 {
-		lockTimeout = 30 * time.Second
-	}
-	refLock, err := lock.Acquire(repo.SharedSafegitDir(ctx, p.SafegitDir), p.SafegitDir, ref, "reword", lockTimeout)
-	if err != nil {
-		return nil, false, fmt.Errorf("acquiring lock on %s: %w", ref, err)
-	}
-	defer refLock.Release()
-
-	currentTip, err := git.RevParse(ctx, ref)
-	if err != nil {
-		return nil, false, fmt.Errorf("re-resolving %s for CAS: %w", ref, err)
-	}
-	if currentTip != headSHA {
-		return nil, true, nil
-	}
-
-	if err := git.UpdateRef(ctx, ref, commitSHA, headSHA); err != nil {
-		if isTransientRefError(err) {
-			return nil, true, nil
-		}
-		return nil, false, fmt.Errorf("update-ref CAS failed: %w", err)
 	}
 
 	// Oplog before reconciliation, for the same reason as amend: a fatal

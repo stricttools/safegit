@@ -54,18 +54,19 @@ func runGitMutation(flags globalFlags, args ...string) int {
 		// exposes no settled-ness: Completed's `settled` field is unexported
 		// and its only public methods (ExitCode, Stdout, Stderr) panic instead
 		// of reporting it, and Effects.Recorded() cannot serve as a probe
-		// because calling it claims the would-do render. The coupling that
-		// makes the flag a correct stand-in is that safegit declares NO
-		// app-level proc-observe allowlist, so no argv reaches Run's observe
-		// branch -- which executes the child even in dry mode and returns a
-		// settled Completed.
+		// because calling it claims the would-do render.
 		//
-		// The hazard, if that ever changes: an allowlisted prefix matching a
-		// runGitMutation argv would run git for real during --dry-run and this
-		// branch would report success while discarding git's own exit code.
-		// TestSafegitDeclaresNoProcObserveAllowlist pins the premise, and the
-		// execution log's Phase 3.3 note records the same requirement for
-		// whoever declares the allowlist.
+		// What makes the flag a correct stand-in is that no argv built here can
+		// reach Run's OBSERVE branch, which executes the child even in dry mode
+		// and returns a settled Completed. safegit's proc-observe allowlist is
+		// generated from the classification table's read view and admits only
+		// verbs the table declares observe-only unconditionally; every argv
+		// this function builds names a verb the same table declares mutating
+		// (checkout, fetch, merge, rebase, reset, bisect, cherry-pick, revert).
+		// The two sets are disjoint by construction, and
+		// TestObserveAllowlistCannotAdmitAMutation checks the prefixes against
+		// the argv this function actually builds rather than trusting the
+		// reasoning.
 		return 0
 	}
 	return done.ExitCode()

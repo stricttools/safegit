@@ -491,3 +491,163 @@ func TestHistoryRewriteDryRunRecordsNoInventedSHA(t *testing.T) {
 		t.Errorf("the rewrite preview moved HEAD: %s -> %s", head, now)
 	}
 }
+
+// procMutations returns the envelope's records for subprocess mutations -- the
+// effects a `run` mints. The records are populated in BOTH modes (the framework
+// documents its effect log as a live run's record as much as a preview's), so
+// this counts what an executing run really performed as readily as what a
+// preview would.
+func procMutations(env machineEnvelope) []map[string]interface{} {
+	var out []map[string]interface{}
+	for _, rec := range env.Preview {
+		if kind, _ := rec["kind"].(string); kind == "proc_mutate" {
+			out = append(out, rec)
+		}
+	}
+	return out
+}
+
+// reflogLength counts the reflog entries of a ref, which is one per ref
+// movement: it is how many times the ref was really updated, measured off git's
+// own record rather than off safegit's report.
+func reflogLength(t *testing.T, dir, ref string) int {
+	t.Helper()
+	out := strings.TrimSpace(testutil.GitOut(t, dir, "reflog", "show", "--format=%H", ref))
+	if out == "" {
+		return 0
+	}
+	return len(strings.Split(out, "\n"))
+}
+
+// TestCommitPerformsExactlyOneRefUpdate: the commit pipeline's ref update is
+// minted through the effects handle in BOTH modes, from a single site inside
+// the compare-and-swap loop. The trap that design avoids is a second mint
+// beside it -- a handler-side record alongside the pipeline's own update, which
+// fires twice per commit and describes a move that has already happened.
+//
+// So: one recorded mutation, and one ref movement in git's own reflog.
+func TestCommitPerformsExactlyOneRefUpdate(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "one\n")
+	before := reflogLength(t, dir, "refs/heads/main")
+
+	stdout, stderr, code := runSafegit(t, dir, "--json", "commit", "-m", "one update", "--", "a.txt")
+	if code != 0 {
+		t.Fatalf("commit failed (%d): %s", code, stderr)
+	}
+	env := decodeEnvelope(t, stdout)
+	if env.DryRun {
+		t.Error("dry_run = true for an executing commit")
+	}
+
+	mutations := procMutations(env)
+	if len(mutations) != 1 {
+		t.Fatalf("an executing commit recorded %d subprocess mutations, want exactly 1: %v", len(mutations), env.Preview)
+	}
+	detail, _ := mutations[0]["detail"].(string)
+	if !strings.Contains(detail, "update-ref refs/heads/main") {
+		t.Errorf("the recorded mutation is not the ref update: %q", detail)
+	}
+	if recorded, _ := mutations[0]["recorded"].(bool); recorded {
+		t.Error("an executing run's effect is marked recorded, which means it was not performed")
+	}
+
+	if got := reflogLength(t, dir, "refs/heads/main") - before; got != 1 {
+		t.Errorf("the commit moved refs/heads/main %d times, want exactly 1", got)
+	}
+}
+
+// TestCommitDryRunEnvelopeCarriesOneRecordedMutation is the same count on the
+// preview side, read off the envelope rather than the would-do text: exactly
+// one recorded mutation, marked as recorded, plus the payload the preview
+// computed.
+func TestCommitDryRunEnvelopeCarriesOneRecordedMutation(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "one\n")
+	before := reflogLength(t, dir, "refs/heads/main")
+
+	stdout, stderr, code := runSafegit(t, dir, "--json", "--dry-run", "commit", "-m", "preview", "--", "a.txt")
+	if code != 0 {
+		t.Fatalf("commit --dry-run failed (%d): %s", code, stderr)
+	}
+	env := decodeEnvelope(t, stdout)
+	if !env.DryRun {
+		t.Error("dry_run = false under --dry-run")
+	}
+
+	mutations := procMutations(env)
+	if len(mutations) != 1 {
+		t.Fatalf("a preview recorded %d subprocess mutations, want exactly 1: %v", len(mutations), env.Preview)
+	}
+	if recorded, _ := mutations[0]["recorded"].(bool); !recorded {
+		t.Error("a preview's effect is not marked recorded, which means it was performed")
+	}
+	if detail, _ := mutations[0]["detail"].(string); !strings.Contains(detail, "update-ref refs/heads/main <new-commit>") {
+		t.Errorf("the recorded ref update is not the preview's: %q", detail)
+	}
+
+	// The preview's own document rides the same envelope.
+	if len(env.Payload) == 0 || !strings.Contains(string(env.Payload), `"tree"`) {
+		t.Errorf("the envelope carries no preview payload: %s", env.Payload)
+	}
+
+	if got := reflogLength(t, dir, "refs/heads/main"); got != before {
+		t.Errorf("a preview moved refs/heads/main: %d -> %d reflog entries", before, got)
+	}
+}
+
+// TestDumpSchemaPublishesTheObserveAllowlist: the observe authorization is part
+// of safegit's published interface, not a private detail -- a consumer reading
+// the schema can see exactly which git invocations the tool considers
+// observations. It is generated from the argv classification table's read view,
+// so what is published here is the table's own answer.
+func TestDumpSchemaPublishesTheObserveAllowlist(t *testing.T) {
+	dir := newRepo(t)
+	// The dump derives its project_id from the module it is run in, and writes
+	// the schema under that directory -- so the probe runs in a throwaway
+	// module rather than in safegit's own checkout, whose committed dump the
+	// release pipeline owns.
+	testutil.WriteFile(t, dir, "go.mod", "module example.test/schema-probe\n\ngo 1.25\n")
+
+	stdout, stderr, code := runSafegit(t, dir, "--dump-schema")
+	if code != 0 {
+		t.Fatalf("--dump-schema failed (%d): %s", code, stderr)
+	}
+	path := strings.TrimSpace(stdout)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading the dumped schema at %q: %v", path, err)
+	}
+
+	var schema struct {
+		Allowlist [][]string `json:"proc_observe_allowlist"`
+	}
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatalf("the dumped schema does not parse: %v", err)
+	}
+	if len(schema.Allowlist) == 0 {
+		t.Fatal("the dumped schema publishes no proc_observe_allowlist")
+	}
+
+	verbs := make(map[string]bool, len(schema.Allowlist))
+	for _, prefix := range schema.Allowlist {
+		if len(prefix) != 3 || prefix[0] != "git" || prefix[1] != noOptionalLocks {
+			t.Errorf("published prefix %v is not `git %s <verb>`; a shorter one would match invocations it does not mean to",
+				prefix, noOptionalLocks)
+			continue
+		}
+		verbs[prefix[2]] = true
+	}
+	for _, read := range []string{"rev-parse", "cat-file", "ls-tree", "status"} {
+		if !verbs[read] {
+			t.Errorf("the published allowlist omits %q, which the classification table declares observe-only", read)
+		}
+	}
+	// Nothing that changes anything, and nothing whose reading depends on what
+	// follows it.
+	for _, mutating := range []string{"update-ref", "checkout", "merge", "rebase", "reset", "push", "commit-tree", "write-tree", "add", "reflog", "tag"} {
+		if verbs[mutating] {
+			t.Errorf("the published allowlist admits %q, which would execute during a --dry-run", mutating)
+		}
+	}
+}

@@ -22,9 +22,9 @@ func TestDirPinExemptionTableIsEnumerated(t *testing.T) {
 		ExemptGuardedPassthrough: KindOperatorCwd,
 		ExemptGitMutation:        KindOperatorCwd,
 		// Argv the strictcli effects handle runs, not safegit.
-		ExemptGitPush:               KindEffectsHandle,
-		ExemptCommitRefUpdateRecord: KindEffectsHandle,
-		ExemptHistoryRewriteRecord:  KindEffectsHandle,
+		ExemptGitPush:              KindEffectsHandle,
+		ExemptCommitRefUpdate:      KindEffectsHandle,
+		ExemptHistoryRewriteRecord: KindEffectsHandle,
 	}
 
 	got := DirPinExemptions()
