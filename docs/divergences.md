@@ -1,3 +1,8 @@
+---
+title: Divergences
+description: "The catalog of every place where safegit's design philosophy and git's own idiom pulled in different directions, with what git does, what safegit does, and which way each ruling went."
+---
+
 # Where safegit follows git, and where it deliberately does not
 
 safegit wraps git, so every command it offers stands next to something git
@@ -59,7 +64,7 @@ Every future change that introduces a decision of this kind adds its entry here.
   contributes nothing to the tree — a typo, a file already committed with this
   exact content, a directory that is empty on disk and absent from the parent
   tree — the whole commit is refused, and the refusal names **every** argument
-  that contributed nothing, not just the first. Exit code 10
+  that contributed nothing, not just the first. Exit code 11
   (`PathMatchedNothing`).
 - **Ruling:** ours — deliberate
 
@@ -331,6 +336,23 @@ Every future change that introduces a decision of this kind adds its entry here.
   nothing to conclude, it mentions the file informationally — an operator who
   just looked inside `.git` and saw it deserves to know why it does not count.
 - **Ruling:** git-like — deliberate
+
+### A conclusion does not teach rerere the resolution it just made
+
+- **git's idiom:** with `rerere.enabled`, git records the conflict in
+  `.git/MERGE_RR` when the operation stops, and when **git** commits the
+  resolution it writes that resolution into `.git/rr-cache`, so the next time
+  the same conflict appears git replays it automatically.
+- **safegit:** a conclusion removes `MERGE_RR` along with the rest of the
+  operation's state files — it owns the state of the operation it concluded —
+  but it never records the resolution into `rr-cache`. Nothing safegit does is
+  replayed on a later conflict, and an operator whose rerere has been learning
+  from every merge will find that the ones concluded through safegit taught it
+  nothing. The resolutions a conclusion applies are **declared** — they come
+  from `--resolve`, not from an operator editing files — so recording them would
+  seed rerere with an answer nobody looked at, and rerere replaying it later
+  would be exactly the silent inference this tool exists to remove.
+- **Ruling:** ours — deliberate
 
 ### An autostash that cannot be applied exits nonzero
 
@@ -608,9 +630,10 @@ safegit's pre-pre-push hooks, which are its own subsystem.
 - **safegit:** four commands declare themselves consequential — `scrub file`,
   `scrub match`, `scrub run`, `author rewrite` — and the framework obtains
   consent before dispatch; `--approve-consequential` answers that in advance, and
-  without a terminal they refuse rather than hang. Two conditions the framework
-  cannot see keep their own seam: `doctor --action uninstall`, answered by
-  `--approve-consequential` because the condition is the flag the caller typed,
+  without a terminal they refuse rather than hang. Three conditions the framework
+  cannot see keep their own seam: `doctor --action uninstall` and
+  `push --force-with-lease`, both answered by `--approve-consequential` because
+  the condition is the flag the caller typed,
   and a backup to a remote that is public or whose visibility cannot be
   determined, answered **only** by `--allow-public-remote` because the visibility
   is discovered at run time and the caller may not have known. The blanket flag
@@ -707,9 +730,30 @@ safegit's pre-pre-push hooks, which are its own subsystem.
 - **git's idiom:** `git filter-branch` and `git rebase --onto` take whatever
   revision you name and do something with it.
 - **safegit:** `--from <sha>` must resolve **and** be an ancestor of HEAD, or the
-  scrub is refused before anything is read. Inside a submodule the same check is
-  made against the submodule's own history, with a refusal that says outright
-  that a parent-repository commit hash means nothing there.
+  scrub is refused before anything is read. A submodule gets the same guarantee
+  in whichever of the two ways the command's own shape allows, and neither one
+  may quietly widen the range:
+  - **`scrub file` on a path inside a submodule** runs the whole scrub in that
+    submodule, so `--from` is read as a commit of the **submodule's** history and
+    checked there. A parent-repository hash is refused outright, in as many
+    words, rather than resolved by accident — the existence check is
+    `rev-parse <sha>^{commit}`, because bare `rev-parse` echoes any 40-hex string
+    back unchanged and a parent hash would otherwise "resolve" and fail
+    confusingly one step later.
+  - **`scrub match`** rewrites the parent and its submodules in one pass, so
+    `--from` names a **parent** commit and is mapped into each submodule through
+    the gitlink that boundary commit records: the boundary read in the
+    submodule's own terms. The mapped commit gets the same `^{commit}` existence
+    check and the same ancestry check against the submodule's HEAD, and every way
+    the mapping can fail — a boundary commit that records no gitlink for that
+    submodule, a gitlink the submodule's object store does not hold, a mapped
+    commit that is not an ancestor of its HEAD — is a hard error naming the fix.
+
+  Both used to fall back to rewriting the submodule's **entire** history when the
+  boundary could not be honored, so a bounded request quietly became an unbounded
+  rewrite of another repository and the operator was told only how many commits
+  were rewritten. Widening a range is now a refusal; `--entire-history` is the
+  only way to ask for one.
 - **Ruling:** ours — deliberate
 
 ### A rewrite is verified before any ref moves
