@@ -585,6 +585,95 @@ func TestScanJSON(t *testing.T) {
 	}
 }
 
+// safegit's own state -- the config and the oplog -- is repository-level and
+// lives under the COMMON git dir, so a linked worktree's own git dir holds none
+// of it. A sweep keyed only on the invoking worktree's git dir therefore reads
+// nothing of safegit's state at all when it is run from a linked worktree, and
+// a secret sitting in the oplog (a commit message safegit recorded, a path) is
+// reported as absent by a scan that never opened the file.
+//
+// The sweep takes the union of the invoking worktree's safegit dir and the
+// shared one. From a linked worktree the shared file is outside the base the
+// coordinate is measured against, so it reports as an absolute path -- which is
+// the same fallback the shared hook store already reports through, and it names
+// exactly one file rather than colliding with the worktree's own coordinates.
+func TestScanFromALinkedWorktreeSweepsTheSharedSafegitState(t *testing.T) {
+	dir := newRepo(t)
+	commitFileEnv(t, dir, scanEnv, "file.txt", "clean content\n", "add file")
+	wt := addLinkedWorktree(t, dir, "scan-side")
+
+	// The secret goes into the SHARED oplog, which is the main git dir's.
+	oplog := filepath.Join(dir, ".git", "safegit", "log")
+	before, err := os.ReadFile(oplog)
+	if err != nil {
+		t.Fatalf("reading the shared oplog: %v", err)
+	}
+	planted := string(before) + `{"op":"note","message":"WORKTREE_SHARED_SECRET"}` + "\n"
+	if err := os.WriteFile(oplog, []byte(planted), 0o644); err != nil {
+		t.Fatalf("planting the secret in the shared oplog: %v", err)
+	}
+
+	// The linked worktree's own safegit dir does not hold it -- that is the
+	// whole point, and a sweep that found the secret through the worktree's own
+	// directory would prove nothing.
+	linkedOplog := filepath.Join(dir, ".git", "worktrees", "scan-side", "safegit", "log")
+	if data, err := os.ReadFile(linkedOplog); err == nil && strings.Contains(string(data), "WORKTREE_SHARED_SECRET") {
+		t.Fatalf("the linked worktree has its own copy of the secret at %s", linkedOplog)
+	}
+
+	stdout, stderr, code := runSafegitEnv(t, wt, scanEnv,
+		"--json", "scan", "--pattern", "WORKTREE_SHARED_SECRET")
+	if code != 0 {
+		t.Fatalf("scan from the linked worktree failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	var result struct {
+		FileMatches []ScanMatchJSON `json:"file_matches"`
+	}
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
+		t.Fatalf("parsing the scan payload: %v\nraw: %s", err, stdout)
+	}
+	if len(result.FileMatches) == 0 {
+		t.Fatalf("the scan from the linked worktree found nothing in the shared safegit state\nraw: %s", stdout)
+	}
+
+	// The match's own context redacts the matched text as <MATCH>, so the file
+	// is identified by its coordinate rather than by the secret itself.
+	var found *ScanMatchJSON
+	for i := range result.FileMatches {
+		if strings.HasSuffix(filepath.ToSlash(result.FileMatches[i].Path), "safegit/log") {
+			found = &result.FileMatches[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("no file match names the shared oplog: %+v", result.FileMatches)
+	}
+	if !found.InGitDir {
+		t.Errorf("the shared safegit file is not reported as git-dir state: %+v", found)
+	}
+	// The coordinate resolves back to the file that was actually read, which is
+	// the MAIN worktree's, not the linked one's.
+	if !filepath.IsAbs(found.Path) {
+		t.Fatalf("the shared file's coordinate %q is not the absolute-path fallback", found.Path)
+	}
+	if found.Path != oplog {
+		t.Errorf("the reported path is %q, want the shared oplog at %q", found.Path, oplog)
+	}
+	if data, err := os.ReadFile(found.Path); err != nil {
+		t.Errorf("the reported path does not resolve: %v", err)
+	} else if !strings.Contains(string(data), "WORKTREE_SHARED_SECRET") {
+		t.Errorf("the reported path does not hold the planted secret")
+	}
+	wantLine := len(testutil.SplitLines(string(before))) + 1
+	if found.Line != wantLine {
+		t.Errorf("the match reports line %d, want %d (the planted line)", found.Line, wantLine)
+	}
+	if !strings.Contains(found.Context, `"op":"note"`) {
+		t.Errorf("the match's context is not the planted line: %q", found.Context)
+	}
+}
+
 // ScanMatchJSON mirrors the JSON structure of a scan match for test parsing.
 type ScanMatchJSON struct {
 	SHA        string `json:"sha"`
@@ -594,4 +683,5 @@ type ScanMatchJSON struct {
 	Line       int    `json:"line"`
 	Reachable  bool   `json:"reachable"`
 	Context    string `json:"context"`
+	InGitDir   bool   `json:"in_git_dir"`
 }
