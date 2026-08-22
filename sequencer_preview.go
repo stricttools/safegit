@@ -162,7 +162,7 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs) int {
 		return exitcode.General
 	}
 	if upToDate {
-		flags.printf("would merge %s: already up to date, nothing to do\n", short(other, otherSHA))
+		infof(flags, "would merge %s: already up to date, nothing to do\n", short(other, otherSHA))
 		return exitcode.OK
 	}
 
@@ -172,7 +172,7 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs) int {
 		return exitcode.General
 	}
 	if fastForward && !parsed.Has("--no-ff") {
-		flags.printf("would merge %s: a fast-forward, no merge commit and no merge to compute\n", short(other, otherSHA))
+		infof(flags, "would merge %s: a fast-forward, no merge commit and no merge to compute\n", short(other, otherSHA))
 		return exitcode.OK
 	}
 
@@ -183,7 +183,7 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs) int {
 	// does not reach -- and would tell the operator to resolve conflicts in a
 	// merge that is not going to start.
 	if parsed.Has("--ff-only") {
-		flags.printf("would merge %s: REFUSED -- --ff-only was given and this is not a fast-forward\n", short(other, otherSHA))
+		infof(flags, "would merge %s: REFUSED -- --ff-only was given and this is not a fast-forward\n", short(other, otherSHA))
 		return exitcode.OK
 	}
 
@@ -242,15 +242,15 @@ func previewReplay(flags globalFlags, ctx context.Context, verb string, parsed g
 		described := describeCommit(ctx, c)
 		if result.Conflicted {
 			if i > 0 {
-				flags.printf("would %s %d commit(s), then stop at %s\n", verb, i, described)
+				infof(flags, "would %s %d commit(s), then stop at %s\n", verb, i, described)
 			}
 			reportPreviewOutcome(flags, verb, described, result)
 			return exitcode.OK
 		}
 		if i == len(commits)-1 {
 			if len(commits) > 1 {
-				flags.printf("would %s %d commit(s) cleanly, ending at %s\n", verb, len(commits), described)
-				flags.printf(" resulting tree: %s\n", result.Tree)
+				infof(flags, "would %s %d commit(s) cleanly, ending at %s\n", verb, len(commits), described)
+				infof(flags, " resulting tree: %s\n", result.Tree)
 				return exitcode.OK
 			}
 			reportPreviewOutcome(flags, verb, described, result)
@@ -298,15 +298,15 @@ func replaySides(ctx context.Context, verb, c, mainline string) (base, theirs st
 // reportPreviewOutcome prints the computed answer for one operation.
 func reportPreviewOutcome(flags globalFlags, verb, what string, result git.MergeTreeResult) {
 	if !result.Conflicted {
-		flags.printf("would %s %s cleanly\n", verb, what)
-		flags.printf(" resulting tree: %s\n", result.Tree)
+		infof(flags, "would %s %s cleanly\n", verb, what)
+		infof(flags, " resulting tree: %s\n", result.Tree)
 		return
 	}
-	flags.printf("would %s %s: CONFLICT in %d path(s)\n", verb, what, len(result.Paths))
+	infof(flags, "would %s %s: CONFLICT in %d path(s)\n", verb, what, len(result.Paths))
 	for _, p := range result.Paths {
-		flags.printf("  %s\n", p)
+		infof(flags, "  %s\n", p)
 	}
-	flags.printf(" the operation would stop here for you to resolve them\n")
+	infof(flags, " the operation would stop here for you to resolve them\n")
 }
 
 // describeCommit renders a commit as an operator recognizes it, falling back to

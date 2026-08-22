@@ -153,16 +153,6 @@ func (g globalFlags) payload(value interface{}) {
 // quiet: ctx.Quiet() keeps reporting exactly what the operator passed.
 func (g globalFlags) silent() bool { return g.quiet || g.json }
 
-// printf writes one line of human output, suppressed in the two modes where
-// safegit's stdout is not the operator's to read. Handlers that print several
-// lines of a report use it instead of repeating the silent() check per line.
-func (g globalFlags) printf(format string, a ...interface{}) {
-	if g.silent() {
-		return
-	}
-	fmt.Printf(format, a...)
-}
-
 func main() {
 	newApp().Run()
 }
@@ -1024,7 +1014,13 @@ func confirmDeliberate(flags globalFlags, c consent, format string, args ...inte
 	return answer == "y" || answer == "Y"
 }
 
-// infof prints a formatted message unless the run is silent (see silent()).
+// infof writes one line of human progress text, suppressed in the two modes
+// where safegit's stdout is not the operator's to read (see silent()). It is
+// the ONE spelling of that job: a handler printing several such lines calls it
+// per line instead of repeating the silent() check around a fmt.Printf block.
+//
+// Its counterpart is outf, which prints a command's own RESULT -- the thing the
+// command exists to say -- and is suppressed only in machine mode.
 func infof(flags globalFlags, format string, args ...interface{}) {
 	if !flags.silent() {
 		fmt.Printf(format, args...)

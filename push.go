@@ -423,12 +423,12 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	flags.payload(buildPushPayload(flags, remote, refs, forceFlag, len(hookResults), hooksSkipped))
 
 	// Output result
-	if !flags.silent() && !flags.dryRun {
+	if !flags.dryRun {
 		for _, r := range refs {
-			fmt.Printf("  %s -> %s\n", shortRef(r.LocalRef), shortRef(r.RemoteRef))
+			infof(flags, "  %s -> %s\n", shortRef(r.LocalRef), shortRef(r.RemoteRef))
 		}
 		if len(hookResults) > 0 {
-			fmt.Printf("(%d pre-pre-push hook(s) passed)\n", len(hookResults))
+			infof(flags, "(%d pre-pre-push hook(s) passed)\n", len(hookResults))
 		}
 	}
 	return 0
