@@ -419,6 +419,40 @@ existing entries are never rewritten.
   not an exit). Route it through the registry constant during the
   hooks rework.
 
+## Ratified Phase 2 (P2c) decisions
+
+- The commit request carries ExtraParents (parents beyond the branch
+  tip), not the plan's literal whole-parents slice: the tip doubles as
+  the CAS expected value and is re-resolved per attempt, so a caller
+  cannot supply it. Phase 6.2 passes IndexBase: IndexBaseSharedIndex
+  plus ExtraParents: the MERGE_HEAD list, and no positional files.
+- Hooks run once per operation via once-guards INSIDE the CAS loop
+  (literal hoisting would invert git's pre-commit-before-commit-msg
+  order, since staging must re-run per attempt); the adopted commit-msg
+  answer is reused across retries. commit-msg runs after the
+  empty/no-match refusals (git's own order); it sees the user message
+  plus user trailers, and safegit's session trailer is injected after,
+  so a rewriting hook cannot strip it. Per-invocation message file under
+  .git/safegit/tmp, never git's shared COMMIT_EDITMSG.
+- All hook output routes to stderr (safegit's stdout is a structured
+  channel: the JSON envelope, and the parent auto-bump parses a child's
+  stdout). Exit 16 CommitHookRejected covers BOTH pre-commit and
+  commit-msg refusals; pre-commit's failure code changed 1 -> 16 (no
+  test pinned the old value).
+- git.CommitMessage deleted (dead after amend reuses ParseCommit's
+  message). CommitTreeWithAuthor unified into multi-parent CommitTree.
+- Known nuance, accepted: a pre-commit hook that stages content
+  DIFFERING from the working tree loses that staging on a CAS retry
+  (the hook does not re-run; disk is re-staged). Formatter hooks
+  rewrite disk, so real exposure is negligible.
+- For Phase 5.5 (doctor): native-hook discovery reads <gitdir>/hooks
+  directly — it honors neither core.hooksPath nor linked worktrees
+  (where the gitdir is .git/worktrees/<name> with no hooks/).
+  `git rev-parse --git-path hooks/<name>` fixes both in one call;
+  pre-existing, now recorded.
+- architecture.md's "standard git hooks run normally" sentence was
+  pre-healed to the as-built truth (Phase 9 note).
+
 ## Ratified Phase 2 (P2a/P2b) decisions
 
 - Exit 11 PathMatchedNothing (no-match arms; also reused for an untrack
