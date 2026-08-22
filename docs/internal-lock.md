@@ -1,8 +1,7 @@
 ---
 title: internal/lock
-description: "go:build !windows"
+description: "Package lock provides ref-lock primitives for concurrent ref updates using atomic lock file creation (link(2) of a fully-written temporary sibling) and exponential backoff polling."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 12
 ---
