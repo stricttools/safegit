@@ -77,6 +77,94 @@ func TestQuarantineAppliesToExplicitDirectorySites(t *testing.T) {
 	}
 }
 
+// TestQuarantineLeavesADirOnlySpecUnableToReadItsOwnObjects pins a LIMITATION,
+// not a guarantee: it records what the assembly does today so that a site which
+// walks into the gap fails against a stated constraint rather than a surprise.
+//
+// GIT_OBJECT_DIRECTORY REPLACES the object store, so every store the invocation
+// still has to read has to appear in the alternates. Command derives exactly one
+// for itself -- <Spec.GitDir>/objects -- and a spec that targets another
+// repository through Spec.Dir or Spec.WorkTree ALONE gets no entry at all: under
+// a quarantine, that repository's own objects are unreachable for the duration.
+//
+// Why this is currently safe: the only quarantine safegit ever installs is the
+// commit pipeline's preview area (commit.beginPreview), and internal/commit
+// builds no directory-targeting spec and imports neither internal/submodule nor
+// main. The two live Dir-only sites -- internal/submodule.runGit and
+// main.autoBumpParent's parent-pointer ls-tree -- both run on contexts that
+// carry no quarantine.
+//
+// What would make it live: any second quarantine installed on a context that
+// reaches one of those sites, or the commit pipeline growing a submodule call
+// inside its preview.
+//
+// Why it is pinned rather than fixed: deriving the store from a directory is
+// guesswork. <Dir>/.git/objects is wrong for a linked worktree (whose objects
+// live in the common git dir), for a bare repository, and for a repository whose
+// store is redirected -- and Command cannot ask git while it is merely
+// assembling an environment. The fix, when a site needs it, is for the SITE to
+// name GitDir alongside Dir; git.RunWithGitDir and the cat-file paths already do.
+func TestQuarantineLeavesADirOnlySpecUnableToReadItsOwnObjects(t *testing.T) {
+	cases := []struct {
+		name string
+		spec Spec
+	}{
+		{
+			// The shape internal/submodule.runGit builds.
+			name: "dir only",
+			spec: Spec{
+				Args:   []string{"rev-parse", "HEAD"},
+				Exempt: ExemptSubmoduleRunGit,
+				Dir:    "/other/worktree",
+			},
+		},
+		{
+			name: "work tree only",
+			spec: Spec{
+				Args:     []string{"rev-parse", "HEAD"},
+				Exempt:   ExemptRunWithGitDir,
+				WorkTree: "/other/worktree",
+			},
+		},
+	}
+
+	ctx := WithObjectQuarantine(context.Background(), "/preview/objects", "/repo/.git/objects")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd, err := Command(ctx, tc.spec)
+			if err != nil {
+				t.Fatalf("Command: %v", err)
+			}
+
+			// The quarantine applies -- it is not exemption from the quarantine
+			// that is at issue here, only what the alternates carry.
+			if got, _ := envValue(cmd.Env, "GIT_OBJECT_DIRECTORY"); got != "/preview/objects" {
+				t.Errorf("GIT_OBJECT_DIRECTORY = %q, want the quarantine", got)
+			}
+
+			alt, ok := envValue(cmd.Env, "GIT_ALTERNATE_OBJECT_DIRECTORIES")
+			if !ok {
+				t.Fatal("no alternates were assembled at all")
+			}
+			entries := altEntries(alt)
+			if !equalStrings(entries, []string{"/repo/.git/objects"}) {
+				t.Errorf("alternates = %v, want only the caller-declared store: a Dir-only spec "+
+					"contributes nothing, and if that has changed, update this pin and the "+
+					"constraint stated on WithObjectQuarantine", entries)
+			}
+			for _, guess := range []string{"/other/worktree/objects", "/other/worktree/.git/objects"} {
+				for _, e := range entries {
+					if e == guess {
+						t.Errorf("alternates contain %q: the assembly is now guessing where a "+
+							"directory's object store lives, which is wrong for a linked worktree, "+
+							"a bare repository and a redirected store", guess)
+					}
+				}
+			}
+		})
+	}
+}
+
 // A blind append would clobber an inherited value, because Go's exec keeps the
 // LAST occurrence of a name: the merged value has to carry both.
 func TestQuarantineMergesInheritedAlternates(t *testing.T) {

@@ -170,6 +170,16 @@ func InPreview(ctx context.Context) bool {
 //
 // It marks the context as a preview too: a quarantine exists for no other
 // reason.
+//
+// One constraint the caller has to know: the only object store Command derives
+// for itself is the one behind Spec.GitDir. A spec that targets another
+// repository through Spec.Dir or Spec.WorkTree ALONE gets the quarantine but no
+// alternate for its own objects, so under this context it could not read them --
+// where a work tree keeps its object store cannot be derived from a directory
+// without guessing (a linked worktree, a bare repository and a redirected store
+// all break the .git/objects join). No site reaches that combination today, and
+// TestQuarantineLeavesADirOnlySpecUnableToReadItsOwnObjects pins it; a site that
+// needs to must name GitDir alongside Dir.
 func WithObjectQuarantine(ctx context.Context, dir string, alternates ...string) context.Context {
 	q := quarantine{Dir: dir, Alternates: append([]string(nil), alternates...)}
 	return context.WithValue(WithPreview(ctx), quarantineKey{}, q)
