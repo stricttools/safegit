@@ -418,7 +418,16 @@ func (p *Pipeline) tryCommit(
 	}
 
 	if !req.DryRun {
-		// Step 5: Acquire ref lock
+		// Step 5: Acquire ref lock.
+		//
+		// Not minted through the effects handle, and it is the one mutation here
+		// that is not. The handle's method set is closed and has no shape for an
+		// exclusive-create -- the lock's whole meaning is that creating it
+		// succeeds for exactly one process -- and a write() of the same path
+		// would be a different operation with none of that guarantee. The gap is
+		// recorded in todo/effects-handle-commit-pipeline-and-method-set.md's
+		// method-set item, and it costs a preview nothing: a preview takes no
+		// lock at all.
 		lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second
 		if lockTimeout <= 0 {
 			lockTimeout = 30 * time.Second
@@ -471,6 +480,11 @@ func (p *Pipeline) tryCommit(
 	}
 
 	// Step 8: Append op log (lock released by defer).
+	//
+	// Off the effects handle for the same reason as the ref lock: the closed
+	// method set has no append, and a write() would rewrite the file a
+	// concurrent safegit may be appending to. A preview never reaches this line,
+	// so nothing about the preview's honesty rests on it.
 	//
 	// Recorded BEFORE the index is reconciled, so that a reconciliation failure
 	// -- which is fatal, below -- still leaves a commit `safegit undo` can
