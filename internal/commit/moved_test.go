@@ -54,25 +54,9 @@ func TestMovedParentRevIsTheFirstParent(t *testing.T) {
 	}
 }
 
-func TestNestsSeesOnlyRealPathNesting(t *testing.T) {
-	cases := []struct {
-		a, b string
-		want bool
-	}{
-		{"src", "src", true},
-		{"src", "src/a.go", true},
-		{"src/a.go", "src", true},
-		{"src", "src2", false},
-		{"src2", "src", false},
-		{"src/a", "src/b", false},
-		{"a", "b", false},
-	}
-	for _, c := range cases {
-		if got := nests(c.a, c.b); got != c.want {
-			t.Errorf("nests(%q, %q) = %v, want %v", c.a, c.b, got, c.want)
-		}
-	}
-}
+// The path-nesting rule itself is trailer.Nests's, and is pinned in that
+// package (TestNests). What is pinned HERE is the use of it: which SIDE of two
+// declarations the overlap refusal names.
 
 func TestOverlapNamesTheSideThatNests(t *testing.T) {
 	source := overlapSide(movedDeclaration{old: "src/", new: "lib/"}, movedDeclaration{old: "src/a", new: "other"})

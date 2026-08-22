@@ -162,23 +162,17 @@ func refuseOverlappingDeclarations(declarations []movedDeclaration) error {
 	return nil
 }
 
-// overlap reports which side of two declarations nests, if either does.
+// overlap reports which side of two declarations nests, if either does. The
+// nesting question is trailer.Nests's, which is also what `safegit mv` asks of
+// its own pairs -- one rule, one implementation.
 func overlap(a, b movedDeclaration) (side, x, y string) {
-	if nests(a.oldPrefix(), b.oldPrefix()) {
+	if trailer.Nests(a.oldPrefix(), b.oldPrefix()) {
 		return "the same source", a.oldPrefix(), b.oldPrefix()
 	}
-	if nests(a.newPrefix(), b.newPrefix()) {
+	if trailer.Nests(a.newPrefix(), b.newPrefix()) {
 		return "the same destination", a.newPrefix(), b.newPrefix()
 	}
 	return "", "", ""
-}
-
-// nests reports whether two paths are the same path or one is inside the other.
-func nests(a, b string) bool {
-	if a == b {
-		return true
-	}
-	return strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
 }
 
 // validateMoved is the whole check one declaration gets. Three questions, each
