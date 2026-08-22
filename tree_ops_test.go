@@ -613,3 +613,60 @@ func TestReplaceInTreeByBlobMapCacheBenefit(t *testing.T) {
 		t.Error("root.txt missing from result")
 	}
 }
+
+// TestTreeRewriteSurvivesAPathologicalPath pins the encoding of the tree
+// writer. `git mktree` reads plain input as a QUOTED path when it starts with a
+// double quote, so a repository holding a file whose name begins with one --
+// legal on every platform safegit runs on -- made the tree writer refuse
+// ("invalid quoting") and took the whole rewrite down with it. The -z form
+// reads NUL-terminated records and takes every path literally, which is the
+// same encoding the read side (`ls-tree -z`) has always used.
+func TestTreeRewriteSurvivesAPathologicalPath(t *testing.T) {
+	dir, ctx := initTestRepo(t)
+
+	// A leading double quote and a backslash: the two characters plain mktree
+	// input gives a meaning to.
+	const weird = `"quoted\name.txt`
+	writeFile(t, dir, weird, "hunter2\n")
+	writeFile(t, dir, "plain.txt", "ordinary\n")
+	commitSHA := commitAll(t, dir, ctx, "add a pathological path")
+	treeSHA := commitTreeSHA(t, ctx, commitSHA)
+
+	// The fixture really does hold the path as written.
+	if got := findBlobInTree(t, ctx, treeSHA, weird); got == "" {
+		t.Fatalf("fixture: %q is not in the committed tree", weird)
+	}
+
+	newBlob := hashBlob(t, dir, ctx, "REDACTED\n")
+
+	t.Run("replaceInTree", func(t *testing.T) {
+		newTree, err := replaceInTree(ctx, treeSHA, weird, newBlob, map[string]string{})
+		if err != nil {
+			t.Fatalf("replaceInTree over a pathological path: %v", err)
+		}
+		if newTree == treeSHA {
+			t.Fatal("the tree did not change, so the replacement never happened")
+		}
+		if got := findBlobInTree(t, ctx, newTree, weird); got != newBlob {
+			t.Errorf("%q holds %s, want the replacement %s", weird, got, newBlob)
+		}
+		if got := findBlobInTree(t, ctx, newTree, "plain.txt"); got == "" {
+			t.Error("the ordinary path was lost from the rewritten tree")
+		}
+	})
+
+	t.Run("replaceInTreeByBlobMap", func(t *testing.T) {
+		oldBlob := findBlobInTree(t, ctx, treeSHA, weird)
+		newTree, changed, err := replaceInTreeByBlobMap(ctx, treeSHA,
+			map[string]string{oldBlob: newBlob}, nil, map[string]treeRewrite{})
+		if err != nil {
+			t.Fatalf("replaceInTreeByBlobMap over a pathological path: %v", err)
+		}
+		if len(changed) != 1 || changed[0] != weird {
+			t.Errorf("declared changed paths = %v, want exactly [%q]", changed, weird)
+		}
+		if got := findBlobInTree(t, ctx, newTree, weird); got != newBlob {
+			t.Errorf("%q holds %s, want the replacement %s", weird, got, newBlob)
+		}
+	})
+}
