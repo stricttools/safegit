@@ -1,6 +1,7 @@
 package test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -218,11 +219,16 @@ func TestCherryPickConclusionPreservesTheSourceAuthor(t *testing.T) {
 	assertNoSequencerResidue(t, fx.dir, "cherry-pick")
 }
 
-// TestRevertConclusionPreservesTheSourceAuthor is the same guarantee on the
-// revert side, plus the stage semantics that make `theirs` mean the opposite of
-// what the word suggests: a revert applies an INVERSE patch, so its stage 3 is
-// what the reverted commit's PARENT held.
-func TestRevertConclusionPreservesTheSourceAuthor(t *testing.T) {
+// TestRevertConclusionAuthorsAsTheOperator is the OPPOSITE guarantee on the
+// revert side, and it is git's own revert semantics rather than a safegit
+// choice: a cherry-pick applies somebody else's change, so their identity is
+// preserved, while a revert is a NEW change of the reverter's own -- git
+// authors it as whoever ran the command, and so does safegit's conclusion.
+//
+// Also asserted here: the stage semantics that make `theirs` mean the opposite
+// of what the word suggests. A revert applies an INVERSE patch, so its stage 3
+// is what the reverted commit's PARENT held.
+func TestRevertConclusionAuthorsAsTheOperator(t *testing.T) {
 	fx := newConflictedPickRepo(t, "revert")
 
 	if _, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession,
@@ -230,7 +236,7 @@ func TestRevertConclusionPreservesTheSourceAuthor(t *testing.T) {
 		t.Fatalf("revert-continue failed (code %d): %s", code, stderr)
 	}
 
-	assertAuthorPreserved(t, fx)
+	assertOperatorAuthored(t, fx)
 	blob := testutil.MustShow(t, fx.dir, "HEAD", "c.txt")
 	if !strings.Contains(blob, "base") {
 		t.Errorf("theirs on a revert is the inverse patch's side -- what the reverted commit's parent held (%q); got %q", "base", blob)
@@ -254,6 +260,60 @@ func assertAuthorPreserved(t *testing.T, fx pickFixture) {
 	}
 	if fields[2] == fx.authorName {
 		t.Errorf("committer = %s; the conclusion must record whoever RAN it as committer, not the source author", fields[2])
+	}
+}
+
+// assertOperatorAuthored is the revert side's identity check: the conclusion
+// records whoever ran it as BOTH author and committer, and the identity of the
+// commit being reverted appears on neither.
+func assertOperatorAuthored(t *testing.T, fx pickFixture) {
+	t.Helper()
+	got := strings.TrimSpace(testutil.Git(t, fx.dir, "log", "-1", "--format=%an|%ae|%cn|%ce"))
+	fields := strings.Split(got, "|")
+	if len(fields) != 4 {
+		t.Fatalf("unreadable identity line %q", got)
+	}
+	if fields[0] == fx.authorName || fields[1] == fx.authorEmail {
+		t.Errorf("author = %s <%s>; a revert is the reverter's own change and must not record the reverted commit's identity",
+			fields[0], fields[1])
+	}
+	if fields[0] != fields[2] || fields[1] != fields[3] {
+		t.Errorf("author %s <%s> and committer %s <%s> differ; a revert conclusion records the operator as both",
+			fields[0], fields[1], fields[2], fields[3])
+	}
+}
+
+// TestRevertConclusionPayloadReportsTheOperatorAsAuthor pins the machine-mode
+// half of the same fact: the payload's `author` member is the identity the
+// commit RECORDS, so for a revert it is the operator's -- a consumer reading it
+// as "the reverted commit's author" would be reading a different fact.
+func TestRevertConclusionPayloadReportsTheOperatorAsAuthor(t *testing.T) {
+	fx := newConflictedPickRepo(t, "revert")
+
+	stdout, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession,
+		"--json", "revert-continue", "--resolve", "c.txt=theirs")
+	if code != exitcode.OK {
+		t.Fatalf("revert-continue under --json failed (code %d): %s", code, stderr)
+	}
+
+	var envelope struct {
+		Payload struct {
+			Author struct {
+				Name  string `json:"name"`
+				Email string `json:"email"`
+			} `json:"author"`
+		} `json:"payload"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &envelope); err != nil {
+		t.Fatalf("the envelope is not JSON (%v):\n%s", err, stdout)
+	}
+
+	recorded := strings.TrimSpace(testutil.Git(t, fx.dir, "log", "-1", "--format=%an|%ae"))
+	if got := envelope.Payload.Author.Name + "|" + envelope.Payload.Author.Email; got != recorded {
+		t.Errorf("payload author = %q, want the identity the commit records (%q)", got, recorded)
+	}
+	if envelope.Payload.Author.Email == fx.authorEmail {
+		t.Errorf("payload author = %q, which is the REVERTED commit's identity", envelope.Payload.Author.Email)
 	}
 }
 

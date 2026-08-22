@@ -65,10 +65,16 @@ func TestSingleCommitRevertIsPipelineAuthored(t *testing.T) {
 	if !strings.Contains(msg, `Revert "the change to undo"`) {
 		t.Errorf("the revert commit does not carry git's message draft:\n%s", msg)
 	}
-	// The author is preserved from the commit being reverted; the committer is
-	// whoever ran the command.
-	if author := testutil.GitOut(t, dir, "log", "-1", "--format=%an <%ae>"); !strings.Contains(author, "original@example.com") {
-		t.Errorf("author = %q, want the identity of the commit being reverted", author)
+	// The identity is the OPERATOR's, on both fields: a revert is a new change
+	// of the reverter's own, which is what git's own revert records. The
+	// identity of the commit being reverted appears on neither field.
+	identity := strings.TrimSpace(testutil.GitOut(t, dir, "log", "-1", "--format=%an <%ae>|%cn <%ce>"))
+	author, committer, _ := strings.Cut(identity, "|")
+	if strings.Contains(author, "original@example.com") {
+		t.Errorf("author = %q; a revert must not record the identity of the commit it undoes", author)
+	}
+	if author != committer {
+		t.Errorf("author = %q, committer = %q; a revert records the operator as both", author, committer)
 	}
 	// And the revert actually reverted.
 	if got := testutil.MustShow(t, dir, "HEAD", "r.txt"); got != "before\n" {

@@ -658,6 +658,26 @@ type AuthorInfo struct {
 	Date  string // raw git date format: "1234567890 +0200"
 }
 
+// ConfiguredAuthor is the identity git itself would record as the AUTHOR of a
+// commit created right now: `git var GIT_AUTHOR_IDENT`, which is git's own
+// resolution of the environment, the repository config and the global config.
+// Asking git is the point -- a reconstruction from `config --get user.name`
+// would miss the GIT_AUTHOR_* environment and git's own fallbacks, and would
+// therefore be able to disagree with the commit it claims to describe.
+//
+// The timestamp git includes is dropped: the identity is asked for so a report
+// can name who a commit records, and a time resolved here is not the time the
+// commit will carry.
+func ConfiguredAuthor(ctx context.Context) (AuthorInfo, error) {
+	out, _, err := Run(ctx, "var", "GIT_AUTHOR_IDENT")
+	if err != nil {
+		return AuthorInfo{}, fmt.Errorf("resolving the identity git would author with: %w", err)
+	}
+	id := parseIdentity(strings.TrimSpace(out))
+	id.Date = ""
+	return id, nil
+}
+
 // CommitInfo holds the parsed contents of a git commit object.
 type CommitInfo struct {
 	Tree      string

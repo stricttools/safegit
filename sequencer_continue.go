@@ -287,8 +287,55 @@ type conclusionResult struct {
 	state    sequencer.State
 	commit   *commit.CommitResult
 	declared []resolution
-	author   *git.AuthorInfo
-	cleared  bool
+	// author is the identity the concluding commit RECORDS as its author, nil
+	// for a merge. Whether it was preserved from the source commit or is the
+	// operator's own is op.preservesSourceAuthor's answer, not a property of
+	// this field.
+	author  *git.AuthorInfo
+	cleared bool
+}
+
+// preservesSourceAuthor reports whether this conclusion records the identity of
+// the commit the operation is applying.
+//
+// It is git's own division and not a safegit policy: a cherry-pick applies
+// SOMEBODY ELSE'S change, so their authorship travels with it and the committer
+// is whoever ran the command; a revert is a NEW change of the reverter's own --
+// undoing something is your decision, not the original author's -- so git's
+// revert authors it as the operator, and so does this.
+func (op continueOp) preservesSourceAuthor() bool { return op.kind == sequencer.KindCherryPick }
+
+// queueable reports the two commands whose operation git can put in a QUEUE,
+// and which therefore carry the delegation members in their payload and can
+// reach delegateQueuedSequence. A merge is never queued.
+func (op continueOp) queueable() bool {
+	return op.kind == sequencer.KindCherryPick || op.kind == sequencer.KindRevert
+}
+
+// conclusionAuthorship resolves the two author facts a conclusion needs.
+//
+// They are two facts because they can differ. `pinned` is the identity handed
+// to the commit pipeline, non-nil only where safegit imposes one; `recorded` is
+// the identity the resulting commit carries, which is what the report and the
+// payload state. For a cherry-pick they are the same value; for a revert
+// nothing is imposed and the recorded identity is the one git will use, asked
+// of git rather than assumed; a merge has neither.
+func (op continueOp) conclusionAuthorship(ctx context.Context, state sequencer.State) (pinned, recorded *git.AuthorInfo, err error) {
+	if op.preservesSourceAuthor() {
+		info, err := sequencer.SourceAuthor(ctx, state)
+		if err != nil {
+			return nil, nil, err
+		}
+		return &info, &info, nil
+	}
+	if op.kind != sequencer.KindRevert {
+		return nil, nil, nil
+	}
+	info, err := git.ConfiguredAuthor(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	return nil, &info, nil
 }
 
 // runContinue is the whole conclusion flow, shared by the three commands.
@@ -387,14 +434,10 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		return exitcode.Usage
 	}
 
-	var author *git.AuthorInfo
-	if op.kind == sequencer.KindCherryPick || op.kind == sequencer.KindRevert {
-		info, err := sequencer.SourceAuthor(ctx, state)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			return exitcode.General
-		}
-		author = &info
+	pinned, recorded, err := op.conclusionAuthorship(ctx, state)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return exitcode.General
 	}
 
 	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
@@ -405,7 +448,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		ExtraParents: state.MergeHeads,
 		IndexBase:    commit.IndexBaseSharedIndex,
 		IndexEdits:   edits,
-		Author:       author,
+		Author:       pinned,
 		OplogOp:      op.command,
 		// A merge commit records its parents whether or not it changes a single
 		// byte, so the pipeline's tree-unchanged refusal does not apply to one.
@@ -427,7 +470,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		die(pipelineExitCode(err), err.Error())
 	}
 
-	out := conclusionResult{state: state, commit: result, declared: declared, author: author}
+	out := conclusionResult{state: state, commit: result, declared: declared, author: recorded}
 
 	if !flags.dryRun {
 		if err := finishConclusion(ctx, gitDir, state, result, edits, sides, declared); err != nil {

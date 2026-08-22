@@ -296,6 +296,11 @@ var verbs = []Verb{
 	},
 	{Name: "update-index", Base: MutatesIndex},
 	{Name: "update-ref", Base: MutatesRefs},
+	{
+		Name: "var",
+		Base: ObserveOnly,
+		Note: "safegit asks only for GIT_AUTHOR_IDENT, git's own resolution of the identity it would author a commit with; `var` reports a value and writes nothing whatever is asked for",
+	},
 	{Name: "write-tree", Base: MutatesObjects},
 }
 

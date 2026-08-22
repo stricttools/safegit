@@ -51,9 +51,14 @@ type continuePayload struct {
 	DryRun       bool `json:"dry_run"`
 }
 
-// continueAuthor is the preserved identity a cherry-pick or revert conclusion
-// records. A merge conclusion has none, which is why its schema has no such
-// member rather than a null one.
+// continueAuthor is the identity the concluding commit RECORDS as its author.
+//
+// Where it comes from differs per operation, which is a fact about the
+// operation rather than about the member: a cherry-pick preserves the picked
+// commit's author, and a revert records the OPERATOR, because a revert is the
+// reverter's own new change (git's own revert semantics). A merge conclusion
+// records no author of its own, which is why its schema has no such member
+// rather than a null one.
 type continueAuthor struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
@@ -75,6 +80,9 @@ type pickRevertPayload struct {
 	// CommitsCreated is 1 here, 0 under --dry-run, and however many git made on
 	// the delegated path.
 	CommitsCreated int `json:"commits_created"`
+	// StoppedAgain is false here by construction: this shape concludes ONE
+	// operation, so there is no queue left to stop. See delegatedPayload.
+	StoppedAgain bool `json:"stopped_again"`
 }
 
 // delegatedPayload is what a QUEUED cherry-pick or revert conclusion reports.
@@ -93,7 +101,15 @@ type delegatedPayload struct {
 	CommitsCreated int                  `json:"commits_created"`
 	Resolutions    []continueResolution `json:"resolutions"`
 	StateCleared   bool                 `json:"state_cleared"`
-	DryRun         bool                 `json:"dry_run"`
+	// StoppedAgain says git's own `--continue` ended NONZERO because the queue
+	// stopped on a further conflict. It is not a restatement of
+	// `state_cleared`, which is read off the git directory and answers a
+	// different question: what git left behind. This one answers how the
+	// delegation ended, and it is the member that makes a payload emitted
+	// alongside a nonzero exit readable -- head and commits_created then
+	// describe the commits git DID make before stopping.
+	StoppedAgain bool `json:"stopped_again"`
+	DryRun       bool `json:"dry_run"`
 }
 
 // continuePayloadSchema builds a conclusion's payload schema. The three
@@ -139,6 +155,7 @@ func continuePayloadSchema(withAuthor bool) map[string]interface{} {
 		members["queue_delegated"] = strictcli.SchemaType("boolean")
 		members["head"] = strictcli.SchemaType("string", "null")
 		members["commits_created"] = strictcli.SchemaType("integer")
+		members["stopped_again"] = strictcli.SchemaType("boolean")
 
 		// The delegated document carries none of the pipeline's members, so
 		// they leave the required set for these two commands: the three
@@ -146,7 +163,7 @@ func continuePayloadSchema(withAuthor bool) map[string]interface{} {
 		// consumer may always read. `queue_delegated` is the discriminator
 		// that says which of the two shapes arrived.
 		required = []string{"operation", "ref", "resolutions", "state_cleared", "dry_run",
-			"queue_delegated", "head", "commits_created"}
+			"queue_delegated", "head", "commits_created", "stopped_again"}
 	}
 	return strictcli.SchemaObject(members, required, false)
 }
@@ -183,21 +200,29 @@ func (op continueOp) reportPayload(flags globalFlags, out conclusionResult) {
 		Attempts:     out.commit.Attempts,
 		DryRun:       flags.dryRun,
 	}
-	if out.author != nil {
-		created := 1
-		if flags.dryRun {
-			created = 0
-		}
-		flags.payload(pickRevertPayload{
-			continuePayload: base,
-			Author:          continueAuthor{Name: out.author.Name, Email: out.author.Email},
-			QueueDelegated:  false,
-			Head:            base.SHA,
-			CommitsCreated:  created,
-		})
-	} else {
+	// The shape is chosen by the COMMAND, not by whether an author was
+	// resolved: the two queueable commands declare the wider schema, and a
+	// document missing its declared members would be refused at emission.
+	if !op.queueable() {
 		flags.payload(base)
+		return
 	}
+	created := 1
+	if flags.dryRun {
+		created = 0
+	}
+	var author continueAuthor
+	if out.author != nil {
+		author = continueAuthor{Name: out.author.Name, Email: out.author.Email}
+	}
+	flags.payload(pickRevertPayload{
+		continuePayload: base,
+		Author:          author,
+		QueueDelegated:  false,
+		Head:            base.SHA,
+		CommitsCreated:  created,
+		StoppedAgain:    false,
+	})
 }
 
 // renderHuman prints what a conclusion did (or would do), headed by the caller's
@@ -227,7 +252,12 @@ func (op continueOp) renderHuman(flags globalFlags, out conclusionResult, headli
 	fmt.Printf("[%s %s] %s\n", refShortName(out.commit.Ref), shortSHA(out.commit.SHA), headline)
 	fmt.Printf(" %d file(s) committed, %d parent(s)\n", len(out.commit.Files), len(out.commit.Parents))
 	if out.author != nil {
-		fmt.Printf(" author preserved: %s <%s>\n", out.author.Name, out.author.Email)
+		if op.preservesSourceAuthor() {
+			fmt.Printf(" author preserved: %s <%s>\n", out.author.Name, out.author.Email)
+		} else {
+			fmt.Printf(" author: %s <%s> (a revert is your own change, so it is NOT authored by the commit it undoes)\n",
+				out.author.Name, out.author.Email)
+		}
 	}
 	// What the conclusion did to the working tree, stated because it wrote
 	// there: `ours` and `theirs` replace the file on disk with the content that
