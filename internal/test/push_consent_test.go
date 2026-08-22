@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
@@ -48,8 +49,8 @@ func TestPushForceWithLeaseDeclinedExitsNonzero(t *testing.T) {
 	testutil.Git(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
 
 	_, stderr, code := runSafegit(t, dir, "push", "--refs", "head", "--force-with-lease", "cloudy")
-	if code == 0 {
-		t.Errorf("a declined force-push must exit nonzero, got 0; stderr: %s", stderr)
+	if code != exitcode.General {
+		t.Errorf("a declined force-push must exit %d (General), got %d; stderr: %s", exitcode.General, code, stderr)
 	}
 	if strings.Contains(stderr, "Could not resolve host") {
 		t.Errorf("the refusal must precede any network contact, got: %s", stderr)
@@ -67,16 +68,17 @@ func TestDeclinedForcePushSaysSoOnTheOrdinaryOutputChannel(t *testing.T) {
 	testutil.Git(t, dir, "remote", "add", "cloudy", "https://example.invalid/owner/repo.git")
 
 	stdout, stderr, code := runSafegit(t, dir, "push", "--refs", "head", "--force-with-lease", "cloudy")
-	if code == 0 {
-		t.Fatalf("a declined force-push must exit nonzero; stdout=%s stderr=%s", stdout, stderr)
+	if code != exitcode.General {
+		t.Fatalf("a declined force-push must exit %d (General), got %d; stdout=%s stderr=%s",
+			exitcode.General, code, stdout, stderr)
 	}
 	if !strings.Contains(stdout, "Aborted.") {
 		t.Errorf("a declined force-push does not say it aborted; stdout=%s stderr=%s", stdout, stderr)
 	}
 
 	stdout, _, code = runSafegit(t, dir, "--quiet", "push", "--refs", "head", "--force-with-lease", "cloudy")
-	if code == 0 {
-		t.Fatal("a declined force-push must exit nonzero under --quiet too")
+	if code != exitcode.General {
+		t.Fatalf("a declined force-push must exit %d (General) under --quiet too, got %d", exitcode.General, code)
 	}
 	if strings.Contains(stdout, "Aborted.") {
 		t.Errorf("--quiet did not suppress the abort notice, so it is not going through the shared output mechanism: %s", stdout)
