@@ -71,6 +71,18 @@ func UnmergedStages(ctx context.Context, indexPath string) ([]UnmergedEntry, err
 	return entries, nil
 }
 
+// AbbrevSHA returns the abbreviated object name git itself would print for a
+// revision, honoring core.abbrev exactly as git's own conflict-marker labels do
+// (git names the merge base on a diff3 marker line by this abbreviation, so a
+// reconstruction that abbreviates differently is not byte-identical).
+func AbbrevSHA(ctx context.Context, rev string) (string, error) {
+	out, _, err := Run(ctx, "rev-parse", "--short", rev)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
 // AttrUnspecified is what check-attr answers for a path no attributes file
 // says anything about. CheckAttr passes it through rather than dropping the
 // entry, because "the path was asked about and nothing was set" and "the path
