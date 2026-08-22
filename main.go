@@ -728,7 +728,7 @@ func newApp() *strictcli.App {
 		),
 	)
 	app.Passthrough("cherry-pick", "cherry-pick one or more commits onto HEAD with safety guards", pt, strictcli.WithEffect(strictcli.EffectMutating))
-	app.Passthrough("revert", "revert one or more commits creating inverse patches, with safety guards", pt, strictcli.WithEffect(strictcli.EffectMutating))
+	app.Passthrough("revert", "revert one or more commits creating inverse patches, with safety guards. Reverting a SINGLE commit produces a safegit commit: git computes the inverse patch and safegit writes the commit, so it carries safegit's trailers and, when the reverted commit declared moves, the INVERSE of each of those move records. Reverting MORE THAN ONE commit is git's own sequencer and git authors those commits, so they carry no trailers and no records at all -- the asymmetry is deliberate, and it is the same one that governs whether 'safegit undo' can reverse the result", pt, strictcli.WithEffect(strictcli.EffectMutating))
 	app.Command("undo", "reverse the last commit, amend, or reword operation using the oplog", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		bypassSession := optBool(kwargs["bypass_session"], false)
 		count := optInt(kwargs["count"], 1)

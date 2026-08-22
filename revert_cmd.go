@@ -251,6 +251,16 @@ func concludeComputedRevert(flags globalFlags, gitDir, sgDir string) int {
 		return exitcode.General
 	}
 
+	// Undoing a move is a move: the records on the commit being reverted are
+	// inverted here, from the same one place `safegit revert-continue` inverts
+	// them, so a revert that hit a conflict and one that did not declare the
+	// same thing.
+	movedRecords, err := op.conclusionMovedRecords(ctx, state)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return exitcode.General
+	}
+
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: loading config: %v\n", err)
@@ -259,11 +269,12 @@ func concludeComputedRevert(flags globalFlags, gitDir, sgDir string) int {
 
 	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
 	result, err := p.Execute(ctx, commit.CommitRequest{
-		Message:   message,
-		IndexBase: commit.IndexBaseSharedIndex,
-		Author:    pinned,
-		OplogOp:   op.command,
-		Sequencer: &coord.SequencerContext{Kind: sequencer.KindRevert},
+		Message:      message,
+		MovedRecords: movedRecords,
+		IndexBase:    commit.IndexBaseSharedIndex,
+		Author:       pinned,
+		OplogOp:      op.command,
+		Sequencer:    &coord.SequencerContext{Kind: sequencer.KindRevert},
 	})
 	if err != nil {
 		if errors.Is(err, commit.ErrTreeUnchanged) {

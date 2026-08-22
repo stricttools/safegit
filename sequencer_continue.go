@@ -16,6 +16,7 @@ import (
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/sequencer"
+	"github.com/smm-h/safegit/internal/trailer"
 )
 
 // The conclusion engine: one implementation behind the three flat commands
@@ -338,6 +339,43 @@ func (op continueOp) conclusionAuthorship(ctx context.Context, state sequencer.S
 	return nil, &info, nil
 }
 
+// conclusionMovedRecords returns the move records the concluding commit
+// carries, minted here rather than read off anything the caller said.
+//
+// It is a REVERT's alone, and it is the only place a commit's records are
+// derived from another commit's: reverting a commit that declared a move undoes
+// that move, so the revert declares the move back -- the same pair with its
+// sides swapped, under a FRESH id, because a different commit making a
+// different claim about a different step is a different record.
+//
+// Retractions are deliberately not inverted. A retraction says "that record was
+// wrong"; reverting the commit that said so does not make the record right
+// again, and resurrecting a claim nobody restated would be safegit deciding
+// something for the operator. Only Moved: records get inverses.
+//
+// A CHERRY-PICK gets none: it re-applies somebody's change, so any record on
+// the source commit describes a move this commit is repeating rather than
+// undoing -- and whether the same move happened again is a fact about trees the
+// operator is the one to state. A merge has no source commit at all.
+func (op continueOp) conclusionMovedRecords(ctx context.Context, state sequencer.State) ([]string, error) {
+	if op.kind != sequencer.KindRevert || state.Source == "" {
+		return nil, nil
+	}
+	info, err := git.ParseCommit(ctx, state.Source)
+	if err != nil {
+		return nil, fmt.Errorf("reading the message of the commit being reverted (%s): %w", shortSHA(state.Source), err)
+	}
+	var lines []string
+	for _, r := range trailer.ReadMoves(info.Message).Records {
+		inverse, err := trailer.NewRecord(r.New, r.Old)
+		if err != nil {
+			return nil, fmt.Errorf("inverting the move record %s on %s: %w", r.ID, shortSHA(state.Source), err)
+		}
+		lines = append(lines, trailer.RecordLine(inverse))
+	}
+	return lines, nil
+}
+
 // runContinue is the whole conclusion flow, shared by the three commands.
 //
 // It returns the process exit code and never panics on a repository state it
@@ -440,10 +478,17 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		return exitcode.General
 	}
 
+	movedRecords, err := op.conclusionMovedRecords(ctx, state)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return exitcode.General
+	}
+
 	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
 	result, err := p.Execute(ctx, commit.CommitRequest{
 		Message:      message,
 		Trailers:     trailers,
+		MovedRecords: movedRecords,
 		DryRun:       flags.dryRun,
 		ExtraParents: state.MergeHeads,
 		IndexBase:    commit.IndexBaseSharedIndex,
