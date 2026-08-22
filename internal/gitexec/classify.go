@@ -117,7 +117,17 @@ var verbs = []Verb{
 		Note: "guarded passthrough; the operator's own argv",
 	},
 	{Name: "cat-file", Base: ObserveOnly},
+	{
+		Name: "check-attr",
+		Base: ObserveOnly,
+		Note: "answers what .gitattributes says about a path; every spelling only reads, including --attr-source=<tree>, which chooses WHICH attributes file is read and never writes one",
+	},
 	{Name: "check-ignore", Base: ObserveOnly},
+	{
+		Name: "config",
+		Base: MutatesConfig,
+		Note: "safegit only ever reads, with `config --get`, but the SET form is two bare positionals (`git config merge.conflictStyle diff3`) and no single token tells it apart from a read; the base set is therefore the wider one",
+	},
 	{
 		Name: "checkout",
 		Base: MutatesRefs | MutatesIndex | MutatesWorktree,
@@ -159,6 +169,11 @@ var verbs = []Verb{
 		Base: MutatesObjects | MutatesRefs | MutatesIndex | MutatesWorktree,
 	},
 	{Name: "merge-base", Base: ObserveOnly},
+	{
+		Name: "merge-file",
+		Base: MutatesWorktree,
+		Note: "safegit only ever runs it with -p, which writes the three-way merge result to stdout; without -p merge-file OVERWRITES its first file argument, and no conditional token can be trusted to tell the two apart (the absence of an option is not a token), so the base set stays the wider one. It writes no objects in either spelling",
+	},
 	{Name: "mktree", Base: MutatesObjects},
 	{
 		Name: "notes",
@@ -241,6 +256,11 @@ var verbs = []Verb{
 	},
 	{Name: "status", Base: ObserveOnly},
 	{
+		Name: "stripspace",
+		Base: ObserveOnly,
+		Note: "a filter: it reads a message on stdin and writes the cleaned message to stdout, touching no repository state at all",
+	},
+	{
 		Name: "submodule",
 		Base: ObserveOnly,
 		Conditional: []ConditionalEffect{
@@ -298,9 +318,13 @@ func Lookup(name string) (Verb, bool) {
 
 // valueTakingGlobals are git global options whose VALUE is a separate argv
 // element, so the element after them can never be the subcommand.
+// --attr-source is here because the conflict-attribute resolver is the first
+// site to use it: in its separate-element spelling the tree name would
+// otherwise be read as the subcommand and refused as undeclared.
 var valueTakingGlobals = map[string]bool{
 	"-c": true, "-C": true, "--git-dir": true, "--work-tree": true,
 	"--namespace": true, "--exec-path": true, "--super-prefix": true,
+	"--attr-source": true,
 }
 
 // Subcommand returns the git subcommand an argv names.
