@@ -1039,6 +1039,7 @@ func scrubMatchExecute(
 	}
 	infof(flags, "  Old HEAD: %s\n", result.OldHeadSHA[:12])
 	infof(flags, "  New HEAD: %s\n", result.NewHeadSHA[:12])
+	printScopeNotice(flags, result.Ref)
 	printRotationNotice(flags, recheckCommandForPatterns(pattern))
 
 	return exitCode

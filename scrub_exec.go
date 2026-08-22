@@ -101,6 +101,25 @@ func printRotationNotice(flags globalFlags, recheck string) {
 	infof(flags, "  %s\n", recheck)
 }
 
+// printScopeNotice states what a successful rewrite's scope actually was: the
+// walk followed one ref's history, and that is the only history it claimed.
+//
+// "Scrub complete" reads as "the content is gone from this repository", and it
+// is not: a branch, a stale remote-tracking ref or a tag reaching commits the
+// walk never visited still holds every one of them. The refs that pointed INTO
+// the walked history moved along with it; nothing else did. Saying so beside
+// the rotation notice puts the scope in front of the operator at the one moment
+// they are deciding whether the job is finished.
+//
+// refs names the ref(s) the walk actually followed, already spelled for
+// printing (a submodule rewrite passes two).
+func printScopeNotice(flags globalFlags, refs ...string) {
+	infof(flags, "\nScope: rewrote the history of %s; other refs were not rewritten.\n", strings.Join(refs, " and "))
+	infof(flags, "A branch, tag or remote-tracking ref that pointed into the walked history moved\n")
+	infof(flags, "with it, but any ref reaching commits this walk never visited still points at\n")
+	infof(flags, "the history it always did.\n")
+}
+
 // recheckCommandForPatterns builds the `scrub verify` invocation that re-checks
 // the given patterns.
 func recheckCommandForPatterns(patterns ...string) string {
