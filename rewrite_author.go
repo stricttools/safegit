@@ -6,11 +6,9 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/trailer"
 	"github.com/smm-h/strictcli/go/strictcli"
@@ -136,23 +134,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	requireCleanTree(ctx)
 
 	// Acquire rewrite lock to prevent concurrent history rewriting (execute path only)
-	cfg, err := loadConfig(flags, gitDir)
-	if err != nil {
-		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
-	}
-	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
-	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
-	lk, err := lock.Acquire(sharedDir, sgDir, lock.RewriteRef, "rewrite-author", timeout)
-	if err != nil {
-		// The real error, not a fixed sentence: it names the ref and the
-		// process still holding it, which is the only thing that tells the
-		// operator what to look at. A timeout gets its own exit code so a
-		// caller can tell contention apart from every other lock failure.
-		if lock.IsTimeout(err) {
-			die(exitcode.LockTimeout, err.Error())
-		}
-		die(exitcode.General, fmt.Sprintf("acquiring rewrite lock: %v", err))
-	}
+	lk := acquireRewriteLock(ctx, flags, gitDir, sgDir, "rewrite-author")
 	defer lk.Release()
 
 	// The framework's confirm protocol already obtained deliberate consent for

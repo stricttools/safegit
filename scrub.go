@@ -6,11 +6,9 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/submodule"
 	"github.com/smm-h/strictcli/go/strictcli"
@@ -131,6 +129,18 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 
 	if targetSub != nil {
+		// A submodule-path scrub rewrites BOTH repositories, so it takes both
+		// rewrite locks: the parent's here, before the delegation, and the
+		// submodule's own inside the delegated flow (see acquireRewriteLock for
+		// the ordering declaration). Taking the parent's first is what makes the
+		// order total and the pair deadlock-free.
+		//
+		// A preview takes neither: it performs no mutation, and the delegated
+		// flow has its own dry-run branch.
+		if !flags.dryRun {
+			lk := acquireRewriteLock(ctx, flags, gitDir, sgDir, "scrub-file")
+			defer lk.Release()
+		}
 		return runScrubFileInSubmodule(ctx, flags, cmd, filePath, subFilePath, targetSub, from, entireHistory, mode, replacementPath, reason, remapGlobs, gitDir, sgDir)
 	}
 
@@ -225,23 +235,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	requireCleanTree(ctx)
 
 	// Acquire rewrite lock to prevent concurrent scrub operations (execute path only).
-	cfg, err := loadConfig(flags, gitDir)
-	if err != nil {
-		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
-	}
-	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
-	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
-	lk, err := lock.Acquire(sharedDir, sgDir, lock.RewriteRef, "scrub-file", timeout)
-	if err != nil {
-		// The real error, not a fixed sentence: it names the ref and the
-		// process still holding it, which is the only thing that tells the
-		// operator what to look at. A timeout gets its own exit code so a
-		// caller can tell contention apart from every other lock failure.
-		if lock.IsTimeout(err) {
-			die(exitcode.LockTimeout, err.Error())
-		}
-		die(exitcode.General, fmt.Sprintf("acquiring rewrite lock: %v", err))
-	}
+	lk := acquireRewriteLock(ctx, flags, gitDir, sgDir, "scrub-file")
 	defer lk.Release()
 
 	// Write the replacement blob to the object store (execute path only).
@@ -531,6 +525,16 @@ func runScrubFileInSubmodule(
 	// Execute path only, and the caller's check was moved past its own dry-run
 	// branch: the parent's tree must still be clean before anything is rewritten.
 	requireCleanTree(ctx)
+
+	// The submodule is a repository of its own -- its own object store, its own
+	// refs, its own .git/safegit -- and this flow rewrites its history, so it
+	// contends on its own rewrite lock. The caller holds the parent's already;
+	// this is the inner half of the parent-then-submodule order declared at
+	// acquireRewriteLock. Both are held through the verification and the
+	// publication of both repositories, which is what makes the cleanliness
+	// re-check exclusive on the submodule side too.
+	subLk := acquireRewriteLock(subCtx, flags, sub.GitDir, sub.SafegitDir, "scrub-file")
+	defer subLk.Release()
 
 	// Write the replacement blob to the submodule's object store (execute path only).
 	if mode == "replace" {

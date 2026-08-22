@@ -8,11 +8,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/scan"
 	"github.com/smm-h/strictcli/go/strictcli"
@@ -272,23 +270,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	sgDir := repo.SafegitDir(gitDir)
 
 	// Acquire rewrite lock (only for the execute path -- diff is read-only).
-	cfg, err := loadConfig(flags, gitDir)
-	if err != nil {
-		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
-	}
-	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
-	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
-	lk, err := lock.Acquire(sharedDir, sgDir, lock.RewriteRef, "scrub-run", timeout)
-	if err != nil {
-		// The real error, not a fixed sentence: it names the ref and the
-		// process still holding it, which is the only thing that tells the
-		// operator what to look at. A timeout gets its own exit code so a
-		// caller can tell contention apart from every other lock failure.
-		if lock.IsTimeout(err) {
-			die(exitcode.LockTimeout, err.Error())
-		}
-		die(exitcode.General, fmt.Sprintf("acquiring rewrite lock: %v", err))
-	}
+	lk := acquireRewriteLock(ctx, flags, gitDir, sgDir, "scrub-run")
 	defer lk.Release()
 
 	// Execute the recipe via the shared pipeline.
