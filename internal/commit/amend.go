@@ -25,6 +25,11 @@ type AmendRequest struct {
 	Trailers  []string   // user-provided trailers ("Key: Value" format)
 	DryRun    bool
 
+	// Untrack is the same input CommitRequest carries: paths to remove from the
+	// index while leaving them on disk, each of which must be tracked in the
+	// tip being replaced.
+	Untrack []string
+
 	// Sequencer is the same declared input CommitRequest carries: nil for
 	// every ordinary caller, set only by a command that concludes the
 	// operation git has in flight.
@@ -80,14 +85,14 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 		}
 	}
 
-	if len(req.FileSpecs) == 0 {
+	if len(req.FileSpecs) == 0 && len(req.Untrack) == 0 {
 		return nil, fmt.Errorf("no files specified for amend")
 	}
 
 	// An amend's temporary index is seeded from the tip it REPLACES, so that
 	// tip -- not HEAD -- is the tree its arguments are judged and expanded
 	// against. The two differ on every cross-branch amend.
-	files, err := p.resolveFiles(ctx, repoRoot, baseRev(ctx, ref), req.FileSpecs)
+	files, err := p.resolveFiles(ctx, repoRoot, baseRev(ctx, ref), req.FileSpecs, req.Untrack)
 	if err != nil {
 		return nil, err
 	}

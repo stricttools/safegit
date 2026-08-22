@@ -332,14 +332,14 @@ func TestAmendFromRepoRootUnchangedPath(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Class 4: gitignored-path refusal blocks untracking
+// Class 4: untracking on the amend path
 // ---------------------------------------------------------------------------
 
-// The untrack cleanup -- add the pattern to .gitignore, `git rm -r --cached`
-// the tracked copies, record both in one commit -- has no amend-mediated form
-// either. resolveFiles (internal/commit/commit.go:411) refuses any named path
-// that exists on disk and is gitignored, which is precisely the path being
-// untracked. Amend reaches the same check through amend.go:81.
+// The untrack cleanup -- add the pattern to .gitignore, drop the tracked
+// copies, record both in one commit -- reaches amend through the same flag it
+// reaches commit through. Amend shares intake with commit, so the flag is the
+// same flag; what this pins is that it is wired on both paths and judged
+// against the tip being REPLACED.
 func TestAmendUntrackGitignoredPath(t *testing.T) {
 	dir := newRepo(t)
 
@@ -357,10 +357,13 @@ func TestAmendUntrackGitignoredPath(t *testing.T) {
 		t.Fatalf("dir/junk.txt must survive `git rm --cached` on disk: %v", err)
 	}
 
-	stdout, stderr, code := runSafegit(t, dir, "commit", "--amend", "-m", "tip, untrack dir", "--",
-		".gitignore", "dir/junk.txt")
+	stdout, stderr, code := runSafegit(t, dir, "commit", "--amend", "-m", "tip, untrack dir",
+		"--untrack", "dir/junk.txt", "--", ".gitignore")
 	if code != 0 {
 		t.Fatalf("amending the untrack cleanup failed (code %d)\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	if strings.Contains(stderr, "not gitignored") {
+		t.Errorf("untracking an already-ignored path must not suggest a .gitignore pattern; stderr:\n%s", stderr)
 	}
 
 	paths := testutil.TreePaths(t, dir, "HEAD")

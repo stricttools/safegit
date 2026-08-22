@@ -56,6 +56,7 @@ Use `safegit commit` instead of `git add` + `git commit` whenever multiple sessi
 | `--allow-empty` | | optional; omitted means an empty commit is refused | Allow creating a commit even when no files have been changed |
 | `--trailer` | | optional | Add a key-value trailer line to the commit message (repeatable) |
 | `--hunks` | | optional; omitted means every named file is committed whole | Commit only the selected hunks of one file, as `path:1,3` or `path:2-4`; repeatable, once per path |
+| `--untrack` | | optional; omitted means nothing is untracked | Stop tracking a path, leaving the file on disk: the commit records its removal from the index (repeatable) |
 
 ### Arguments
 
@@ -102,6 +103,9 @@ safegit commit -m "partial stage" --hunks 'main.go:1,3'
 
 # A filename that contains a colon is an ordinary positional path
 safegit commit -m "add notes" -- 'sprint:1'
+
+# Stop tracking a build directory and record the .gitignore pattern in one commit
+safegit commit -m "stop tracking build output" --untrack dist/bundle.js -- .gitignore
 
 # Allow an empty commit (no file changes)
 safegit commit --allow-empty -m "trigger CI rebuild"

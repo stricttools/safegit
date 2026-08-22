@@ -122,7 +122,7 @@ func orEmpty(list []string) []string {
 	return list
 }
 
-func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, trailers []string, files []string, hunks []string) {
+func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, trailers []string, files []string, hunks []string, untrack []string) {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -143,7 +143,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 			die(exitcode.Usage, "-F cannot be used with --amend")
 		}
 
-		runCommitAmend(flags, gitDir, messages, branch, trailers, files, hunks)
+		runCommitAmend(flags, gitDir, messages, branch, trailers, files, hunks, untrack)
 		return
 	}
 
@@ -159,8 +159,8 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	if len(messages) == 0 {
 		die(exitcode.Usage, "commit message required (-m or -F)")
 	}
-	if len(files) == 0 && len(hunks) == 0 && !allowEmpty {
-		die(exitcode.Usage, "no files specified (use -- file1 file2 ... or --hunks path:1,3)")
+	if len(files) == 0 && len(hunks) == 0 && len(untrack) == 0 && !allowEmpty {
+		die(exitcode.Usage, "no files specified (use -- file1 file2 ..., --hunks path:1,3 or --untrack path)")
 	}
 
 	msg := strings.Join(messages, "\n")
@@ -205,6 +205,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		Trailers:   trailers,
 		AllowEmpty: allowEmpty,
 		DryRun:     flags.dryRun,
+		Untrack:    untrack,
 	})
 	if err != nil {
 		die(pipelineExitCode(err), err.Error())
@@ -275,7 +276,7 @@ func recordCommitRefUpdate(flags globalFlags, ref, newSHA, oldSHA string) {
 	_, _ = flags.effects().Run(argv, strictcli.Resource("ref:"+ref))
 }
 
-func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch string, trailers []string, files []string, hunks []string) {
+func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch string, trailers []string, files []string, hunks []string, untrack []string) {
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
@@ -292,7 +293,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 
 	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg}
 
-	if len(files) > 0 || len(hunks) > 0 {
+	if len(files) > 0 || len(hunks) > 0 || len(untrack) > 0 {
 		// Amend: add new files to the tip commit
 		var msg string
 		if len(messages) > 0 {
@@ -321,6 +322,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			Branch:    branch,
 			Trailers:  trailers,
 			DryRun:    flags.dryRun,
+			Untrack:   untrack,
 		})
 		if err != nil {
 			die(pipelineExitCode(err), err.Error())

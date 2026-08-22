@@ -125,10 +125,11 @@ const (
 	// PathMatchedNothing means a path or directory the caller named contributes
 	// nothing to the commit: it is absent from disk and untracked in the tree
 	// the commit is built on, it is a directory holding neither files on disk
-	// nor paths in that tree, or it is a file whose content the commit would
-	// not change. Naming a path is a statement that it belongs in the commit,
-	// so a path that cannot be in it is a refusal rather than a silent
-	// omission. Produced by commit, including --amend.
+	// nor paths in that tree, it is a file whose content the commit would not
+	// change, or it is an --untrack target the commit's parent does not track,
+	// which leaves no index entry to remove. Naming a path is a statement about
+	// what the commit contains, so a path that cannot affect it is a refusal
+	// rather than a silent omission. Produced by commit, including --amend.
 	PathMatchedNothing = 11
 
 	// BinaryHunkSpec means a hunk spec (--hunks file:1,3) was given for a file

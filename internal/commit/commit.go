@@ -86,6 +86,11 @@ type CommitRequest struct {
 	AllowEmpty bool
 	DryRun     bool
 
+	// Untrack lists paths to remove from the index while leaving them on disk.
+	// Each must be tracked in the tree the commit is built on; one that is not
+	// is a hard error rather than a silent no-op.
+	Untrack []string
+
 	// Sequencer declares that this caller is the conclusion path for an
 	// operation git has in flight. Nil -- which is every ordinary caller --
 	// means the commit is refused whenever git is mid-merge, mid-cherry-pick,
@@ -159,7 +164,7 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	// Resolve, canonicalize and expand the arguments once, before the retry
 	// loop, against the tree this commit is built on -- the TARGET branch's
 	// tip, which is not HEAD when --branch names another branch.
-	files, err := p.resolveFiles(ctx, repoRoot, baseRev(ctx, ref), fileSpecs)
+	files, err := p.resolveFiles(ctx, repoRoot, baseRev(ctx, ref), fileSpecs, req.Untrack)
 	if err != nil {
 		return nil, err
 	}
@@ -430,6 +435,16 @@ func baseRev(ctx context.Context, ref string) string {
 // keeps the two spellings from mixing anywhere else in the pipeline.
 func (p *Pipeline) stageAll(ctx context.Context, indexPath, repoRoot string, files *intake) error {
 	for _, entry := range files.entries {
+		if entry.untrack {
+			// The one staging action that deliberately ignores the working
+			// tree: the file stays exactly where it is, and only the index
+			// entry goes. It takes the repo-relative path, not the absolute
+			// one, because it is not reaching for the file at all.
+			if err := git.DropFromIndex(ctx, indexPath, entry.path); err != nil {
+				return fmt.Errorf("untracking %s: %w", entry.path, err)
+			}
+			continue
+		}
 		absPath := git.Anchor(repoRoot, entry.path)
 		if entry.hunks != nil {
 			if err := stage.StageHunks(ctx, indexPath, absPath, entry.hunks); err != nil {
