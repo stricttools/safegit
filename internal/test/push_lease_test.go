@@ -47,8 +47,8 @@ func TestGitBareLeaseCannotForcePushAMovedTag(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("premise gone: a bare --force-with-lease moved an existing remote tag; output: %s", out)
 	}
-	if !strings.Contains(out, "stale info") {
-		t.Errorf("git's lease-rejection signature is no longer %q; safegit classifies on it. Output was:\n%s", "stale info", out)
+	if !strings.Contains(out, "(stale info)") {
+		t.Errorf("git's lease-rejection signature is no longer %q; safegit classifies on it, PARENTHESES included, because they are what distinguishes git's per-ref status marker from the same two words appearing in prose. Output was:\n%s", "(stale info)", out)
 	}
 
 	// The remote tag is untouched, which is what makes the refusal a problem
