@@ -62,6 +62,32 @@ func openForReclaim(path string) (*os.File, reclaimOutcome) {
 	return f, reclaimNone
 }
 
+// ReclaimIfStale removes the lock file at path if, and only if, its holder is
+// genuinely gone -- the same judgement Acquire makes, under the same flock and
+// the same inode identity re-check. It reports whether the file was removed.
+//
+// It is the authority for every unattended removal of a lock nobody asked about
+// by name: `safegit doctor --action fix` sweeps the locks subtree through it
+// rather than judging staleness and then calling os.Remove, because between
+// those two steps another process can reclaim the same stale lock and publish
+// its own live one at that path, and the bare remove would delete THAT.
+//
+// A false result is never a verdict that the lock is live: it also covers "the
+// path is already gone", "another contender holds the flock right now" and "this
+// filesystem cannot flock". All of those mean leave it alone and look again
+// later, which is the fail-closed direction.
+func ReclaimIfStale(path string) bool {
+	if !IsStale(path) {
+		return false
+	}
+	f, _ := openForReclaim(path)
+	if f == nil {
+		return false
+	}
+	outcome, _ := reclaimLocked(f, path)
+	return outcome == reclaimDone
+}
+
 // reclaimLocked finishes a reclamation attempt on a lock file the caller has
 // already opened and flocked with openForReclaim, and closes it (which releases
 // the flock). It returns the outcome and, on reclaimDone, the pid of the stale
