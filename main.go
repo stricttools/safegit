@@ -325,6 +325,30 @@ func newApp() *strictcli.App {
 		),
 	)
 
+	app.Command("mv", "move tracked paths and commit the moves with their records in one operation", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+		gf := globalsToFlags(ctx, kwargs)
+		return strictcli.Exit(runMv(gf, kwargsStrSlice(kwargs["m"]), kwargsStrSlice(kwargs["pairs"])))
+	},
+		strictcli.WithEffect(strictcli.EffectMutating),
+		strictcli.WithTags("json"),
+		strictcli.PayloadSchema(mvPayloadSchema),
+		strictcli.WithGrants(strictcli.Grant{
+			Name:   "parent-bump",
+			Reason: "moving paths in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
+			Kind:   strictcli.ProcMutate,
+		}),
+		strictcli.WithFlags(
+			// Required, with no fallback of any kind. A message the framework
+			// chose would be a message the framework wrote into history, which
+			// is exactly what the mutating-default ban forbids -- and "moved
+			// some files" is not a commit message anyone wanted.
+			strictcli.StringFlag("m", "commit message paragraph; repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body", strictcli.Short("m"), strictcli.Repeatable(), strictcli.Unique(false), strictcli.Required()),
+		),
+		strictcli.WithArgs(
+			strictcli.NewArg("pairs", "one move each, written 'old -> new'. End BOTH paths with a slash to move a whole directory, which is recorded as ONE subtree record however many files it holds. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. Every pair is checked before the first file is touched -- the source must be tracked and on disk, the destination must be free, and no two pairs may speak for the same path or chain into one another -- and a failure part-way through puts back everything already moved. The commit is the rename and nothing else: each path is carried across as the blob its parent commit held, so uncommitted content changes stay uncommitted", strictcli.ArgRequired(), strictcli.Variadic()),
+		),
+	)
+
 	// The three conclusion commands, in git's own word order. They are flat
 	// verbs rather than a `commit --conclude` mode because concluding an
 	// operation is whole-index by construction and `commit` is pathspec-only:

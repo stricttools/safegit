@@ -112,6 +112,22 @@ type CommitRequest struct {
 	// inferred -- safegit detects no moves at all.
 	Moved []string
 
+	// MovedRecords carries move records the caller has ALREADY MINTED, as whole
+	// trailer lines. They are written exactly where a --moved record is written
+	// -- caller content, before the commit-msg hook -- and the pipeline neither
+	// parses nor re-checks them.
+	//
+	// It exists for the two callers that hold facts this pipeline cannot ask the
+	// repository for. `safegit mv` PERFORMS the moves it records, so by the time
+	// the commit is built the world already agrees and the --moved check (whose
+	// question is "is the old path gone?") is answering about a move that has
+	// just happened rather than one being declared after the fact -- and under a
+	// preview the renames were recorded rather than performed, so that check
+	// would refuse a preview of a perfectly good move. A single-commit revert
+	// emits the INVERSES of the records on the commit it is reverting, which are
+	// facts about that commit's message and not about any tree.
+	MovedRecords []string
+
 	// ExtraParents names parents BEYOND the branch tip, in order, for a commit
 	// with more than one -- a merge conclusion, whose second parent is the side
 	// being merged in.
@@ -270,6 +286,9 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	if err != nil {
 		return nil, err
 	}
+	// Already-minted records go on first, in the order the caller gave them:
+	// they are the caller's own statement, and the pipeline adds nothing to it.
+	movedTrailers = append(append([]string{}, req.MovedRecords...), movedTrailers...)
 
 	// The repository's own hooks, prepared once for the whole operation: they
 	// run at most once each no matter how many attempts the CAS loop takes.
