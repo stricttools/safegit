@@ -17,7 +17,15 @@ type rewriteMapLine map[string]interface{}
 // readRewriteMaps parses .git/safegit/rewrite-maps.jsonl in the given repo.
 func readRewriteMaps(t *testing.T, dir string) []rewriteMapLine {
 	t.Helper()
-	path := filepath.Join(dir, ".git", "safegit", "rewrite-maps.jsonl")
+	return readRewriteMapsAt(t, filepath.Join(dir, ".git", "safegit"))
+}
+
+// readRewriteMapsAt parses the rewrite journal held in an explicit safegit
+// directory. A submodule's safegit directory is under the parent's
+// .git/modules/<name>/, which no repo-root-relative path reaches.
+func readRewriteMapsAt(t *testing.T, sgDir string) []rewriteMapLine {
+	t.Helper()
+	path := filepath.Join(sgDir, "rewrite-maps.jsonl")
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
