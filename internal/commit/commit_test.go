@@ -972,3 +972,33 @@ func TestCommitFromSharedIndexBase(t *testing.T) {
 	treeHasFile(t, plain.SHA, "other.txt")
 	treeLacksFile(t, plain.SHA, "alsostaged.txt")
 }
+
+// TestNewTmpIndexRefusesAnUndeclaredIndexBase: the index-base selector is a
+// closed set, and a value outside it is a programming error the pipeline must
+// refuse rather than silently resolve to one of the two real modes.
+//
+// A default that picked either would be the wrong kind of helpful: the parent
+// tree and a copy of the shared index are DIFFERENT starting points, and
+// guessing between them decides what the commit contains.
+func TestNewTmpIndexRefusesAnUndeclaredIndexBase(t *testing.T) {
+	baseDir := t.TempDir()
+	p := newPipeline(t.TempDir())
+
+	idx, err := p.newTmpIndex(context.Background(), baseDir, IndexBase(99), false, "")
+	if err == nil {
+		t.Fatalf("newTmpIndex accepted an undeclared index base and returned %v", idx)
+	}
+	if !strings.Contains(err.Error(), "unknown index base") || !strings.Contains(err.Error(), "99") {
+		t.Errorf("the refusal must name what was undeclared, got: %v", err)
+	}
+
+	// The refusal comes before anything is created: no index file, no
+	// directory, nothing to garbage-collect afterwards.
+	entries, rerr := os.ReadDir(baseDir)
+	if rerr != nil {
+		t.Fatalf("reading the base dir: %v", rerr)
+	}
+	if len(entries) != 0 {
+		t.Errorf("the refused call left %d entries under the index base dir, want none", len(entries))
+	}
+}
