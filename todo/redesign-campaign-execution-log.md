@@ -370,6 +370,41 @@ existing entries are never rewritten.
   before any push in the observation-failure arms) with the table
   regenerated.
 
+## Phase 5 audit outcome, corrections, and rulings
+
+- Audit PASS on all subphases; exactly the two named dead-code tests
+  removed; the exit-sites artifact spot-verified fresh.
+- CORRECTION to the earlier tracked-store ratification: the "a worktree
+  writer could equally write the local store" rationale is over-broad —
+  it conflates a local writer with REMOTE CONTENT materialized by
+  clone/pull/checkout (git deliberately does not version .git/hooks so
+  cloned content cannot execute; the tracked store re-opens that path).
+  The defensible argument, verified as-built, is that pre-pre-push
+  hooks execute only on push and hook run — an operator action with
+  push intent; the residual exposure (clone, then push from that
+  checkout, runs the repository's committed script) is real, narrow,
+  and must be DOCUMENTED, not argued away. The ruling itself stands.
+- ORCHESTRATOR RULING (D5): the LIVE hook store adopts
+  repo.SharedSafegitDir — hooks are repo-level policy exactly like the
+  locks that already share state across worktrees. hook
+  install/migrate/remove/list, discovery, and doctor's hooks_migrated
+  all key on the shared dir; the per-worktree store produced a new
+  doctor false-negative (hooks_migrated OK from a linked worktree while
+  pushes exit 24). The tracked store stays per-worktree by nature (it
+  is checkout content).
+- Dispatched to the fixer besides the ruling: the security-boundary
+  sentence in code-level docs (Origin's doc comment carries the
+  directory-not-tracked-ness rule; the "committed hook(s)" error text
+  and hook list help stop implying git-tracked-ness; the
+  commands-guide sentence saying legacy .d hooks "run before network
+  I/O" — now actively false, they exit 24); exit 24's producer list
+  gains hook remove; the internal/commit hooks package comment still
+  says "run from .git/hooks"; strengthen the two flipped tests that
+  retain the red-era tolerance branches; suppress hook remove's
+  advisory line under --quiet; document in_git_dir as "found inside
+  git's own state" (an escaping hooksPath path stays absolute); add
+  the missing config/COMMIT_EDITMSG sweep test.
+
 ## Ratified Phase 5 decisions
 
 - Exit codes 24 HooksNotMigrated, 25 TrackedHookNotExecutable, 50
