@@ -1544,6 +1544,112 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
   (asserts `.git/worktrees/side/safegit` while the fixture names the
   worktree `linked-side`; vacuously true since it was written).
+## Phase 10.2 consolidated outcome and remediation rulings
+
+- All ten per-phase fresh audits complete. Phases 0, 1, 3, 4, 5, 8, 9
+  PASS; Phase 2 PASS with one medium; Phase 7 PARTIAL (one medium-high
+  defect); Phase 6 PARTIAL (one high defect, one medium-high
+  unexecuted item). Findings consolidated into three remediation waves
+  (A critical behavioral; B behavioral; C docs/comments/coverage).
+- HIGH (Phase 6): the sequencer guard and its declared bypass resolve
+  .git against the PROCESS CWD (internal/commit/sequencer.go:32 uses
+  the relative GitDir answer; GuardInFlight joins it against safegit's
+  own cwd). Reproduced: conclusions refuse from subdirectories; a
+  single revert from a subdir bricks state after --no-commit already
+  staged; a mid-merge commit from a subdir SUCCEEDS as a single-parent
+  commit — 1.4's refusal silently disabled off-root. LATENT TWIN, fix
+  together: commit.go:365-369 joins the same relative git dir for
+  IndexBaseSharedIndex and a missing index file reads as EMPTY — the
+  guard fix alone would make subdir conclusions silently truncate.
+  RULING: anchor both resolutions absolutely; subdir tests for a
+  conclusion, the mid-merge refusal, and the revert path.
+- MEDIUM-HIGH (Phase 7): mv skips the destination-absent check for ANY
+  case-only pair regardless of core.ignorecase — reproduced destroying
+  an untracked destination's content on this case-sensitive
+  filesystem. RULING: gate the exemption on core.ignorecase, read
+  before validation; red-first.
+- MEDIUM-HIGH (Phase 6, a binding log note left unexecuted):
+  MERGE_AUTOSTASH / MERGE_RR unhandled — a safegit conclusion of an
+  autostash merge strands the stash and the uncommitted work silently
+  reverts (git's own --continue applies it and says so). RULING:
+  native merge-continue APPLIES the autostash after commit and state
+  cleanup, mirroring git; an apply conflict keeps the stash entry,
+  prints recovery instructions, and exits nonzero (General, message
+  names the stash). MERGE_RR joins the owned cleanup set; the residue
+  test gains both files.
+- MEDIUM rulings: scrub match --from silently rewrites each
+  submodule's ENTIRE history (the 4.2 silent-escalation class,
+  surviving on the match path) — adopt scrub file's submodule range
+  mechanism and hard error, dedupe the byte-identical range arms; the
+  cleanup-side old-object residue check warns at exit 0 — adopt the
+  sibling's reachability filtering and route through Tier B (31); the
+  DIRECTORY spelling of the positional+--untrack contradiction gets
+  the same hard error as the file spelling; revert-continue's
+  registration help falsely claims source-author preservation (the
+  overturned ruling) — fix and regenerate; --dry-run push skips hook
+  DISCOVERY along with execution, previewing success where the real
+  push exits 24/25 — discovery is a pure read, run it in previews;
+  divergences.md says exit 10 where PathMatchedNothing is 11.
+- LOG CORRECTION (Phase 6 audit, reproduced both ways): the earlier
+  ratified claim "a conflicted octopus cannot exist" is FALSE — only a
+  FIRST-head conflict aborts unparked; a later-head conflict parks
+  normally, and safegit merge-continue concludes it correctly today.
+  The false rationale in sequencer_markers.go and 6.3's octopus scope
+  sentence get corrected and a conflicted-octopus conclusion test is
+  added; behavior unchanged.
+- Generated-doc front-matter defect (Phase 9 audit): selfdoc gen
+  PRESERVES an existing file's front-matter description, so
+  internal-lock.md still carries the falsified O_CREAT|O_EXCL claim
+  (the earlier "heals on next gen" assumption was wrong) and
+  internal-trailer.md's description predates the record layer. Heal by
+  regenerating from scratch if selfdoc rebuilds descriptions for
+  absent files, else a deliberate front-matter edit; the mechanism is
+  a candidate upstream selfdoc report.
+- Wave B/C headline items: gnutls_handshake single-token transport
+  pattern (falsifies the stated multi-word invariant) + the doubled
+  stderr in the exit-40 message + two loose exit assertions + a
+  test-name typo; readTreeEntries missing --full-tree; the RefUpdate
+  port's silent empty->ZeroSHA substitution becomes a hard error (the
+  one bypass of 0.4's contract); the reopened runGitIn helper
+  consolidated; internal/filelock gains direct unit tests; mv
+  intra-pair nesting refused at validation; a re-declared identical
+  un-retracted pair on amend REFUSES as Usage naming the existing id
+  (the whole-line dedup branch was unreachable — replaced by this);
+  conclusion trailer/commit-msg-hook coverage tests; conflicted
+  revert-continue inverse-record test; --moved-retract coverage
+  (multi-id refusal, same-amend rule); hunks-vs-directory conflict
+  detection with repo-relative error paths; exit-registry producer
+  lists gain mv and the conclusions; the cross-repo auto-bump lock
+  ordering documented; repo.Uninstall deleted (dead API, superseded by
+  UninstallPlan + effects); hook_safety's stale comment and the two
+  log-only branches strengthened; the scan state sweep unions the
+  SHARED safegit dir from linked worktrees; the observe-staleness
+  comment and the scrub-record prefix assertion; the remap-skip clause
+  pinned; pre_rewrite_remotes nested per submodule path (schema
+  updated); the Tier A/B scope-filter asymmetry documented in code;
+  undo's registration string names all seven undoable ops (+ regen);
+  the undo guide section gains the range-validation refusal;
+  divergences.md gains front-matter and entries for rerere and (after
+  the fix) autostash; stale red-era comment sweep over
+  coord_subdir_test, commit_intake_edge_test,
+  commit_staged_deletion_dir_test, amend_parity_test,
+  commit_merge_state_test, and internal/conflict/property_test.
+- RATIFIED AS-IS (no change): --allow-empty plus a no-match path
+  refuses (the per-path rule governs; gains a pin);
+  unmatchedSources's actual order (untrack arguments first) — the
+  comment corrected to match; P8's quiet-channel decisions (git's
+  captured output not quiet-suppressed — streaming parity, revisited
+  by the push-streaming todo; the dry-run hook-skip notice suppressed
+  under --quiet while the payload carries it under --json; no payload
+  on a declined push); P5's six implementor-shaped hook decisions
+  (ambiguity refusal, migrate no-clobber, legacy-name 24, hook_perms
+  escalating a non-executable tracked hook to error/50, dot-files
+  under legacy .d triggering 24, dangling symlink as non-executable);
+  P1's untested pull exit path (identical code); P0's Spec.Env
+  hardening, the third exemption kind, and version memoization;
+  rerere non-recording on native conclusions (a documented
+  divergence, not a defect).
+
 ## Phase 10.1 closure
 
 - All seven battery items pass: build/vet clean; gofmt-clean; full
