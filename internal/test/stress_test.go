@@ -228,6 +228,9 @@ func TestHookTimeout(t *testing.T) {
 	hookDir := filepath.Join(dir, ".git", "safegit", "hooks")
 	hookPath := filepath.Join(hookDir, "pre-pre-push")
 	hookContent := "#!/bin/sh\nsleep 60\n"
+	if err := os.MkdirAll(hookDir, 0755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(hookPath, []byte(hookContent), 0755); err != nil {
 		t.Fatal(err)
 	}
