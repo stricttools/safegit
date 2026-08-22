@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // safegit decides what to do with a failed push by reading GIT'S OWN stderr:
 // a lease rejection is terminal, a transport failure is retried, everything
@@ -26,6 +29,10 @@ var gitTransportFailures = map[string]string{
 	// spellings for a transfer that was cut off.
 	"reset mid-transfer": "fatal: unable to access 'https://example.com/x.git/': Recv failure: Connection reset by peer\n",
 	"early eof":          "remote: fatal: early EOF\nfatal: the remote end hung up unexpectedly\n",
+	// Also not from the local probe: it needs a GnuTLS build of curl, which
+	// this machine's git is not linked against. The spelling is GnuTLS's own
+	// and curl reports it verbatim.
+	"gnutls handshake": "fatal: unable to access 'https://example.com/x.git/': gnutls_handshake() failed: The TLS connection was non-properly terminated.\n",
 }
 
 // refNamedAfterAPattern builds the rejection git prints for a non-fast-forward
@@ -52,7 +59,7 @@ func TestIsTransportErrorAcceptsWhatGitActuallyEmits(t *testing.T) {
 func TestIsTransportErrorIgnoresRefNames(t *testing.T) {
 	// Every one of these is a legal git branch name, and every one of them was
 	// a bare pattern in the transport list.
-	for _, ref := range []string{"EOF", "SSL", "TLS", "transport", "eof", "ssl-migration", "tls", "transport-refactor"} {
+	for _, ref := range []string{"EOF", "SSL", "TLS", "transport", "eof", "ssl-migration", "tls", "transport-refactor", "gnutls_handshake"} {
 		t.Run(ref, func(t *testing.T) {
 			stderrText := refNamedAfterAPattern(ref)
 			if isTransportError(stderrText) {
@@ -108,6 +115,19 @@ func TestLeaseRejectedNeedsTheParenthesesAndTheForce(t *testing.T) {
 		"To /srv/git/repo.git\n ! [rejected]        main -> main (non-fast-forward)\n"
 	if leaseRejected(unparenthesized, true) {
 		t.Errorf("only git's parenthesized (stale info) marker is a lease rejection:\n%s", unparenthesized)
+	}
+}
+
+// TestEveryTransportPatternIsMultiWord pins the invariant the list is written
+// under, so a single-token pattern cannot be added back without the test that
+// would notice: git's stderr echoes REF NAMES, a ref name cannot contain a
+// space, and a pattern that could BE a ref name turns an operator's naming
+// choice into a retry policy.
+func TestEveryTransportPatternIsMultiWord(t *testing.T) {
+	for _, p := range transportPatterns {
+		if !strings.Contains(p, " ") {
+			t.Errorf("transport pattern %q is a single token, so a ref of that name would classify its own rejection as a transport failure", p)
+		}
 	}
 }
 
