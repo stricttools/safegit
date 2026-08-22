@@ -215,24 +215,78 @@ func TestEnsureInitialized(t *testing.T) {
 	}
 }
 
-func TestUninstall(t *testing.T) {
+// UninstallPlan is what an uninstall is: enumerating and removing are separate,
+// so that the command can print the plan before asking for consent and record
+// it under a dry run instead of performing it. What is pinned here is the plan's
+// CONTENTS -- that a repository with nothing installed produces the refusal, and
+// that an initialized one names the state directory whose removal is the whole
+// operation. The command that consumes it is covered end to end in
+// internal/test/doctor_uninstall_test.go.
+func TestUninstallPlan(t *testing.T) {
 	gitDir := filepath.Join(t.TempDir(), ".git")
 	os.MkdirAll(gitDir, 0755)
 
-	// Uninstall when not initialized
-	err := Uninstall(context.Background(), gitDir)
+	// Nothing installed is the "safegit is not initialized" refusal, and it
+	// yields no plan rather than an empty one.
+	targets, err := UninstallPlan(context.Background(), gitDir)
 	if err == nil {
-		t.Fatal("expected error uninstalling when not initialized")
+		t.Fatal("expected a refusal planning an uninstall of an uninitialized repository")
+	}
+	if len(targets) != 0 {
+		t.Errorf("the refusal still produced %d target(s): %+v", len(targets), targets)
 	}
 
-	Init(context.Background(), gitDir)
-	err = Uninstall(context.Background(), gitDir)
+	if err := Init(context.Background(), gitDir); err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	targets, err = UninstallPlan(context.Background(), gitDir)
 	if err != nil {
 		t.Fatal(err)
 	}
+	if len(targets) == 0 {
+		t.Fatal("an initialized repository planned no targets")
+	}
 
+	// With no linked worktrees the invoking worktree's state directory IS the
+	// shared store, so it appears once, is not foreign, and is the path whose
+	// removal makes the repository uninitialized.
+	want := SafegitDir(gitDir)
+	var found int
+	for _, tgt := range targets {
+		if tgt.Path != want {
+			continue
+		}
+		found++
+		if tgt.Foreign {
+			t.Errorf("the invoking worktree's own state is marked foreign: %+v", tgt)
+		}
+		if tgt.Label == "" {
+			t.Errorf("the target carries no label: %+v", tgt)
+		}
+	}
+	if found != 1 {
+		t.Fatalf("the plan names %s %d time(s), want exactly 1: %+v", want, found, targets)
+	}
+
+	// Every planned path exists: the plan is read off disk, not guessed.
+	for _, tgt := range targets {
+		if _, err := os.Lstat(tgt.Path); err != nil {
+			t.Errorf("the plan names %s, which does not exist: %v", tgt.Path, err)
+		}
+	}
+
+	// Removing what the plan names is what leaves the repository uninstalled --
+	// the removal itself belongs to the caller's effects handle.
+	for _, tgt := range targets {
+		if err := os.RemoveAll(tgt.Path); err != nil {
+			t.Fatalf("removing %s: %v", tgt.Path, err)
+		}
+	}
 	if IsInitialized(gitDir) {
-		t.Fatal("should not be initialized after uninstall")
+		t.Fatal("removing every planned target left the repository initialized")
+	}
+	if _, err := UninstallPlan(context.Background(), gitDir); err == nil {
+		t.Error("a second plan after the removal did not refuse")
 	}
 }
 
