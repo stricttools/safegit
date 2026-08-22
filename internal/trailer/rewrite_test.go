@@ -89,6 +89,14 @@ func TestRemoveMovedRecordsNamingKeepsTheBodyWhenEveryTrailerGoes(t *testing.T) 
 	if got != "just a subject\n" {
 		t.Errorf("message is %q, want %q", got, "just a subject\n")
 	}
+
+	// A message that is NOTHING but the record leaves nothing behind. The empty
+	// answer is the honest one; whether a caller can write it is the caller's
+	// problem to state (see removeScrubbedMoveRecords).
+	onlyRecord := "Moved: " + id + " a.txt -> b.txt\n"
+	if got, changed := RemoveMovedRecordsNaming(onlyRecord, "a.txt"); !changed || got != "" {
+		t.Errorf("removing the only trailer of a body-less message gave %q (changed=%v)", got, changed)
+	}
 }
 
 // TestRewriteMessageKeepsQuotingIntact is the whole point of the trailer-aware
