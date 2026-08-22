@@ -179,31 +179,50 @@ func TestPushForcedMultiRefArgvIsPinnedAndAtomic(t *testing.T) {
 }
 
 // gitShim installs a `git` wrapper ahead of the real one on the spawned
-// safegit's PATH. Every invocation whose argv contains the bare word `push`
-// appends a line to a counter file and then runs beforePush (a shell snippet,
-// with REALGIT bound to the actual git binary) before handing off to the real
-// git with the original arguments.
+// safegit's PATH. Every invocation whose argv contains the bare word `sub`
+// records its whole argv on a log file and then runs `before` (a shell snippet,
+// with REALGIT bound to the actual git binary and ATTEMPT bound to the ordinal
+// of this interception, counting from 1) before handing off to the real git
+// with the original arguments. A snippet that exits itself replaces the real
+// invocation instead of preceding it, which is how a test fabricates a failure.
 //
 // It is how a test reaches INTO the window between safegit observing the remote
 // and safegit pushing: the snippet runs after the observation and before the
 // push, which is exactly the concurrent-pusher race the lease exists to refuse.
 // It returns the environment entries to hand runSafegitEnv, plus a func
-// reporting how many pushes were attempted.
-func gitShim(t *testing.T, beforePush string) (env []string, pushCount func() int) {
+// returning one entry per interception, in order, each the argv git was called
+// with -- so a test can assert both HOW MANY attempts happened and WHAT each
+// one asked for, from one recording.
+func gitShim(t *testing.T, sub, before string) (env []string, calls func() []string) {
 	t.Helper()
 	realGit, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatalf("locating the real git binary: %v", err)
 	}
 	shimDir := t.TempDir()
-	counter := filepath.Join(shimDir, "push-count")
+	argvLog := filepath.Join(shimDir, "argv-log")
+
+	read := func() []string {
+		data, err := os.ReadFile(argvLog)
+		if err != nil {
+			return nil
+		}
+		var out []string
+		for _, line := range strings.Split(string(data), "\n") {
+			if strings.TrimSpace(line) != "" {
+				out = append(out, line)
+			}
+		}
+		return out
+	}
 
 	script := "#!/bin/sh\n" +
 		"for a in \"$@\"; do\n" +
-		"  if [ \"$a\" = \"push\" ]; then\n" +
-		"    echo push >> " + counter + "\n" +
+		"  if [ \"$a\" = \"" + sub + "\" ]; then\n" +
+		"    printf '%s\\n' \"$*\" >> " + argvLog + "\n" +
+		"    ATTEMPT=$(wc -l < " + argvLog + " | tr -d ' ')\n" +
 		"    REALGIT=" + realGit + "\n" +
-		beforePush + "\n" +
+		before + "\n" +
 		"    break\n" +
 		"  fi\n" +
 		"done\n" +
@@ -212,14 +231,7 @@ func gitShim(t *testing.T, beforePush string) (env []string, pushCount func() in
 		t.Fatal(err)
 	}
 
-	return []string{"PATH=" + shimDir + string(os.PathListSeparator) + os.Getenv("PATH")},
-		func() int {
-			data, err := os.ReadFile(counter)
-			if err != nil {
-				return 0
-			}
-			return len(strings.Fields(string(data)))
-		}
+	return []string{"PATH=" + shimDir + string(os.PathListSeparator) + os.Getenv("PATH")}, read
 }
 
 // divergedFromRemote builds the situation a force-push exists for: the remote
@@ -261,7 +273,7 @@ func divergedFromRemote(t *testing.T) (dir, remoteDir, remoteBase string) {
 func TestPushLeaseRefusesWhenTheRemoteMovedUnderUs(t *testing.T) {
 	dir, remoteDir, remoteBase := divergedFromRemote(t)
 
-	env, pushes := gitShim(t, `"$REALGIT" --git-dir=`+remoteDir+` update-ref refs/heads/main `+remoteBase)
+	env, pushes := gitShim(t, "push", `"$REALGIT" --git-dir=`+remoteDir+` update-ref refs/heads/main `+remoteBase)
 
 	_, stderr, code := runSafegitEnv(t, dir, env, "--approve-consequential", "push",
 		"--refs", "head", "--force-with-lease", "origin")
@@ -275,7 +287,7 @@ func TestPushLeaseRefusesWhenTheRemoteMovedUnderUs(t *testing.T) {
 	if got := testutil.Rev(t, remoteDir, "refs/heads/main"); got != remoteBase {
 		t.Errorf("remote main is %s; the refused push must leave the other session's ref alone (%s)", got, remoteBase)
 	}
-	if n := pushes(); n != 1 {
+	if n := len(pushes()); n != 1 {
 		t.Errorf("a lease rejection is terminal, so exactly one push must be attempted; got %d", n)
 	}
 }
@@ -293,14 +305,14 @@ func TestPushLeaseRejectionIsNotRetried(t *testing.T) {
 		t.Fatalf("setting push.retryAttempts failed (code %d): %s", code, stderr)
 	}
 
-	env, pushes := gitShim(t, `"$REALGIT" --git-dir=`+remoteDir+` update-ref refs/heads/main `+remoteBase)
+	env, pushes := gitShim(t, "push", `"$REALGIT" --git-dir=`+remoteDir+` update-ref refs/heads/main `+remoteBase)
 
 	_, stderr, code := runSafegitEnv(t, dir, env, "--approve-consequential", "push",
 		"--refs", "head", "--force-with-lease", "origin")
 	if code == 0 {
 		t.Fatalf("the push must fail; stderr: %s", stderr)
 	}
-	if n := pushes(); n != 1 {
+	if n := len(pushes()); n != 1 {
 		t.Errorf("push.retryAttempts=5 must not apply to a lease rejection; %d pushes were attempted", n)
 	}
 	if got := testutil.Rev(t, remoteDir, "refs/heads/main"); got != remoteBase {

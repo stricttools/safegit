@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -184,6 +185,16 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	// Resolve refs to push
 	refs, err := resolveRefsForPush(ctx, remote, mode)
 	if err != nil {
+		// A remote that could not be READ exits PushFailed, the same code the
+		// retry path uses when its own re-read fails: the push did not get
+		// through, and no amount of fixing the command line changes that. The
+		// other failures here -- a detached HEAD, a local ref that will not
+		// resolve -- are about this repository and stay General.
+		var readErr *remoteReadError
+		if errors.As(err, &readErr) {
+			die(exitcode.PushFailed, err.Error())
+			return exitcode.PushFailed
+		}
 		die(exitcode.General, fmt.Sprintf("resolving refs: %v", err))
 		return exitcode.General
 	}
@@ -430,7 +441,10 @@ func resolveHeadRef(ctx context.Context, remote string) ([]pushRefInfo, error) {
 		return nil, fmt.Errorf("resolving %s: %w", headRef, err)
 	}
 
-	remoteSHA := getRemoteSHA(ctx, remote, headRef)
+	remoteSHA, err := getRemoteSHA(ctx, remote, headRef)
+	if err != nil {
+		return nil, err
+	}
 
 	return []pushRefInfo{{
 		LocalRef:  headRef,
@@ -449,7 +463,9 @@ func resolveBranchRefs(ctx context.Context, remote string) ([]pushRefInfo, error
 
 	remoteMap, err := git.LsRemoteBulk(ctx, remote, "refs/heads/*")
 	if err != nil {
-		return nil, fmt.Errorf("listing remote branches: %w", err)
+		// Same classification as the single-ref read: one unreadable remote has
+		// one answer, whether the push is of one ref or of all of them.
+		return nil, &remoteReadError{Remote: remote, Pattern: "refs/heads/*", Err: err}
 	}
 
 	var refs []pushRefInfo
@@ -483,7 +499,7 @@ func resolveTagRefs(ctx context.Context, remote string) ([]pushRefInfo, error) {
 
 	remoteMap, err := git.LsRemoteBulk(ctx, remote, "refs/tags/*")
 	if err != nil {
-		return nil, fmt.Errorf("listing remote tags: %w", err)
+		return nil, &remoteReadError{Remote: remote, Pattern: "refs/tags/*", Err: err}
 	}
 
 	var refs []pushRefInfo
@@ -508,16 +524,49 @@ func resolveTagRefs(ctx context.Context, remote string) ([]pushRefInfo, error) {
 	return refs, nil
 }
 
-func getRemoteSHA(ctx context.Context, remote, ref string) string {
-	stdout, _, err := git.Run(ctx, "ls-remote", remote, ref)
-	if err != nil || stdout == "" {
-		return nullSHA
+// remoteReadError is a failure to OBSERVE the remote -- git could not list its
+// refs at all -- as distinct from an observation that came back saying the ref
+// is not there.
+//
+// Keeping the two apart is the lease's requirement. safegit pins
+// --force-with-lease to the SHA it observed, and it pins "absent" to the EMPTY
+// expectation, which is git's spelling for "this ref must not exist yet". So an
+// unreadable remote answered with the absent marker asserts that a ref which
+// plainly does exist does not: git refuses the push as a stale lease, safegit
+// reports it as a concurrent pusher who was never there, and the payload says
+// the remote ref is null. An unreadable remote is not a state of the remote; it
+// is not knowing one, and it is fatal rather than an answer.
+type remoteReadError struct {
+	// Remote is the remote name that could not be read.
+	Remote string
+	// Pattern is the ref or ref glob that was being listed.
+	Pattern string
+	// Err is git's own failure.
+	Err error
+}
+
+func (e *remoteReadError) Error() string {
+	return fmt.Sprintf("reading %s on %s: %v", e.Pattern, e.Remote, e.Err)
+}
+
+func (e *remoteReadError) Unwrap() error { return e.Err }
+
+// getRemoteSHA returns the SHA the remote has for one ref, or the null marker
+// when the remote answered and does not have it. A remote that could not be
+// read is an error, never the null marker -- see remoteReadError.
+func getRemoteSHA(ctx context.Context, remote, ref string) (string, error) {
+	stdout, stderr, err := git.Run(ctx, "ls-remote", remote, ref)
+	if err != nil {
+		if msg := strings.TrimSpace(stderr); msg != "" {
+			err = fmt.Errorf("%w: %s", err, msg)
+		}
+		return "", &remoteReadError{Remote: remote, Pattern: ref, Err: err}
 	}
 	parts := strings.Fields(stdout)
 	if len(parts) >= 1 {
-		return parts[0]
+		return parts[0], nil
 	}
-	return nullSHA
+	return nullSHA, nil
 }
 
 // leaseExpectation is the value safegit pins a ref's lease to: the SHA it
