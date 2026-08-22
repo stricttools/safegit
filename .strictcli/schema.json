@@ -82,7 +82,7 @@
   },
   "project_id": "github.com/smm-h/safegit",
   "name": "safegit",
-  "version": "0.28.1-0.20260822115812-16a27cf6869d",
+  "version": "0.28.1-0.20260822124239-4cadcd4bb2d1",
   "help": "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "proc_observe_allowlist": [
     [
@@ -319,6 +319,18 @@
         {
           "name": "untrack",
           "help": "stop tracking a path, leaving the file itself on disk: the commit records its removal from the index (repeatable, one path each); the path must be tracked in the commit's parent; omitted means nothing is untracked",
+          "value_schema": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "presence": "optional",
+          "unique": true
+        },
+        {
+          "name": "moved",
+          "help": "declare that content moved, as 'old -> new' (repeatable, one pair each). End BOTH paths with a slash to declare a whole subtree. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. The old path must be tracked in the commit's parent and gone from disk, and the new one must exist; nothing is inferred from file contents. Omitted means the commit declares no moves",
           "value_schema": {
             "type": "array",
             "items": {
