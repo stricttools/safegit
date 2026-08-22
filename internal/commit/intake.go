@@ -114,21 +114,25 @@ type intake struct {
 	skipped []string
 }
 
-// unmatchedSource returns the first argument that contributed nothing to the
-// given set of changed paths, if there is one.
+// unmatchedSources returns EVERY argument that contributed nothing to the given
+// set of changed paths, in the order the caller typed them.
 //
 // Naming a path is a statement that it belongs in the commit. When it turns out
 // to change nothing -- a typo, a file already committed with this exact
 // content, a directory that is empty on disk and absent from the tree -- the
 // honest answer is a refusal naming that argument, not a commit that quietly
 // contains something else.
-func (in *intake) unmatchedSource(changed []git.ChangedPath) (intakeSource, bool) {
+//
+// All of them, not just the first: a caller who mistyped two arguments learns
+// both at once instead of discovering the second only after fixing the first.
+func (in *intake) unmatchedSources(changed []git.ChangedPath) []intakeSource {
+	var out []intakeSource
 	for _, src := range in.sources {
 		if !src.contributed(changed) {
-			return src, true
+			out = append(out, src)
 		}
 	}
-	return intakeSource{}, false
+	return out
 }
 
 // contributed reports whether any changed path is this source's own doing: the
@@ -820,17 +824,35 @@ func changedPaths(changed []git.ChangedPath) []string {
 	return out
 }
 
-// unmatchedSourceError is the refusal for an argument that contributed nothing.
-func unmatchedSourceError(src intakeSource, against string) error {
-	what := "it"
-	if src.dir {
-		what = "everything under it"
+// unmatchedSourceError is the refusal for the arguments that contributed
+// nothing. Every one of them is named, one per line, so a single run reports
+// the whole set rather than the first of it.
+func unmatchedSourceError(srcs []intakeSource, against string) error {
+	if len(srcs) == 1 {
+		return &CommitError{
+			Code: exitcode.PathMatchedNothing,
+			Message: fmt.Sprintf("nothing to commit for %s: staging %s leaves the tree of %s unchanged",
+				srcs[0].arg, stagedWhat(srcs[0]), against),
+		}
+	}
+	lines := make([]string, 0, len(srcs))
+	for _, src := range srcs {
+		lines = append(lines, fmt.Sprintf("%s: staging %s changes nothing", src.arg, stagedWhat(src)))
 	}
 	return &CommitError{
 		Code: exitcode.PathMatchedNothing,
-		Message: fmt.Sprintf("nothing to commit for %s: staging %s leaves the tree of %s unchanged",
-			src.arg, what, against),
+		Message: fmt.Sprintf("nothing to commit for %d of the named arguments; each leaves the tree of %s unchanged:\n  %s",
+			len(srcs), against, strings.Join(lines, "\n  ")),
 	}
+}
+
+// stagedWhat names what staging an argument covers: the path itself, or -- for
+// a directory -- everything underneath it.
+func stagedWhat(src intakeSource) string {
+	if src.dir {
+		return "everything under it"
+	}
+	return "it"
 }
 
 // refOrEmptyTree names what a new tree was compared against.

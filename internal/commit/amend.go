@@ -248,8 +248,8 @@ func (p *Pipeline) tryAmend(
 	if err != nil {
 		return nil, false, fmt.Errorf("comparing the amended tree against %s: %w", ref, err)
 	}
-	if src, unmatched := files.unmatchedSource(changed); unmatched {
-		return nil, false, unmatchedSourceError(src, ref)
+	if unmatched := files.unmatchedSources(changed); len(unmatched) > 0 {
+		return nil, false, unmatchedSourceError(unmatched, ref)
 	}
 
 	// The commit-msg hook, on the message with the user's own trailers and move

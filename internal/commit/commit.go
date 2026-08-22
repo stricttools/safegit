@@ -431,8 +431,8 @@ func (p *Pipeline) tryCommit(
 	}
 
 	// An argument that changed nothing is a refusal naming that argument.
-	if src, unmatched := files.unmatchedSource(changed); unmatched {
-		return nil, false, unmatchedSourceError(src, refOrEmptyTree(isRootCommit, ref))
+	if unmatched := files.unmatchedSources(changed); len(unmatched) > 0 {
+		return nil, false, unmatchedSourceError(unmatched, refOrEmptyTree(isRootCommit, ref))
 	}
 
 	// Check for empty commit (tree unchanged). Root commits are never empty.
