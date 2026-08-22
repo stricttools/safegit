@@ -393,7 +393,7 @@
    sequencer_markers.go:118  return in verifyMarkers  code=exitcode.General  | return exitcode.General
    sequencer_markers.go:129  return in verifyMarkers  code=exitcode.General  | return exitcode.General
    sequencer_markers.go:135  return in verifyMarkers  code=op.refuseSurvivingMarkers(violations)  | return op.refuseSurvivingMarkers(violations)
-   sequencer_markers.go:483  return in refuseSurvivingMarkers  code=exitcode.ConclusionMarkerSurvived  | return exitcode.ConclusionMarkerSurvived
+   sequencer_markers.go:495  return in refuseSurvivingMarkers  code=exitcode.ConclusionMarkerSurvived  | return exitcode.ConclusionMarkerSurvived
    undo.go:60  die in runUndo  code=exitcode.Usage  | die(exitcode.Usage, fmt.Sprintf("--count must be positive, got %d", count))
    undo.go:65  die in runUndo  code=exitcode.NotInitialized  | die(exitcode.NotInitialized, err.Error())
    undo.go:72  die in runUndo  code=exitcode.General  | die(exitcode.General, fmt.Sprintf("loading config: %v", err))
