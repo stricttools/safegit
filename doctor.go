@@ -168,7 +168,7 @@ func printUninstallPlan(flags globalFlags, targets []repo.UninstallTarget) {
 		outf(flags, "  %s  (%s%s)\n", t.Path, t.Label, note)
 	}
 	if foreign > 0 {
-		outf(flags, "%d of these belong to other worktrees of this repository; uninstall is repository-wide.\n", foreign)
+		outf(flags, "Includes %d path(s) outside the worktree you are in; uninstall is repository-wide.\n", foreign)
 	}
 }
 
