@@ -59,11 +59,12 @@ const (
 
 	// Usage is a command line safegit itself rejects after strictcli has
 	// accepted it: mutually exclusive flags, a missing message, a hunk spec
-	// that does not parse, an empty file list, a malformed glob or --target
-	// value. Produced by commit, scan, scrub file/match/run, author check, and
-	// the three guarded passthroughs that take a bare positional argument
-	// (checkout, merge, rebase). Note that a refusal by the framework's own
-	// parser exits General (1) instead -- see the package comment.
+	// that does not parse, an empty file list, a non-positive --count, a
+	// malformed glob or --target value. Produced by commit, undo, scan, scrub
+	// file/match/run, author check, and the three guarded passthroughs that
+	// take a bare positional argument (checkout, merge, rebase). Note that a
+	// refusal by the framework's own parser exits General (1) instead -- see
+	// the package comment.
 	Usage = 2
 
 	// NoRepository means the working directory is not inside a git repository
@@ -82,7 +83,10 @@ const (
 	// CoordinationBusy means the coordination guard refused: another safegit
 	// operation, or an in-progress git sequencer state, owns the working tree.
 	// Produced by checkout, pull, merge, rebase, reset, bisect, cherry-pick,
-	// revert and backup restore.
+	// revert and backup restore, and by commit (including its --amend and
+	// reword forms) and undo, which refuse outright while git has a merge,
+	// cherry-pick, revert, rebase or mailbox application in flight -- naming
+	// the operation and the command that ends it.
 	CoordinationBusy = 5
 
 	// CASExhausted means the ref moved under every compare-and-swap attempt,

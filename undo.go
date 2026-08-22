@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smm-h/safegit/internal/coord"
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/lock"
@@ -31,13 +32,25 @@ const sessionIDEnvVar = "CLAUDE_CODE_SESSION_ID"
 func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string) {
 	const cmd = "undo"
 
+	// Post-parse argument validation: the framework accepted the command line,
+	// safegit rejects the value. That is exitcode.Usage by the registry's own
+	// definition.
 	if count <= 0 {
-		die(exitcode.General, fmt.Sprintf("--count must be positive, got %d", count))
+		die(exitcode.Usage, fmt.Sprintf("--count must be positive, got %d", count))
 	}
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		die(exitcode.NotInitialized, err.Error())
+	}
+
+	// Undoing while git has an operation in flight is incoherent on its face --
+	// the operation was computed against a commit undo is about to move off
+	// HEAD -- and the rollback's index reconciliation would erase the conflict
+	// stages git needs to conclude it, leaving a repository that looks clean and
+	// mid-merge at once.
+	if err := coord.GuardInFlight(gitDir, "undo", nil); err != nil {
+		die(exitcode.CoordinationBusy, err.Error())
 	}
 
 	sgDir := repo.SafegitDir(gitDir)

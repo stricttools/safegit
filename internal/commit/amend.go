@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smm-h/safegit/internal/coord"
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/index"
@@ -24,6 +25,11 @@ type AmendRequest struct {
 	Branch    string     // target branch ref; empty = HEAD
 	Trailers  []string   // user-provided trailers ("Key: Value" format)
 	DryRun    bool
+
+	// Sequencer is the same declared input CommitRequest carries: nil for
+	// every ordinary caller, set only by a command that concludes the
+	// operation git has in flight.
+	Sequencer *coord.SequencerContext
 }
 
 // AmendResult is the JSON-serializable output of a successful amend.
@@ -45,6 +51,10 @@ type AmendResult struct {
 // Uses tmp index seeded from HEAD, stages files, builds a new commit with
 // parent = HEAD^ and lock-and-CAS updates the ref.
 func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, error) {
+	if err := guardSequencer(ctx, req.Sequencer, "amend"); err != nil {
+		return nil, err
+	}
+
 	repoRoot, err := git.RepoRoot(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolving repo root: %w", err)
@@ -267,6 +277,11 @@ type RewordRequest struct {
 	Branch   string   // target branch ref; empty = HEAD
 	Trailers []string // user-provided trailers ("Key: Value" format)
 	DryRun   bool
+
+	// Sequencer is the same declared input CommitRequest carries: nil for
+	// every ordinary caller, set only by a command that concludes the
+	// operation git has in flight.
+	Sequencer *coord.SequencerContext
 }
 
 // RewordResult is the JSON-serializable output of a successful reword.
@@ -281,6 +296,10 @@ type RewordResult struct {
 // Reword rewrites only the commit message of the tip of the current branch.
 // Tree and parent remain unchanged. Retries on CAS miss.
 func (p *Pipeline) Reword(ctx context.Context, req RewordRequest) (*RewordResult, error) {
+	if err := guardSequencer(ctx, req.Sequencer, "reword"); err != nil {
+		return nil, err
+	}
+
 	if req.Message == "" {
 		return nil, fmt.Errorf("reword requires a message (-m)")
 	}
