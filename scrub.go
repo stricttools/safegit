@@ -350,7 +350,14 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		return xform, nil
 	}, flags.verbose)
 	if err != nil {
-		die(exitcode.General, err.Error())
+		// Through dieFinalize, like every other walk in the rewrite family: the
+		// walk is one of the two seams that can produce a Tier A REFUSAL, and a
+		// refusal exits RewriteRefused ("nothing happened") rather than General.
+		// No transform on THIS walk raises one today -- `scrub file` removes a
+		// move record rather than transforming it, so there is no
+		// RecordTransformError to refuse over -- but the seam is shared and the
+		// exit code is not the walk's own choice to make.
+		dieFinalize("", err)
 	}
 	remap.reportStale(flags)
 
@@ -639,7 +646,7 @@ func runScrubFileInSubmodule(
 		return xform, nil
 	}, flags.verbose)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("submodule walk and rewrite: %v", err))
+		dieFinalize("submodule walk and rewrite", err)
 	}
 
 	// The submodule's rewritten commits now exist as unreachable objects. They
@@ -772,7 +779,7 @@ func runScrubFileInSubmodule(
 		return xform, nil
 	}, flags.verbose)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("parent walk and rewrite: %v", err))
+		dieFinalize("parent walk and rewrite", err)
 	}
 	parentRemap.reportStale(flags)
 
