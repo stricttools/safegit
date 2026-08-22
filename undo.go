@@ -18,10 +18,31 @@ import (
 // commit -> parent (the commit before this one)
 // amend  -> oldSha (the commit that was replaced)
 // reword -> oldSha (the commit that was replaced)
+//
+// The three conclusion commands record their own op names rather than "commit",
+// so undo can name what it is reversing -- and warn about the half it cannot
+// reverse (see conclusionOps).
 var undoableOps = map[string]string{
-	"commit": "parent",
-	"amend":  "oldSha",
-	"reword": "oldSha",
+	"commit":               "parent",
+	"amend":                "oldSha",
+	"reword":               "oldSha",
+	"merge-continue":       "parent",
+	"cherry-pick-continue": "parent",
+	"revert-continue":      "parent",
+}
+
+// conclusionOps are the operations whose undo is PARTIAL by construction.
+//
+// Undo moves a ref and reconciles the index. A conclusion did that AND removed
+// git's operation state files, and nothing in the oplog records what those
+// files held -- MERGE_HEAD's commits, the message draft, the conflict stages the
+// index no longer carries. So undoing one gives back the pre-conclusion tip and
+// a repository git considers idle, not one it considers mid-merge. Saying so is
+// the whole point of these ops being distinguishable from a plain commit.
+var conclusionOps = map[string]string{
+	"merge-continue":       "merge",
+	"cherry-pick-continue": "cherry-pick",
+	"revert-continue":      "revert",
 }
 
 // sessionIDEnvVar is the Claude Code session handshake variable. It is declared
@@ -238,6 +259,17 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	}
 	if err := git.ReconcileMainIndex(ctx, currentSHA, syncTreeish); err != nil {
 		die(exitcode.General, fmt.Sprintf("%s was undone, but reconciling the shared index failed: %v", currentSHA[:8], err))
+	}
+
+	// A conclusion's undo is partial by construction: the ref is back, the git
+	// operation it concluded is not. Said on stderr unconditionally, like the
+	// parent-bump note below -- it is a fact about what this undo did NOT do,
+	// and withholding it under --quiet would let an operator believe the merge
+	// is waiting to be concluded again.
+	if operation, isConclusion := conclusionOps[targetEntry.Op]; isConclusion {
+		fmt.Fprintf(os.Stderr, "note: %s is reversed, but git's %s state is NOT restored -- MERGE_HEAD, the message draft\n", targetEntry.Op, operation)
+		fmt.Fprintf(os.Stderr, "      and the conflict stages are gone, so the repository is idle rather than mid-%s.\n", operation)
+		fmt.Fprintf(os.Stderr, "      Re-run the %s to get back to a state safegit %s-continue can conclude.\n", operation, operation)
 	}
 
 	// If the commit being undone triggered a parent bump, inform the user.

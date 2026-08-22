@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
-	"strconv"
 	"testing"
 
 	"github.com/smm-h/strictcli/go/strictcli"
@@ -28,10 +27,17 @@ import (
 // object store, the config file or the remote's ref list and writes nothing;
 // `backup list` is a network read (git ls-remote) but still a read.
 //
-// Mutating and NOT consequential (20):
+// Mutating and NOT consequential (23):
 //
 //   - commit -- creates a commit and moves a ref. The routine operation this
 //     tool exists for, and `safegit undo` reverses it from the oplog.
+//   - merge-continue, cherry-pick-continue, revert-continue -- conclude an
+//     operation git stopped before committing. Each creates one commit and
+//     moves one ref, exactly as commit does, and then removes the state files
+//     of the operation it just finished. `safegit undo` reverses the ref move
+//     (and says what it cannot restore), and every one of them refuses unless
+//     the state it names is the state actually on disk -- so there is nothing
+//     here to interrupt someone for that commit does not also have.
 //   - checkout, merge, rebase, reset, bisect, cherry-pick, revert -- guarded
 //     passthroughs. Each moves HEAD, refs or the working tree and then hands
 //     off to git; git itself does not interrupt for any of them, and safegit's
@@ -80,39 +86,42 @@ var classification = map[string]struct {
 	dryRunSupported bool
 	passthrough     bool
 }{
-	"commit":         {strictcli.EffectMutating, false, true, false},
-	"checkout":       {strictcli.EffectMutating, false, true, true},
-	"merge":          {strictcli.EffectMutating, false, true, true},
-	"rebase":         {strictcli.EffectMutating, false, true, true},
-	"reset":          {strictcli.EffectMutating, false, true, true},
-	"bisect":         {strictcli.EffectMutating, false, true, true},
-	"cherry-pick":    {strictcli.EffectMutating, false, true, true},
-	"revert":         {strictcli.EffectMutating, false, true, true},
-	"push":           {strictcli.EffectMutating, false, true, false},
-	"pull":           {strictcli.EffectMutating, false, true, false},
-	"doctor":         {strictcli.EffectMutating, false, true, false},
-	"undo":           {strictcli.EffectMutating, false, true, false},
-	"unlock":         {strictcli.EffectMutating, false, true, false},
-	"scan":           {strictcli.EffectReadOnly, false, true, false},
-	"version":        {strictcli.EffectReadOnly, false, true, false},
-	"author.list":    {strictcli.EffectReadOnly, false, true, false},
-	"author.check":   {strictcli.EffectReadOnly, false, true, false},
-	"author.rewrite": {strictcli.EffectMutating, true, true, false},
-	"backup.backup":  {strictcli.EffectMutating, false, true, false},
-	"backup.list":    {strictcli.EffectReadOnly, false, true, false},
-	"backup.restore": {strictcli.EffectMutating, false, true, false},
-	"config.show":    {strictcli.EffectReadOnly, false, true, false},
-	"config.get":     {strictcli.EffectReadOnly, false, true, false},
-	"config.set":     {strictcli.EffectMutating, false, true, false},
-	"hook.list":      {strictcli.EffectReadOnly, false, true, false},
-	"hook.run":       {strictcli.EffectMutating, false, false, false},
-	"hook.install":   {strictcli.EffectMutating, false, true, false},
-	"hook.remove":    {strictcli.EffectMutating, false, true, false},
-	"hook.migrate":   {strictcli.EffectMutating, false, true, false},
-	"scrub.file":     {strictcli.EffectMutating, true, true, false},
-	"scrub.match":    {strictcli.EffectMutating, true, true, false},
-	"scrub.run":      {strictcli.EffectMutating, true, true, false},
-	"scrub.verify":   {strictcli.EffectReadOnly, false, true, false},
+	"commit":               {strictcli.EffectMutating, false, true, false},
+	"merge-continue":       {strictcli.EffectMutating, false, true, false},
+	"cherry-pick-continue": {strictcli.EffectMutating, false, true, false},
+	"revert-continue":      {strictcli.EffectMutating, false, true, false},
+	"checkout":             {strictcli.EffectMutating, false, true, true},
+	"merge":                {strictcli.EffectMutating, false, true, true},
+	"rebase":               {strictcli.EffectMutating, false, true, true},
+	"reset":                {strictcli.EffectMutating, false, true, true},
+	"bisect":               {strictcli.EffectMutating, false, true, true},
+	"cherry-pick":          {strictcli.EffectMutating, false, true, true},
+	"revert":               {strictcli.EffectMutating, false, true, true},
+	"push":                 {strictcli.EffectMutating, false, true, false},
+	"pull":                 {strictcli.EffectMutating, false, true, false},
+	"doctor":               {strictcli.EffectMutating, false, true, false},
+	"undo":                 {strictcli.EffectMutating, false, true, false},
+	"unlock":               {strictcli.EffectMutating, false, true, false},
+	"scan":                 {strictcli.EffectReadOnly, false, true, false},
+	"version":              {strictcli.EffectReadOnly, false, true, false},
+	"author.list":          {strictcli.EffectReadOnly, false, true, false},
+	"author.check":         {strictcli.EffectReadOnly, false, true, false},
+	"author.rewrite":       {strictcli.EffectMutating, true, true, false},
+	"backup.backup":        {strictcli.EffectMutating, false, true, false},
+	"backup.list":          {strictcli.EffectReadOnly, false, true, false},
+	"backup.restore":       {strictcli.EffectMutating, false, true, false},
+	"config.show":          {strictcli.EffectReadOnly, false, true, false},
+	"config.get":           {strictcli.EffectReadOnly, false, true, false},
+	"config.set":           {strictcli.EffectMutating, false, true, false},
+	"hook.list":            {strictcli.EffectReadOnly, false, true, false},
+	"hook.run":             {strictcli.EffectMutating, false, false, false},
+	"hook.install":         {strictcli.EffectMutating, false, true, false},
+	"hook.remove":          {strictcli.EffectMutating, false, true, false},
+	"hook.migrate":         {strictcli.EffectMutating, false, true, false},
+	"scrub.file":           {strictcli.EffectMutating, true, true, false},
+	"scrub.match":          {strictcli.EffectMutating, true, true, false},
+	"scrub.run":            {strictcli.EffectMutating, true, true, false},
+	"scrub.verify":         {strictcli.EffectReadOnly, false, true, false},
 }
 
 // groupTree pins the five command groups and their members, so that moving a
@@ -236,24 +245,23 @@ func TestGroupTreeIsPinned(t *testing.T) {
 	}
 }
 
-// TestAppDescriptionCommandCountIsTrue closes the class of defect that left the
-// app description advertising "20 commands" long after there were 31: the
-// number in the description is checked against the number of commands actually
-// registered, so it cannot go stale silently.
-func TestAppDescriptionCommandCountIsTrue(t *testing.T) {
+// TestAppDescriptionStatesNoCommandCount replaces the count check that used to
+// live here, and it closes the same defect class from the other side.
+//
+// The description once advertised "20 commands" long after there were 31, and
+// the pin that caught that only ever moved the staleness around: the number was
+// true until the next command was registered, docs/cli-index.md carried its own
+// copy that said 31 while the description said 33, and no test could bind a
+// number in one document to a number in another. A count in prose about a
+// command set cannot heal itself, so the number is DELETED and its absence is
+// what is pinned. `safegit --help` enumerates the commands, which is an answer
+// that cannot go stale.
+func TestAppDescriptionStatesNoCommandCount(t *testing.T) {
 	hygiene.Isolate(t, hygiene.Preserve(hygiene.GoPath, hygiene.GoModCache, hygiene.GoCache))
 
-	app := newApp()
-	m := regexp.MustCompile(`providing (\d+) commands`).FindStringSubmatch(app.Help)
-	if m == nil {
-		t.Fatalf("app description does not state a command count: %q", app.Help)
-	}
-	claimed, err := strconv.Atoi(m[1])
-	if err != nil {
-		t.Fatalf("parsing the claimed command count: %v", err)
-	}
-	if actual := len(collectCommands(app)); claimed != actual {
-		t.Errorf("app description claims %d commands, %d are registered", claimed, actual)
+	help := newApp().Help
+	if m := regexp.MustCompile(`(\d+) commands`).FindStringSubmatch(help); m != nil {
+		t.Errorf("app description states a command count (%q); a count in prose cannot self-heal, so it must not be stated: %q", m[0], help)
 	}
 }
 

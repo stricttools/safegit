@@ -199,7 +199,14 @@ var (
 // what was registered -- which is what pins every command's effect
 // classification (see classification_test.go).
 func newApp() *strictcli.App {
-	app := strictcli.NewApp("safegit", version, "concurrency-safe git wrapper providing 33 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
+	// The description states NO command count, deliberately. It carried one for
+	// a long time ("providing 20 commands" while there were 31, then 33 while
+	// docs/cli-index.md said 31), and a number in prose cannot heal itself: it
+	// is true only until the next command is registered, and every reader who
+	// finds it stale has been told something false by the tool about itself.
+	// `safegit --help` enumerates the commands, which is the answer that cannot
+	// go out of date. TestAppDescriptionStatesNoCommandCount pins the absence.
+	app := strictcli.NewApp("safegit", version, "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
 		strictcli.WithHandshakeEnv(sessionIDEnvVar, "Claude Code session identifier set by the invoking agent session; scopes 'safegit undo' to operations this session performed and is recorded as a commit trailer"),
 		// The observe authorization, GENERATED from the git argv classification
 		// table's read view (see gitexec.ObservePrefixes) rather than written
@@ -300,6 +307,24 @@ func newApp() *strictcli.App {
 			strictcli.NewArg("files", "files to commit, taken literally -- a colon in an argument is part of the filename, and hunk selection is --hunks", strictcli.ArgOptional(), strictcli.Variadic()),
 		),
 	)
+
+	// The three conclusion commands, in git's own word order. They are flat
+	// verbs rather than a `commit --conclude` mode because concluding an
+	// operation is whole-index by construction and `commit` is pathspec-only:
+	// one flag switching between two opposite contracts is exactly the
+	// ambiguity this tool exists to remove. They share one engine
+	// (sequencer_continue.go) and one flag vocabulary, and each declares its own
+	// classification, payload schema and help.
+	registerContinue(app, mergeContinueOp, mergeContinuePayloadSchema,
+		"the content merged in from the other side",
+		"conclude a merge git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file), and safegit writes the merge commit itself: HEAD plus EVERY MERGE_HEAD line as parents, an octopus merge included; the merge's whole staged result as its tree, so a path the merge staged cleanly is never dropped; git's own message draft with its comment block stripped, or -m; the repository's commit-msg hook run and safegit's trailers injected; and the merge's whole state-file set removed afterwards, so a later commit is not refused. An empty merge needs no flag -- a merge commit records its parents whether or not the tree changed")
+	registerContinue(app, cherryPickContinueOp, cherryPickContinuePayloadSchema,
+		"the result of applying the cherry-picked commit",
+		"conclude a single cherry-pick git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file), and safegit writes the commit itself: one parent, the AUTHOR preserved from the commit being applied while the committer is you, git's own message draft with its comment block stripped or -m, the repository's commit-msg hook run, and the cherry-pick's state files removed afterwards. A QUEUED sequence -- git cherry-pick with more than one commit -- is refused here, because concluding one step natively would strand the rest of the queue")
+	registerContinue(app, revertContinueOp, revertContinuePayloadSchema,
+		"the result of UNDOING the reverted commit, which is what its parent held -- not the reverted commit's own content",
+		"conclude a single revert git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file), and safegit writes the commit itself: one parent, the AUTHOR preserved from the commit being reverted while the committer is you, git's own message draft with its comment block stripped or -m, the repository's commit-msg hook run, and the revert's state files removed afterwards. Note the stage keywords: a revert applies an INVERSE patch, so theirs is what the reverted commit's parent held -- resolving to theirs keeps the revert, resolving to ours keeps the commit being reverted. A QUEUED sequence is refused here")
+
 	app.Passthrough("checkout", "checkout a branch or ref with working-tree safety guards", pt, strictcli.WithEffect(strictcli.EffectMutating))
 	app.Passthrough("merge", "merge a branch into HEAD with working-tree safety guards", pt, strictcli.WithEffect(strictcli.EffectMutating))
 	app.Passthrough("rebase", "rebase current branch onto upstream with safety guards", pt, strictcli.WithEffect(strictcli.EffectMutating))
