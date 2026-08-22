@@ -624,6 +624,15 @@ func runScrubFileInSubmodule(
 		}
 	}
 
+	// Capture old parent HEAD. It is read here, before the no-gitlink-moved
+	// branch below, because that branch reports it too: a run that leaves the
+	// parent alone still has to say which commit the parent is at.
+	oldHeadSHA, err := git.RevParse(ctx, "HEAD")
+	if err != nil {
+		die(exitcode.General, fmt.Sprintf("resolving parent HEAD: %v", err))
+	}
+	result.OldHead = oldHeadSHA
+
 	if len(gitlinkMap) == 0 {
 		// No submodule commit moved, so the parent has nothing to follow. The
 		// submodule still gets verified and published on its own: its tag
@@ -637,13 +646,26 @@ func runScrubFileInSubmodule(
 		if label, err := publishAll(flags, cmd, only); err != nil {
 			dieFinalize(label, err)
 		}
-		return subResult.TierBExit(exitcode.OK)
-	}
 
-	// Capture old parent HEAD.
-	oldHeadSHA, err := git.RevParse(ctx, "HEAD")
-	if err != nil {
-		die(exitcode.General, fmt.Sprintf("resolving parent HEAD: %v", err))
+		// The same struct the other exits carry, filled with what THIS run did:
+		// the submodule was the only repository published, so its figures are
+		// the ones that exist. rewrites is empty by construction (it is the map
+		// this branch tested), and new_head stays absent because the parent
+		// published no new head -- old_head above already says where it is.
+		subTags := subResult.TagRewrites
+		if subTags == nil {
+			subTags = []TagRewrite{}
+		}
+		result.Rewrites = map[string]string{}
+		result.Tags = subTags
+		result.CommitsRewritten = intPtr(subRewrittenCount)
+		result.PreRewriteRemotes = nonNilStringMap(subResult.PreRewriteRemotes)
+		result.CleanupOK = boolPtr(subResult.CleanupOK)
+		result.CleanupErrors = nonNilStrings(subResult.CleanupErrors)
+		result.SyncSkipped = subResult.SyncSkipped
+		flags.payload(result)
+
+		return subResult.TierBExit(exitcode.OK)
 	}
 
 	// Parent commit range: use entire history since --from is a submodule SHA
@@ -778,7 +800,6 @@ func runScrubFileInSubmodule(
 	result.Rewrites = rewrites
 	result.Tags = allTagRewrites
 	result.CommitsRewritten = intPtr(parentRewrittenCount + subRewrittenCount)
-	result.OldHead = oldHeadSHA
 	result.NewHead = parentResult.NewHeadSHA
 	result.PreRewriteRemotes = nonNilStringMap(parentResult.PreRewriteRemotes)
 	result.CleanupOK = boolPtr(parentResult.CleanupOK)
