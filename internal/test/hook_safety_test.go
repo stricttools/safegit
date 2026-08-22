@@ -20,10 +20,10 @@ import (
 //     metadata from this repository entirely", but repo.Uninstall deletes only
 //     .git/safegit/ and the shared lock directory. A hook safegit itself
 //     installed survives the uninstall and keeps running on every push.
-//  3. `safegit scan` sweeps .git/hooks/* non-recursively and skips directories,
-//     so a secret inside a hook under .git/hooks/pre-pre-push.d/ escapes the
-//     scan that covers its siblings one directory up -- even though hook
-//     discovery treats both locations as hooks.
+//  3. `safegit scan` sweeps the hook directory non-recursively and skips
+//     directory entries, so a secret inside a hook under `pre-pre-push.d/`
+//     escapes the scan that covers its siblings one directory up -- even though
+//     hook discovery treats both locations as hooks.
 //
 // The tests assert the observable contract, not an implementation: an install
 // that REFUSES the colliding basename satisfies (1) exactly as well as one that
@@ -199,13 +199,13 @@ func TestDoctorUninstallRemovesInstalledHooks(t *testing.T) {
 		t.Fatalf("hook install failed (code %d): %s", code, stderr)
 	}
 
-	installedPath := filepath.Join(dir, ".git", "hooks", "pre-pre-push")
+	installedPath := filepath.Join(dir, ".git", "safegit", "hooks", "pre-pre-push")
 	if _, err := os.Stat(installedPath); err != nil {
 		t.Fatalf("precondition: hook install did not produce %s: %v", installedPath, err)
 	}
 
 	// An operator-authored hook alongside it, for evidence only.
-	operatorPath := filepath.Join(dir, ".git", "hooks", "pre-pre-push.d", "20-operator")
+	operatorPath := filepath.Join(dir, ".git", "safegit", "hooks", "pre-pre-push.d", "20-operator")
 	writeHookScript(t, operatorPath, "true")
 
 	stdout, stderr, code := runSafegitEnv(t, dir, hookSafetyEnv,
@@ -233,17 +233,15 @@ func TestDoctorUninstallRemovesInstalledHooks(t *testing.T) {
 }
 
 // TestScanSeesHooksInPrePrePushDir: `safegit scan` sweeps non-object files
-// including .git/hooks, but internal/scan/nonobject.go ScanNonObjects skips
-// directory entries, so a hook under .git/hooks/pre-pre-push.d/ is never read.
-// Both locations are hooks as far as hook discovery is concerned
-// (internal/hooks/hooks.go Discover reads exactly these two places), so a
-// secret in one is as reachable as a secret in the other and the scan must see
-// both.
+// including the hook store, but internal/scan/nonobject.go ScanNonObjects
+// skipped directory entries, so a hook under `pre-pre-push.d/` was never read.
+// Both locations are hooks as far as hook discovery is concerned, so a secret
+// in one is as reachable as a secret in the other and the scan must see both.
 func TestScanSeesHooksInPrePrePushDir(t *testing.T) {
 	dir := newRepo(t)
 
 	const secret = "HOOKSAFETY_LEAK_TOKEN_NESTED"
-	leakyPath := filepath.Join(dir, ".git", "hooks", "pre-pre-push.d", "leaky.sh")
+	leakyPath := filepath.Join(dir, ".git", "safegit", "hooks", "pre-pre-push.d", "leaky.sh")
 	writeHookScript(t, leakyPath, "TOKEN="+secret+"; export TOKEN")
 
 	paths := hookSafetyFileMatchPaths(t, dir, secret)

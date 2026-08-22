@@ -9,11 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/smm-h/safegit/internal/exitcode"
 )
 
 // stdout and stderr are the default output writers for hook execution.
@@ -39,74 +40,96 @@ type HookResult struct {
 	TimedOut bool          `json:"timedOut,omitempty"`
 }
 
-// Discover finds pre-pre-push hooks in .git/hooks/.
-// Returns executable hook paths in execution order:
-// 1. .git/hooks/pre-pre-push (single file)
-// 2. .git/hooks/pre-pre-push.d/* (lexical order, skip dot-prefixed and tilde-suffixed)
-func Discover(gitDir string) ([]string, error) {
-	hooksDir := filepath.Join(gitDir, "hooks")
-	var hooks []string
+// LegacyLocationError reports hooks still sitting in the pre-migration
+// location, git's own .git/hooks. Discovery refuses rather than running them:
+// running from both places would make the store safegit executes from depend on
+// where a file happened to be left, and silently skipping them would stop an
+// operator's checks without saying so.
+type LegacyLocationError struct {
+	// Paths are the absolute paths found, in enumeration order.
+	Paths []string
+}
 
-	// Single-file hook
-	single := filepath.Join(hooksDir, "pre-pre-push")
-	if info, err := os.Stat(single); err == nil && !info.IsDir() {
-		if isExecutable(info) {
-			hooks = append(hooks, single)
-		} else {
-			fmt.Fprintf(stderr, "warning: %s exists but is not executable, skipping\n", single)
-		}
-	}
+func (e *LegacyLocationError) Error() string {
+	return fmt.Sprintf("%d hook(s) are still in the pre-migration location (%s); "+
+		"run `safegit hook migrate` to move them into the tool-owned hook store", len(e.Paths), strings.Join(e.Paths, ", "))
+}
 
-	// Directory-based hooks
-	dirPath := filepath.Join(hooksDir, "pre-pre-push.d")
-	entries, err := os.ReadDir(dirPath)
+// TrackedNotExecutableError reports a committed hook whose mode says it cannot
+// run. It is a refusal, not a skip: a tracked hook is disabled by committing its
+// deletion, so a mode that silently disabled one would turn an accidentally lost
+// executable bit -- a checkout on a filesystem without modes, a patch applied by
+// a tool that drops them -- into checks that quietly stopped running.
+type TrackedNotExecutableError struct {
+	// Paths are the absolute paths of the offending committed hooks.
+	Paths []string
+}
+
+func (e *TrackedNotExecutableError) Error() string {
+	return fmt.Sprintf("%d committed hook(s) are not executable: %s; "+
+		"run `chmod +x` on each and COMMIT the mode change (a tracked hook is disabled by committing its deletion, never by dropping its mode)",
+		len(e.Paths), strings.Join(e.Paths, ", "))
+}
+
+// Discover returns the hooks to execute, in execution order: the committed
+// store first, then the local one, each in Rel order. It is the
+// execution-eligibility layer over Enumerate, and the only place that decides
+// what "eligible" means.
+//
+// Two states are refusals rather than filters -- a hook left in the legacy
+// location, and a committed hook that is not executable -- and both come back as
+// typed errors so a caller can map them to their own exit codes. A LOCAL hook
+// that is not executable is skipped with a warning, which is git's own stance
+// for its hooks and this tool's original one.
+func Discover(s Store) ([]string, error) {
+	all, err := Enumerate(s)
 	if err != nil {
-		// Directory doesn't exist -- that's fine
-		if os.IsNotExist(err) {
-			return hooks, nil
-		}
-		return hooks, fmt.Errorf("reading pre-pre-push.d: %w", err)
+		return nil, err
 	}
 
-	// Collect and sort lexically
-	var names []string
-	for _, e := range entries {
-		name := e.Name()
-		if strings.HasPrefix(name, ".") || strings.HasSuffix(name, "~") {
+	var legacy, trackedNonExec []string
+	var hooks []string
+	for _, loc := range all {
+		if loc.Origin == OriginLegacy {
+			legacy = append(legacy, loc.Path)
 			continue
 		}
-		if e.IsDir() {
+		if !loc.IsHookName() {
 			continue
 		}
-		names = append(names, name)
-	}
-	sort.Strings(names)
-
-	for _, name := range names {
-		p := filepath.Join(dirPath, name)
-		info, err := os.Stat(p)
-		if err != nil {
+		if loc.Executable {
+			hooks = append(hooks, loc.Path)
 			continue
 		}
-		if isExecutable(info) {
-			hooks = append(hooks, p)
-		} else {
-			fmt.Fprintf(stderr, "warning: %s is not executable, skipping\n", p)
+		if loc.Origin == OriginTracked {
+			trackedNonExec = append(trackedNonExec, loc.Path)
+			continue
 		}
+		fmt.Fprintf(stderr, "warning: %s is not executable, skipping\n", loc.Path)
 	}
 
+	if len(legacy) > 0 {
+		return nil, &LegacyLocationError{Paths: legacy}
+	}
+	if len(trackedNonExec) > 0 {
+		return nil, &TrackedNotExecutableError{Paths: trackedNonExec}
+	}
 	return hooks, nil
 }
 
-// DiscoverMulti discovers hooks across multiple git directories, concatenating
-// results in order. The first gitDir's hooks come first. This supports hook
-// cascading from parent repos into submodule pushes.
-func DiscoverMulti(gitDirs []string) ([]string, error) {
+// DiscoverMulti discovers hooks across several repositories, concatenating the
+// results in order: the first store's hooks run first. It is what a push from a
+// submodule uses to run the parent's hooks before its own.
+//
+// The parameter is a store per repository rather than a git directory, because
+// each repository's committed hooks live in its WORK TREE -- a cascade keyed on
+// git directories alone could never see them.
+func DiscoverMulti(stores []Store) ([]string, error) {
 	var all []string
-	for _, gd := range gitDirs {
-		found, err := Discover(gd)
+	for _, s := range stores {
+		found, err := Discover(s)
 		if err != nil {
-			return nil, fmt.Errorf("discovering hooks in %s: %w", gd, err)
+			return nil, fmt.Errorf("discovering hooks in %s: %w", s.GitDir, err)
 		}
 		all = append(all, found...)
 	}
@@ -115,8 +138,8 @@ func DiscoverMulti(gitDirs []string) ([]string, error) {
 
 // Run executes all discovered hooks sequentially with the given stdin.
 // On non-zero exit, remaining hooks are skipped. On timeout: SIGTERM, 5s grace, SIGKILL.
-func Run(ctx context.Context, gitDir string, stdin []byte, timeoutSec int, env []string) ([]HookResult, error) {
-	hooks, err := Discover(gitDir)
+func Run(ctx context.Context, s Store, stdin []byte, timeoutSec int, env []string) ([]HookResult, error) {
+	hooks, err := Discover(s)
 	if err != nil {
 		return nil, err
 	}
@@ -247,12 +270,13 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		}
 		<-ioDone
 
-		// ExitCode is the HOOK's status, not safegit's, so it is deliberately
-		// not an internal/exitcode constant. A killed hook has no status of its
-		// own; 21 is a synthetic marker chosen to read the same as safegit's
-		// own hook-timeout code in the "exit=%d" line callers print. Nothing
-		// branches on it -- TimedOut is what decides the caller's exit code.
-		return HookResult{Name: name, ExitCode: 21, Duration: time.Since(start), TimedOut: true}
+		// ExitCode is the HOOK's status, not safegit's. A killed hook has no
+		// status of its own, so the marker is deliberately chosen to READ the
+		// same as safegit's own hook-timeout code in the "exit=%d" line callers
+		// print -- which is why it is taken from the registry rather than
+		// written as a bare 21 that duplicates the constant by value. Nothing
+		// branches on it: TimedOut is what decides the caller's exit code.
+		return HookResult{Name: name, ExitCode: exitcode.PushHookTimeout, Duration: time.Since(start), TimedOut: true}
 
 	case <-ctx.Done():
 		// Parent context cancelled
@@ -286,57 +310,24 @@ func isExecutable(info os.FileInfo) bool {
 	return info.Mode()&0111 != 0
 }
 
-// PlanInstall reads the hook source and resolves the destination path, without
-// mutating anything. Callers mint the mkdir/write/chmod themselves so a dry run
-// can record the install instead of performing it.
+// PlanInstall reads the hook source and resolves the destination inside the
+// tool-owned store, without mutating anything. Callers mint the mkdir/write/chmod
+// themselves so a dry run can record the install instead of performing it.
+//
+// An existing destination is REFUSED rather than overwritten: an install that
+// silently replaced a hook could destroy the operator's own script (and, back
+// when the store was git's own .git/hooks, a native git hook safegit itself
+// runs). Upgrading a hook is `safegit hook remove <name>` followed by an
+// install, which says out loud that the old one is going away.
 func PlanInstall(gitDir, srcPath string) (data []byte, dest string, err error) {
 	data, err = os.ReadFile(srcPath)
 	if err != nil {
 		return nil, "", fmt.Errorf("reading hook file: %w", err)
 	}
-	return data, filepath.Join(gitDir, "hooks", filepath.Base(srcPath)), nil
-}
-
-// Install copies a hook file to .git/hooks/ and makes it executable.
-func Install(gitDir, srcPath string) error {
-	hooksDir := filepath.Join(gitDir, "hooks")
-	if err := os.MkdirAll(hooksDir, 0755); err != nil {
-		return fmt.Errorf("creating hooks dir: %w", err)
+	dest = filepath.Join(LocalDir(gitDir), filepath.Base(srcPath))
+	if _, statErr := os.Lstat(dest); statErr == nil {
+		return nil, "", fmt.Errorf("%s already exists; remove it first (`safegit hook remove %s`) -- install never overwrites a hook",
+			dest, filepath.Base(srcPath))
 	}
-
-	data, err := os.ReadFile(srcPath)
-	if err != nil {
-		return fmt.Errorf("reading hook file: %w", err)
-	}
-
-	destName := filepath.Base(srcPath)
-	dest := filepath.Join(hooksDir, destName)
-	if err := os.WriteFile(dest, data, 0755); err != nil {
-		return fmt.Errorf("writing hook file: %w", err)
-	}
-	return nil
-}
-
-// InstallPlaceholder writes a no-op pre-pre-push hook if one doesn't already exist.
-func InstallPlaceholder(gitDir string) error {
-	hooksDir := filepath.Join(gitDir, "hooks")
-	if err := os.MkdirAll(hooksDir, 0755); err != nil {
-		return fmt.Errorf("creating hooks dir: %w", err)
-	}
-
-	dest := filepath.Join(hooksDir, "pre-pre-push")
-	if _, err := os.Stat(dest); err == nil {
-		// Already exists, don't overwrite
-		return nil
-	}
-
-	placeholder := `#!/bin/sh
-# Installed by safegit. This is a no-op placeholder.
-# Add your pre-push validators here, or use .git/hooks/pre-pre-push.d/
-exit 0
-`
-	if err := os.WriteFile(dest, []byte(placeholder), 0755); err != nil {
-		return fmt.Errorf("writing placeholder hook: %w", err)
-	}
-	return nil
+	return data, dest, nil
 }

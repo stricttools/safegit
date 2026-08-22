@@ -268,20 +268,25 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 			fmt.Sprintf("SAFEGIT_HOOK_TIMEOUT_S=%d", timeoutSec),
 		}
 
-		// Discover hooks: if inside a submodule, cascade from parent first
+		// Discover hooks: if inside a submodule, cascade from parent first.
+		// Each repository contributes a STORE -- work tree plus git dir -- so
+		// the parent's committed hooks participate in the cascade too.
+		own := hooks.Store{Worktree: flags.root.resolve(), GitDir: gitDir}
 		var hookPaths []string
-		parentGitDir, _, isSubmodule := submodule.DetectParent(ctx)
+		parent, isSubmodule := submodule.DetectParent(ctx)
 		if isSubmodule {
 			if flags.verbose {
-				fmt.Fprintf(os.Stderr, "  submodule detected, cascading hooks from parent %s\n", parentGitDir)
+				fmt.Fprintf(os.Stderr, "  submodule detected, cascading hooks from parent %s\n", parent.GitDir)
 			}
-			hookPaths, err = hooks.DiscoverMulti([]string{parentGitDir, gitDir})
+			hookPaths, err = hooks.DiscoverMulti([]hooks.Store{
+				{Worktree: parent.WorkTree, GitDir: parent.GitDir},
+				own,
+			})
 		} else {
-			hookPaths, err = hooks.Discover(gitDir)
+			hookPaths, err = hooks.Discover(own)
 		}
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("discovering hooks: %v", err))
-			return exitcode.General
+			return hookDiscoveryExit(err)
 		}
 
 		hookResults, err = hooks.RunAll(ctx, hookPaths, hookStdin, timeoutSec, hookEnv)

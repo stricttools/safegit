@@ -1054,9 +1054,9 @@ func TestPushHookCascadeFromParent(t *testing.T) {
 		t.Fatalf("initial push to bare remote: %v\n%s", err, out)
 	}
 
-	// Install a pre-pre-push hook in the parent's .git/hooks/
+	// Install a pre-pre-push hook in the parent's tool-owned hook store
 	parentGitDir := filepath.Join(parentDir, ".git")
-	hooksDir := filepath.Join(parentGitDir, "hooks")
+	hooksDir := filepath.Join(parentGitDir, "safegit", "hooks")
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -1114,9 +1114,9 @@ func TestPushHookCascadeRejectsOnParentHookFailure(t *testing.T) {
 		t.Fatalf("initial push to bare remote: %v\n%s", err, out)
 	}
 
-	// Install a failing pre-pre-push hook in the parent's .git/hooks/
+	// Install a failing pre-pre-push hook in the parent's tool-owned hook store
 	parentGitDir := filepath.Join(parentDir, ".git")
-	hooksDir := filepath.Join(parentGitDir, "hooks")
+	hooksDir := filepath.Join(parentGitDir, "safegit", "hooks")
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
 		t.Fatal(err)
 	}

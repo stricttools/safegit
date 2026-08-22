@@ -199,7 +199,7 @@ var (
 // what was registered -- which is what pins every command's effect
 // classification (see classification_test.go).
 func newApp() *strictcli.App {
-	app := strictcli.NewApp("safegit", version, "concurrency-safe git wrapper providing 31 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
+	app := strictcli.NewApp("safegit", version, "concurrency-safe git wrapper providing 33 commands for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
 		strictcli.WithHandshakeEnv(sessionIDEnvVar, "Claude Code session identifier set by the invoking agent session; scopes 'safegit undo' to operations this session performed and is recorded as a commit trailer"),
 		// The observe authorization, GENERATED from the git argv classification
 		// table's read view (see gitexec.ObservePrefixes) rather than written
@@ -500,6 +500,18 @@ func newApp() *strictcli.App {
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
 		strictcli.WithArgs(strictcli.NewArg("path", "filesystem path to the hook script file to install into safegit", strictcli.ArgRequired())),
+	)
+	hg.Command("remove", "remove one installed hook from the tool-owned .git/safegit/hooks directory by name, naming either the store-relative path such as pre-pre-push.d/20-lint or just the base name, so a hook can be retired or replaced without deleting files by hand; a name that resolves to a hook committed to the repository is refused, because removing that one means committing its deletion", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+		name := kwargs["name"].(string)
+		return strictcli.Exit(hookRemove(globalsToFlags(ctx, kwargs), name))
+	},
+		strictcli.WithEffect(strictcli.EffectMutating),
+		strictcli.WithArgs(strictcli.NewArg("name", "name of the installed hook to remove, as shown by 'safegit hook list'", strictcli.ArgRequired())),
+	)
+	hg.Command("migrate", "move safegit's hooks out of git's own .git/hooks directory into the tool-owned .git/safegit/hooks store, relocating the pre-pre-push file and the pre-pre-push.d directory unconditionally because those two names are the only ones safegit ever wrote there, and reporting success with an explanation when there is nothing to move", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+		return strictcli.Exit(hookMigrate(globalsToFlags(ctx, kwargs)))
+	},
+		strictcli.WithEffect(strictcli.EffectMutating),
 	)
 	app.Command("doctor", "run diagnostic health checks on the repository and optionally repair issues", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(runDoctor(globalsToFlags(ctx, kwargs), kwargs))
