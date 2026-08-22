@@ -129,6 +129,18 @@ func ValidatePair(old, new string) error {
 	if oldSubtree && (old == "/" || new == "/") {
 		return fmt.Errorf("a subtree move names a prefix; %q -> %q names the repository root", old, new)
 	}
+	// The nesting rule holds WITHIN a pair, not only between two of them. A pair
+	// whose own two paths nest states that content moved into or out of itself:
+	// a directory into a path underneath it, a file onto the directory that
+	// holds it. Overlap says the same thing about two pairs; the identical
+	// refusal by one argument belongs here, in the grammar, so it is reached
+	// before anything asks the repository or the filesystem. (`old == new` above
+	// is the degenerate case of this same rule, kept separate only so its
+	// refusal can name what is actually wrong with it.)
+	if Nests(strings.TrimSuffix(old, "/"), strings.TrimSuffix(new, "/")) {
+		return fmt.Errorf("%q -> %q nest: one path contains the other, so the move would be into or out of "+
+			"itself; a move goes from one path to another", old, new)
+	}
 	return nil
 }
 
