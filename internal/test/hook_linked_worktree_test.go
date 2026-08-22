@@ -116,6 +116,41 @@ func TestHookMigrateFromLinkedWorktreeMovesTheCommonHooks(t *testing.T) {
 	}
 }
 
+// TestUninstallFromLinkedWorktreeTakesTheSharedLiveStore: uninstall must reach
+// every store safegit runs from. Since the live store moved to the common git
+// dir, an uninstall run in a linked worktree that removed only that worktree's
+// own state directory would leave the hooks that actually run in place.
+func TestUninstallFromLinkedWorktreeTakesTheSharedLiveStore(t *testing.T) {
+	dir := newRepo(t)
+
+	src := filepath.Join(dir, "hooksrc", "pre-pre-push")
+	writeHookScript(t, src, "true")
+	if _, stderr, code := runSafegitEnv(t, dir, hookSafetyEnv, "hook", "install", src); code != 0 {
+		t.Fatalf("hook install failed (%d): %s", code, stderr)
+	}
+	installed := filepath.Join(dir, ".git", "safegit", "hooks", "pre-pre-push")
+	if _, err := os.Stat(installed); err != nil {
+		t.Fatalf("precondition: the hook is not in the repository's live store: %v", err)
+	}
+
+	// The linked worktree keeps its own state directory, and uninstall is
+	// keyed on it: initialize it so the command has something of its own to
+	// remove, which is what puts the SHARED store in question.
+	wt := addLinkedWorktree(t, dir, "side")
+	if _, stderr, code := runSafegitEnv(t, wt, hookSafetyEnv, "config", "set", "commit.casMaxAttempts", "200"); code != 0 {
+		t.Fatalf("initializing the linked worktree failed (%d): %s", code, stderr)
+	}
+
+	if _, stderr, code := runSafegitEnv(t, wt, hookSafetyEnv,
+		"doctor", "--action", "uninstall", "--approve-consequential"); code != 0 {
+		t.Fatalf("doctor --action uninstall from the linked worktree failed (%d): %s", code, stderr)
+	}
+
+	if _, err := os.Stat(installed); !os.IsNotExist(err) {
+		t.Errorf("uninstall left the live hook %s in place; it still runs on every push (err=%v)", installed, err)
+	}
+}
+
 // TestDoctorFromLinkedWorktreeReportsUnmigratedHooks: the refusal is
 // repository-wide, so doctor must report it from any worktree. Reporting
 // hooks_migrated OK in a linked worktree while every push in the repository
