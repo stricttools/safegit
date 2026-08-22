@@ -12,6 +12,7 @@ import (
 	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/oplog"
 	"github.com/smm-h/safegit/internal/repo"
+	"github.com/smm-h/safegit/internal/sequencer"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 
@@ -92,6 +93,40 @@ func coordGuard(flags globalFlags, gitDir, operation string) int {
 		return exitcode.CoordinationBusy
 	}
 	return 0
+}
+
+// announceWayOut prints safegit's own next step when a passthrough failed and
+// left git with an operation in flight.
+//
+// git's own failure text ends at "fix conflicts and then commit the result",
+// and that instruction has no safegit-conformant execution: `safegit commit` is
+// pathspec-only and refuses mid-merge, and `git commit` is unavailable to an
+// agent under the git-add/git-commit blocking hooks. So safegit owes the
+// operator the command that DOES conclude the operation, rendered from
+// coord.WayOutOf -- the single authority every in-flight refusal already reads,
+// so no two messages can name different commands for the same state.
+//
+// It prints on stderr, unconditionally: this is the tail of a failure, and an
+// operator who asked for --quiet asked for less noise on the happy path, not
+// for the way out to be withheld.
+func announceWayOut(flags globalFlags, gitDir string) {
+	if flags.dryRun {
+		// Nothing ran, so nothing is in flight that this invocation put there.
+		return
+	}
+	state, err := sequencer.Read(gitDir)
+	if err != nil || !state.InProgress() {
+		return
+	}
+	w := coord.WayOutOf(state)
+	if w.Conclude == "" {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "\nsafegit: %s is in progress.\n", state.String())
+	fmt.Fprintf(os.Stderr, "  conclude it:  %s\n", w.Conclude)
+	if w.Abandon != "" {
+		fmt.Fprintf(os.Stderr, "  abandon it:   %s\n", w.Abandon)
+	}
 }
 
 func runCheckout(flags globalFlags, args []string) int {
@@ -238,6 +273,7 @@ func runMerge(flags globalFlags, args []string) int {
 
 	ctx := flags.ctx()
 	if code := runGitMutation(flags, append([]string{"merge"}, args...)...); code != 0 {
+		announceWayOut(flags, gitDir)
 		return code
 	}
 	if flags.dryRun {
@@ -445,6 +481,9 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 	}
 
 	code = runPassthrough(flags, gitCmd, args)
+	if code != 0 {
+		announceWayOut(flags, gitDir)
+	}
 
 	_ = oplog.Append(sgDir, oplog.Entry{
 		Op: gitCmd,
