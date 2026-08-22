@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/smm-h/safegit/internal/commit"
+	"github.com/smm-h/safegit/internal/coord"
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/repo"
@@ -143,6 +144,18 @@ func runMv(flags globalFlags, messages []string, args []string) int {
 		return code
 	}
 	defer release()
+
+	// Taken here rather than left to the commit pipeline's own declaration
+	// check, which every other commit path relies on. That check runs when the
+	// commit is built -- which for this command is AFTER the renames, so a `mv`
+	// run while git has a merge, cherry-pick, revert, rebase or mailbox
+	// application in flight would move every file and then refuse to commit
+	// them. Read inside the operation lock, so no passthrough in this worktree
+	// can start one between the check and the renames.
+	if err := coord.GuardInFlight(gitDir, mvOplogOp, nil); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return exitcode.CoordinationBusy
+	}
 
 	ctx := flags.ctx()
 	repoRoot, err := git.AnchorRoot(ctx)

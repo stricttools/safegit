@@ -244,6 +244,36 @@ func TestMvRollsBackCompletedRenamesOnAMidSequenceFailure(t *testing.T) {
 	assertNoCommitHappened(t, dir, "seed")
 }
 
+// TestMvRefusesWhileGitHasAnOperationInFlight: the commit pipeline's own
+// in-flight refusal runs when the commit is BUILT, which for this command is
+// after the renames. So the check is taken up front instead -- otherwise a `mv`
+// during a conflicted merge would move every file and then refuse to commit
+// them, leaving a working tree that is mid-merge and half-moved at once.
+func TestMvRefusesWhileGitHasAnOperationInFlight(t *testing.T) {
+	dir := mvSeed(t)
+
+	// A conflicted merge, left in flight.
+	testutil.Git(t, dir, "checkout", "-q", "-b", "side")
+	testutil.WriteFile(t, dir, "b.txt", "side\n")
+	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "side edit", "--", "b.txt"); code != 0 {
+		t.Fatalf("side commit failed (code %d): %s", code, stderr)
+	}
+	testutil.Git(t, dir, "checkout", "-q", "main")
+	testutil.WriteFile(t, dir, "b.txt", "main\n")
+	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "main edit", "--", "b.txt"); code != 0 {
+		t.Fatalf("main commit failed (code %d): %s", code, stderr)
+	}
+	runSafegit(t, dir, "merge", "side")
+
+	_, stderr, code := runSafegit(t, dir, "mv", "-m", "move during a merge", "a.txt -> x.txt")
+	if code != exitcode.CoordinationBusy {
+		t.Fatalf("exit %d, want %d (CoordinationBusy): %s", code, exitcode.CoordinationBusy, stderr)
+	}
+	if !mvExists(t, dir, "a.txt") || mvExists(t, dir, "x.txt") {
+		t.Error("the refused mv moved a file anyway")
+	}
+}
+
 func TestMvDryRunRecordsTheRenamesAndPerformsNothing(t *testing.T) {
 	dir := mvSeed(t)
 
