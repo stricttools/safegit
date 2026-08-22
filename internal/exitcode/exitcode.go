@@ -172,7 +172,10 @@ const (
 	// refusal lists the paths on whichever side is wrong. Nothing is committed;
 	// the operation is still in flight and the same command re-run with the
 	// missing (or without the surplus) entries concludes it. Produced by
-	// merge-continue, cherry-pick-continue and revert-continue.
+	// merge-continue, cherry-pick-continue and revert-continue -- and by
+	// `safegit revert` of a single commit, which reaches the same conclusion
+	// engine after computing the inverse patch, and therefore refuses on a
+	// foreign unmerged entry the same way.
 	ConclusionUnresolved = 17
 
 	// ConclusionMarkerSurvived means the content a conclusion was about to
@@ -185,7 +188,8 @@ const (
 	// whose real content legitimately holds marker-shaped lines is declared
 	// with the `safegit-conflict-markers` attribute, read from the first
 	// parent's tree. Produced by merge-continue, cherry-pick-continue and
-	// revert-continue.
+	// revert-continue -- and by `safegit revert` of a single commit, whose
+	// staged result goes through the same verification before it is committed.
 	ConclusionMarkerSurvived = 18
 
 	// PushHookFailed means a pre-pre-push hook exited nonzero, so no network
