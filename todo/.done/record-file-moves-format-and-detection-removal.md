@@ -1,4 +1,13 @@
-# Record file and directory moves in repository history
+# Record file moves — the delivered parts (split from record-file-moves-in-history.md, 2026-08-22)
+
+Delivered by the 2026-08 redesign campaign: detection removal in Phase
+2.1; the trailer storage, grammar, encoding, and correction/parser
+machinery in Phase 7.1; declared moves on commit/amend in Phase 7.2
+(via the --moved flag, an evolution recorded in the campaign execution
+log). The encoding question below was RESOLVED as candidate 1 (arrow
+form with git-style C-quoting, exhaustive trigger), and correction
+semantics as retract-only with per-record ULIDs. Original text
+verbatim:
 
 ## Context
 
@@ -9,11 +18,6 @@ time with similarity heuristics that are allowed to be wrong. safegit
 additionally has automatic move detection inside commit: a newly-added file
 whose blob matches a parent-tree blob triggers an auto-staged deletion of the
 "old" path.
-
-An earlier version of this file surveyed ten candidate approaches. The design
-has since been settled; this file records the decisions and the remaining open
-points. Red tests for the defects in the current behavior are committed in
-internal/test/moves_cross_session_test.go.
 
 ## Decision: automatic move detection is removed
 
@@ -31,24 +35,6 @@ is afterwards hard-blocked from committing its own deletion.
 Automatic detection and its auto-staged deletions are deleted entirely,
 including the detectMoves pass in internal/commit/moves.go and its invocation
 from both commit and amend. Moves become declared.
-
-## Decision: moves are declared, two ways
-
-1. **`safegit mv <old> <new>`** -- a new verb that performs the filesystem
-   move and commits it in one operation (one commit per move; safegit has no
-   persistent staging area by design, so a stage-only mv has no home in the
-   architecture). The move record is written as part of the commit it creates.
-2. **Explicit both-path pairing in `safegit commit`** -- when the caller names
-   BOTH the old path (absent from disk, tracked in the parent) and the new
-   path in the pathspec, and the old path's blob in the parent commit hashes
-   identically to the new path's blob, the commit records the pair as a move.
-   No blob match, no record. This makes `mv old new` via the shell followed by
-   `safegit commit -- old new` produce a record, closing the hole where an
-   ordinary manual move went unrecorded.
-
-Anything else (a hand-written record via the existing `--trailer` flag) is
-possible because the record format is an open convention, but safegit vouches
-only for records it writes itself.
 
 ## Decision: storage is commit-message trailers
 
@@ -129,51 +115,3 @@ both established conventions rather than inventions:
    pays the syntax cost and log output reads as payload rather than prose.
 
 Same schema and semantics either way; decide before implementation.
-
-## Consumers
-
-- `safegit scan --target trailers` works with no new code.
-- A **derived local query index** under `.git/safegit/` for fast "where did
-  this path live at commit X" queries: built by walking trailers (folding
-  corrections), regenerable at any time, never authoritative -- a doubted or
-  stale index is regenerated, not repaired.
-- A future scrub could consume the records for rename-aware remapping of
-  file-targeted rewrites across a file's whole life. Design note only;
-  nothing to build now.
-
-## Documentation
-
-safegit's docs describe the `Moved:` trailer as a repo-level convention --
-any tool may write or read these records; the grammar is stated fully
-(writer and reader behavior, subtree form, corrections, encoding). No
-separate specification artifact: the docs section is the reference, and can
-be promoted to a standalone document if a second independent implementer
-ever appears.
-
-## Affected areas
-
-- `internal/commit/moves.go` -- deleted (detection removal), along with its
-  call sites in commit and amend
-- `main.go` -- `mv` command registration; pairing wiring in commit
-- `internal/trailer` -- writing is one AppendCustom call; reading needs a
-  key-value trailer parser plus correction folding (does not exist today)
-- `internal/git` -- blob-compare helpers for pairing verification (hash
-  plumbing exists)
-- `internal/test` -- existing TestMoveDetection_* green tests retire with the
-  detection; moves_cross_session_test.go flips green via the removal; new
-  tests for mv, pairing, subtree records, corrections, the derived index,
-  and the encoding rule
-- docs -- the convention section; removal of auto-detection from all
-  descriptions
-
-## Open items besides encoding
-
-- Whether `safegit mv` accepts multiple old/new pairs in one invocation (one
-  commit, several records) or exactly one pair per commit.
-- Correction-record semantics (retract vs replace; target identification).
-
-## Effort estimate
-
-Detection removal: small (deletion plus test retirement). mv + pairing +
-trailer emission: a few days including tests. Trailer parser + correction
-folding + derived index: a few days. Docs: a day.
