@@ -370,6 +370,50 @@ existing entries are never rewritten.
   before any push in the observation-failure arms) with the table
   regenerated.
 
+## Ratified 6.1 decisions and probe facts (binding on 6.2/6.3/6.4)
+
+- BOTH delegation probes hold: git revert --continue AND git rebase
+  --continue honor a substituted GIT_INDEX_FILE (commit the copy's
+  resolution, advance/finish, remove their state, leave the shared
+  index STALE — the 1.3 reconcile after delegation is mandatory). The
+  future rebase extension is feasible; recorded in permanent probe
+  tests.
+- ORCHESTRATOR RULING (stale AUTO_MERGE): a normally-concluded REBASE
+  leaves .git/AUTO_MERGE behind (git's own behavior, control-tested),
+  so the plan's "stale AUTO_MERGE with no matching operation state at
+  entry is a hard error" is wrong as written — it would fire on every
+  post-rebase repo. As ruled: a LONE AUTO_MERGE (no operation state) is
+  completed-operation residue — ignored by entry checks, mentioned
+  informationally in the nothing-in-progress refusal; the hard error
+  applies to AUTO_MERGE alongside a DIFFERENT operation's state.
+- ORCHESTRATOR RULING (octopus): no AUTO_MERGE exists, index stages
+  describe only the LAST pairwise step (stage 2 is an intermediate blob
+  in no commit), marker labels are random temp file names — byte-exact
+  reconstruction is impossible BY CONSTRUCTION. Octopus therefore joins
+  6.3's own structurally-inapplicable list (delete/modify, add/add,
+  binary): content-level region verification where the stages permit,
+  structural layer + write-tree completeness always. The
+  hard-refusal stays reserved for anomalous absence (a two-parent
+  content conflict whose AUTO_MERGE should exist but does not).
+- Label facts (git 2.54, recorded because nothing documents them):
+  ours is always HEAD; merge base label is the abbreviated OID for one
+  base, "merged common ancestors" for several, "empty tree" for none;
+  cherry-pick theirs is "<abbrev> (<subject>)" with base "parent of
+  <abbrev> (<subject>)"; revert swaps those. A MERGE's theirs label is
+  the name the operator typed and is recorded NOWHERE machine-readable
+  — 6.3's byte-identity property must supply it, read it from the
+  marker line, or compare region content.
+- merge-file's exit status IS the conflict count (success); only >=128
+  is failure. merge-file classified MutatesWorktree (its bare form
+  overwrites a file; safegit uses -p); check-attr and stripspace
+  observe-only; --attr-source added to the value-taking globals.
+- New package internal/conflict (resolver + reconstruction) — Phase 9
+  package-table row, alongside the queue.
+- Version floors wired at the structural chokepoints (CheckAttr with
+  attr-source -> 2.40; AutoMergeTree -> 2.38, because on older git
+  AUTO_MERGE is absent for EVERY merge and reporting "none" would
+  silently downgrade verification).
+
 ## Phase 5 audit outcome, corrections, and rulings
 
 - Audit PASS on all subphases; exactly the two named dead-code tests
