@@ -204,6 +204,24 @@ const (
 	// staged result goes through the same verification before it is committed.
 	ConclusionMarkerSurvived = 18
 
+	// MoveNotBorneOut means a declared move (--moved) is contradicted by the
+	// repository: the old path is not tracked in the tree the commit is built
+	// on, the old path is still sitting on disk, or the new path is neither on
+	// disk nor in that tree. A move record is a claim every later reader
+	// resolves against real trees, so writing one the repository already
+	// disagrees with would send those readers to a path that was never there.
+	// It is a separate code from PathMatchedNothing, which is about a named
+	// path CONTRIBUTING nothing to the commit's content: a declaration stages
+	// nothing and changes no content at all, and its failure is a claim the
+	// world does not support rather than an argument that had no effect.
+	// Nothing is committed when it fires. Produced by commit, including its
+	// --amend and reword forms.
+	//
+	// Two declarations that contradict EACH OTHER -- nested sources, nested
+	// destinations -- exit Usage instead, which is where every other
+	// argument-against-argument contradiction in the commit family exits.
+	MoveNotBorneOut = 19
+
 	// PushHookFailed means a pre-pre-push hook exited nonzero, so no network
 	// I/O was attempted. Produced by push and by `hook run`.
 	PushHookFailed = 20
@@ -350,6 +368,7 @@ func All() []Entry {
 		{CommitHookRejected, "CommitHookRejected", "A pre-commit or commit-msg hook refused the commit"},
 		{ConclusionUnresolved, "ConclusionUnresolved", "A conclusion's declared resolutions do not match the conflicted paths in the index"},
 		{ConclusionMarkerSurvived, "ConclusionMarkerSurvived", "A conclusion's content still holds a complete conflict region"},
+		{MoveNotBorneOut, "MoveNotBorneOut", "A declared move (--moved) is contradicted by the repository"},
 		{PushHookFailed, "PushHookFailed", "Pre-pre-push hook failed"},
 		{PushHookTimeout, "PushHookTimeout", "Pre-pre-push hook timed out"},
 		{BackupDiverged, "BackupDiverged", "The remote backup slot holds work missing from the local history"},

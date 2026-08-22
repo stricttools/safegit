@@ -105,6 +105,13 @@ type CommitRequest struct {
 	// is a hard error rather than a silent no-op.
 	Untrack []string
 
+	// Moved carries the caller's declared moves, one "old -> new" pair each, in
+	// the grammar internal/trailer defines. Each becomes a record in the commit
+	// message after being checked against the repository; a declaration the
+	// repository contradicts is a refusal, never a record. Nothing here is
+	// inferred -- safegit detects no moves at all.
+	Moved []string
+
 	// ExtraParents names parents BEYOND the branch tip, in order, for a commit
 	// with more than one -- a merge conclusion, whose second parent is the side
 	// being merged in.
@@ -253,6 +260,17 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 		return nil, err
 	}
 
+	// The declared moves, checked and turned into records once -- before the
+	// retry loop, so a refusal happens before anything is staged and so every
+	// attempt writes the same record with the same id.
+	//
+	// The parent of an ordinary commit is the tip it is built on, which is the
+	// same revision intake judged the file arguments against.
+	movedTrailers, err := resolveMoved(ctx, repoRoot, baseRev(ctx, ref), req.Moved)
+	if err != nil {
+		return nil, err
+	}
+
 	// The repository's own hooks, prepared once for the whole operation: they
 	// run at most once each no matter how many attempts the CAS loop takes.
 	hooks, err := newNativeHooks(ctx, repoRoot, p.SafegitDir, req.DryRun)
@@ -267,7 +285,7 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryCommit(ctx, ref, repoRoot, previewArea, files, req, hooks, attempt)
+		result, retry, err := p.tryCommit(ctx, ref, repoRoot, previewArea, files, movedTrailers, req, hooks, attempt)
 		if err != nil {
 			return nil, err
 		}
@@ -328,6 +346,7 @@ func (p *Pipeline) tryCommit(
 	ctx context.Context,
 	ref, repoRoot, previewArea string,
 	files *intake,
+	movedTrailers []string,
 	req CommitRequest,
 	hooks *nativeHooks,
 	attempt int,
@@ -425,12 +444,14 @@ func (p *Pipeline) tryCommit(
 		}
 	}
 
-	// Step 3.6: the commit-msg hook, on the user's message before safegit's own
-	// session trailer goes on, adopting whatever the hook left in the file. It
-	// comes after the refusals above so that a commit safegit is about to refuse
-	// never sets an operator's message hook running -- the same order git uses,
-	// which stops at "nothing to commit" before it asks for a message.
-	message, err := hooks.commitMsg(ctx, tmpIdx.IndexPath, trailer.AppendCustom(req.Message, req.Trailers))
+	// Step 3.6: the commit-msg hook, on the user's message with the user's own
+	// trailers and move records already on it, before safegit's own session
+	// trailer goes on, adopting whatever the hook left in the file. It comes
+	// after the refusals above so that a commit safegit is about to refuse never
+	// sets an operator's message hook running -- the same order git uses, which
+	// stops at "nothing to commit" before it asks for a message.
+	message, err := hooks.commitMsg(ctx, tmpIdx.IndexPath,
+		trailer.AppendCustom(req.Message, commitTrailers(req.Trailers, nil, movedTrailers)))
 	if err != nil {
 		return nil, false, err
 	}

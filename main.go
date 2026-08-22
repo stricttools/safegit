@@ -17,6 +17,7 @@ import (
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/stage"
+	"github.com/smm-h/safegit/internal/trailer"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 
@@ -284,7 +285,8 @@ func newApp() *strictcli.App {
 		files := kwargsStrSlice(kwargs["files"])
 		hunks := kwargsStrSlice(kwargs["hunks"])
 		untrack := kwargsStrSlice(kwargs["untrack"])
-		runCommit(gf, messages, messageFile, branch, amend, allowEmpty, trailers, files, hunks, untrack)
+		moved := kwargsStrSlice(kwargs["moved"])
+		runCommit(gf, messages, messageFile, branch, amend, allowEmpty, trailers, files, hunks, untrack, moved)
 		return strictcli.Exit(exitcode.OK)
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
@@ -312,6 +314,11 @@ func newApp() *strictcli.App {
 			// ignored one, and a target the commit's parent does not track is a
 			// hard error rather than a no-op.
 			strictcli.StringFlag("untrack", "stop tracking a path, leaving the file itself on disk: the commit records its removal from the index (repeatable, one path each); the path must be tracked in the commit's parent; omitted means nothing is untracked", strictcli.Repeatable(), strictcli.Unique(true), strictcli.Optional()),
+			// Moves are DECLARED, never detected: safegit reads no blob
+			// equality and guesses no renames. This flag is how a caller says
+			// one happened, and the record it writes into the commit message is
+			// what every later reader resolves against the trees.
+			strictcli.StringFlag("moved", "declare that content moved, as 'old -> new' (repeatable, one pair each). End BOTH paths with a slash to declare a whole subtree. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. The old path must be tracked in the commit's parent and gone from disk, and the new one must exist; nothing is inferred from file contents. Omitted means the commit declares no moves", strictcli.Repeatable(), strictcli.Unique(true), strictcli.Optional(), strictcli.ValidateFn(validateMovedPair)),
 		),
 		strictcli.WithArgs(
 			strictcli.NewArg("files", "files to commit, taken literally -- a colon in an argument is part of the filename, and hunk selection is --hunks", strictcli.ArgOptional(), strictcli.Variadic()),
@@ -1100,6 +1107,16 @@ func parseHunkSelection(value string) (hunkSelection, error) {
 // validateHunkSelection is the flag's per-element ValidateFn.
 func validateHunkSelection(v interface{}) error {
 	_, err := parseHunkSelection(v.(string))
+	return err
+}
+
+// validateMovedPair is --moved's per-element ValidateFn: the same parser the
+// pipeline uses, so a malformed pair is refused at parse time rather than after
+// a repository has been read. Both call internal/trailer's ParsePair, which is
+// also what `safegit mv` parses its arguments with -- one grammar, one
+// implementation, three consumers.
+func validateMovedPair(v interface{}) error {
+	_, _, err := trailer.ParsePair(v.(string))
 	return err
 }
 

@@ -31,6 +31,11 @@ type AmendRequest struct {
 	// tip being replaced.
 	Untrack []string
 
+	// Moved is the same input CommitRequest carries: declared moves, one
+	// "old -> new" pair each. They are judged against the FIRST PARENT of the
+	// tip being replaced, because the amended commit describes that same step.
+	Moved []string
+
 	// Sequencer is the same declared input CommitRequest carries: nil for
 	// every ordinary caller, set only by a command that concludes the
 	// operation git has in flight.
@@ -96,7 +101,12 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 		}
 	}
 
-	if len(req.FileSpecs) == 0 && len(req.Untrack) == 0 {
+	// An amend needs something to do. Declared moves count: an amend that names
+	// no file but declares one is how a move committed WITHOUT its record gets
+	// one -- the content is already right and only the message is missing the
+	// declaration. It rebuilds the tip's own tree, which is the honest answer
+	// for an operation that changes nothing but the message.
+	if len(req.FileSpecs) == 0 && len(req.Untrack) == 0 && len(req.Moved) == 0 {
 		return nil, fmt.Errorf("no files specified for amend")
 	}
 
@@ -104,6 +114,15 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	// tip -- not HEAD -- is the tree its arguments are judged and expanded
 	// against. The two differ on every cross-branch amend.
 	files, err := p.resolveFiles(ctx, repoRoot, baseRev(ctx, ref), req.FileSpecs, req.Untrack)
+	if err != nil {
+		return nil, err
+	}
+
+	// The declared moves, checked and turned into records once. Their base is
+	// NOT the base above: the tip being replaced already holds the result of the
+	// move, so the question "was the old path tracked" can only be asked of the
+	// tip's own first parent -- see movedParentRev.
+	movedTrailers, err := p.resolveAmendMoved(ctx, repoRoot, ref, req.Moved)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +140,7 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryAmend(ctx, ref, repoRoot, previewArea, files, req, hooks, attempt)
+		result, retry, err := p.tryAmend(ctx, ref, repoRoot, previewArea, files, movedTrailers, req, hooks, attempt)
 		if err != nil {
 			return nil, err
 		}
@@ -137,10 +156,32 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	}
 }
 
+// resolveAmendMoved checks and mints the declared moves of an amend or a
+// reword, against the first parent of the tip those operations replace.
+//
+// It is shared by both because both replace the tip: an amend and a reword
+// build a commit on the same parents, so a move declared on either describes
+// the same step out of that parent's tree.
+func (p *Pipeline) resolveAmendMoved(ctx context.Context, repoRoot, ref string, moved []string) ([]string, error) {
+	if len(moved) == 0 {
+		return nil, nil
+	}
+	tipSHA, err := git.RevParse(ctx, ref)
+	if err != nil {
+		return nil, fmt.Errorf("resolving %s: %w", ref, err)
+	}
+	tip, err := git.ParseCommit(ctx, tipSHA)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", tipSHA, err)
+	}
+	return resolveMoved(ctx, repoRoot, movedParentRev(tip.Parents), moved)
+}
+
 func (p *Pipeline) tryAmend(
 	ctx context.Context,
 	ref, repoRoot, previewArea string,
 	files *intake,
+	movedTrailers []string,
 	req AmendRequest,
 	hooks *nativeHooks,
 	attempt int,
@@ -211,9 +252,13 @@ func (p *Pipeline) tryAmend(
 		return nil, false, unmatchedSourceError(src, ref)
 	}
 
-	// The commit-msg hook, on the message with the user's own trailers on it and
-	// before safegit's session trailer goes on.
-	msg, err := hooks.commitMsg(ctx, tmpIdx.IndexPath, trailer.AppendCustom(message, req.Trailers))
+	// The commit-msg hook, on the message with the user's own trailers and move
+	// records on it and before safegit's session trailer goes on. A -m that
+	// replaces the message carries the replaced message's move records forward:
+	// dropping a record is a retraction the caller states, never a side effect
+	// of rewording.
+	trailers := commitTrailers(req.Trailers, preservedMovedLines(tip.Message, req.Message != ""), movedTrailers)
+	msg, err := hooks.commitMsg(ctx, tmpIdx.IndexPath, trailer.AppendCustom(message, trailers))
 	if err != nil {
 		return nil, false, err
 	}
@@ -315,6 +360,11 @@ type RewordRequest struct {
 	Trailers []string // user-provided trailers ("Key: Value" format)
 	DryRun   bool
 
+	// Moved is the same input AmendRequest carries. A reword is how a move that
+	// was committed without its record gets one: the commit's content is
+	// already right, and only the message is missing the declaration.
+	Moved []string
+
 	// Sequencer is the same declared input CommitRequest carries: nil for
 	// every ordinary caller, set only by a command that concludes the
 	// operation git has in flight.
@@ -379,6 +429,14 @@ func (p *Pipeline) Reword(ctx context.Context, req RewordRequest) (*RewordResult
 		return nil, fmt.Errorf("resolving repo root: %w", err)
 	}
 
+	// The declared moves, checked and minted once, against the first parent of
+	// the commit being reworded -- the same base an amend uses, for the same
+	// reason.
+	movedTrailers, err := p.resolveAmendMoved(ctx, repoRoot, ref, req.Moved)
+	if err != nil {
+		return nil, err
+	}
+
 	// A reword is a commit as far as the repository's hooks are concerned, so it
 	// runs the same three, once each -- see nativeHooks.
 	hooks, err := newNativeHooks(ctx, repoRoot, p.SafegitDir, req.DryRun)
@@ -393,7 +451,7 @@ func (p *Pipeline) Reword(ctx context.Context, req RewordRequest) (*RewordResult
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryReword(ctx, ref, req, hooks, attempt)
+		result, retry, err := p.tryReword(ctx, ref, movedTrailers, req, hooks, attempt)
 		if err != nil {
 			return nil, err
 		}
@@ -412,6 +470,7 @@ func (p *Pipeline) Reword(ctx context.Context, req RewordRequest) (*RewordResult
 func (p *Pipeline) tryReword(
 	ctx context.Context,
 	ref string,
+	movedTrailers []string,
 	req RewordRequest,
 	hooks *nativeHooks,
 	attempt int,
@@ -447,7 +506,10 @@ func (p *Pipeline) tryReword(
 		return nil, false, err
 	}
 
-	msg, err := hooks.commitMsg(ctx, hookIndex, trailer.AppendCustom(req.Message, req.Trailers))
+	// A reword always replaces the message (-m is required), so the reworded
+	// commit's existing move records are always carried forward.
+	rewordTrailers := commitTrailers(req.Trailers, preservedMovedLines(tip.Message, true), movedTrailers)
+	msg, err := hooks.commitMsg(ctx, hookIndex, trailer.AppendCustom(req.Message, rewordTrailers))
 	if err != nil {
 		return nil, false, err
 	}

@@ -126,7 +126,7 @@ func orEmpty(list []string) []string {
 	return list
 }
 
-func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, trailers []string, files []string, hunks []string, untrack []string) {
+func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, trailers []string, files []string, hunks []string, untrack []string, moved []string) {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -147,7 +147,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 			die(exitcode.Usage, "-F cannot be used with --amend")
 		}
 
-		runCommitAmend(flags, gitDir, messages, branch, trailers, files, hunks, untrack)
+		runCommitAmend(flags, gitDir, messages, branch, trailers, files, hunks, untrack, moved)
 		return
 	}
 
@@ -217,6 +217,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		AllowEmpty: allowEmpty,
 		DryRun:     flags.dryRun,
 		Untrack:    untrack,
+		Moved:      moved,
 	})
 	if err != nil {
 		die(pipelineExitCode(err), err.Error())
@@ -342,7 +343,7 @@ func (u effectsRefUpdate) Update(_ context.Context, ref, newSHA, expected string
 	return nil
 }
 
-func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch string, trailers []string, files []string, hunks []string, untrack []string) {
+func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch string, trailers []string, files []string, hunks []string, untrack []string, moved []string) {
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
@@ -366,7 +367,15 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 
 	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
 
-	if len(files) > 0 || len(hunks) > 0 || len(untrack) > 0 {
+	// Three ways to amend, in the order they are decided:
+	//
+	//   - files, hunks or untrack targets: an amend of the tip's content, with
+	//     the message replaced by -m or kept as it is;
+	//   - no files but a message: a reword;
+	//   - no files and no message, but declared moves: an amend that changes
+	//     nothing but the records the message carries, which is how a move
+	//     committed without its record gets one.
+	if len(files) > 0 || len(hunks) > 0 || len(untrack) > 0 || (len(moved) > 0 && len(messages) == 0) {
 		// Amend: add new files to the tip commit
 		var msg string
 		if len(messages) > 0 {
@@ -396,6 +405,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			Trailers:  trailers,
 			DryRun:    flags.dryRun,
 			Untrack:   untrack,
+			Moved:     moved,
 		})
 		if err != nil {
 			die(pipelineExitCode(err), err.Error())
@@ -462,6 +472,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			Branch:   branch,
 			Trailers: trailers,
 			DryRun:   flags.dryRun,
+			Moved:    moved,
 		})
 		if err != nil {
 			die(pipelineExitCode(err), err.Error())
