@@ -998,6 +998,7 @@ func scrubMatchExecute(
 	// report at all.
 	if result == nil {
 		flags.payload(submoduleOnlyMatchPayload(ctx, pattern, subScrubResults, subResults, subSyncSkipped))
+		reportSubmoduleOnlyCompletion(flags, pattern, subScrubResults, subResults)
 		return exitCode
 	}
 
@@ -1054,6 +1055,51 @@ func scrubMatchExecute(
 	printRotationNotice(flags, recheckCommandForPatterns(pattern))
 
 	return exitCode
+}
+
+// reportSubmoduleOnlyCompletion prints the human completion for the branch
+// where the parent repository had nothing to rewrite and one or more submodules
+// were rewritten and published.
+//
+// A successful rewrite completion prints three things -- the summary, the scope
+// the rewrite actually had, and the rotation notice -- and this branch printed
+// none of them. That silence was a real hazard rather than a cosmetic gap: a
+// submodule's history had moved and a credential still needed rotating, while
+// the last line an operator saw was "0 commits contained the pattern" about the
+// parent. The figures are the submodules' own, because they are the only
+// figures this run produced.
+func reportSubmoduleOnlyCompletion(flags globalFlags, pattern string, scrubbed []submoduleScrubResult, published []*RewriteResult) {
+	if len(scrubbed) == 0 {
+		return
+	}
+	commits, blobs, messages := 0, 0, 0
+	for _, sr := range scrubbed {
+		commits += sr.rewrittenCount
+		blobs += len(sr.blobMap)
+		messages += sr.messagesModified
+	}
+	tags := 0
+	for _, r := range published {
+		tags += r.TagsRewrittenCount
+	}
+
+	infof(flags, "\nScrub complete:\n")
+	infof(flags, "  the parent repository held nothing to rewrite\n")
+	infof(flags, "  %d submodule commits rewritten\n", commits)
+	infof(flags, "  %d submodule blobs replaced\n", blobs)
+	infof(flags, "  %d submodule commit messages modified\n", messages)
+	infof(flags, "  %d submodule tag annotations rewritten\n", tags)
+
+	refs := make([]string, 0, len(scrubbed))
+	for i, sr := range scrubbed {
+		ref := "its history"
+		if i < len(published) && published[i].Ref != "" {
+			ref = published[i].Ref
+		}
+		refs = append(refs, fmt.Sprintf("%s in submodule [%s]", ref, sr.sub.RelativePath))
+	}
+	printScopeNotice(flags, refs...)
+	printRotationNotice(flags, recheckCommandForPatterns(pattern))
 }
 
 // nothingRewrittenMatchPayload is the `scrub match` payload for a search that
