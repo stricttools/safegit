@@ -336,7 +336,12 @@ func runBackupRestore(flags globalFlags, remote string) int {
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
-	if code := coordGuard(flags, sgDir, "backup restore"); code != 0 {
+	// gitDir, not sgDir: coordGuard reads git's OWN in-flight operation state
+	// (MERGE_HEAD, .git/sequencer, rebase-merge/) out of the git directory, so
+	// handing it the safegit directory made every refusal report a bare dirty
+	// tree and print the "commit your work" advice even mid-merge, where that
+	// advice cannot be followed.
+	if code := coordGuard(flags, gitDir, "backup restore"); code != 0 {
 		return code
 	}
 
