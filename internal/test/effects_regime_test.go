@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -244,27 +245,137 @@ func TestPushDryRunDoesNotPush(t *testing.T) {
 	}
 }
 
-// TestCommitDryRunRecordsAndCommitsNothing: the commit pipeline's own dry-run
-// seam builds the objects and stops before the ref moves. The would-do log must
-// still say what the run would do -- an empty log reads as "this would change
-// nothing" -- and the output must not claim a commit landed.
+// TestCommitDryRunRecordsAndCommitsNothing: the commit pipeline's ref update is
+// minted through the effects handle, so a dry run records it instead of
+// performing it. The would-do log must say what the run would do -- an empty
+// log reads as "this would change nothing" -- and everything it says must be
+// something the preview actually knows.
+//
+// The commit SHA is not such a thing. It is a function of the committer
+// timestamp, so the object a preview could build is never the object a real run
+// will create; the recorded argv therefore carries a placeholder where the new
+// SHA goes, and the human output states the tree the preview really computed
+// instead of a `[branch sha]` line naming a commit that will never exist.
 func TestCommitDryRunRecordsAndCommitsNothing(t *testing.T) {
 	dir := newRepo(t)
 	testutil.WriteFile(t, dir, "a.txt", "one\n")
 	before := gitLog(t, dir, "HEAD")
+	head := testutil.Rev(t, dir, "HEAD")
 
 	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "commit", "-m", "preview", "--", "a.txt")
 	if code != 0 {
 		t.Fatalf("commit --dry-run failed (%d): %s", code, stderr)
 	}
-	if log := wouldDoLog(stdout); !strings.Contains(log, "run: git "+noOptionalLocks+" update-ref") {
-		t.Errorf("the would-do log must record the ref update, got: %s", log)
+
+	log := wouldDoLog(stdout)
+	// The whole argv, with the ref that moves, the placeholder in place of the
+	// unknowable new SHA, and the value the compare-and-swap is made against.
+	wantRecord := "run: git " + noOptionalLocks + " update-ref refs/heads/main <new-commit> " + head
+	if !strings.Contains(log, wantRecord) {
+		t.Errorf("the would-do log must record the ref update as %q, got: %s", wantRecord, log)
 	}
+	if sha := previewSHAIn(log); sha != "" {
+		t.Errorf("the recorded ref update names %s as the new commit, which no run will ever create: %s", sha, log)
+	}
+
+	// The human output: the tree is real and reported, the commit line is not.
 	if !strings.Contains(stdout, "would be committed") {
 		t.Errorf("a preview must not claim files were committed, got: %s", stdout)
 	}
+	tree := strings.TrimSpace(testutil.GitOut(t, dir, "rev-parse", "HEAD^{tree}"))
+	if strings.Contains(stdout, "(tree "+tree[:8]+")") {
+		t.Errorf("the preview reported the PARENT's tree; it must report the tree it computed: %s", stdout)
+	}
+	if !strings.Contains(stdout, "would commit on main (tree ") {
+		t.Errorf("the preview must name the branch and the tree it computed, got: %s", stdout)
+	}
+	if line := commitShapedLine(stdout); line != "" {
+		t.Errorf("a preview printed a commit line %q, which reads as a commit that happened: %s", line, stdout)
+	}
+
 	if after := gitLog(t, dir, "HEAD"); after != before {
 		t.Errorf("a dry-run commit landed: %d -> %d", before, after)
+	}
+}
+
+// hexSHA matches a full or abbreviated object name.
+var hexSHA = regexp.MustCompile(`\b[0-9a-f]{7,40}\b`)
+
+// previewSHAIn returns the first object-name-shaped token a recorded `update-ref`
+// line gives as the NEW value, or "" when it carries the placeholder. The old
+// value is exempt: a preview knows what the ref points at now.
+func previewSHAIn(log string) string {
+	for _, line := range strings.Split(log, "\n") {
+		i := strings.Index(line, "update-ref ")
+		if i < 0 {
+			continue
+		}
+		fields := strings.Fields(line[i:])
+		if len(fields) < 3 {
+			continue
+		}
+		if hexSHA.MatchString(fields[2]) {
+			return fields[2]
+		}
+	}
+	return ""
+}
+
+// commitShapedLine returns the first line shaped like the `[branch sha] subject`
+// line a real commit prints -- the line the submodule auto-bump parses a child's
+// commit SHA out of -- or "" when there is none.
+func commitShapedLine(stdout string) string {
+	for _, line := range strings.Split(stdout, "\n") {
+		if !strings.HasPrefix(line, "[") {
+			continue
+		}
+		close := strings.IndexByte(line, ']')
+		if close < 0 {
+			continue
+		}
+		if fields := strings.Fields(line[1:close]); len(fields) >= 2 && hexSHA.MatchString(fields[1]) {
+			return line
+		}
+	}
+	return ""
+}
+
+// TestAmendAndRewordDryRunPrintNoCommitLine: the same honesty on the other two
+// entry points. A reword's preview goes further -- it builds no commit object at
+// all -- so there is not even an unpublishable SHA to be tempted by.
+func TestAmendAndRewordDryRunPrintNoCommitLine(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		verb string
+		args []string
+	}{
+		{"amend", "amend", []string{"--dry-run", "commit", "--amend", "-m", "preview amend", "--", "extra.txt"}},
+		{"reword", "reword", []string{"--dry-run", "commit", "--amend", "-m", "preview reword"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// newRepo already carries one commit, which is the tip both
+			// forms rewrite.
+			dir := newRepo(t)
+			testutil.WriteFile(t, dir, "extra.txt", "extra\n")
+			head := testutil.Rev(t, dir, "HEAD")
+
+			stdout, stderr, code := runSafegit(t, dir, tc.args...)
+			if code != 0 {
+				t.Fatalf("%s --dry-run failed (%d): %s", tc.name, code, stderr)
+			}
+			if line := commitShapedLine(stdout); line != "" {
+				t.Errorf("the %s preview printed a commit line %q: %s", tc.name, line, stdout)
+			}
+			if !strings.Contains(stdout, "would "+tc.verb+" on main (tree ") {
+				t.Errorf("the %s preview must name the branch and the tree, got: %s", tc.name, stdout)
+			}
+			if sha := previewSHAIn(wouldDoLog(stdout)); sha != "" {
+				t.Errorf("the recorded ref update of the %s preview invents the new SHA %s: %s", tc.name, sha, stdout)
+			}
+			if now := testutil.Rev(t, dir, "HEAD"); now != head {
+				t.Errorf("the %s preview moved HEAD: %s -> %s", tc.name, head, now)
+			}
+		})
 	}
 }
 
@@ -337,5 +448,46 @@ func TestPassthroughDryRunArgvCarriesTheGlobalPrefix(t *testing.T) {
 	}
 	if branch := strings.TrimSpace(testutil.GitRaw(t, dir, "rev-parse", "--abbrev-ref", "HEAD")); branch != "main" {
 		t.Errorf("a dry-run checkout moved the branch to %q", branch)
+	}
+}
+
+// TestHistoryRewriteDryRunRecordsNoInventedSHA is the same honesty on the
+// history-rewrite side, which mints four effects: the ref move onto the
+// rewritten history, then the reflog expire, repack and prune that make the
+// pre-rewrite objects unreachable.
+//
+// The ref move is the one with a value nobody can know in advance -- computing
+// the rewritten head would mean performing the rewrite -- so it carries a
+// placeholder there, while the value it moves AWAY from is the real current
+// head, which the preview did read.
+func TestHistoryRewriteDryRunRecordsNoInventedSHA(t *testing.T) {
+	dir, initialSHA := newRawSecretRepo(t)
+	head := testutil.Rev(t, dir, "HEAD")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, dryRunScrubEnv,
+		"--dry-run", "scrub", "file", "secret.txt", "--from", initialSHA, "--reason", "preview honesty")
+	if code != 0 {
+		t.Fatalf("scrub file --dry-run failed (%d): %s", code, stderr)
+	}
+
+	log := wouldDoLog(stdout)
+	if log == "" {
+		t.Fatalf("a rewrite preview must render a would-do log, got: %s", stdout)
+	}
+	for _, want := range []string{
+		"update-ref refs/heads/main <rewritten> " + head,
+		"reflog expire",
+		"repack",
+		"prune",
+	} {
+		if !strings.Contains(log, want) {
+			t.Errorf("the would-do log must record %q, got: %s", want, log)
+		}
+	}
+	if sha := previewSHAIn(log); sha != "" {
+		t.Errorf("the recorded ref move names %s as the rewritten head, which the preview cannot know: %s", sha, log)
+	}
+	if now := testutil.Rev(t, dir, "HEAD"); now != head {
+		t.Errorf("the rewrite preview moved HEAD: %s -> %s", head, now)
 	}
 }

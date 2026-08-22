@@ -285,6 +285,21 @@ func wouldWriteHeader(verb, ref, tree, subject string) string {
 }
 
 // runCommitAmend handles the --amend path: amend with files, or reword without.
+// previewCommitPlaceholder stands where the new commit's SHA goes in a recorded
+// ref update.
+//
+// A preview cannot know that SHA. The commit object a real run builds carries
+// the committer timestamp, so the object a preview could name is never the
+// object that will exist -- and a would-do log stating `update-ref
+// refs/heads/main <some sha> <old>` invites a reader to go looking for a commit
+// that neither exists now nor will exist under that name later. The rest of the
+// argv is exact: the ref that moves and the value it moves away from are both
+// known, and the whole line is what the execute path really runs.
+//
+// It mirrors rewrittenPlaceholder in scrub_preview.go, which stands for the
+// same thing on the history-rewrite side.
+const previewCommitPlaceholder = "<new-commit>"
+
 // recordCommitRefUpdate puts the commit pipeline's ref move into the
 // framework's would-do log.
 //
@@ -303,7 +318,7 @@ func recordCommitRefUpdate(flags globalFlags, ref, newSHA, oldSHA string) {
 	if oldSHA == "" {
 		oldSHA = git.ZeroSHA
 	}
-	argv, err := gitexec.ArgvAny(gitexec.ExemptCommitRefUpdateRecord, "update-ref", ref, newSHA, oldSHA)
+	argv, err := gitexec.ArgvAny(gitexec.ExemptCommitRefUpdateRecord, "update-ref", ref, previewCommitPlaceholder, oldSHA)
 	if err != nil {
 		return
 	}
