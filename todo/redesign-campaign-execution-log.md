@@ -109,6 +109,46 @@ existing entries are never rewritten.
   stdout-only (`testutil.GitOut` added), and SHA-feeding call sites in
   `root_commit_cas_test.go` re-pointed at stdout-only readers.
 
+## Ratified 1.4/1.5 decisions
+
+- The in-flight refusal exit code is exitcode.CoordinationBusy (5), whose
+  registry meaning already covered sequencer state. coord.Check's
+  dirty-tree VERDICT deliberately ignores in-flight state (the guarded
+  passthroughs are how an operator reaches `rebase --continue` /
+  `merge --abort`; refusing on state alone would refuse the way out) —
+  only the advice text switches. The sequencer declaration is verified,
+  not trusted: wrong kind, or a declaration with nothing in flight, is
+  itself a refusal.
+- The operation-lock timeout reuses exit 8 (LockTimeout).
+- Backoff-reset fix in the shared lock primitive (beyond the brief,
+  ratified): waiters escalated to the 1s poll cap and never reset, so a
+  rapidly-handed-over lock drained the queue at ~1 waiter/second — the
+  stress suite went red at exactly the 30s timeouts. Reset on observing
+  a different lock-file inode than the previous poll. Alternative if
+  this ever needs revisiting: a shared/exclusive design so commits
+  parallelize with each other and only exclude passthroughs (rejected
+  now: needs a new primitive and flock leaves no on-disk record for
+  unlock/doctor recovery).
+- Same-worktree commits now serialize with each other (the plan's own
+  consequence of commit taking the operation lock; the TOCTOU strictly
+  needs only commit-vs-passthrough exclusion). Throughput measured fine
+  post-backoff-fix (~30 commits/second sequential).
+- die() now releases pending locks (a refusal no longer leaks the
+  operation/ref lock file); three os.Exit sites in the commit path
+  routed through die() for the same reason.
+- unlock's ForceRelease stays an unconditional operator tool (staleness
+  refusal still in front; last-resort recovery where flock cannot work);
+  doctor's unattended sweep takes the strict reclamation authority.
+- stdin probe result (replaces the plan's assumption): under the
+  effects-handle passthroughs the child's fd 0 is /dev/null — stdin
+  reads fail, but /dev/tty opens, so real editors work under
+  `safegit rebase -i`. Documented in the concurrency guide.
+- NOT covered by the operation lock, deliberately: backup restore's
+  ff-only merge and the scrub/author rewrite commands. A scrub can run
+  concurrently with a commit in the same worktree; Phase 4.1's
+  under-rewrite-lock cleanliness re-check is the designed mitigation —
+  its implementor should treat this as a live scenario.
+
 ## Ratified 1.3 decisions
 
 - `git.SyncMainIndex`/`syncMainIndexInner` are DELETED, not just
