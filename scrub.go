@@ -394,6 +394,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	infof(flags, "  %d commits rewritten\n", *result.CommitsRewritten)
 	infof(flags, "  Old HEAD: %s\n", result.OldHead[:12])
 	infof(flags, "  New HEAD: %s\n", result.NewHead[:12])
+	printRotationNotice(flags, recheckCommandForRemovedContent())
 
 	return rewriteResult.TierBExit(exitcode.OK)
 }
@@ -748,6 +749,7 @@ func runScrubFileInSubmodule(
 	infof(flags, "  %d parent commits rewritten (gitlink updates)\n", parentRewrittenCount)
 	infof(flags, "  Old HEAD: %s\n", result.OldHead[:12])
 	infof(flags, "  New HEAD: %s\n", result.NewHead[:12])
+	printRotationNotice(flags, recheckCommandForRemovedContent())
 
 	// A submodule-side finding and a parent-side one are the same verdict: the
 	// rewrite stands and something after it did not complete.
