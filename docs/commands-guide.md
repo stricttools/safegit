@@ -1229,6 +1229,12 @@ does, and git's fatal errors exit 128 or 129. A code from one of those commands
 is therefore only safegit's when the failure happened before git ran (the
 coordination guard, an uninitialized repository, a rejected argument).
 
+`revert` of a SINGLE commit is the one exception, because it is not a plain
+passthrough: git computes the inverse patch and safegit commits it, so the
+conclusion engine's own refusals reach it too. It can exit **17** (the staged
+result carries an unmerged entry no resolution names) or **18** (the content it
+would commit still holds a complete conflict region) after git has already run.
+
 <!-- BEGIN generated exit-code table (scripts/gen-exit-table) -->
 
 | Code | Meaning |
