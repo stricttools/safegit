@@ -36,6 +36,10 @@ type AmendRequest struct {
 	// tip being replaced, because the amended commit describes that same step.
 	Moved []string
 
+	// MovedRetract is the same input CommitRequest carries: the ids of move
+	// records this commit retracts, judged against the same first parent.
+	MovedRetract []string
+
 	// Sequencer is the same declared input CommitRequest carries: nil for
 	// every ordinary caller, set only by a command that concludes the
 	// operation git has in flight.
@@ -106,7 +110,7 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	// one -- the content is already right and only the message is missing the
 	// declaration. It rebuilds the tip's own tree, which is the honest answer
 	// for an operation that changes nothing but the message.
-	if len(req.FileSpecs) == 0 && len(req.Untrack) == 0 && len(req.Moved) == 0 {
+	if len(req.FileSpecs) == 0 && len(req.Untrack) == 0 && len(req.Moved) == 0 && len(req.MovedRetract) == 0 {
 		return nil, fmt.Errorf("no files specified for amend")
 	}
 
@@ -122,7 +126,7 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	// NOT the base above: the tip being replaced already holds the result of the
 	// move, so the question "was the old path tracked" can only be asked of the
 	// tip's own first parent -- see movedParentRev.
-	movedTrailers, err := p.resolveAmendMoved(ctx, repoRoot, ref, req.Moved)
+	movedTrailers, err := p.resolveAmendMoveTrailers(ctx, repoRoot, ref, req.Moved, req.MovedRetract)
 	if err != nil {
 		return nil, err
 	}
@@ -156,14 +160,16 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	}
 }
 
-// resolveAmendMoved checks and mints the declared moves of an amend or a
-// reword, against the first parent of the tip those operations replace.
+// resolveAmendMoveTrailers checks and mints the declared moves and the
+// retractions of an amend or a reword, against the first parent of the tip
+// those operations replace.
 //
 // It is shared by both because both replace the tip: an amend and a reword
 // build a commit on the same parents, so a move declared on either describes
-// the same step out of that parent's tree.
-func (p *Pipeline) resolveAmendMoved(ctx context.Context, repoRoot, ref string, moved []string) ([]string, error) {
-	if len(moved) == 0 {
+// the same step out of that parent's tree. The two are resolved together
+// because they are judged against the same base, which is read once.
+func (p *Pipeline) resolveAmendMoveTrailers(ctx context.Context, repoRoot, ref string, moved, retract []string) ([]string, error) {
+	if len(moved) == 0 && len(retract) == 0 {
 		return nil, nil
 	}
 	tipSHA, err := git.RevParse(ctx, ref)
@@ -174,7 +180,16 @@ func (p *Pipeline) resolveAmendMoved(ctx context.Context, repoRoot, ref string, 
 	if err != nil {
 		return nil, fmt.Errorf("reading %s: %w", tipSHA, err)
 	}
-	return resolveMoved(ctx, repoRoot, movedParentRev(tip.Parents), moved)
+	parentRev := movedParentRev(tip.Parents)
+	lines, err := resolveMoved(ctx, repoRoot, parentRev, moved)
+	if err != nil {
+		return nil, err
+	}
+	retractLines, err := resolveMovedRetract(ctx, parentRev, retract)
+	if err != nil {
+		return nil, err
+	}
+	return append(lines, retractLines...), nil
 }
 
 func (p *Pipeline) tryAmend(
@@ -365,6 +380,10 @@ type RewordRequest struct {
 	// already right, and only the message is missing the declaration.
 	Moved []string
 
+	// MovedRetract is the same input AmendRequest carries: the ids of move
+	// records this commit retracts.
+	MovedRetract []string
+
 	// Sequencer is the same declared input CommitRequest carries: nil for
 	// every ordinary caller, set only by a command that concludes the
 	// operation git has in flight.
@@ -432,7 +451,7 @@ func (p *Pipeline) Reword(ctx context.Context, req RewordRequest) (*RewordResult
 	// The declared moves, checked and minted once, against the first parent of
 	// the commit being reworded -- the same base an amend uses, for the same
 	// reason.
-	movedTrailers, err := p.resolveAmendMoved(ctx, repoRoot, ref, req.Moved)
+	movedTrailers, err := p.resolveAmendMoveTrailers(ctx, repoRoot, ref, req.Moved, req.MovedRetract)
 	if err != nil {
 		return nil, err
 	}

@@ -126,7 +126,7 @@ func orEmpty(list []string) []string {
 	return list
 }
 
-func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, trailers []string, files []string, hunks []string, untrack []string, moved []string) {
+func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, trailers []string, files []string, hunks []string, untrack []string, moved []string, movedRetract []string) {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -147,7 +147,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 			die(exitcode.Usage, "-F cannot be used with --amend")
 		}
 
-		runCommitAmend(flags, gitDir, messages, branch, trailers, files, hunks, untrack, moved)
+		runCommitAmend(flags, gitDir, messages, branch, trailers, files, hunks, untrack, moved, movedRetract)
 		return
 	}
 
@@ -210,14 +210,15 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 
 	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
 	result, err := p.Execute(flags.ctx(), commit.CommitRequest{
-		Message:    msg,
-		FileSpecs:  fileSpecs,
-		Branch:     branch,
-		Trailers:   trailers,
-		AllowEmpty: allowEmpty,
-		DryRun:     flags.dryRun,
-		Untrack:    untrack,
-		Moved:      moved,
+		Message:      msg,
+		FileSpecs:    fileSpecs,
+		Branch:       branch,
+		Trailers:     trailers,
+		AllowEmpty:   allowEmpty,
+		DryRun:       flags.dryRun,
+		Untrack:      untrack,
+		Moved:        moved,
+		MovedRetract: movedRetract,
 	})
 	if err != nil {
 		die(pipelineExitCode(err), err.Error())
@@ -343,7 +344,7 @@ func (u effectsRefUpdate) Update(_ context.Context, ref, newSHA, expected string
 	return nil
 }
 
-func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch string, trailers []string, files []string, hunks []string, untrack []string, moved []string) {
+func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch string, trailers []string, files []string, hunks []string, untrack []string, moved []string, movedRetract []string) {
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
@@ -375,7 +376,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 	//   - no files and no message, but declared moves: an amend that changes
 	//     nothing but the records the message carries, which is how a move
 	//     committed without its record gets one.
-	if len(files) > 0 || len(hunks) > 0 || len(untrack) > 0 || (len(moved) > 0 && len(messages) == 0) {
+	if len(files) > 0 || len(hunks) > 0 || len(untrack) > 0 || ((len(moved) > 0 || len(movedRetract) > 0) && len(messages) == 0) {
 		// Amend: add new files to the tip commit
 		var msg string
 		if len(messages) > 0 {
@@ -399,13 +400,14 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		}
 
 		result, err := p.Amend(flags.ctx(), commit.AmendRequest{
-			Message:   msg,
-			FileSpecs: fileSpecs,
-			Branch:    branch,
-			Trailers:  trailers,
-			DryRun:    flags.dryRun,
-			Untrack:   untrack,
-			Moved:     moved,
+			Message:      msg,
+			FileSpecs:    fileSpecs,
+			Branch:       branch,
+			Trailers:     trailers,
+			DryRun:       flags.dryRun,
+			Untrack:      untrack,
+			Moved:        moved,
+			MovedRetract: movedRetract,
 		})
 		if err != nil {
 			die(pipelineExitCode(err), err.Error())
@@ -468,11 +470,12 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		}
 
 		result, err := p.Reword(flags.ctx(), commit.RewordRequest{
-			Message:  msg,
-			Branch:   branch,
-			Trailers: trailers,
-			DryRun:   flags.dryRun,
-			Moved:    moved,
+			Message:      msg,
+			Branch:       branch,
+			Trailers:     trailers,
+			DryRun:       flags.dryRun,
+			Moved:        moved,
+			MovedRetract: movedRetract,
 		})
 		if err != nil {
 			die(pipelineExitCode(err), err.Error())

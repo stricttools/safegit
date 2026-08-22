@@ -112,6 +112,12 @@ type CommitRequest struct {
 	// inferred -- safegit detects no moves at all.
 	Moved []string
 
+	// MovedRetract carries the ids of move records this commit retracts, one
+	// each. Every id must name a record that exists and is not already retracted
+	// in the history the commit is built on; one that does not is a refusal,
+	// never a trailer. The unchecked spelling is --trailer, deliberately.
+	MovedRetract []string
+
 	// MovedRecords carries move records the caller has ALREADY MINTED, as whole
 	// trailer lines. They are written exactly where a --moved record is written
 	// -- caller content, before the commit-msg hook -- and the pipeline neither
@@ -289,6 +295,15 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	// Already-minted records go on first, in the order the caller gave them:
 	// they are the caller's own statement, and the pipeline adds nothing to it.
 	movedTrailers = append(append([]string{}, req.MovedRecords...), movedTrailers...)
+
+	// Retractions, checked against the same base and written after the records
+	// this commit declares: a replacement is a retraction plus a new record in
+	// one commit, and reading it that way round is how it was written.
+	retractTrailers, err := resolveMovedRetract(ctx, baseRev(ctx, ref), req.MovedRetract)
+	if err != nil {
+		return nil, err
+	}
+	movedTrailers = append(movedTrailers, retractTrailers...)
 
 	// The repository's own hooks, prepared once for the whole operation: they
 	// run at most once each no matter how many attempts the CAS loop takes.

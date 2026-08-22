@@ -1266,7 +1266,7 @@ would commit still holds a complete conflict region) after git has already run.
 | 16 | A pre-commit or commit-msg hook refused the commit |
 | 17 | A conclusion's declared resolutions do not match the conflicted paths in the index |
 | 18 | A conclusion's content still holds a complete conflict region |
-| 19 | A declared move (--moved) is contradicted by the repository |
+| 19 | A claim about a move (--moved, --moved-retract, a `mv` pair) is contradicted by the repository |
 | 20 | Pre-pre-push hook failed |
 | 21 | Pre-pre-push hook timed out |
 | 22 | The remote backup slot holds work missing from the local history |
