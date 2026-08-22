@@ -159,7 +159,18 @@ var (
 
 // report emits the payload and the human rendering of a finished (or
 // previewed) conclusion.
+//
+// It is the whole answer for the three conclusion commands. The restructured
+// `safegit revert` reaches the same engine through a different door and calls
+// renderHuman alone: `revert` is a passthrough registration with no declared
+// payload schema, so there is no machine document for it to emit.
 func (op continueOp) report(flags globalFlags, out conclusionResult) {
+	op.reportPayload(flags, out)
+	op.renderHuman(flags, out, "concluded the "+op.kind.String())
+}
+
+// reportPayload builds and supplies the machine document.
+func (op continueOp) reportPayload(flags globalFlags, out conclusionResult) {
 	base := continuePayload{
 		Operation:    op.kind.String(),
 		Ref:          out.commit.Ref,
@@ -187,7 +198,12 @@ func (op continueOp) report(flags globalFlags, out conclusionResult) {
 	} else {
 		flags.payload(base)
 	}
+}
 
+// renderHuman prints what a conclusion did (or would do), headed by the caller's
+// own one-line summary of the operation: the three conclusion commands say they
+// concluded something, the restructured revert says it reverted a commit.
+func (op continueOp) renderHuman(flags globalFlags, out conclusionResult, headline string) {
 	if flags.silent() {
 		return
 	}
@@ -208,7 +224,7 @@ func (op continueOp) report(flags globalFlags, out conclusionResult) {
 		return
 	}
 
-	fmt.Printf("[%s %s] concluded the %s\n", refShortName(out.commit.Ref), shortSHA(out.commit.SHA), op.kind)
+	fmt.Printf("[%s %s] %s\n", refShortName(out.commit.Ref), shortSHA(out.commit.SHA), headline)
 	fmt.Printf(" %d file(s) committed, %d parent(s)\n", len(out.commit.Files), len(out.commit.Parents))
 	if out.author != nil {
 		fmt.Printf(" author preserved: %s <%s>\n", out.author.Name, out.author.Email)
