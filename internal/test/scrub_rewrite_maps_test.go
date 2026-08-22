@@ -433,3 +433,134 @@ func TestScrubRunRewriteMapsPersisted(t *testing.T) {
 		t.Errorf("complete new_head = %v, want %v", lines[2]["new_head"], result.NewHead)
 	}
 }
+
+// Two submodules of one parent routinely carry the SAME remote-tracking
+// refnames -- `refs/remotes/origin/main` is what `git submodule add` leaves in
+// every one of them. The submodule-only payload used to flat-merge every
+// submodule's remotes into one object keyed by refname, so the second
+// submodule's `refs/remotes/origin/main` overwrote the first's and the record of
+// where one of the two started was simply gone.
+//
+// The remotes are nested one entry per submodule path instead, which is the
+// only key that distinguishes them. The parent's own `pre_rewrite_remotes` stays
+// what it always was and is absent here, because on this branch the parent's
+// refs never moved.
+//
+// The fixture puts the secret in each submodule's annotated TAG MESSAGE and
+// nowhere else. That is what reaches this branch: the submodule's commits all
+// map to themselves, so no gitlink changes and the parent has nothing to
+// rewrite, while the submodule's own refs still move because the tag object is
+// rewritten -- which is exactly when its pre-rewrite remote state is captured.
+func TestSubmoduleOnlyScrubMatchNestsPreRewriteRemotesPerSubmodule(t *testing.T) {
+	const secret = "TWOSUB_SECRET_XYZ"
+	parentDir := newTwoSubmodulesWithTaggedSecret(t, secret)
+	sub1Dir := filepath.Join(parentDir, "sub1")
+	sub2Dir := filepath.Join(parentDir, "sub2")
+
+	// Both submodules were cloned by `git submodule add`, so both already carry
+	// refs/remotes/origin/main -- the collision this test is about. Their SHAs
+	// differ, which is what makes an overwrite observable.
+	sub1Before := testutil.Rev(t, sub1Dir, "refs/remotes/origin/main")
+	sub2Before := testutil.Rev(t, sub2Dir, "refs/remotes/origin/main")
+	if sub1Before == "" || sub2Before == "" {
+		t.Fatal("the fixture's submodules carry no origin/main remote-tracking ref")
+	}
+	if sub1Before == sub2Before {
+		t.Fatal("both submodules point origin/main at the same commit; the overwrite would be invisible")
+	}
+
+	// The parent's own files hold no secret, so the parent has nothing to
+	// rewrite and the run takes the submodule-only payload branch.
+	stdout, stderr, code := runSafegitEnv(t, parentDir, submoduleEnv,
+		"--approve-consequential", "--json", "scrub", "match",
+		"--pattern", "TWOSUB_SECRET_XYZ",
+		"--replace", "REDACTED",
+		"--reason", "nested remotes",
+		"--entire-history",
+	)
+	if code != 0 {
+		t.Fatalf("scrub match failed (code %d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	var result struct {
+		PreRewriteRemotes          map[string]string            `json:"pre_rewrite_remotes"`
+		SubmodulePreRewriteRemotes map[string]map[string]string `json:"submodule_pre_rewrite_remotes"`
+		NewHead                    string                       `json:"new_head"`
+	}
+	if err := json.Unmarshal([]byte(jsonPayload(t, stdout)), &result); err != nil {
+		t.Fatalf("parsing scrub match JSON: %v\n%s", err, stdout)
+	}
+	if result.NewHead != "" {
+		t.Errorf("new_head is %q; the parent was not rewritten on this branch", result.NewHead)
+	}
+	if len(result.PreRewriteRemotes) != 0 {
+		t.Errorf("the parent's own pre_rewrite_remotes is %v; the parent's refs never moved here",
+			result.PreRewriteRemotes)
+	}
+
+	nested := result.SubmodulePreRewriteRemotes
+	if len(nested) != 2 {
+		t.Fatalf("submodule_pre_rewrite_remotes holds %d submodule(s), want 2: %v", len(nested), nested)
+	}
+	for path, want := range map[string]string{"sub1": sub1Before, "sub2": sub2Before} {
+		remotes, ok := nested[path]
+		if !ok {
+			t.Errorf("submodule_pre_rewrite_remotes has no entry for %s: %v", path, nested)
+			continue
+		}
+		if got := remotes["refs/remotes/origin/main"]; got != want {
+			t.Errorf("%s: origin/main recorded as %q, want %q", path, got, want)
+		}
+	}
+}
+
+// newTwoSubmodulesWithTaggedSecret builds a parent with submodules "sub1" and
+// "sub2" whose only occurrence of secret is in an annotated tag's MESSAGE. No
+// blob, no commit message and nothing in the parent holds it, which is what
+// leaves every submodule commit mapping to itself.
+func newTwoSubmodulesWithTaggedSecret(t *testing.T, secret string) string {
+	t.Helper()
+	base := evalTempDir(t)
+
+	origin := func(name string) string {
+		dir := filepath.Join(base, name+"-origin")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		testutil.Git(t, dir, "init", "-q", "--initial-branch=main")
+		testutil.Git(t, dir, "config", "user.email", "test@test.com")
+		testutil.Git(t, dir, "config", "user.name", "Test")
+		// The content is clean and the commit subject names the submodule, so
+		// the two origins' commits have different SHAs.
+		testutil.WriteFile(t, dir, "clean.txt", "nothing sensitive here\n")
+		testutil.Git(t, dir, "add", "clean.txt")
+		testutil.Git(t, dir, "commit", "-q", "-m", name+" initial")
+		testutil.Git(t, dir, "tag", "-a", name+"-v1", "-m", "release note mentioning "+secret)
+		return dir
+	}
+	sub1Origin := origin("sub1")
+	sub2Origin := origin("sub2")
+
+	parentDir := filepath.Join(base, "parent")
+	if err := os.MkdirAll(parentDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, parentDir, "init", "-q", "--initial-branch=main")
+	testutil.Git(t, parentDir, "config", "user.email", "test@test.com")
+	testutil.Git(t, parentDir, "config", "user.name", "Test")
+	testutil.WriteFile(t, parentDir, "seed.txt", "seed\n")
+	testutil.Git(t, parentDir, "add", "seed.txt")
+	testutil.Git(t, parentDir, "commit", "-q", "-m", "initial")
+	testutil.Git(t, parentDir, "config", "protocol.file.allow", "always")
+	testutil.Git(t, parentDir, "submodule", "add", "-q", sub1Origin, "sub1")
+	testutil.Git(t, parentDir, "submodule", "add", "-q", sub2Origin, "sub2")
+	testutil.Git(t, parentDir, "commit", "-q", "-m", "add submodules")
+
+	for _, name := range []string{"sub1", "sub2"} {
+		sub := filepath.Join(parentDir, name)
+		testutil.Git(t, sub, "checkout", "-q", "main")
+		testutil.Git(t, sub, "config", "user.email", "test@test.com")
+		testutil.Git(t, sub, "config", "user.name", "Test")
+	}
+	return parentDir
+}
