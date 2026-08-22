@@ -206,12 +206,18 @@ const (
 	// staged result goes through the same verification before it is committed.
 	ConclusionMarkerSurvived = 18
 
-	// MoveNotBorneOut means a declared move (--moved) is contradicted by the
-	// repository: the old path is not tracked in the tree the commit is built
-	// on, the old path is still sitting on disk, or the new path is neither on
-	// disk nor in that tree. A move record is a claim every later reader
-	// resolves against real trees, so writing one the repository already
-	// disagrees with would send those readers to a path that was never there.
+	// MoveNotBorneOut means a claim about a move is contradicted by the
+	// repository.
+	//
+	// A declared move (--moved) reaches it when the old path is not tracked in
+	// the tree the commit is built on, when the old path is still sitting on
+	// disk, or when the new path is neither on disk nor in that tree. A
+	// retraction (--moved-retract) reaches it when the id names no record in
+	// the history the commit is built on, or names one that is already
+	// retracted. Both are the same verdict: a record and a retraction are each
+	// a claim every later reader resolves against the repository, so writing
+	// one the repository already disagrees with would send those readers to a
+	// path -- or to a record -- that was never there.
 	// It is a separate code from PathMatchedNothing, which is about a named
 	// path CONTRIBUTING nothing to the commit's content: a declaration stages
 	// nothing and changes no content at all, and its failure is a claim the
@@ -377,7 +383,7 @@ func All() []Entry {
 		{CommitHookRejected, "CommitHookRejected", "A pre-commit or commit-msg hook refused the commit"},
 		{ConclusionUnresolved, "ConclusionUnresolved", "A conclusion's declared resolutions do not match the conflicted paths in the index"},
 		{ConclusionMarkerSurvived, "ConclusionMarkerSurvived", "A conclusion's content still holds a complete conflict region"},
-		{MoveNotBorneOut, "MoveNotBorneOut", "A declared move (--moved) is contradicted by the repository"},
+		{MoveNotBorneOut, "MoveNotBorneOut", "A claim about a move (--moved, --moved-retract, a `mv` pair) is contradicted by the repository"},
 		{PushHookFailed, "PushHookFailed", "Pre-pre-push hook failed"},
 		{PushHookTimeout, "PushHookTimeout", "Pre-pre-push hook timed out"},
 		{BackupDiverged, "BackupDiverged", "The remote backup slot holds work missing from the local history"},

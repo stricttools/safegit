@@ -93,6 +93,89 @@ func resolveMoved(ctx context.Context, repoRoot, parentRev string, moved []strin
 	return lines, nil
 }
 
+// resolveMovedRetract turns the caller's --moved-retract ids into the
+// retraction trailer lines the commit will carry, refusing any id the
+// repository does not bear out.
+//
+// Retraction is the ONLY correction a move record has: a record already written
+// is never edited, because a record only exists on a commit and editing that
+// commit rewrites history. So a retraction is a claim in its own right, and it
+// gets the same treatment every other claim gets -- it is checked against the
+// repository before it is written.
+//
+// Two things make an id wrong, and both are the same kind of wrong as a move
+// the trees contradict:
+//
+//   - it names NO record in the history this commit is built on. Almost always
+//     a typo or a copied-out-of-date id, and the retraction would sit in the
+//     history forever naming nothing;
+//   - it names a record that is ALREADY retracted. A record is retracted once;
+//     a second retraction says nothing the first did not, and the caller
+//     believing they are correcting something is the thing worth stopping.
+//
+// The bare `--trailer 'Moved-Retract: <id>'` spelling stays legal and gets none
+// of this. That is the open convention: a trailer is a trailer, and a caller
+// who means to write one safegit would refuse can still write it -- deliberately,
+// through the flag whose whole contract is "put this line in the message".
+//
+// parentRev is the same base the declared moves are judged against: the branch
+// tip for a commit, the tip's own first parent for an amend or a reword. A
+// record declared by the very commit being amended is therefore not retractable
+// in the same breath -- an amend that wants the record gone drops it by not
+// declaring it, which is what an amend is for.
+func resolveMovedRetract(ctx context.Context, parentRev string, ids []string) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	if parentRev == "" {
+		return nil, movedRefusal("--moved-retract names a record to retract, but this commit has no parent: "+
+			"no record exists yet for %s to name", strings.Join(ids, ", "))
+	}
+
+	commits, err := git.ReachableMessages(ctx, parentRev)
+	if err != nil {
+		return nil, err
+	}
+	declaredBy := make(map[string]string)
+	retracted := make(map[string]bool)
+	for _, c := range commits {
+		moves := trailer.ReadMoves(c.Message)
+		for _, r := range moves.Records {
+			declaredBy[r.ID] = c.SHA
+		}
+		for _, id := range moves.Retractions {
+			retracted[id] = true
+		}
+	}
+
+	var refusals []string
+	var lines []string
+	for _, raw := range ids {
+		id := strings.TrimSpace(raw)
+		if !trailer.ValidID(id) {
+			return nil, &CommitError{
+				Code:    exitcode.Usage,
+				Message: fmt.Sprintf("--moved-retract %s is not a record id; an id is the token a Moved: trailer begins with", raw),
+			}
+		}
+		switch {
+		case declaredBy[id] == "":
+			refusals = append(refusals, fmt.Sprintf(
+				"%s names no move record in the history %s is built on", id, describeBase(parentRev)))
+		case retracted[id]:
+			refusals = append(refusals, fmt.Sprintf(
+				"%s names a record that is already retracted; a record is retracted once", id))
+		default:
+			lines = append(lines, trailer.RetractLine(id))
+		}
+	}
+	if len(refusals) > 0 {
+		return nil, movedRefusal("%d of %d retraction(s) are not borne out by the repository:\n  %s\n  nothing was committed.",
+			len(refusals), len(ids), strings.Join(refusals, "\n  "))
+	}
+	return lines, nil
+}
+
 // parseMovedArgs reads every --moved element through the ONE pair parser and
 // canonicalizes both sides.
 //

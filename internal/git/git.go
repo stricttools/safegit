@@ -1306,6 +1306,40 @@ func ForEachRef(ctx context.Context, format string, prefixes ...string) ([]strin
 	return SplitNonEmpty(stdout), nil
 }
 
+// CommitMessage is one commit and the whole message it carries.
+type CommitMessage struct {
+	SHA     string
+	Message string
+}
+
+// ReachableMessages returns every commit reachable from rev, newest first,
+// with its full message.
+//
+// The delimiter is a NUL between commits (`log -z`), which is the only
+// separator a commit message cannot contain: a message holds arbitrary text,
+// blank lines and lines that look like whatever separator one might reach for,
+// so any printable delimiter is a message somebody can write.
+func ReachableMessages(ctx context.Context, rev string) ([]CommitMessage, error) {
+	stdout, _, err := Run(ctx, "log", "-z", "--format=%H%n%B", rev)
+	if err != nil {
+		return nil, fmt.Errorf("reading the messages reachable from %s: %w", rev, err)
+	}
+	var out []CommitMessage
+	for _, record := range strings.Split(stdout, "\x00") {
+		if record == "" {
+			continue
+		}
+		newline := strings.IndexByte(record, '\n')
+		if newline < 0 {
+			// A commit with no message at all: the record is the SHA alone.
+			out = append(out, CommitMessage{SHA: record})
+			continue
+		}
+		out = append(out, CommitMessage{SHA: record[:newline], Message: record[newline+1:]})
+	}
+	return out, nil
+}
+
 // LsRemoteBulk runs git ls-remote against a remote with a pattern and returns
 // a map of refname to SHA. The output format of git ls-remote is
 // "<SHA>\t<refname>" per line; the map key is the refname.

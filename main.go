@@ -286,7 +286,8 @@ func newApp() *strictcli.App {
 		hunks := kwargsStrSlice(kwargs["hunks"])
 		untrack := kwargsStrSlice(kwargs["untrack"])
 		moved := kwargsStrSlice(kwargs["moved"])
-		runCommit(gf, messages, messageFile, branch, amend, allowEmpty, trailers, files, hunks, untrack, moved)
+		movedRetract := kwargsStrSlice(kwargs["moved_retract"])
+		runCommit(gf, messages, messageFile, branch, amend, allowEmpty, trailers, files, hunks, untrack, moved, movedRetract)
 		return strictcli.Exit(exitcode.OK)
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
@@ -319,6 +320,11 @@ func newApp() *strictcli.App {
 			// one happened, and the record it writes into the commit message is
 			// what every later reader resolves against the trees.
 			strictcli.StringFlag("moved", "declare that content moved, as 'old -> new' (repeatable, one pair each). End BOTH paths with a slash to declare a whole subtree. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. The old path must be tracked in the commit's parent and gone from disk, and the new one must exist; nothing is inferred from file contents. Omitted means the commit declares no moves", strictcli.Repeatable(), strictcli.Unique(true), strictcli.Optional(), strictcli.ValidateFn(validateMovedPair)),
+			// Retraction is the only correction a record has: a record already
+			// written is never edited, because editing the commit that carries
+			// it rewrites history. A replacement is this flag plus --moved in
+			// one commit.
+			strictcli.StringFlag("moved-retract", "retract a move record declared earlier in this branch's history, by its id -- the token a 'Moved:' trailer begins with (repeatable, one id each). The id must name a record that exists and is not already retracted in the history this commit is built on; one that does not is refused rather than written. To write an unchecked retraction, use --trailer 'Moved-Retract: <id>'. Omitted means the commit retracts nothing", strictcli.Repeatable(), strictcli.Unique(true), strictcli.Optional()),
 		),
 		strictcli.WithArgs(
 			strictcli.NewArg("files", "files to commit, taken literally -- a colon in an argument is part of the filename, and hunk selection is --hunks", strictcli.ArgOptional(), strictcli.Variadic()),
