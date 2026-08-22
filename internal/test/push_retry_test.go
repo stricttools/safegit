@@ -52,6 +52,12 @@ func TestPushRefusesWhenTheRemoteCannotBeObserved(t *testing.T) {
 	if !strings.Contains(stderr, "ls-remote") && !strings.Contains(stderr, "reading") {
 		t.Errorf("the refusal must name the failed observation rather than blame the remote's state; stderr: %s", stderr)
 	}
+	// git's own stderr is carried by the error the git call returns, so a
+	// second copy appended on top of it printed the same sentence twice in one
+	// message and read like two separate failures.
+	if n := strings.Count(stderr, "unreachable.invalid"); n != 1 {
+		t.Errorf("git's stderr appears %d times in the refusal, want once:\n%s", n, stderr)
+	}
 	if n := len(lsRemotes()); n == 0 {
 		t.Error("the shim never intercepted an ls-remote, so the test proved nothing")
 	}

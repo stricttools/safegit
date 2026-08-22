@@ -604,11 +604,11 @@ func (e *remoteReadError) Unwrap() error { return e.Err }
 // when the remote answered and does not have it. A remote that could not be
 // read is an error, never the null marker -- see remoteReadError.
 func getRemoteSHA(ctx context.Context, remote, ref string) (string, error) {
-	stdout, stderr, err := git.Run(ctx, "ls-remote", remote, ref)
+	// git.Run's error already carries the argv and git's own stderr, so nothing
+	// is appended here: doing that printed the same sentence twice in one
+	// message, which reads like two separate failures.
+	stdout, _, err := git.Run(ctx, "ls-remote", remote, ref)
 	if err != nil {
-		if msg := strings.TrimSpace(stderr); msg != "" {
-			err = fmt.Errorf("%w: %s", err, msg)
-		}
 		return "", &remoteReadError{Remote: remote, Pattern: ref, Err: err}
 	}
 	parts := strings.Fields(stdout)
@@ -834,51 +834,60 @@ func isTransportError(stderrText string) bool {
 	if stderrText == "" {
 		return false
 	}
-	// Captured from git 2.54.0 against unreachable remotes, except where noted;
-	// the samples are in push_classify_test.go's gitTransportFailures, which is
-	// what re-derives this list if a git or curl release respells anything.
-	transportPatterns := []string{
-		// curl (https) and OpenSSH resolver failures. The ssh spelling is
-		// "Could not resolve hostname", which this covers as a prefix.
-		"Could not resolve host",
-		// OpenSSH; also the tail of git's native transport line,
-		// "127.0.0.1[0: 127.0.0.1]: errno=Connection refused".
-		"Connection refused",
-		// strerror, reached through curl ("Recv failure: Connection reset by
-		// peer") and through ssh.
-		"Connection reset",
-		"Connection timed out",
-		"Network is unreachable",
-		"Transport endpoint is not connected",
-		// curl's two connect failures, both on one line of a real refusal.
-		"Failed to connect to",
-		"Could not connect to server",
-		// git's own native (git://) transport.
-		"unable to connect to",
-		// curl's TLS layer, and the OpenSSL error strings behind it. GnuTLS
-		// builds of curl report gnutls_handshake instead.
-		"TLS connect error",
-		"SSL connect error",
-		"SSL certificate problem",
-		"SSL routines",
-		"gnutls_handshake",
-		// A transfer that was cut off mid-pack. Not from the local probe --
-		// staging a connection that dies mid-transfer is not cheap -- but these
-		// are git's long-standing spellings, and "unexpected EOF" is also
-		// OpenSSL's.
-		"early EOF",
-		"unexpected EOF",
-		"the remote end hung up unexpectedly",
-		"RPC failed",
-		// strerror again, via git's own write error and curl's send failure.
-		"Broken pipe",
-	}
 	for _, p := range transportPatterns {
 		if strings.Contains(stderrText, p) {
 			return true
 		}
 	}
 	return false
+}
+
+// transportPatterns is the list isTransportError matches against, declared at
+// package scope so a test can assert the multi-word invariant over every
+// element rather than over the ones somebody remembered to sample.
+//
+// Captured from git 2.54.0 against unreachable remotes, except where noted; the
+// samples are in push_classify_test.go's gitTransportFailures, which is what
+// re-derives this list if a git or curl release respells anything.
+var transportPatterns = []string{
+	// curl (https) and OpenSSH resolver failures. The ssh spelling is
+	// "Could not resolve hostname", which this covers as a prefix.
+	"Could not resolve host",
+	// OpenSSH; also the tail of git's native transport line,
+	// "127.0.0.1[0: 127.0.0.1]: errno=Connection refused".
+	"Connection refused",
+	// strerror, reached through curl ("Recv failure: Connection reset by
+	// peer") and through ssh.
+	"Connection reset",
+	"Connection timed out",
+	"Network is unreachable",
+	"Transport endpoint is not connected",
+	// curl's two connect failures, both on one line of a real refusal.
+	"Failed to connect to",
+	"Could not connect to server",
+	// git's own native (git://) transport.
+	"unable to connect to",
+	// curl's TLS layer, and the OpenSSL error strings behind it.
+	"TLS connect error",
+	"SSL connect error",
+	"SSL certificate problem",
+	"SSL routines",
+	// A GnuTLS build of curl reports the handshake failure instead. Not
+	// from the local probe -- this machine's git is linked against OpenSSL
+	// -- but the spelling is GnuTLS's own and curl prints it verbatim. The
+	// bare `gnutls_handshake` this replaces was a legal BRANCH NAME, and so
+	// a falsification of the invariant above.
+	"gnutls_handshake() failed",
+	// A transfer that was cut off mid-pack. Not from the local probe --
+	// staging a connection that dies mid-transfer is not cheap -- but these
+	// are git's long-standing spellings, and "unexpected EOF" is also
+	// OpenSSL's.
+	"early EOF",
+	"unexpected EOF",
+	"the remote end hung up unexpectedly",
+	"RPC failed",
+	// strerror again, via git's own write error and curl's send failure.
+	"Broken pipe",
 }
 
 func shortRef(ref string) string {
