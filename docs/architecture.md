@@ -454,11 +454,11 @@ safegit supports same-machine concurrency only. Cross-machine concurrency on a s
 ### Raw-git bypass
 
 - **Symptom:** a user (or another tool) ran `git commit` directly. safegit does not install enforcement hooks, so this is allowed by design.
-- **Detection:** on any safegit invocation, the op log's most recent ref-update entry is compared against the actual ref tip. If the tip has advanced without an entry, `safegit doctor` and a warning on the next mutating command surface the bypass:
+- **Detection:** `safegit doctor`'s `bypass_detect` check, and only there -- no mutating command warns about it in passing. The check compares the oplog's most recent ref-update entry for the current branch against the branch's actual tip, and reports a warn-severity finding when they have diverged:
 
     ```
-    WARN: HEAD moved from <sha> to <sha> with no safegit op log entry.
-    Possible bypass via raw 'git commit'.
+    tip of main (a1b2c3d4) diverged from last oplog entry (9e8f7a6b); raw git may have been used
     ```
 
-- **Recovery:** none needed mechanically -- git semantics still hold. We just surface the bypass for transparency.
+    A divergence is warn-severity, so it does not by itself make `doctor` exit nonzero. Two conditions the check reports at ERROR severity instead, because each would otherwise disable the check silently just when it has something to say: an oplog it cannot read for this ref, and a ref the oplog records a tip for that no longer resolves at all -- a branch deleted or reset outside safegit. A detached HEAD reports nothing, since there is no branch to compare.
+- **Recovery:** none needed mechanically -- git semantics still hold. The bypass is surfaced for transparency.
