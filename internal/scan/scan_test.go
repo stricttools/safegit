@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/smm-h/safegit/internal/testutil"
@@ -231,8 +232,83 @@ func TestScanObjectsErrorOnEmptyOpts(t *testing.T) {
 	pattern := regexp.MustCompile(`test`)
 	_, err := ScanObjects(ctx, pattern, ScanOpts{})
 	if err == nil {
-		t.Fatal("expected error when both EntireHistory and FromSHA are empty")
+		t.Fatal("expected error when none of EntireHistory, FromSHA and Tips is set")
 	}
+}
+
+// TestScanObjectsErrorOnAmbiguousOpts pins that the three object-set selectors
+// are alternatives, not a precedence rule: naming two is refused rather than
+// silently scanning one of them.
+func TestScanObjectsErrorOnAmbiguousOpts(t *testing.T) {
+	ctx := context.Background()
+	pattern := regexp.MustCompile(`test`)
+	_, err := ScanObjects(ctx, pattern, ScanOpts{EntireHistory: true, Tips: []string{"HEAD"}})
+	if err == nil {
+		t.Fatal("expected error when EntireHistory and Tips are both set")
+	}
+}
+
+// TestScanObjectsTipsSeesUnreferencedCommit is the property Tier A scrub
+// verification depends on: a commit no ref points at -- exactly what a rewrite
+// has produced before its refs move -- is scanned when it is named as a tip,
+// and its blobs are attributed to their paths so a scoped check can read them.
+func TestScanObjectsTipsSeesUnreferencedCommit(t *testing.T) {
+	dir := initRepo(t)
+	testutil.Chdir(t, dir)
+
+	os.WriteFile(filepath.Join(dir, "clean.txt"), []byte("nothing here\n"), 0644)
+	gitRun(t, dir, "add", "clean.txt")
+	gitRun(t, dir, "commit", "-m", "clean commit")
+
+	ctx := context.Background()
+	pattern := regexp.MustCompile(`SECRET_123`)
+
+	// Build a commit that no ref reaches: a blob, a tree holding it, and a
+	// commit on that tree. This is the shape of a rewritten-but-not-yet-published
+	// commit.
+	blob := gitOut(t, dir, "token=SECRET_123\n", "hash-object", "-w", "--stdin")
+	tree := gitOut(t, dir, "100644 blob "+blob+"\tleaked.txt\n", "mktree")
+	commit := gitOut(t, dir, "", "commit-tree", tree, "-m", "unreferenced")
+
+	// The whole-store scan sees it as unreachable; the range scan cannot see it
+	// at all. Tips is the mode that can.
+	results, err := ScanObjects(ctx, pattern, ScanOpts{Tips: []string{commit}})
+	if err != nil {
+		t.Fatalf("Tips scan: %v", err)
+	}
+	if len(results.Matches) != 1 {
+		t.Fatalf("Tips scan found %d matches, want 1: %+v", len(results.Matches), results.Matches)
+	}
+	m := results.Matches[0]
+	if m.ObjectType != "blob" || m.SHA != blob {
+		t.Errorf("match is %s %s, want blob %s", m.ObjectType, m.SHA, blob)
+	}
+	if !m.Reachable {
+		t.Error("a match found from a declared tip is reachable from that tip by construction")
+	}
+
+	if err := AddAttribution(ctx, results, ScanOpts{Tips: []string{commit}}); err != nil {
+		t.Fatalf("AddAttribution: %v", err)
+	}
+	if got := results.Matches[0].Path; got != "leaked.txt" {
+		t.Errorf("attributed path = %q, want leaked.txt (a --all walk cannot reach this commit)", got)
+	}
+}
+
+// gitOut runs a git command with the given stdin (empty for none) and returns
+// trimmed stdout.
+func gitOut(t *testing.T, dir, stdin string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git %v: %v", args, err)
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func TestIsBinary(t *testing.T) {

@@ -57,21 +57,33 @@ func AddAttribution(ctx context.Context, results *ScanResults, opts ScanOpts) er
 	return nil
 }
 
-// buildBlobIndex runs `git rev-list --all --objects` and parses the output
-// to build a map from blob SHA to (commit, path). Only SHAs present in the
-// wantSHAs set are indexed. When opts.GitDir is set, targets that git directory.
+// buildBlobIndex runs `git rev-list --objects` over the object set opts elects
+// and parses the output to build a map from blob SHA to (commit, path). Only
+// SHAs present in the wantSHAs set are indexed. When opts.GitDir is set,
+// targets that git directory.
+//
+// The walk follows the SCAN's own selection: `--all` for a scan of the whole
+// store or of a range (both of which only ever see objects refs reach), and
+// the explicit tips for a Tips scan, whose objects no ref points at yet -- a
+// `--all` walk there would attribute nothing and every scoped filter reading
+// those paths would silently pass.
 //
 // rev-list outputs commits in reverse chronological order. Each commit SHA
 // appears alone on a line, followed by the SHAs of objects it references
 // in the format "<sha> <path>". The commit that "owns" a blob line is the
 // most recent commit line that appeared before it.
 func buildBlobIndex(ctx context.Context, wantSHAs map[string]bool, opts ScanOpts) (map[string]blobAttribution, error) {
+	args := []string{"rev-list", "--objects", "--all"}
+	if len(opts.Tips) > 0 {
+		args = append([]string{"rev-list", "--objects"}, opts.Tips...)
+	}
+
 	var stdout string
 	var err error
 	if opts.GitDir != "" {
-		stdout, _, err = git.RunWithGitDir(ctx, opts.GitDir, opts.WorkTree, "rev-list", "--all", "--objects")
+		stdout, _, err = git.RunWithGitDir(ctx, opts.GitDir, opts.WorkTree, args...)
 	} else {
-		stdout, _, err = git.Run(ctx, "rev-list", "--all", "--objects")
+		stdout, _, err = git.Run(ctx, args...)
 	}
 	if err != nil {
 		return nil, err
