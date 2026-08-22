@@ -51,7 +51,11 @@ type nonObjectFile struct {
 //     safegit's own hook stores, which is the location enumerator's answer --
 //     one authority, so a store the enumerator learns about is swept without
 //     this file being told about it;
-//   - everything under <gitDir>/safegit except the rewrite journal;
+//   - everything under safegit's own state directory except the rewrite
+//     journal, from the invoking worktree's git dir AND from the common one --
+//     the same directory in an ordinary repository, but in a linked worktree
+//     the common one is where the repository-level state (config.json, the
+//     oplog) actually lives;
 //   - the tracked working-tree files git lists.
 //
 // Binary files are skipped (NUL in first 8KB). Non-existent files are skipped.
@@ -128,17 +132,32 @@ func gitDirFiles(ctx context.Context, gitDir, root string) ([]nonObjectFile, err
 		add(p)
 	}
 
-	// Everything else safegit keeps, minus the rewrite journal.
-	safegitDir := filepath.Join(gitDir, "safegit")
-	stateFiles, err := walkFiles(safegitDir)
-	if err != nil {
-		return nil, err
-	}
-	for _, p := range stateFiles {
-		if filepath.Base(p) == rewriteJournalFile {
-			continue
+	// Everything else safegit keeps, minus the rewrite journal -- from BOTH the
+	// invoking worktree's safegit directory and the SHARED one.
+	//
+	// The two are the same directory in an ordinary repository, and files2matches
+	// reads each absolute path once, so the union costs nothing there. In a
+	// linked worktree they are different directories and the shared one is where
+	// the repository-level state lives -- config.json and the oplog -- so a
+	// sweep keyed only on the invoking worktree's git dir would read none of it
+	// and report a secret sitting in the oplog as absent.
+	//
+	// A shared file reached from a linked worktree is outside the base the
+	// coordinate is measured against, so relToBase reports its absolute path.
+	// That is the same fallback the shared hook store below already reports
+	// through, and it is the right answer: a git-dir-relative coordinate would
+	// be indistinguishable from the invoking worktree's own.
+	for _, dir := range []string{filepath.Join(gitDir, "safegit"), repo.SharedSafegitDir(ctx, gitDir)} {
+		stateFiles, err := walkFiles(dir)
+		if err != nil {
+			return nil, err
 		}
-		add(p)
+		for _, p := range stateFiles {
+			if filepath.Base(p) == rewriteJournalFile {
+				continue
+			}
+			add(p)
+		}
 	}
 
 	// The hook stores as the enumerator sees them, keyed on the COMMON git dir:
