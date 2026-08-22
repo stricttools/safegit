@@ -175,6 +175,7 @@ func Acquire(locksBaseDir, safegitDir, ref, op string, timeout time.Duration) (*
 
 	deadline := time.Now().Add(timeout)
 	step := 0
+	var seenHolder holderIdentity
 
 	for {
 		err := tryCreate(lp, op)
@@ -226,6 +227,23 @@ func Acquire(locksBaseDir, safegitDir, ref, op string, timeout time.Duration) (*
 			return nil, &TimeoutError{Ref: ref, Holder: describeHolder(lp), Timeout: timeout}
 		}
 
+		// A lock that changed hands since the last poll is a lock being handed
+		// around quickly, and the right response is to poll quickly again. This
+		// is not a refinement: without it a busy lock starves its waiters. Every
+		// waiter escalates to the 1s cap within six polls and stays there, so a
+		// lock held for 30ms at a time sits idle for most of every second and
+		// the queue drains at roughly one waiter per second however many are
+		// waiting. Fifty concurrent commits then take fifty seconds and time out
+		// on a lock whose total work is under two.
+		//
+		// The escalation still does its job where it was meant to: a lock held
+		// by ONE process for minutes -- an interactive rebase -- never changes
+		// hands, so its waiters keep escalating and poll once a second.
+		if holder := readHolderIdentity(lp); holder.changedFrom(seenHolder) {
+			seenHolder = holder
+			step = 0
+		}
+
 		delay := backoffSteps[step]
 		if step < len(backoffSteps)-1 {
 			step++
@@ -237,6 +255,44 @@ func Acquire(locksBaseDir, safegitDir, ref, op string, timeout time.Duration) (*
 		}
 		time.Sleep(delay)
 	}
+}
+
+// holderIdentity identifies the file currently at a lock path well enough to
+// tell "still the same holder" from "somebody else's lock now".
+//
+// The inode is what actually distinguishes them: every lock is published by
+// linking a fresh temporary file into place, so a new holder is always a new
+// inode. The size and modification time are carried as corroboration for
+// filesystems that recycle inode numbers quickly.
+type holderIdentity struct {
+	known bool
+	ino   uint64
+	size  int64
+	mod   time.Time
+}
+
+// readHolderIdentity identifies whatever is at path right now. A path that
+// cannot be stat'ed yields an unknown identity, which compares as "changed"
+// against a known one -- the lock disappearing is itself a change worth polling
+// quickly after.
+func readHolderIdentity(path string) holderIdentity {
+	info, err := os.Stat(path)
+	if err != nil {
+		return holderIdentity{}
+	}
+	return holderIdentity{known: true, ino: inodeOf(info), size: info.Size(), mod: info.ModTime()}
+}
+
+// changedFrom reports whether this identity is a different lock file from prev.
+// The first observation is not a change: there is nothing to compare against.
+func (h holderIdentity) changedFrom(prev holderIdentity) bool {
+	if !prev.known {
+		return h.known
+	}
+	if !h.known {
+		return true
+	}
+	return h.ino != prev.ino || h.size != prev.size || !h.mod.Equal(prev.mod)
 }
 
 // tryCreate creates the lock file with its owner record already in it, failing
