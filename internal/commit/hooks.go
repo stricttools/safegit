@@ -23,6 +23,14 @@ const (
 	hookPostCommit = "post-commit"
 )
 
+// NativeHooks returns the git hooks safegit itself executes, in the order a
+// commit reaches them. It is exported because doctor reports the hooks safegit
+// does NOT run, and that report is only true while it derives the set from
+// here rather than restating it.
+func NativeHooks() []string {
+	return []string{hookPreCommit, hookCommitMsg, hookPostCommit}
+}
+
 // nativeHooks runs a repository's own git hooks around ONE commit-family
 // operation -- a commit, an amend or a reword.
 //
@@ -39,7 +47,10 @@ const (
 // commit line otherwise -- and an operator-supplied script must not be able to
 // write into it.
 type nativeHooks struct {
-	gitDir     string
+	// hooksDir is the directory git runs hooks from, resolved once through
+	// git.HooksDir rather than joined onto the git dir: core.hooksPath moves it
+	// elsewhere, and a linked worktree's git dir has no hooks/ at all.
+	hooksDir   string
 	repoRoot   string
 	safegitDir string
 
@@ -60,11 +71,11 @@ type nativeHooks struct {
 // newNativeHooks prepares hook execution for one operation. Under a dry run it
 // prepares nothing and says so, naming the hooks the real run would have run.
 func newNativeHooks(ctx context.Context, repoRoot, safegitDir string, dryRun bool) (*nativeHooks, error) {
-	gitDir, err := git.GitDir(ctx)
+	hooksDir, err := git.HooksDir(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("resolving git dir: %w", err)
+		return nil, fmt.Errorf("resolving the hook directory: %w", err)
 	}
-	h := &nativeHooks{gitDir: gitDir, repoRoot: repoRoot, safegitDir: safegitDir, skip: dryRun}
+	h := &nativeHooks{hooksDir: hooksDir, repoRoot: repoRoot, safegitDir: safegitDir, skip: dryRun}
 	if dryRun {
 		h.noteSkipped()
 	}
@@ -75,7 +86,7 @@ func newNativeHooks(ctx context.Context, repoRoot, safegitDir string, dryRun boo
 // Silent when the repository has none, which is the common case.
 func (h *nativeHooks) noteSkipped() {
 	var present []string
-	for _, name := range []string{hookPreCommit, hookCommitMsg, hookPostCommit} {
+	for _, name := range NativeHooks() {
 		if h.path(name) != "" {
 			present = append(present, name)
 		}
@@ -90,7 +101,7 @@ func (h *nativeHooks) noteSkipped() {
 // no such hook or the file is not executable (which is git's own rule for
 // ignoring it).
 func (h *nativeHooks) path(name string) string {
-	p := filepath.Join(h.gitDir, "hooks", name)
+	p := filepath.Join(h.hooksDir, name)
 	info, err := os.Stat(p)
 	if err != nil || info.Mode()&0111 == 0 {
 		return ""

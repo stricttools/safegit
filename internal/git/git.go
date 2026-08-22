@@ -158,6 +158,23 @@ func ObjectsDir(ctx context.Context) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// HooksDir returns the ABSOLUTE path of the directory git runs hooks from.
+//
+// It is git's own answer rather than a join onto the git dir, and it is the one
+// place anything in safegit asks. Two configurations make the join wrong, and
+// both are silent when it is: `core.hooksPath` redirects the directory
+// entirely, and a LINKED WORKTREE's git dir (.git/worktrees/<name>) has no
+// hooks/ of its own -- git runs the common git dir's hooks there. A caller
+// joining paths itself would run nothing in the first case and nothing at all
+// in the second, while git still ran the operator's hooks.
+func HooksDir(ctx context.Context) (string, error) {
+	out, _, err := Run(ctx, "rev-parse", "--path-format=absolute", "--git-path", "hooks")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
 // ErrDetachedHead is returned when HEAD is not on a branch.
 var ErrDetachedHead = fmt.Errorf("HEAD is detached (not on a branch); check out a branch first or use --branch")
 
