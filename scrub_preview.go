@@ -26,9 +26,15 @@ import (
 const rewrittenPlaceholder = "<rewritten>"
 
 // recordHistoryRewrite mints a history rewrite into the framework's would-do
-// log. It is dry-mode-only, exactly like recordCommitRefUpdate: on the execute
-// path these commands run through internal/git and the shared post-rewrite
-// pipeline, which predate the effects regime and own their own ordering.
+// log. It is dry-mode-only -- it returns immediately on the execute path, where
+// these commands run through internal/git and the shared post-rewrite pipeline,
+// which predate the effects regime and own their own ordering.
+//
+// That makes it the exception rather than the pattern: the commit family's ref
+// update is minted through the handle in BOTH modes, one call site that
+// performs the update in an executing run and records it in a preview. A
+// dry-mode-only recorder like this one is a description of what the execute
+// path would do, written beside it rather than by it, so the two can drift.
 //
 // The four effects are the rewrite's user-visible mutations, in the order the
 // execute path performs them: the ref moves onto the rewritten history, then

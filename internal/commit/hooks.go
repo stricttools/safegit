@@ -117,6 +117,14 @@ func (h *nativeHooks) wantsIndex() bool {
 
 // run executes one hook to completion with its output on stderr, returning the
 // hook's own error when it exits nonzero.
+//
+// The environment is the process's own plus GIT_INDEX_FILE, and deliberately
+// carries no object quarantine: no hook ever runs in a preview (skip is set
+// from dryRun, and every entry point returns early on it). Were that to change,
+// a hook's own git calls would write objects into the repository for real --
+// gitexec's boundary sees only the subprocesses safegit itself constructs, and
+// a hook is an operator-supplied script whose children it can neither classify
+// nor reach.
 func (h *nativeHooks) run(ctx context.Context, hookPath, indexPath string, args ...string) error {
 	cmd := exec.CommandContext(ctx, hookPath, args...)
 	cmd.Dir = h.repoRoot
