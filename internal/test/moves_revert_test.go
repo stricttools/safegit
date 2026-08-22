@@ -114,6 +114,59 @@ func TestRevertOfASubtreeMoveDeclaresTheSubtreeBack(t *testing.T) {
 	}
 }
 
+// TestRevertOfAMoveWhoseRecordWasRetractedStillDeclaresTheMoveBack pins that
+// the inverse record does not consult the source record's standing.
+//
+// The inverse describes THE REVERT COMMIT'S OWN tree delta: this commit put the
+// content back where it came from, which happened whatever a later commit said
+// about the record that first declared it. A retraction says the earlier CLAIM
+// was wrong, not that the content never moved -- and the projection arbitrates
+// every claim against the trees anyway, so a wrong inverse would be caught
+// there rather than by refusing to write one.
+//
+// Making the revert read the retraction would also make an inverse depend on
+// how much history the reader happens to walk, which is the opposite of a
+// record's whole point: a claim written once, on the commit it describes.
+func TestRevertOfAMoveWhoseRecordWasRetractedStillDeclaresTheMoveBack(t *testing.T) {
+	dir := mvSeed(t)
+
+	if _, stderr, code := runSafegit(t, dir, "mv", "-m", "move a to moved", "a.txt -> moved.txt"); code != 0 {
+		t.Fatalf("mv failed (code %d): %s", code, stderr)
+	}
+	moveSHA := testutil.Rev(t, dir, "HEAD")
+	forward := movedRecordsIn(t, commitMessageOf(t, dir, moveSHA))
+	if len(forward) != 1 {
+		t.Fatalf("the fixture recorded no move: %v", forward)
+	}
+
+	// A later commit retracts the record the move commit carries.
+	testutil.WriteFile(t, dir, "b.txt", "changed\n")
+	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "that record was wrong",
+		"--trailer", "Moved-Retract: "+forward[0][0], "--", "b.txt"); code != 0 {
+		t.Fatalf("retraction commit failed (code %d): %s", code, stderr)
+	}
+
+	if _, stderr, code := runSafegit(t, dir, "revert", moveSHA); code != 0 {
+		t.Fatalf("revert failed (code %d): %s", code, stderr)
+	}
+
+	msg := commitMessageOf(t, dir, "HEAD")
+	inverse := movedRecordsIn(t, msg)
+	if len(inverse) != 1 {
+		t.Fatalf("the revert of a retracted move carries %d records, want one:\n%s", len(inverse), msg)
+	}
+	if inverse[0][1] != "moved.txt -> a.txt" {
+		t.Errorf("the inverse pair is %q, want %q", inverse[0][1], "moved.txt -> a.txt")
+	}
+	if inverse[0][0] == forward[0][0] {
+		t.Errorf("the inverse record reuses the retracted record's id %s; it is a different claim", forward[0][0])
+	}
+	// The revert declares a move; it does not carry the retraction forward.
+	if strings.Contains(msg, "Moved-Retract:") {
+		t.Errorf("the revert carried the retraction forward:\n%s", msg)
+	}
+}
+
 func TestRevertOfARetractionDeclaresNothing(t *testing.T) {
 	dir := mvSeed(t)
 
