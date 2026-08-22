@@ -1544,6 +1544,41 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
   (asserts `.git/worktrees/side/safegit` while the fixture names the
   worktree `linked-side`; vacuously true since it was written).
+## Remediation wave C closure (final doc pass) — 10.2 REMEDIATION COMPLETE
+
+- All nine items done; tree clean; suite green. divergences.md: exit
+  code corrected to 11, front-matter added (no order key — siblings'
+  slots examined, none claimed), the rerere entry added, the
+  rewrite-range entry split into the two verified mechanisms (file:
+  resolve --from in the submodule's own history; match: map through
+  the gitlink with ^{commit} + ancestry, all failures hard), the
+  autostash entry verified. revert-continue and undo registration
+  helps corrected; the undo guide gains the range-validation bullet;
+  push's help/guide state that hook DISCOVERY (24/25) runs in
+  previews; _CLAUDE gains submodule_pre_rewrite_remotes and the
+  exit-31 coverage bullet. Schema + selfdoc regenerated; the false
+  author sentence is gone from every generated surface.
+- SELFDOC MECHANISM FINDING (front-matter defect root cause):
+  regeneration-from-scratch seeds a description from the FIRST FILE'S
+  leading comment in name order, not the go/doc package comment —
+  internal/lock got description "go:build !windows" (cleanup_unix.go
+  sorts before lock.go). internal-trailer healed by delete+regen;
+  internal-lock needed the sanctioned deliberate front-matter edit
+  (chmod dance, description from the real package doc, seeded:true
+  removed so future gens treat it as authored, rlsbl commit). Two
+  upstream selfdoc defects — the seeding source and the
+  never-heals preservation — FILED as todos in the selfdoc project by
+  the orchestrator (written generically, naming no consumer).
+- Ratified: the "Two conditions" -> "Three conditions" correction in
+  divergences' consent entry (verifiably false against push.go; the
+  template already said three); the seeded:true removal; the absent
+  order key. One pin honored rather than relaxed: the push help kept
+  the literal "never run" phrase the pin test asserts, with the
+  discovery/execution split stated around it.
+
+10.2 REMEDIATION IS COMPLETE (waves A, B1, B2, C all closed). Next:
+10.3 changelog, then Phase 11 pending the user's divergence review.
+
 ## Remediation wave B2 closure (nineteen small items)
 
 - All nineteen done (red-first where behavioral), nineteen commits;
