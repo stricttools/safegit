@@ -12,17 +12,25 @@ import (
 )
 
 // A `--dry-run` commit promises a preview: docs/commands-guide.md states it
-// shows what would happen "without writing any changes to disk". The commit
-// pipeline keeps only half of that promise -- it stops before the ref moves,
-// but every object the commit is made of is written for real first. Staging
-// runs `git add` against a temp index (blob objects), `git write-tree` writes
-// the tree, `git commit-tree` writes the commit, and only then does the dry-run
-// branch return (internal/commit/commit.go:218-231, :253, :271, :282; the amend
-// pipeline reaches the same seam at internal/commit/amend.go:177, :185, :190,
-// and the reword path at amend.go:349, :354). No GIT_OBJECT_DIRECTORY is ever
-// set -- internal/git/git.go only ever adds GIT_INDEX_FILE -- so the writes go
-// straight into the repository's own object store and stay there as
-// unreferenced loose objects.
+// shows what would happen "without writing any changes to disk".
+//
+// The commit pipeline once kept only half of that promise. It stopped before
+// the ref moved, but every object the commit was made of had already been
+// written for real: staging ran `git add` against a temp index (blob objects),
+// `git write-tree` wrote the tree, `git commit-tree` wrote the commit, and only
+// then did the dry-run branch return. No GIT_OBJECT_DIRECTORY was ever set, so
+// those writes went straight into the repository's own object store and stayed
+// there as unreferenced loose objects. The amend and reword paths had the same
+// seam.
+//
+// They no longer do. Every commit-family operation opens an object quarantine
+// before its first object-writing call (commit.beginPreview, which points
+// GIT_OBJECT_DIRECTORY at a throwaway preview area and lists the repository's
+// own store as an alternate), so a preview still computes the exact tree and
+// commit SHAs a real run would while writing every object it makes into a
+// directory that is deleted with the preview. gitexec.Command backs that up:
+// an invocation its classification table says can write objects is REFUSED on a
+// previewing context that carries no quarantine.
 //
 // These tests assert the promise as written: the object store is byte-identical
 // before and after a preview.

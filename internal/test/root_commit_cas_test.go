@@ -11,30 +11,33 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// Root-commit ref creation is the one place in the commit pipeline where the
-// ref update is NOT a compare-and-swap.
+// Root-commit ref creation used to be the one place in the commit pipeline
+// where the ref update was NOT a compare-and-swap.
 //
-//   - internal/git/git.go:177-184 -- UpdateRef appends the old-value argument
-//     only when oldSHA != "". An empty oldSHA therefore produces
-//     `git update-ref <ref> <new>`, an unconditional write, despite the doc
-//     comment claiming "if empty, the ref must not exist".
-//   - internal/commit/commit.go:324 -- the commit pipeline passes parentSHA,
-//     which is "" for a root commit (set at commit.go:190-196 when the target
-//     ref does not resolve).
-//   - internal/commit/commit.go:307-312 -- the only protection is a re-check
-//     that the ref still does not exist. That is a time-of-check/time-of-use
-//     window, not a CAS: anything that creates the ref between the RevParse at
-//     :309 and the update-ref at :324 is silently overwritten.
+//   - git.UpdateRef appended the old-value argument only when oldSHA != "". An
+//     empty oldSHA therefore produced `git update-ref <ref> <new>`, an
+//     unconditional write, despite the doc comment claiming "if empty, the ref
+//     must not exist".
+//   - commit.tryCommit passed parentSHA, which is "" for a root commit (it is
+//     set empty when the target ref does not resolve).
+//   - The only protection was a re-check that the ref still did not exist --
+//     a time-of-check/time-of-use window, not a CAS: anything that created the
+//     ref between that RevParse and the update-ref was silently overwritten.
+//     The per-ref lock closed the window against other safegit processes on the
+//     same machine (TestRootCommitConcurrentSafegitBothLand pins that), but it
+//     is a safegit-private lock, invisible to raw `git commit`, to any other
+//     tool, and to any hook writing the ref -- and safegit's own docs treat
+//     raw-git writes as an expected event (doctor's bypass detection), so the
+//     loss was reachable rather than theoretical.
 //
-// The per-ref lock taken at commit.go:300 closes this window against other
-// safegit processes on the same machine (TestRootCommitConcurrentSafegitBoth
-// Land pins that), but it is a safegit-private lock: raw `git commit`, any
-// other tool, and any hook writing the ref are all invisible to it. safegit's
-// own docs treat raw-git writes as an expected event (doctor's bypass
-// detection), so this is a reachable loss, not a theoretical one.
+// Both halves are now closed. git.UpdateRef REFUSES an empty expected old value
+// (git.ErrNoExpectedValue), and commit.tryCommit substitutes git.ZeroSHA for the
+// empty parentSHA on the root-commit path -- git's "create only" convention,
+// pinned by TestRootCommitZeroOldValueRefusesExistingRef below. A losing race is
+// then git's "reference already exists", which the retry loop classifies as
+// transient and re-attempts from Phase A.
 //
-// git's convention for "create only" is the all-zeros old value, pinned by
-// TestRootCommitZeroOldValueRefusesExistingRef below.
+// These tests assert the closed behaviour.
 
 // rootCasNewUnbornRepo creates a temp git repo with NO commits, so refs/heads/main
 // is unborn and the next safegit commit takes the root-commit path.
@@ -171,14 +174,15 @@ func TestRootCommitDoesNotClobberRefCreatedInWindow(t *testing.T) {
 	args := rootCasUpdateRefArgs(t, argvPath)
 	t.Logf("safegit issued: git %s (safegit exit=%d)", strings.Join(args, " "), code)
 
-	// Direct pin of the defect: the ref update carried no expected old value,
-	// so git performed an unconditional write. git's create-only convention is
-	// the all-zeros old value (see TestRootCommitZeroOldValueRefusesExistingRef).
+	// Direct pin: the root-commit ref update carries an expected old value, so
+	// git performs a compare-and-swap rather than an unconditional write. git's
+	// create-only convention is the all-zeros old value (see
+	// TestRootCommitZeroOldValueRefusesExistingRef).
 	if len(args) < 4 {
 		t.Errorf("root-commit ref update has no CAS: safegit ran `git %s` with no old-value argument, "+
-			"which is an unconditional write (internal/git/git.go:177-184 omits the argument when oldSHA is empty, "+
-			"and internal/commit/commit.go:324 passes an empty parentSHA for root commits); "+
-			"expected the all-zeros old value so git refuses when the ref already exists",
+			"which is an unconditional write; commit.tryCommit must substitute git.ZeroSHA for the empty "+
+			"parentSHA on the root-commit path, and git.UpdateRef must refuse an empty expected old value, "+
+			"so that git refuses when the ref already exists",
 			strings.Join(args, " "))
 	}
 
@@ -201,12 +205,11 @@ func TestRootCommitDoesNotClobberRefCreatedInWindow(t *testing.T) {
 }
 
 // TestRootCommitZeroOldValueRefusesExistingRef pins git's create-only
-// convention, which is the mechanism the fix depends on: an all-zeros old value
+// convention, which is the mechanism the fix rests on: an all-zeros old value
 // means "this ref must not exist", and git refuses with "reference already
-// exists" when it does. safegit's retry loop already classifies that message as
-// transient (internal/commit/commit.go:467-473 matches "cannot lock ref"), so a
-// fixed root commit would retry from Phase A and build on the winner instead of
-// failing outright.
+// exists" when it does. safegit's retry loop classifies that message as
+// transient (commit.isTransientRefError), so a losing root commit retries from
+// Phase A and builds on the winner instead of failing outright.
 func TestRootCommitZeroOldValueRefusesExistingRef(t *testing.T) {
 	dir := rootCasNewUnbornRepo(t)
 
