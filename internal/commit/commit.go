@@ -111,6 +111,26 @@ type CommitRequest struct {
 	// value is the parent tree, which is every ordinary commit.
 	IndexBase IndexBase
 
+	// IndexEdits are already-decided index entries applied to the temporary
+	// index right after it is seeded and before any path is staged. They are how
+	// a conclusion's conflict resolutions reach the commit: decided once by the
+	// caller against the shared index, applied here so they land inside a dry
+	// run's object quarantine and are re-applied on every CAS retry.
+	IndexEdits []IndexEdit
+
+	// Author, when non-nil, pins the AUTHOR identity the commit records -- name,
+	// email and date -- while the committer stays git's own configured identity
+	// and the current time. It exists for the cherry-pick and revert
+	// conclusions, which preserve the identity recorded on the commit the
+	// operation was applying.
+	Author *git.AuthorInfo
+
+	// OplogOp names this operation in the op log. Empty means "commit", which is
+	// every ordinary caller. A conclusion command names itself, so that `safegit
+	// undo` can say what it is reversing -- and say that reversing it does not
+	// put the concluded operation back in flight.
+	OplogOp string
+
 	// Sequencer declares that this caller is the conclusion path for an
 	// operation git has in flight. Nil -- which is every ordinary caller --
 	// means the commit is refused whenever git is mid-merge, mid-cherry-pick,
@@ -327,6 +347,14 @@ func (p *Pipeline) tryCommit(
 	}
 	defer tmpIdx.Cleanup()
 
+	// Step 1.5: the caller's already-decided index edits, before anything is
+	// staged over them. Inside the retry loop because the index is created fresh
+	// on every attempt, and inside the preview quarantine for the same reason
+	// staging is: a `git add` here writes a blob.
+	if err := applyIndexEdits(ctx, tmpIdx.IndexPath, repoRoot, req.IndexEdits); err != nil {
+		return nil, false, err
+	}
+
 	// Step 2: Stage files into tmp index (with optional hunk selection).
 	// Paths are canonical repo-relative and become absolute only here, at the
 	// syscall boundary.
@@ -398,7 +426,13 @@ func (p *Pipeline) tryCommit(
 	// CAS below is made against -- and a caller concluding a merge names the
 	// other side in ExtraParents.
 	parents := commitParents(parentSHA, req.ExtraParents)
-	commitSHA, err := git.CommitTree(ctx, treeSHA, parents, trailer.Inject(message), nil)
+	var identity *git.CommitIdentity
+	if req.Author != nil {
+		// Author only: the committer is whoever is running the command, which is
+		// what git's own cherry-pick records too.
+		identity = &git.CommitIdentity{Author: *req.Author}
+	}
+	commitSHA, err := git.CommitTree(ctx, treeSHA, parents, trailer.Inject(message), identity)
 	if err != nil {
 		return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
 	}
@@ -502,8 +536,12 @@ func (p *Pipeline) tryCommit(
 	// -- which is fatal, below -- still leaves a commit `safegit undo` can
 	// reverse. The two steps are independent; only the crash-in-between case
 	// can tell them apart.
+	oplogOp := req.OplogOp
+	if oplogOp == "" {
+		oplogOp = "commit"
+	}
 	_ = oplog.Append(p.SafegitDir, oplog.Entry{
-		Op: "commit",
+		Op: oplogOp,
 		Extra: map[string]interface{}{
 			"ref":      ref,
 			"tree":     treeSHA,

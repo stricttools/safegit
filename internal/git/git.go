@@ -243,14 +243,7 @@ func CommitTree(ctx context.Context, treeSHA string, parents []string, message s
 
 	var env []string
 	if identity != nil {
-		env = []string{
-			"GIT_AUTHOR_NAME=" + identity.Author.Name,
-			"GIT_AUTHOR_EMAIL=" + identity.Author.Email,
-			"GIT_AUTHOR_DATE=" + identity.Author.Date,
-			"GIT_COMMITTER_NAME=" + identity.Committer.Name,
-			"GIT_COMMITTER_EMAIL=" + identity.Committer.Email,
-			"GIT_COMMITTER_DATE=" + identity.Committer.Date,
-		}
+		env = append(identityEnv(identity.Author, "GIT_AUTHOR"), identityEnv(identity.Committer, "GIT_COMMITTER")...)
 	}
 
 	out, _, err := RunWithEnv(ctx, env, args...)
@@ -258,6 +251,26 @@ func CommitTree(ctx context.Context, treeSHA string, parents []string, message s
 		return "", err
 	}
 	return strings.TrimSpace(out), nil
+}
+
+// identityEnv renders one identity as the environment variables git reads it
+// from, omitting every field the caller left empty.
+//
+// The omission is what lets a caller pin ONE side. A conclusion of a cherry-pick
+// or a revert preserves the author recorded on the source commit while the
+// committer stays whoever is running the command, so it supplies an Author and
+// no Committer -- and an empty GIT_COMMITTER_NAME would be a commit with no
+// committer rather than git's own configured one. The rewrite paths, which set
+// all six, are unaffected.
+func identityEnv(id AuthorInfo, prefix string) []string {
+	var env []string
+	for _, field := range [][2]string{{"NAME", id.Name}, {"EMAIL", id.Email}, {"DATE", id.Date}} {
+		if field[1] == "" {
+			continue
+		}
+		env = append(env, prefix+"_"+field[0]+"="+field[1])
+	}
+	return env
 }
 
 // ZeroSHA is git's "this object must not exist" convention: the all-zero object
@@ -302,8 +315,14 @@ func DeleteRef(ctx context.Context, ref, oldSHA string) error {
 }
 
 // AddFile stages a file into a custom index.
+//
+// An empty indexPath stages into the repository's shared index, the same
+// convention UnmergedStages and SetIndexStage0 use.
 func AddFile(ctx context.Context, indexPath, filePath string) error {
-	env := []string{"GIT_INDEX_FILE=" + indexPath}
+	var env []string
+	if indexPath != "" {
+		env = []string{"GIT_INDEX_FILE=" + indexPath}
+	}
 	_, _, err := RunWithEnv(ctx, env, "add", "--", filePath)
 	return err
 }

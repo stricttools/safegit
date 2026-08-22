@@ -273,7 +273,7 @@ func MergeLabels(ctx context.Context, theirs string, bases []string) (Labels, er
 
 // PickLabels derives the labels a conflicted cherry-pick of source wrote.
 func PickLabels(ctx context.Context, source string) (Labels, error) {
-	described, err := describe(ctx, source)
+	described, err := Describe(ctx, source)
 	if err != nil {
 		return Labels{}, err
 	}
@@ -284,16 +284,20 @@ func PickLabels(ctx context.Context, source string) (Labels, error) {
 // PickLabels with the base and theirs sides exchanged, because a revert applies
 // the inverse patch: the incoming side is what the commit's PARENT held.
 func RevertLabels(ctx context.Context, source string) (Labels, error) {
-	described, err := describe(ctx, source)
+	described, err := Describe(ctx, source)
 	if err != nil {
 		return Labels{}, err
 	}
 	return Labels{Ours: "HEAD", Base: described, Theirs: "parent of " + described}, nil
 }
 
-// describe renders a commit the way git's sequencer names it on a marker line:
+// Describe renders a commit the way git's sequencer names it on a marker line:
 // the abbreviated object name, then the subject in parentheses.
-func describe(ctx context.Context, sha string) (string, error) {
+//
+// It is exported because the conclusion commands say the same thing in prose:
+// a listing that explains what `theirs` resolves to for a revert names the
+// commit being undone in exactly the spelling its conflict markers used.
+func Describe(ctx context.Context, sha string) (string, error) {
 	out, _, err := git.Run(ctx, "log", "-1", "--format=%h (%s)", sha)
 	if err != nil {
 		return "", err
