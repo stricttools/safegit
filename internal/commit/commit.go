@@ -431,15 +431,15 @@ func (p *Pipeline) tryCommit(
 	if !req.DryRun {
 		// Step 5: Acquire ref lock.
 		//
-		// Not minted through the effects handle. It is one of exactly two
-		// mutations on the executing path that are not: this lock, and the op-log
-		// append at Step 8. Both are off for the same reason -- the handle's
-		// method set is closed and has no shape for either. The lock's whole
-		// meaning is that creating it succeeds for exactly one process, and a
-		// write() of the same path would be a different operation with none of
-		// that guarantee. The gap is recorded in
-		// todo/effects-handle-closed-method-set.md, and it costs a preview
-		// nothing: a preview takes no lock at all.
+		// Not minted through the effects handle -- like the op-log append at
+		// Step 8, and for the same reason: the handle's method set is closed and
+		// has no shape for either. The lock's whole meaning is that creating it
+		// succeeds for exactly one process, and a write() of the same path would
+		// be a different operation with none of that guarantee. The gap is
+		// recorded in todo/effects-handle-closed-method-set.md, and it costs a
+		// preview nothing: neither this lock nor that append is ever reached by
+		// one. The ref update at Step 7 is the mutation a preview must withhold,
+		// and it is the one that IS minted.
 		lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second
 		if lockTimeout <= 0 {
 			lockTimeout = 30 * time.Second
