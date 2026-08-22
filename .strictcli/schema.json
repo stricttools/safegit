@@ -82,7 +82,7 @@
   },
   "project_id": "github.com/smm-h/safegit",
   "name": "safegit",
-  "version": "0.28.1-0.20260822111328-9fa06de07e8f",
+  "version": "0.28.1-0.20260822115812-16a27cf6869d",
   "help": "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "proc_observe_allowlist": [
     [
@@ -164,6 +164,11 @@
       "git",
       "--no-optional-locks",
       "stripspace"
+    ],
+    [
+      "git",
+      "--no-optional-locks",
+      "var"
     ]
   ],
   "global_flags": [
@@ -576,6 +581,9 @@
           "state_cleared": {
             "type": "boolean"
           },
+          "stopped_again": {
+            "type": "boolean"
+          },
           "tree": {
             "type": "string"
           }
@@ -588,7 +596,8 @@
           "dry_run",
           "queue_delegated",
           "head",
-          "commits_created"
+          "commits_created",
+          "stopped_again"
         ],
         "type": "object"
       },
@@ -738,6 +747,9 @@
           "state_cleared": {
             "type": "boolean"
           },
+          "stopped_again": {
+            "type": "boolean"
+          },
           "tree": {
             "type": "string"
           }
@@ -750,7 +762,8 @@
           "dry_run",
           "queue_delegated",
           "head",
-          "commits_created"
+          "commits_created",
+          "stopped_again"
         ],
         "type": "object"
       },
