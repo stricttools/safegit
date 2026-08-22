@@ -197,20 +197,19 @@ func TestStagesReportsAnAbsentSideAsAbsent(t *testing.T) {
 	}
 }
 
-// FLAKE WATCHLIST -- certified load-sensitive, not racy.
-//
-// One transient failure of this test was observed once and has never
-// reproduced. The mechanism is the temporary filesystem the whole suite
-// competes for: the fixture builds an entire repository under $TMPDIR and
-// drives it with a dozen git subprocesses, and when concurrent test processes
-// exhaust that filesystem -- reproduced elsewhere in this repository on a tmpfs
-// /tmp sized against RAM -- any one of those git calls fails on a write and
-// testutil.Git reports it as this test failing.
+// One transient failure of this test was observed once and never reproduced.
+// The cause was not here: the fixture builds a whole repository under $TMPDIR
+// and drives it with a dozen git subprocesses, and the integration-test package
+// (internal/test) had been leaking its built binary into that same filesystem on
+// every run -- 7.5 GB of it against a 9.4 GB tmpfs quota by the time it was
+// found. Once the quota is gone, any of those git calls fails on a write with
+// EDQUOT and testutil.Git reports it as this test failing. That leak is fixed
+// and guarded (TestNoDeferredCleanupIsStrandedByAProcessExit in internal/test).
 //
 // The behaviour under test has no interleaving to get wrong. A delete/modify
 // conflict is written into the index by git's own merge, and conflict.Stages
-// only reads back what git recorded there; nothing here is concurrent, timed,
-// or dependent on scheduling.
+// only reads back what git recorded there; nothing here is concurrent, timed, or
+// dependent on scheduling.
 //
 // Evidence: 3360 iterations under -race with no failure -- 2160 targeted plus a
 // final round of 1200 across six concurrent processes -- including 1800 run
