@@ -180,6 +180,14 @@ const AutoMergeRef = "AUTO_MERGE"
 // that introduced AUTO_MERGE the ref is absent for EVERY merge, and reporting
 // that as "this merge simply has none" would silently downgrade every
 // verification built on it.
+//
+// PRESENCE is not evidence of an operation in flight. A completed rebase leaves
+// AUTO_MERGE behind -- git's own `rebase --continue` does it too, so it is not
+// an artifact of how safegit finishes anything (asserted by
+// internal/git's TestRebaseContinueControl). Anything that reads a leftover
+// AUTO_MERGE as an interrupted operation will fire on a repository whose rebase
+// finished normally; the operation's OWN state files are what say an operation
+// is in flight.
 func AutoMergeTree(ctx context.Context) (tree string, present bool, err error) {
 	if err := git.RequireFeature(ctx, gitversion.MergeTreeWriteTree); err != nil {
 		return "", false, err
