@@ -1511,3 +1511,45 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
 - The installed safegit binary (used by implementors to commit) predates
   the campaign: commits are made from the repo root with a single `-m` and
   plain file paths to stay off its known-buggy paths.
+
+## Fixer-window closure (2026-08-22, resumed session — the six addendum items)
+
+- All six items done red-first; suite 1511 PASS / 0 FAIL / 7 SKIP on the
+  quiescent tree. The 8-vs-7 SKIP delta against the handoff figure is
+  flag-explained: the handoff counted a `-short` run (scripts/test-baseline
+  passes `-short`), which additionally skips internal/hooks' ~1s timeout
+  test; a bare `-race` run executes it.
+- Ratified: uninstall's worktree enumeration lists `<common>/worktrees/*`
+  on disk (labels read from each git dir's gitdir marker) instead of
+  `git worktree list` — the removal targets are git dirs, the disk set is
+  exactly git's own layout (the dependency repo.SharedGitDir already
+  documents), and it also removes the state of a deleted-but-unpruned
+  worktree that a list-driven removal would strand.
+- Ratified: the payload-gap fix covers scrub match's AND scrub run's
+  nothing-matched early returns too (an absent payload there contradicted
+  the one-envelope invariant the item exists to restore); scrub file's
+  no-target case is already a hard error, no gap.
+- Ratified: dry-run uninstall no longer prints "safegit uninstalled"
+  (hook.go's established silent/dryRun output pattern).
+- FIXED AS A SIDE EFFECT, changelog fix entry required at 10.3:
+  `--dry-run doctor --action uninstall` was DESTRUCTIVE (removed state
+  while claiming preview) until removal was routed through the effects
+  handle. Uninstall's enumeration prints via outf before the confirmation,
+  so --quiet does not hide what is about to be removed.
+- Dispatched with the Phase 7 implementor (an application of the round-2
+  scope/rotation ruling, not a new ruling): the submodule-only scrub match
+  completion prints no human summary, scope line, or rotation notice — a
+  successful rewrite completion must print them.
+- Queued for the Phase 7 closing-audit remediation: the vacuous
+  precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
+  (asserts `.git/worktrees/side/safegit` while the fixture names the
+  worktree `linked-side`; vacuously true since it was written).
+- Phase 9 rows from the fixer: the confirmation-seam paragraph in
+  docs/_CLAUDE.md must say the prompt goes to STDERR unsuppressed by
+  --quiet; uninstall's repository-wide scope and enumeration need
+  sentences (doctor sections in commands-guide, the `--action` help in
+  main.go, _README's uninstall line); the scrub scope line needs a
+  mention (commands-guide scrub section); integration-guide's machine-mode
+  section can note scrub match/run now always carry a payload where
+  no-match runs previously emitted payload null. Generated docs heal via
+  selfdoc gen.
