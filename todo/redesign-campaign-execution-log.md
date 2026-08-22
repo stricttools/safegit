@@ -347,6 +347,37 @@ existing entries are never rewritten.
 - testdata/exit-sites.txt needs one regeneration after Phase 8's
   commits (queued for the Phase 4 implementor's closeout).
 
+## Phase 8 audit outcome and dispatched fixes
+
+- Audit PASS on all three subphases; the adversarial sweep found no
+  surviving bare-lease path and no --force producer at all.
+- Dispatched to a fixer (after the scrub implementor frees the exit
+  table): getRemoteSHA must propagate ls-remote failures instead of
+  answering "absent" (silent degradation that since 8.1 becomes a false
+  must-not-exist lease and a wrong terminal diagnosis); a test for the
+  revived retry loop (transport failure then success via the git shim,
+  asserting two attempts and a re-pinned lease); anchor the lease
+  classifier to "(stale info)" and force mode; tighten transport
+  patterns that could match ref names (bare EOF/SSL/TLS/transport);
+  one authority for --atomic (payload and argv derive from one place);
+  ORCHESTRATOR RULING: backup's concurrent-slot lease rejection
+  classifies to exit 41 like push (one meaning per code; BackupDiverged
+  stays the ancestry refusal) and the PushLeaseRejected/PushFailed doc
+  comments update to the truth (40 also covers failed re-observation);
+  RULING for the hook/retry window: if a retry's re-resolution finds
+  LOCAL ref SHAs differing from what the pre-pre-push hooks saw, the
+  retry is REFUSED with a clear message (fail closed; no hook re-run
+  machinery); stale comments (confirm_deliberate's "only two sites",
+  ExemptGitPush's reason, hookSkipDryRun's three-readers claim,
+  classification_test's push row); a one-line comment making the
+  disabled-beats-dry-run payload precedence deliberate.
+- Phase 9 rows recorded by the audit: architecture's push flow (consent
+  first, ls-remote before hooks, pinned per-ref lease + atomic);
+  "oplog records each attempt" is false (one append after success);
+  push output now BUFFERED (and git stdout to stderr under --json) —
+  needs a user-facing sentence; row 37 largely pre-healed (verify, not
+  rewrite); the consent-seam and template bullets already queued.
+
 ## Ratified Phase 3 decisions
 
 - Quarantine INSTALLATION lives with the commands that write objects in
