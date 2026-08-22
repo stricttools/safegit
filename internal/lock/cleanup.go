@@ -4,8 +4,6 @@ import (
 	"os"
 	"os/signal"
 	"sync"
-
-	"github.com/smm-h/safegit/internal/exitcode"
 )
 
 // heldLock is one lock this process still holds: where it is, and which file
@@ -32,9 +30,15 @@ func registerCleanup(path string, published os.FileInfo) {
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, cleanupSignals()...)
 		go func() {
-			<-c
+			sig := <-c
 			ReleasePending()
-			os.Exit(exitcode.General)
+			// A process a signal ended exits 128 + the signal number, which is
+			// the convention every shell, supervisor and CI runner already reads
+			// (a SIGTERM is 143, a SIGINT 130). The number is not safegit's to
+			// choose, so it is a carve-out from the exit-code registry rather
+			// than a row in it -- stated in internal/exitcode's package doc
+			// beside the git-passthrough carve-out.
+			os.Exit(signalExitStatus(sig))
 		}()
 	})
 }
