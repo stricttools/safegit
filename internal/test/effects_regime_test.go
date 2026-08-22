@@ -217,7 +217,7 @@ func TestHookInstallDryRunInstallsNothing(t *testing.T) {
 			t.Errorf("the would-do log is missing %q, got: %s", verb, log)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".git", "hooks", "my-hook")); err == nil {
+	if _, err := os.Stat(filepath.Join(dir, ".git", "safegit", "hooks", "my-hook")); err == nil {
 		t.Error("a dry run installed the hook for real")
 	}
 }
@@ -389,9 +389,8 @@ func TestHookRunRefusesDryRun(t *testing.T) {
 	dir := newRepo(t)
 	marker := filepath.Join(t.TempDir(), "hook-ran")
 
-	// The discovered name is `pre-pre-push` (or an entry under
-	// `pre-pre-push.d/`); `hook install` copies the source under its own
-	// basename, so the source has to carry that name to be found.
+	// Anything in the tool-owned store is a hook, whatever it is called;
+	// `hook install` copies the source under its own basename.
 	src := filepath.Join(t.TempDir(), "pre-pre-push")
 	script := "#!/bin/sh\ntouch " + marker + "\nexit 0\n"
 	if err := os.WriteFile(src, []byte(script), 0o755); err != nil {
