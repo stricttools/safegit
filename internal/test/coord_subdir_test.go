@@ -9,19 +9,23 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// This file pins the behavior safegit must have when it is invoked from a
-// repository SUBDIRECTORY rather than the repository root.
+// This file pins the behavior safegit has when it is invoked from a repository
+// SUBDIRECTORY rather than the repository root.
 //
 // Several git plumbing commands safegit relies on are scoped to the process
 // working directory: `git ls-files` (with or without -v / -i -c) defaults to
 // the pathspec "." and `git ls-tree` prefixes the cwd path onto the tree it
-// reads. safegit runs every one of them through internal/git with a bare
-// context.Background(), so the process cwd -- an operator's or an agent's
-// arbitrary directory -- silently narrows what safegit sees.
+// reads. safegit answers that in two places at once: every git subprocess it
+// builds runs with its working directory set to the REPOSITORY ROOT (the
+// repository-root pin, gitexec.WithRoot, escapable only through the declared
+// exemption table), and the tree-reading calls additionally pass --full-tree so
+// they are repository-rooted whatever directory the process stands in. Before
+// both of those, an operator's or an agent's arbitrary directory silently
+// narrowed what safegit saw and what it rewrote.
 //
 // Every test below runs the SAME safegit command twice: once from the repo
-// root (the control, which documents the behavior safegit already has) and
-// once from a subdirectory (which must produce the identical outcome).
+// root (the control) and once from a subdirectory, and the two must produce the
+// identical outcome.
 
 // coordSubdirRepo builds a repo with a subdirectory, a tracked file at the
 // root and a tracked file inside the subdirectory. Returns (repoDir, subDir).
@@ -125,10 +129,10 @@ func TestCoordSubdirCheckoutRefusesUntrackedFromRoot(t *testing.T) {
 // repo-wide: an untracked file at the repo root must block a checkout invoked
 // from a subdirectory exactly as it blocks one invoked from the root.
 //
-// coord.Check runs `git ls-files --others --exclude-standard` (coord.go:36)
-// with no cwd pinning, and that listing is scoped to the process working
-// directory, so from sub/ the root-level untracked file is invisible and the
-// guard reports a clean tree.
+// coord.Check runs `git ls-files --others --exclude-standard`, whose listing is
+// scoped to the process working directory. The repository-root pin is what
+// makes it repository-wide: without it the call ran in sub/, the root-level
+// untracked file was invisible, and the guard reported a clean tree.
 func TestCoordSubdirCheckoutRefusesUntrackedFromSubdir(t *testing.T) {
 	dir, sub := coordSubdirRepo(t)
 	testutil.GitRaw(t, dir, "branch", "other")
@@ -150,8 +154,9 @@ func TestCoordSubdirCheckoutRefusesUntrackedFromSubdir(t *testing.T) {
 }
 
 // TestCoordSubdirCheckoutRefusesModifiedFromSubdir is the control for the other
-// half of coord.Check: `git diff HEAD --name-status` (coord.go:24) IS repo-wide,
-// so a modified tracked file outside the subtree is still seen from sub/.
+// half of coord.Check: `git diff HEAD --name-status` is repo-wide on its own,
+// so a modified tracked file outside the subtree is seen from sub/ whether or
+// not the working directory is pinned.
 func TestCoordSubdirCheckoutRefusesModifiedFromSubdir(t *testing.T) {
 	dir, sub := coordSubdirRepo(t)
 	testutil.GitRaw(t, dir, "branch", "other")
@@ -298,11 +303,12 @@ func TestCoordSubdirScrubProtectsTrackedIgnoredFromRoot(t *testing.T) {
 // outcome when the scrub is issued from a subdirectory.
 //
 // git.SyncMainIndexWithWorktree collects the paths to protect with
-// git.ListTrackedIgnoredFiles (`git ls-files -i -c --exclude-standard`). From
-// sub/ that listing is empty, so the function takes its "no tracked+gitignored
-// files" fast path and runs `read-tree --reset -u` with no content save/restore and
-// no skip-worktree preservation at all -- the local-only file outside the
-// subtree is left to whatever read-tree does to it.
+// git.ListTrackedIgnoredFiles (`git ls-files -i -c --exclude-standard`), and
+// the repository-root pin is what makes that listing repository-wide. Before
+// the pin the call ran in sub/, the listing came back empty, the function took
+// its "no tracked+gitignored files" path and ran `read-tree --reset -u` with no
+// content save/restore and no skip-worktree preservation -- and the local-only
+// file outside the subtree was left to whatever read-tree did to it.
 func TestCoordSubdirScrubProtectsTrackedIgnoredFromSubdir(t *testing.T) {
 	dir, sub := coordSubdirIgnoreRepo(t)
 
@@ -335,21 +341,22 @@ func TestCoordSubdirScrubProtectsTrackedIgnoredFromSubdir(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // C. Tree rewriting must not be scoped to the working directory
-//     (git.LsTree, git.go:656 / git.LsTreeAll, git.go:645)
+//     (git.LsTree / git.LsTreeAll)
 // ---------------------------------------------------------------------------
 
 // TestCoordSubdirScrubFromSubdirPreservesHistoryPaths asserts that a scrub
 // issued from a subdirectory rewrites the repository's history, not the
 // subdirectory's, and leaves every path in every commit tree where it was.
 //
-// replaceInTreeByBlobMap (tree_ops.go:122) reads each tree with git.LsTree,
-// which runs `git ls-tree <tree>` without --full-tree (git.go:656). git
-// resolves that against the process working directory, so from sub/ it returns
-// the entries of sub/ INSIDE the tree it was handed. The walker then rebuilds a
-// root tree out of those entries via mktree (tree_ops.go:161): every commit's
-// tree becomes the subdirectory's tree with the prefix stripped, and every file
-// outside the subdirectory disappears from all of history. The post-rewrite
-// cleanup (reflog expire + prune) then removes the original objects.
+// replaceInTreeByBlobMap reads each tree with git.LsTree, and both LsTree and
+// LsTreeAll pass --full-tree so the listing is repository-rooted regardless of
+// where the process stands. Without it git resolves the listing against the
+// working-directory prefix: from sub/ it returned the entries of sub/ INSIDE
+// the tree it was handed, the walker rebuilt a root tree out of those entries
+// via mktree, every commit's tree became the subdirectory's tree with the
+// prefix stripped, and every file outside the subdirectory disappeared from all
+// of history -- after which the post-rewrite cleanup (reflog expire + prune)
+// removed the originals.
 func TestCoordSubdirScrubFromSubdirPreservesHistoryPaths(t *testing.T) {
 	dir, sub := coordSubdirIgnoreRepo(t)
 

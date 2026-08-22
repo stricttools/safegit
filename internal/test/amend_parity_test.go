@@ -121,11 +121,12 @@ func TestAmendSymlink_LinkToCommittedFile(t *testing.T) {
 // Amending a directory pathspec whose files were deleted and pre-staged, in the
 // same amend as a new file that shares a blob with one of them, must succeed.
 //
-// stageFile drops the whole directory from the temp index; detectMoves
-// (re-run for amend at amend.go:171) then independently issues
-// `git rm --cached` for an individual path inside that directory that is
-// already gone from the index, and git rejects it. Exactly the plain-commit
-// shape, reached through amend.
+// It is the plain-commit shape reached through amend. stageFile drops the whole
+// directory from the temp index, and move DETECTION -- which the amend path ran
+// too, and which safegit no longer has at all -- then independently issued
+// `git rm --cached` for an individual path inside that directory that was
+// already gone from the index, which git rejects. A move is declared now, never
+// guessed from a shared blob, so the amend is the ordinary one.
 func TestAmendStagedDeletions_DirectoryPathWithMovedFile(t *testing.T) {
 	dir := newRepo(t)
 
@@ -464,12 +465,14 @@ func amendParNewMergedRepo(t *testing.T) amendParMergeFixture {
 	return amendParMergeFixture{dir: dir, mergeSHA: mergeSHA, mainSHA: mainSHA, featureSHA: featureSHA}
 }
 
-// Rewording a merge commit must keep both parents. `git commit --amend -m` on a
-// two-parent commit preserves both; safegit's Reword resolves a single parent
-// with `ref^` (internal/commit/amend.go:343) and hands it to git.CommitTree
-// (amend.go:349), whose one -p (internal/git/git.go:163-167) cannot express the
-// second. The reworded tip therefore has one parent, and the merged branch is
-// silently unmerged.
+// Rewording a merge commit keeps both parents, exactly as `git commit --amend
+// -m` does. Reword reads EVERY parent off the commit object being replaced and
+// hands the whole list to git.CommitTree.
+//
+// It once resolved a single parent with `ref^` and passed it to a CommitTree
+// that could only express one -p, so a reworded merge came out with one parent
+// and the merged branch was silently unmerged. That is what this test exists to
+// keep from coming back.
 func TestRewordMergeCommitPreservesBothParents(t *testing.T) {
 	fx := amendParNewMergedRepo(t)
 
@@ -505,10 +508,10 @@ func TestRewordMergeCommitPreservesBothParents(t *testing.T) {
 	}
 }
 
-// Amending a merge commit WITH new files must likewise keep both parents.
-// `git commit --amend` with staged changes on a two-parent commit preserves
-// both. tryAmend resolves one parent at internal/commit/amend.go:125 and passes
-// it to git.CommitTree at amend.go:185.
+// Amending a merge commit WITH new files likewise keeps both parents, as `git
+// commit --amend` with staged changes does. tryAmend reads the tip's whole
+// parent list off the commit object and builds the replacement on all of it;
+// naming only the first would silently unmerge the branch that was merged in.
 func TestAmendMergeCommitWithFilesPreservesBothParents(t *testing.T) {
 	fx := amendParNewMergedRepo(t)
 

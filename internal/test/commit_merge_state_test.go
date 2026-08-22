@@ -20,12 +20,11 @@ import (
 // commit-tree (internal/commit/commit.go:271). Nothing in the pipeline reads
 // MERGE_HEAD.
 //
-// The tests below are RED on purpose. They assert the behavior safegit must
-// have once a merge-conclusion path exists, and every one of them fails today.
-// Inverting them into a green suite means changing nothing in the assertions:
-// they describe the end state, not the current one. The only edit a fix
-// requires is registering whatever verb concludes the merge in
-// mergeConclusionRoutes below.
+// The tests below were written before any merge-conclusion path existed, as
+// assertions about the end state rather than about the behavior of the day.
+// They are green now: `merge-continue` is the verb that concludes a merge, and
+// it is registered in mergeConclusionRoutes below. The assertions never
+// changed -- that is the point of having written them that way.
 
 // mergeConclusionRoute is one candidate command line for concluding a merge.
 // The suite tries each and asserts that at least one produces a real merge
@@ -53,12 +52,11 @@ func mergeConclusionRoutes() []mergeConclusionRoute {
 // safegit command, producing a genuine two-parent merge commit that carries the
 // merge's whole staged result.
 //
-// RED today: neither route works. `commit` with no pathspec is refused outright
-// (commit.go:52, "no files specified", exit 2), and `commit` with a pathspec
-// exits 0 while producing a single-parent commit -- see the corruption test
-// below. There is no third route: `safegit --help` lists no merge-conclusion
-// verb, and git's own `git commit` is unavailable to an agent under the
-// git-add/git-commit blocking hooks.
+// `merge-continue` is that command. The two `commit` routes are kept in the
+// table because they are the ones an agent reaches for first and neither may
+// silently do the wrong thing: `commit` with no pathspec is refused outright
+// ("no files specified", exit 2), and `commit` with a pathspec is refused
+// mid-merge rather than building a single-parent commit -- see the test below.
 func TestMergeCanBeConcludedThroughSafegit(t *testing.T) {
 	var failures []string
 
@@ -112,14 +110,14 @@ func TestMergeCanBeConcludedThroughSafegit(t *testing.T) {
 //	$ git commit -m msg -- conflicted.txt
 //	fatal: cannot do a partial commit during a merge.
 //
-// safegit must refuse too. It does not: the pipeline never consults MERGE_HEAD,
-// seeds its tmp index from the parent commit's tree
-// (internal/commit/commit.go:210) and hands commit-tree exactly one parent
-// (internal/commit/commit.go:271), so it exits 0 having built a commit that
-// drops the second parent AND every path the merge staged but the pathspec did
-// not name.
+// safegit refuses too, through the commit pipeline's in-flight-operation
+// declaration check, and names merge-continue as the command that ends it.
 //
-// RED today: the command succeeds and the assertions below fire.
+// Before that check existed the pipeline never consulted MERGE_HEAD: it seeded
+// its tmp index from the parent commit's tree and handed commit-tree exactly
+// one parent, so it exited 0 having built a commit that dropped the second
+// parent AND every path the merge staged but the pathspec did not name. That is
+// the corruption this test keeps out.
 func TestCommitWithPathspecRefusedDuringMerge(t *testing.T) {
 	fx := newConflictedMergeRepo(t, conflictedMergeOpts{cleanSideFile: true, resolveInTree: true})
 
