@@ -16,6 +16,11 @@ func TestSubcommandExtraction(t *testing.T) {
 		{[]string{"--no-optional-locks", "ls-tree", "-r", "-z", "HEAD"}, "ls-tree", true},
 		{[]string{"--version"}, "--version", true},
 		{[]string{"-c", "core.hooksPath=/dev/null", "status"}, "status", true},
+		// --attr-source in both spellings: the joined one is a single element
+		// the scan skips, and the separate one takes the tree name as its value
+		// so the tree can never be read as the subcommand.
+		{[]string{"--attr-source=HEAD^{tree}", "check-attr", "-z", "--all", "--", "f"}, "check-attr", true},
+		{[]string{"--attr-source", "HEAD^{tree}", "check-attr", "-z", "--all", "--", "f"}, "check-attr", true},
 		{[]string{}, "", false},
 		{[]string{"--no-optional-locks"}, "", false},
 	}
@@ -152,6 +157,10 @@ func TestObserveOnlyView(t *testing.T) {
 		// --no-index changes which answer check-ignore gives, never what it
 		// does: both spellings only read.
 		{"check-ignore", "--no-index", "-q", "--", "f"},
+		// The conflict-attribute resolver's own two reads: check-attr answers
+		// from a tree, stripspace filters a message on stdin.
+		{"check-attr", "-z", "conflict-marker-size", "--", "f"},
+		{"stripspace", "--strip-comments"},
 	} {
 		if !IsObserveOnly(argv) {
 			t.Errorf("IsObserveOnly(%v) = false, want true", argv)
@@ -161,6 +170,13 @@ func TestObserveOnlyView(t *testing.T) {
 		{"ls-remote", "origin", "refs/heads/main"},
 		{"update-index", "--skip-worktree", "f"},
 		{"rm", "--cached", "--", "f"},
+		// merge-file and config are declared by their WIDER spelling: -p sends
+		// the merge result to stdout but the bare form overwrites a file, and
+		// `config <name> <value>` sets without any option to key on. Neither
+		// may become an allowlisted observe on the strength of how safegit
+		// happens to spell it today.
+		{"merge-file", "-p", "ours", "base", "theirs"},
+		{"config", "--get", "merge.conflictStyle"},
 	} {
 		if IsObserveOnly(argv) {
 			t.Errorf("IsObserveOnly(%v) = true, want false", argv)
