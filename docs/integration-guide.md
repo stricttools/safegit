@@ -29,6 +29,7 @@ Key operations:
 - **Amend with files:** `safegit commit --amend -m "new message" -- file3.go`
 - **Reword (no files):** `safegit commit --amend -m "reworded message"`
 - **Cross-branch amend:** `safegit commit --amend --branch feature-x -m "msg" -- file.go`
+- **Move and record it in one step:** `safegit mv -m "move the parser" 'src/parse.go -> internal/parse/parse.go'`
 - **Undo last commit:** `safegit undo`
 - **Undo last N operations:** `safegit undo --count 3`
 
@@ -46,7 +47,7 @@ The following git operations are forbidden in multi-session worktrees because th
 - `git stash` (hides working tree state from other sessions)
 - `git restore` / `git checkout -- <file>` (destroys uncommitted work from other sessions)
 
-safegit provides guarded passthroughs for `checkout`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick`, and `revert`. These check for uncommitted changes (coordination guard) before proceeding.
+safegit provides guarded passthroughs for `checkout`, `pull`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick`, and `revert`. Each takes the worktree operation lock for the whole operation and then checks for uncommitted changes before handing the arguments to git.
 
 ## rlsbl release workflow
 
@@ -54,13 +55,13 @@ safegit integrates with [rlsbl](https://github.com/smm-h/rlsbl) for release orch
 
 ### Push handling
 
-In rlsbl-managed projects, pushes happen exclusively through `rlsbl release run` (which handles version bumps, changelog finalization, tagging, and pushing in one atomic flow). safegit's `push` command is available for non-release pushes (e.g., dev branches via `rlsbl push`), but direct pushes to release branches are discouraged.
+In rlsbl-managed projects, pushes happen exclusively through `rlsbl release run`, which handles version bumps, changelog finalization, tagging and pushing in one flow. There is no dev-branch push path: rlsbl has no `push` command, and its release entry points refuse to run on anything but a release branch. safegit's `push` is available for repositories that are not managed that way.
 
 `safegit push` provides:
 
-- Pre-pre-push hooks (run before any network I/O)
-- Automatic retry with exponential backoff on transport errors
-- Oplog recording of every push
+- Pre-pre-push hooks, run before `git push` opens a transport
+- Automatic retry with exponential backoff on transport errors, with every lease re-pinned per attempt
+- One oplog entry per successful push
 
 ### rlsbl detection
 
@@ -85,7 +86,15 @@ safegit has its own hook system called "pre-pre-push hooks" that run before `saf
 safegit hook install /path/to/script.sh
 ```
 
-This copies the script into `.git/safegit/hooks/` and makes it executable. Hooks are discovered by scanning that directory.
+This copies the script into the live store under the repository's **common** `.git/safegit/hooks/` and makes it executable, so a hook installed from a linked worktree is the hook every worktree of the repository runs. An existing destination is refused rather than overwritten: upgrading a hook is `safegit hook remove <name>` followed by an install.
+
+Discovery walks TWO stores in full, at any depth, in a deterministic order -- the store the CHECKOUT provides (`.safegit/hooks/` in the work tree, which is repository content everyone who clones gets) first, then the live store -- each sorted by its store-relative name. Within a store the traditional two shapes are just names: `pre-pre-push` is the single-file hook, `pre-pre-push.d/*` the directory of them, and anything else in the store is a hook too. Files starting with `.` or ending in `~` are not hooks by name and never run.
+
+Membership of the checkout-provided store is the DIRECTORY, not git's tracking: an uncommitted -- even gitignored -- executable file there runs on the next push exactly like a committed one. The consequence, stated plainly: cloning a repository and pushing from that checkout runs the repository's committed scripts. Execution happens only on `safegit push` and `safegit hook run`, never on clone, fetch, checkout or any inspection command, and `safegit hook list` names every location with its origin so the set can be read beforehand.
+
+A non-executable hook in the live store is skipped with a warning; one in the checkout-provided store is a refusal (exit 25), because such a hook is disabled by deleting it and committing that, so a lost mode bit must not silently stop the repository's checks.
+
+**Hooks still in the pre-migration location do not run.** `.git/hooks/pre-pre-push` and `.git/hooks/pre-pre-push.d/` are where safegit kept its hooks before the live store existed; their presence makes every push and every `hook run` refuse with exit 24 until `safegit hook migrate` relocates them.
 
 ### Hook environment
 
@@ -102,9 +111,13 @@ Hook stdin follows the same format as git's pre-push hook: one line per ref bein
 
 ### Hook management
 
-- `safegit hook list` -- show all installed hooks
-- `safegit hook run` -- run all hooks without pushing (dry run)
+- `safegit hook list` -- show every hook location with its origin (`local`, `tracked`, `legacy`), path and executable state, including non-executable and non-hook entries, because the hook an operator is asking about is usually the one that is NOT running
+- `safegit hook run` -- run all hooks without pushing
 - `safegit hook run <name>` -- run a specific hook by name
+- `safegit hook remove <name>` -- remove one hook from the live store by name; a name only the checkout provides is refused with an explanation (removing that one means deleting the file and committing it), and a name both stores carry removes the live one and says the other still runs
+- `safegit hook migrate` -- move safegit's hooks out of git's own `.git/hooks` into the live store
+
+`hook run` declares that it cannot be previewed: `--dry-run` is refused with its reason rather than rendering an invented would-do log, because a hook is an operator-supplied script whose effects safegit cannot know. Use `hook list` to see which scripts a push would run.
 
 ### Timeout configuration
 
@@ -120,7 +133,7 @@ When `safegit push` runs inside a submodule, it automatically discovers and runs
 
 ### Interaction with git pre-push hooks
 
-rlsbl installs a git pre-push hook (`.git/hooks/pre-push`) that runs `rlsbl pre-push-check` to enforce JSONL changelog coverage. This is a standard git hook, separate from safegit's pre-pre-push system. The execution order is:
+rlsbl installs a git pre-push hook (`.git/hooks/pre-push`) that runs `rlsbl check --tag prepush` to enforce JSONL changelog coverage and its other pre-push checks. (The older `rlsbl pre-push-check` command was removed; a repository whose hook still calls it needs `rlsbl scaffold` to regenerate the hook.) This is a standard git hook, separate from safegit's pre-pre-push system. The execution order is:
 
 1. safegit pre-pre-push hooks (safegit's own system)
 2. `git push` executes
@@ -187,22 +200,23 @@ safegit scrub match --pattern "SECRET_KEY" --replace "REDACTED" \
 
 ## Configuration reference
 
-All safegit configuration lives in `.git/safegit/config.json` and is managed with the `safegit config show`, `safegit config get <key>`, and `safegit config set <key> <value>` subcommands. The following keys control commit retry behavior, lock timeouts, hook execution, push retries, and oplog rotation:
+All safegit configuration lives in `.git/safegit/config.json` and is managed with the `safegit config show`, `safegit config get <key>`, and `safegit config set <key> <value>` subcommands. The following keys control commit retry behavior, lock timeouts, hook execution, push retries, and the submodule auto-bump decision. These five are the whole key set: writing anything else reports an unknown config key, and every integer key must be a positive integer, parsed whole (`5abc` is refused, not silently read as 5).
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `commit.casMaxAttempts` | 5 | Maximum CAS retry attempts for concurrent ref updates |
-| `commit.autoBumpParent` | (unset) | When `true`, auto-bumps the parent submodule pointer after commits |
-| `lock.acquireTimeoutSeconds` | 30 | Timeout for acquiring per-ref locks |
+| `commit.casMaxAttempts` | 5 | Maximum CAS retry attempts for concurrent ref updates (no upper bound) |
+| `commit.autoBumpParent` | (unset, and an unset one is a refusal) | Whether a commit in a submodule also commits the parent's moved gitlink |
+| `lock.acquireTimeoutSeconds` | 30 | Timeout for acquiring a lock (per-ref, worktree operation, or rewrite) |
 | `hooks.preprepush.timeoutSeconds` | 1800 | Timeout for pre-pre-push hook execution |
 | `push.retryAttempts` | 3 | Number of push retry attempts on transport errors |
-| `log.maxSizeMB` | 100 | Maximum oplog file size |
+
+There is no oplog size or rotation key. The oplog is append-only and complete by design; the exclusive lock held across each append is what makes concurrent appends atomic, so entries have no size limit and nothing truncates the file. `log.maxSizeMB` was removed: an existing `config.json` carrying it still loads (unknown members are ignored), but reading or writing the key is an unknown-key error.
 
 ## Submodule integration
 
 When safegit detects it is running inside a git submodule, two additional behaviors activate to coordinate commits between the submodule and its parent repository, and to cascade push hooks from the parent down to nested submodules:
 
-- **Auto-bump parent:** if `commit.autoBumpParent` is `true` in the parent repo's safegit config, every `safegit commit` in the submodule automatically creates a bump commit in the parent repo updating the submodule pointer. Nested submodules are detected and rejected.
+- **Auto-bump parent, and the decision is mandatory.** `commit.autoBumpParent` is read from the PARENT repository's config. `true` means every `safegit commit` in the submodule also creates a bump commit in the parent updating the submodule pointer; `false` means deliberately do not. **Absent means nobody has decided, and safegit refuses rather than guessing** -- either guess is wrong in somebody's repository. The refusal happens BEFORE anything is committed, and it names the command that settles it (`safegit config set commit.autoBumpParent true`, run in the parent). A dry run validates it the same way, reading the parent's config and creating nothing there. `undo` is the one path that can only meet the question after the rollback it is undoing. Nested submodules are detected and rejected.
 
 - **Hook cascading:** `safegit push` discovers and runs pre-pre-push hooks from both the parent repo and the submodule, with parent hooks executing first.
 
@@ -232,10 +246,12 @@ Parse the whole stream: there is no trailing would-do log to cut off, and no sec
 
 Each command that produces a payload **declares its JSON Schema**, and the framework validates the value against that declaration before writing it -- a wrong shape fails the run instead of shipping. `safegit --dump-schema` publishes every declaration verbatim.
 
-Three properties worth knowing:
+Five properties worth knowing:
 
 - **The envelope is exempt from `--quiet`.** `--json --quiet` emits the complete document; quiet governs the human stream only.
 - **`--json` does not imply approval.** A non-interactive `--json` run of a *consequential* command (`scrub file`/`match`/`run`, `author rewrite`) must pass `--approve-consequential` explicitly. Ordinary mutating commands such as `commit` need nothing. A `--json backup backup` to a remote safegit cannot prove is private is the one place `--approve-consequential` is not the answer either: that question belongs to the target, so it takes `--allow-public-remote`.
+- **A successful run of a payload-producing command always carries its payload.** `scrub match` and `scrub run` used to emit a null payload on their nothing-matched early returns, so a machine consumer could not tell "the run said nothing matched" from "the run produced nothing"; both now answer with the payload in every completing shape, which is the one-envelope invariant doing its job.
+- **git's own push output moves.** `push` captures git's streams rather than passing them through, and under `--json` git's stdout is re-routed to stderr, so the envelope stays the only document on stdout.
 - **An error path answers with its exit code and stderr.** A command that fails writes its message to stderr and exits nonzero; it does not write a JSON error object, because the envelope is the only document machine mode has and a failing command exits below the point where the framework emits it.
 
 This makes safegit suitable for embedding in tool pipelines that parse structured output.
