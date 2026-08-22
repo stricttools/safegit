@@ -261,6 +261,54 @@ func TestDeclaredMoveRefusesNestedDeclarations(t *testing.T) {
 	assertNoCommitHappened(t, dir, "seed")
 }
 
+// TestDeclaredMoveRefusesChainedDeclarations: one path that is both a
+// destination and a source -- `p.txt -> q.txt` beside `q.txt -> r.txt` -- says
+// something whose outcome depends on the order the two are read in, which is
+// not something the caller stated. `safegit mv` has always refused that shape,
+// and `--moved` is the same declaration by another spelling, so it goes through
+// the same check and gets the same verdict.
+func TestDeclaredMoveRefusesChainedDeclarations(t *testing.T) {
+	seed := func(t *testing.T) string {
+		t.Helper()
+		dir := newRepo(t)
+		testutil.WriteFile(t, dir, "p.txt", "p\n")
+		testutil.WriteFile(t, dir, "q.txt", "q\n")
+		if _, stderr, code := runSafegit(t, dir, "commit", "-m", "seed", "--", "p.txt", "q.txt"); code != 0 {
+			t.Fatalf("seed commit failed (code %d): %s", code, stderr)
+		}
+		return dir
+	}
+
+	assertChainRefusal := func(t *testing.T, stderr string, code int) {
+		t.Helper()
+		if code != exitcode.Usage {
+			t.Fatalf("exit %d, want %d (Usage): %s", code, exitcode.Usage, stderr)
+		}
+		if !strings.Contains(stderr, "moves a path the other moves away from") {
+			t.Errorf("refusal does not name the chain: %s", stderr)
+		}
+	}
+
+	t.Run("commit", func(t *testing.T) {
+		dir := seed(t)
+		_, stderr, code := runSafegit(t, dir, "commit", "-m", "chained",
+			"--moved", "p.txt -> q.txt", "--moved", "q.txt -> r.txt", "--", "p.txt")
+		assertChainRefusal(t, stderr, code)
+		assertNoCommitHappened(t, dir, "seed")
+	})
+
+	t.Run("amend", func(t *testing.T) {
+		dir := seed(t)
+		before := testutil.Rev(t, dir, "HEAD")
+		_, stderr, code := runSafegit(t, dir, "commit", "--amend",
+			"--moved", "p.txt -> q.txt", "--moved", "q.txt -> r.txt")
+		assertChainRefusal(t, stderr, code)
+		if got := testutil.Rev(t, dir, "HEAD"); got != before {
+			t.Errorf("a refused amend rewrote the commit: HEAD is %s, want %s", got, before)
+		}
+	})
+}
+
 func TestDeclaredMoveRefusesAMalformedPair(t *testing.T) {
 	dir := seedMove(t, "a.txt", "b.txt")
 	for _, pair := range []string{"no arrow at all", "a -> b -> c", "src/ -> lib", "a.txt -> a.txt"} {

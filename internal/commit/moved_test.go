@@ -1,8 +1,12 @@
 package commit
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
+
+	"github.com/smm-h/safegit/internal/exitcode"
 )
 
 // TestCommitTrailersOrderingAndDedup pins the order a commit's trailers go on
@@ -54,26 +58,57 @@ func TestMovedParentRevIsTheFirstParent(t *testing.T) {
 	}
 }
 
-// The path-nesting rule itself is trailer.Nests's, and is pinned in that
-// package (TestNests). What is pinned HERE is the use of it: which SIDE of two
-// declarations the overlap refusal names.
+// The overlap rule itself is trailer.Overlap's, and is pinned in that package.
+// What is pinned HERE is this caller's use of it: that a --moved declaration is
+// handed over in the form the shared check takes, and that each verdict comes
+// back as the refusal a --moved caller reads.
 
-func TestOverlapNamesTheSideThatNests(t *testing.T) {
-	source := overlapSide(movedDeclaration{old: "src/", new: "lib/"}, movedDeclaration{old: "src/a", new: "other"})
-	if source != "the same source" {
-		t.Errorf("nesting sources reported %q", source)
+func TestOverlapRefusesEveryCollidingDeclarationPair(t *testing.T) {
+	cases := []struct {
+		name string
+		a, b movedDeclaration
+		want string
+	}{
+		{
+			name: "nesting sources",
+			a:    movedDeclaration{arg: "src/ -> lib/", old: "src/", new: "lib/"},
+			b:    movedDeclaration{arg: "src/a -> other", old: "src/a", new: "other"},
+			want: "the same source",
+		},
+		{
+			name: "nesting destinations",
+			a:    movedDeclaration{arg: "a -> lib/x", old: "a", new: "lib/x"},
+			b:    movedDeclaration{arg: "b -> lib/", old: "b", new: "lib/"},
+			want: "the same destination",
+		},
+		{
+			name: "a chain",
+			a:    movedDeclaration{arg: "p.txt -> q.txt", old: "p.txt", new: "q.txt"},
+			b:    movedDeclaration{arg: "q.txt -> r.txt", old: "q.txt", new: "r.txt"},
+			want: "moves a path the other moves away from",
+		},
 	}
-	dest := overlapSide(movedDeclaration{old: "a", new: "lib/x"}, movedDeclaration{old: "b", new: "lib/"})
-	if dest != "the same destination" {
-		t.Errorf("nesting destinations reported %q", dest)
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := refuseOverlappingDeclarations([]movedDeclaration{c.a, c.b})
+			if err == nil {
+				t.Fatalf("%s and %s were accepted", c.a.arg, c.b.arg)
+			}
+			var ce *CommitError
+			if !errors.As(err, &ce) || ce.Code != exitcode.Usage {
+				t.Fatalf("refusal is %v, want a Usage CommitError", err)
+			}
+			if !strings.Contains(ce.Message, c.want) {
+				t.Errorf("refusal is %q, want it to name %q", ce.Message, c.want)
+			}
+		})
 	}
-	none := overlapSide(movedDeclaration{old: "a", new: "b"}, movedDeclaration{old: "c", new: "d"})
-	if none != "" {
-		t.Errorf("unrelated declarations reported an overlap: %q", none)
-	}
-}
 
-func overlapSide(a, b movedDeclaration) string {
-	side, _, _ := overlap(a, b)
-	return side
+	unrelated := []movedDeclaration{
+		{arg: "a -> b", old: "a", new: "b"},
+		{arg: "c -> d", old: "c", new: "d"},
+	}
+	if err := refuseOverlappingDeclarations(unrelated); err != nil {
+		t.Errorf("unrelated declarations were refused: %v", err)
+	}
 }

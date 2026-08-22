@@ -49,6 +49,69 @@ func Nests(a, b string) bool {
 	return strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
 }
 
+// Pair is one declared move's two paths, in either the file form or the subtree
+// form. The trailing slash is trimmed wherever these paths are compared, so a
+// caller may hand over whichever form it holds.
+type Pair struct {
+	Old string
+	New string
+}
+
+func (p Pair) oldPrefix() string { return strings.TrimSuffix(p.Old, "/") }
+func (p Pair) newPrefix() string { return strings.TrimSuffix(p.New, "/") }
+
+// OverlapKind names how two declared moves speak about each other's paths.
+type OverlapKind int
+
+const (
+	// NoOverlap: the two moves are about different paths entirely.
+	NoOverlap OverlapKind = iota
+	// SameSource: their source paths nest, so they state two fates for one
+	// file.
+	SameSource
+	// SameDestination: their destination paths nest, so they describe a result
+	// no move produces.
+	SameDestination
+	// Chained: one path is both a destination and a source, so the outcome
+	// would depend on which move was performed first.
+	Chained
+)
+
+// Overlap reports whether two declared moves can stand as one statement, and it
+// is the ONE implementation of that question: `safegit mv` asks it of the pairs
+// it is about to rename, and `--moved` asks it of the records a commit or an
+// amend is about to write. The two spellings are the same declaration, so a
+// command line either of them refuses is refused by both.
+//
+// Three ways two moves collide:
+//
+//   - NESTING ON THE SOURCE SIDE: `src/ -> lib/` alongside `src/one.txt -> x`
+//     says two different things about one file. A reader could resolve that by
+//     longest match; a writer guessing which the caller meant would be the
+//     silent precedence rule this tool does not have.
+//   - NESTING ON THE DESTINATION SIDE: two moves landing inside one another
+//     describe a result no move produces.
+//   - CHAINING: one path that is both a destination and a source, as in
+//     `a -> b` beside `b -> c`. The result would depend on the order the moves
+//     happened to be performed in, which is not something a caller stated.
+//
+// The two returned paths are the ones that nest, for a refusal to name.
+func Overlap(a, b Pair) (kind OverlapKind, x, y string) {
+	if Nests(a.oldPrefix(), b.oldPrefix()) {
+		return SameSource, a.oldPrefix(), b.oldPrefix()
+	}
+	if Nests(a.newPrefix(), b.newPrefix()) {
+		return SameDestination, a.newPrefix(), b.newPrefix()
+	}
+	if Nests(a.newPrefix(), b.oldPrefix()) {
+		return Chained, a.newPrefix(), b.oldPrefix()
+	}
+	if Nests(b.newPrefix(), a.oldPrefix()) {
+		return Chained, b.newPrefix(), a.oldPrefix()
+	}
+	return NoOverlap, "", ""
+}
+
 // RemoveMovedRecordsNaming drops every Moved: record whose pair names path,
 // returning the new message and whether anything was dropped.
 //
