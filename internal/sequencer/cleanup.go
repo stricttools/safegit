@@ -14,13 +14,21 @@ import (
 //
 // The sets:
 //
-//	merge        MERGE_HEAD, MERGE_MODE, MERGE_MSG, AUTO_MERGE
-//	cherry-pick  CHERRY_PICK_HEAD, MERGE_MSG, AUTO_MERGE, sequencer/
-//	revert       REVERT_HEAD, MERGE_MSG, AUTO_MERGE, sequencer/
+//	merge        MERGE_HEAD, MERGE_MODE, MERGE_MSG, AUTO_MERGE, MERGE_RR
+//	cherry-pick  CHERRY_PICK_HEAD, MERGE_MSG, AUTO_MERGE, MERGE_RR, sequencer/
+//	revert       REVERT_HEAD, MERGE_MSG, AUTO_MERGE, MERGE_RR, sequencer/
 //
-// MERGE_MSG and AUTO_MERGE belong to all three: git writes them for every one
-// of these operations and removes them when the operation concludes, so they
-// are not "another operation's files" that a cleanup could leave behind.
+// MERGE_MSG, AUTO_MERGE and MERGE_RR belong to all three: git writes them for
+// every one of these operations and removes them when the operation concludes,
+// so they are not "another operation's files" that a cleanup could leave behind.
+// (MERGE_RR is rerere's, and only exists where rerere is enabled; an absent path
+// is not an error, so the entry costs nothing where it is not written.)
+//
+// MERGE_AUTOSTASH is deliberately NOT in any set, and that is the one exclusion
+// worth stating: it names a stash-shaped commit holding the operator's
+// uncommitted work, so removing it is only correct AFTER that work has been put
+// back. Deleting it here would turn every conclusion of an autostashed merge
+// into silent data loss. The conclusion consumes it instead -- see State.Autostash.
 //
 // Paths returns nil for KindNone, KindRebase and KindAM. safegit owns no part
 // of a rebase's or a mailbox application's state: those are concluded and
@@ -30,11 +38,11 @@ import (
 func Paths(k Kind) []string {
 	switch k {
 	case KindMerge:
-		return []string{FileMergeHead, FileMergeMode, FileMergeMsg, FileAutoMerge}
+		return []string{FileMergeHead, FileMergeMode, FileMergeMsg, FileAutoMerge, FileMergeRR}
 	case KindCherryPick:
-		return []string{FileCherryPickHead, FileMergeMsg, FileAutoMerge, DirSequencer}
+		return []string{FileCherryPickHead, FileMergeMsg, FileAutoMerge, FileMergeRR, DirSequencer}
 	case KindRevert:
-		return []string{FileRevertHead, FileMergeMsg, FileAutoMerge, DirSequencer}
+		return []string{FileRevertHead, FileMergeMsg, FileAutoMerge, FileMergeRR, DirSequencer}
 	}
 	return nil
 }

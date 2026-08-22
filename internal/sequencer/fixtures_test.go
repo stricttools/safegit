@@ -17,9 +17,16 @@ import (
 // is always <repoDir>/.git, which is what gitDir() returns.
 
 // newRepo creates a repository with one committed file, "f.txt", on main.
+//
+// rerere is enabled, so every conflicted operation these fixtures build really
+// writes MERGE_RR. That file is part of the state a concluded operation owns,
+// and a fixture that never produced it would let the cleanup assertion pass
+// without ever removing anything. Nothing is auto-resolved by it: rr-cache lives
+// in the repository, and each fixture starts with an empty one.
 func newRepo(t *testing.T) string {
 	t.Helper()
 	dir := testutil.InitBareRepo(t)
+	testutil.Git(t, dir, "config", "rerere.enabled", "true")
 	testutil.WriteFile(t, dir, "f.txt", "base\n")
 	testutil.Git(t, dir, "add", "f.txt")
 	testutil.Git(t, dir, "commit", "-m", "base")
