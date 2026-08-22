@@ -183,7 +183,10 @@ func (p *Pipeline) resolveAmendMoveTrailers(ctx context.Context, repoRoot, ref s
 		return nil, fmt.Errorf("reading %s: %w", tipSHA, err)
 	}
 	parentRev := movedParentRev(tip.Parents)
-	lines, err := resolveMoved(ctx, repoRoot, parentRev, moved)
+	// The tip's own message is what the re-declaration refusal is asked of: an
+	// amend reuses it, and a reword's -m carries its records forward, so a
+	// record on it is still on the commit these declarations would join.
+	lines, err := resolveMoved(ctx, repoRoot, parentRev, tip.Message, moved)
 	if err != nil {
 		return nil, err
 	}

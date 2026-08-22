@@ -433,6 +433,83 @@ func TestAmendCanAddARecordToACommitThatLacksOne(t *testing.T) {
 	}
 }
 
+// A pair the commit being amended ALREADY declares cannot be declared again.
+// Two records for one move are two claims where the caller made one, and the
+// second carries a fresh id, so nothing downstream can tell they are the same
+// statement. The refusal names the id already carrying it, which is the id a
+// caller would need for --moved-retract if the record is what they meant to
+// replace.
+func TestAmendRefusesAPairTheCommitAlreadyDeclares(t *testing.T) {
+	dir := seedMove(t, "a.txt", "b.txt")
+	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "the move",
+		"--moved", "a.txt -> b.txt", "--", "a.txt", "b.txt"); code != 0 {
+		t.Fatalf("move commit failed (code %d): %s", code, stderr)
+	}
+	id := movedRecordsIn(t, commitMessageOf(t, dir, "HEAD"))[0][0]
+	tipBefore := testutil.Rev(t, dir, "HEAD")
+
+	// An amend that keeps the message: the record is already in the message the
+	// amend reuses.
+	_, stderr, code := runSafegit(t, dir, "commit", "--amend", "--moved", "a.txt -> b.txt")
+	if code != exitcode.Usage {
+		t.Fatalf("re-declaring on an amend exited %d, want %d (Usage): %s", code, exitcode.Usage, stderr)
+	}
+	if !strings.Contains(stderr, id) {
+		t.Errorf("the refusal does not name the record already carrying the pair (%s): %s", id, stderr)
+	}
+
+	// An amend that REPLACES the message: the record is in the preserved block
+	// rather than in the message itself, and the answer is the same.
+	_, stderr, code = runSafegit(t, dir, "commit", "--amend", "-m", "reworded",
+		"--moved", "a.txt -> b.txt")
+	if code != exitcode.Usage {
+		t.Fatalf("re-declaring on a reword exited %d, want %d (Usage): %s", code, exitcode.Usage, stderr)
+	}
+	if !strings.Contains(stderr, id) {
+		t.Errorf("the reword refusal does not name the existing record (%s): %s", id, stderr)
+	}
+
+	if got := testutil.Rev(t, dir, "HEAD"); got != tipBefore {
+		t.Errorf("a refused re-declaration replaced the tip (%s -> %s)", tipBefore, got)
+	}
+	if n := strings.Count(commitMessageOf(t, dir, "HEAD"), "Moved: "); n != 1 {
+		t.Errorf("the tip carries %d records, want 1", n)
+	}
+}
+
+// The refusal is about an un-retracted record. Once the record is retracted the
+// pair is no longer claimed by anything, so declaring it again is a caller
+// making the statement afresh -- which is exactly what a retraction followed by
+// a re-declaration is for.
+func TestAmendAllowsRedeclaringAPairWhoseRecordIsRetracted(t *testing.T) {
+	dir := seedMove(t, "a.txt", "b.txt")
+	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "the move",
+		"--moved", "a.txt -> b.txt", "--", "a.txt", "b.txt"); code != 0 {
+		t.Fatalf("move commit failed (code %d): %s", code, stderr)
+	}
+	id := movedRecordsIn(t, commitMessageOf(t, dir, "HEAD"))[0][0]
+
+	// The retraction goes on the same commit, through the open --trailer
+	// spelling: --moved-retract cannot reach a record the commit being amended
+	// declared itself.
+	if _, stderr, code := runSafegit(t, dir, "commit", "--amend", "-m", "the move",
+		"--trailer", "Moved-Retract: "+id); code != 0 {
+		t.Fatalf("retracting on the amend failed (code %d): %s", code, stderr)
+	}
+
+	_, stderr, code := runSafegit(t, dir, "commit", "--amend", "--moved", "a.txt -> b.txt")
+	if code != 0 {
+		t.Fatalf("re-declaring a retracted pair exited %d, want 0: %s", code, stderr)
+	}
+	records := movedRecordsIn(t, commitMessageOf(t, dir, "HEAD"))
+	if len(records) != 2 {
+		t.Fatalf("expected the retracted record plus the new one, got %v", records)
+	}
+	if records[0][0] == records[1][0] {
+		t.Errorf("the re-declaration reused the retracted id: %v", records)
+	}
+}
+
 func TestDeclaredMoveResolvesFromASubdirectory(t *testing.T) {
 	dir := seedMove(t, "sub/a.txt", "sub/b.txt")
 	sub := filepath.Join(dir, "sub")
