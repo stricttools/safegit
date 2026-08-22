@@ -141,6 +141,43 @@ func TestPushMultiRefFailurePushesNothing(t *testing.T) {
 	}
 }
 
+// TestPushForcedMultiRefArgvIsPinnedAndAtomic pins the argv itself, read off a
+// dry run's would-do log: one expectation per ref, pinned to the SHA safegit
+// observed, the EMPTY expectation for the ref the remote does not have, and
+// --atomic because more than one ref is in flight.
+//
+// The preview records the argv the execute path would run, so this is the one
+// place the whole composed command line is asserted rather than inferred from
+// its effects.
+func TestPushForcedMultiRefArgvIsPinnedAndAtomic(t *testing.T) {
+	dir, _ := newRepoWithRemote(t)
+
+	// main exists on the remote; the tag does not.
+	testutil.WriteFile(t, dir, "a.txt", "a\n")
+	safegitCommit(t, dir, "a", "a.txt")
+	if _, stderr, code := runSafegit(t, dir, "push", "--refs", "head", "origin"); code != 0 {
+		t.Fatalf("seeding the remote failed (code %d): %s", code, stderr)
+	}
+	observed := testutil.Rev(t, dir, "refs/heads/main")
+	testutil.Git(t, dir, "tag", "v9.9")
+
+	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "push", "--refs", "both", "--force-with-lease", "origin")
+	if code != 0 {
+		t.Fatalf("dry-run force-push failed (code %d): %s", code, stderr)
+	}
+	log := wouldDoLog(stdout)
+	for _, want := range []string{
+		"push --atomic",
+		"--force-with-lease=refs/heads/main:" + observed,
+		"--force-with-lease=refs/tags/v9.9: ",
+		"origin refs/heads/main:refs/heads/main refs/tags/v9.9:refs/tags/v9.9",
+	} {
+		if !strings.Contains(log, want) {
+			t.Errorf("the recorded push argv must contain %q; the log was:\n%s", want, log)
+		}
+	}
+}
+
 // gitShim installs a `git` wrapper ahead of the real one on the spawned
 // safegit's PATH. Every invocation whose argv contains the bare word `push`
 // appends a line to a counter file and then runs beforePush (a shell snippet,
