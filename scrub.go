@@ -626,7 +626,6 @@ func runScrubFileInSubmodule(
 		// annotations or tagger identity may have been rewritten even when every
 		// commit maps to itself.
 		infof(flags, "No submodule commits were rewritten; parent history unchanged.\n")
-		infof(flags, "Finalizing submodule [%s] rewrite...\n", sub.RelativePath)
 		only := []*pendingRewrite{subPending}
 		if label, err := prepareAll(flags, only); err != nil {
 			dieFinalize(label, err)
@@ -755,7 +754,6 @@ func runScrubFileInSubmodule(
 	if label, err := prepareAll(flags, both); err != nil {
 		dieFinalize(label, err)
 	}
-	infof(flags, "Finalizing submodule [%s] rewrite...\n", sub.RelativePath)
 	if label, err := publishAll(flags, cmd, both); err != nil {
 		dieFinalize(label, err)
 	}
