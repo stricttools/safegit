@@ -1544,6 +1544,48 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
   (asserts `.git/worktrees/side/safegit` while the fixture names the
   worktree `linked-side`; vacuously true since it was written).
+## Remediation wave A closure (the three critical items)
+
+- All three done red-first; three commits; full -race green; tree
+  clean. git.GitDir now answers `rev-parse --absolute-git-dir` — ONE
+  shared resolution fixing both defective sites; the caller table:
+  mustGitDir was already correct (bare Background context = operator
+  cwd; its redundant Abs removed), both submodule sites anchor
+  explicitly, CommonGitDirOf now strictly safer. The
+  mid-merge-commit-from-subdir corruption, the subdir conclusion
+  refusal, and the subdir revert brick are all pinned green, with the
+  merge test asserting the FULL committed tree (so the empty-index
+  truncation cannot pass).
+- mv: the exemption is now `!caseOnly || !ignoreCase`; core.ignorecase
+  read once and threaded into validation AND the rename so they cannot
+  disagree; the audit's destruction case pinned (exit 19, file
+  intact, nothing committed).
+- Autostash: sequencer.State gains Autostash; MERGE_RR joins Paths()
+  for all three owned ops; MERGE_AUTOSTASH deliberately NOT owned
+  (pinned by TestPathsNeverOwnsTheAutostash — deletion without
+  applying IS the data loss); consumeAutostash runs last (after
+  auto-bump), skipped under --dry-run with a would-apply line;
+  success prints "Applied autostash.", removes the file, and cleans
+  the apply's own fresh AUTO_MERGE (second cleanup — deliberate; NOT
+  done after a conflicting apply, whose AUTO_MERGE belongs to the
+  live conflict); a conflicting apply mirrors git (stash store,
+  names stash@{0} and the pop/drop recovery) but EXITS 1 where git
+  exits 0 — a deliberate divergence, entered in docs/divergences.md,
+  with git's 0 pinned by a recorded-fact probe so a future git change
+  re-opens the decision against fact.
+- Ratified: autostash outcome on stderr rather than the closed
+  payload schema (possible future member, noted); MERGE_RR deleted,
+  not rerere-finalized (consistent with the rerere divergence
+  ruling); the ignorecase=false subtest skip on case-folding
+  filesystems (the repo's word is now taken); the rerere-enabled
+  sequencer test fixture (makes the MERGE_RR cleanup assertion
+  non-vacuous).
+- NEW dead API: git.CommonGitDir has ZERO callers and the same
+  latent relative-answer defect — wave B deletes it (CommonGitDirOf
+  is the used form).
+- docs/internal-sequencer.md now stale (generated; heals at wave C's
+  selfdoc gen).
+
 ## Phase 10.2 consolidated outcome and remediation rulings
 
 - All ten per-phase fresh audits complete. Phases 0, 1, 3, 4, 5, 8, 9
