@@ -1255,3 +1255,44 @@ func TestWithDirDoesNotAffectRunWithGitDir(t *testing.T) {
 		t.Error("RunWithGitDir returned repo A's HEAD instead of repo B's HEAD")
 	}
 }
+
+// TestMatchesIgnoreRulesLeavesTheIndexOutOfTheQuestion pins the one difference
+// between the two ignore questions, on the state where they disagree: a path
+// that matches an ignore pattern AND is still in the index.
+//
+// git's own answer for such a path is "not ignored" -- it is tracked, so the
+// patterns do not apply to it. That is the right answer for "may this be
+// added" and the wrong one for "is this path covered by a pattern", which is
+// what a caller about to remove the index entry is asking.
+func TestMatchesIgnoreRulesLeavesTheIndexOutOfTheQuestion(t *testing.T) {
+	dir := testutil.InitBareRepo(t)
+	testutil.Chdir(t, dir)
+	ctx := context.Background()
+
+	testutil.WriteFile(t, dir, "junk.txt", "build artifact\n")
+	testutil.WriteFile(t, dir, "kept.txt", "kept\n")
+	testutil.GitRaw(t, dir, "add", "junk.txt", "kept.txt")
+	testutil.WriteFile(t, dir, ".gitignore", "junk.txt\n")
+
+	// Tracked and pattern-matched: the two questions disagree.
+	if ignored, err := IsIgnored(ctx, "junk.txt"); err != nil || ignored {
+		t.Errorf("IsIgnored(junk.txt) = %t (err %v), want false: an indexed path is tracked, not ignored", ignored, err)
+	}
+	matched, err := MatchesIgnoreRules(ctx, "junk.txt")
+	if err != nil {
+		t.Fatalf("MatchesIgnoreRules(junk.txt): %v", err)
+	}
+	if !matched {
+		t.Error("MatchesIgnoreRules(junk.txt) = false, want true: the pattern matches, index or no index")
+	}
+
+	// No pattern matches: both questions answer no, and "no match" is an
+	// answer rather than a failure.
+	matched, err = MatchesIgnoreRules(ctx, "kept.txt")
+	if err != nil {
+		t.Fatalf("MatchesIgnoreRules(kept.txt): %v", err)
+	}
+	if matched {
+		t.Error("MatchesIgnoreRules(kept.txt) = true, want false")
+	}
+}

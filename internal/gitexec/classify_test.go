@@ -149,6 +149,9 @@ func TestObserveOnlyView(t *testing.T) {
 		{"for-each-ref", "--format=%(refname)"},
 		{"merge-base", "--is-ancestor", "a", "b"},
 		{"check-ignore", "-q", "--", "f"},
+		// --no-index changes which answer check-ignore gives, never what it
+		// does: both spellings only read.
+		{"check-ignore", "--no-index", "-q", "--", "f"},
 	} {
 		if !IsObserveOnly(argv) {
 			t.Errorf("IsObserveOnly(%v) = false, want true", argv)

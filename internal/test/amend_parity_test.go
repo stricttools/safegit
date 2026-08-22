@@ -349,13 +349,12 @@ func TestAmendUntrackGitignoredPath(t *testing.T) {
 	testutil.WriteFile(t, dir, "tip.txt", "tip\n")
 	safegitCommit(t, dir, "tip", "tip.txt")
 
-	// The pattern that makes the tracked file ignored from now on.
+	// The pattern that makes the tracked file ignored from now on. The index
+	// entry stays: dropping it is what --untrack is being asked to do, and a
+	// fixture that drops it first would also make the notice assertion below
+	// vacuous, since the not-gitignored question has the opposite index-aware
+	// answer for a path still in the index.
 	testutil.WriteFile(t, dir, ".gitignore", "dir/\n")
-	// The operator's own step: stage the removal, keep the file on disk.
-	testutil.GitRaw(t, dir, "rm", "-r", "--cached", "dir")
-	if _, err := os.Stat(filepath.Join(dir, "dir", "junk.txt")); err != nil {
-		t.Fatalf("dir/junk.txt must survive `git rm --cached` on disk: %v", err)
-	}
 
 	stdout, stderr, code := runSafegit(t, dir, "commit", "--amend", "-m", "tip, untrack dir",
 		"--untrack", "dir/junk.txt", "--", ".gitignore")

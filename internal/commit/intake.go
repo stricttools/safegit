@@ -430,7 +430,16 @@ func (p *Pipeline) resolveUntrack(
 		// someone means -- but far more often the .gitignore edit that belongs
 		// with it was forgotten, and without it the next commit that names the
 		// path puts it straight back.
-		if ignored, _ := git.IsIgnored(ctx, rel); !ignored {
+		//
+		// The question is asked of the ignore RULES alone (MatchesIgnoreRules,
+		// which passes --no-index), never of git's index-aware check: an
+		// --untrack target is tracked by definition and normally still in the
+		// index, and the index-aware answer for such a path is always "not
+		// ignored", which would fire this notice precisely when the target IS
+		// covered by a pattern. An error means the answer is unknown, and an
+		// unknown answer is not worth a line that might be the opposite of the
+		// truth.
+		if ignored, ierr := git.MatchesIgnoreRules(ctx, rel); ierr == nil && !ignored {
 			fmt.Fprintf(os.Stderr, "notice: %s is not gitignored; it stops being tracked, but nothing "+
 				"stops it from being committed again -- add a .gitignore pattern if that is what you meant\n", arg)
 		}
