@@ -11,6 +11,7 @@ import (
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/scan"
+	"github.com/smm-h/safegit/internal/submodule"
 	"github.com/smm-h/safegit/internal/trailer"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
@@ -178,6 +179,59 @@ func scrubFileCommitRange(ctx context.Context, fromSHA string, entireHistory boo
 		die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
 	}
 	return append([]string{fromSHA}, git.SplitNonEmpty(out)...)
+}
+
+// submoduleFromBoundary maps the elected --from boundary into one submodule,
+// through the gitlink the boundary commit records for it.
+//
+// A --from commit names a commit of the PARENT's history, and a parent hash
+// means nothing inside a submodule -- but the boundary commit records which
+// submodule commit was current at that point, and that gitlink IS the same
+// boundary read in the submodule's own terms: everything from it onward is in
+// range, everything before it is not.
+//
+// Every way the mapping can fail is a hard error naming the fix, which is the
+// rule `scrub file` already follows for the same question. The submodule walk
+// used to ignore the boundary and list the submodule's ENTIRE history instead,
+// so a bounded request quietly became an unbounded rewrite of another
+// repository, and the operator was told only how many commits were rewritten.
+func submoduleFromBoundary(ctx, subCtx context.Context, fromSHA string, sub submodule.SubmoduleInfo) string {
+	out, _, err := git.Run(ctx, "ls-tree", "--full-tree", fromSHA, "--", sub.RelativePath)
+	if err != nil {
+		die(exitcode.General, fmt.Sprintf("reading the gitlink for submodule %s at --from %s: %v",
+			sub.RelativePath, shortSHA(fromSHA), err))
+	}
+	fields := strings.Fields(out)
+	if len(fields) < 3 || fields[1] != "commit" {
+		die(exitcode.General, fmt.Sprintf(
+			"--from commit %s records no submodule commit for %s, so the range boundary cannot be mapped into it.\n"+
+				"Pass --from with a commit that already records %s, or pass --entire-history to rewrite every history in full, deliberately.",
+			shortSHA(fromSHA), sub.RelativePath, sub.RelativePath))
+	}
+	gitlink := fields[2]
+
+	// "^{commit}" is what makes this a real existence check: bare rev-parse
+	// echoes any 40-hex string back unchanged, so a gitlink whose commit the
+	// submodule's object store does not hold would "resolve" here and fail
+	// confusingly one step later.
+	resolved, err := git.RevParse(subCtx, gitlink+"^{commit}")
+	if err != nil {
+		die(exitcode.General, fmt.Sprintf(
+			"--from maps to submodule commit %s in %s (through the gitlink), and that submodule's object store does not contain it.\n"+
+				"Fetch the submodule's history, or pass --entire-history to rewrite all of it deliberately.",
+			shortSHA(gitlink), sub.RelativePath))
+	}
+	isAnc, err := git.IsAncestorOf(subCtx, resolved, "HEAD")
+	if err != nil {
+		die(exitcode.General, fmt.Sprintf("checking ancestry of the mapped --from inside submodule %s: %v", sub.RelativePath, err))
+	}
+	if !isAnc {
+		die(exitcode.General, fmt.Sprintf(
+			"--from maps to submodule commit %s in %s (through the gitlink), which is not an ancestor of that submodule's HEAD.\n"+
+				"Check out the submodule branch that contains it, or pass --entire-history to rewrite all of it deliberately.",
+			shortSHA(resolved), sub.RelativePath))
+	}
+	return resolved
 }
 
 // executeScrubRecipe runs the shared execution pipeline for recipe-based scrub

@@ -701,6 +701,15 @@ func scrubMatchExecute(
 		subLk := acquireRewriteLock(subCtx, flags, si.sub.GitDir, si.sub.SafegitDir, "scrub-match")
 		defer subLk.Release()
 
+		// The range this submodule is rewritten over, decided BEFORE a single
+		// object is written: an elected --from is mapped through the gitlink the
+		// boundary commit records, and a mapping that fails is a hard error
+		// rather than a silent widening to the submodule's whole history.
+		subFromSHA := ""
+		if !entireHistory {
+			subFromSHA = submoduleFromBoundary(ctx, subCtx, fromSHA, si.sub)
+		}
+
 		// Build blob replacement map for this submodule.
 		subBlobMap := make(map[string]string, len(si.uniqueBlobs))
 		for blobSHA := range si.uniqueBlobs {
@@ -730,23 +739,10 @@ func scrubMatchExecute(
 			}
 		}
 
-		// Determine commit range for the submodule.
-		var subSHAs []string
-		if entireHistory {
-			out, _, err := git.Run(subCtx, "rev-list", "--topo-order", "--reverse", "HEAD")
-			if err != nil {
-				die(exitcode.General, fmt.Sprintf("submodule %s: listing commits: %v", si.sub.RelativePath, err))
-			}
-			subSHAs = git.SplitNonEmpty(out)
-		} else {
-			// For submodules with --from, use entire history since we don't know
-			// the corresponding commit boundary in the submodule.
-			out, _, err := git.Run(subCtx, "rev-list", "--topo-order", "--reverse", "HEAD")
-			if err != nil {
-				die(exitcode.General, fmt.Sprintf("submodule %s: listing commits: %v", si.sub.RelativePath, err))
-			}
-			subSHAs = git.SplitNonEmpty(out)
-		}
+		// The commits to walk, from the range elected above -- listed by the one
+		// helper every scrub range goes through, so a submodule's range and the
+		// parent's can never be computed two different ways.
+		subSHAs := scrubFileCommitRange(subCtx, subFromSHA, entireHistory)
 
 		// Note: --remap-shas-in is not applied inside submodule histories
 		// (documented limitation).
