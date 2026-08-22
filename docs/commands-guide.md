@@ -525,7 +525,7 @@ Use `safegit push` instead of `git push` to benefit from pre-pre-push hooks (cus
 
 | Flag | Presence | Description |
 |------|----------|-------------|
-| `--pre-push-hook` / `--no-pre-push-hook` | optional; omitted means the hooks run | Run pre-pre-push hook scripts before pushing. Under `--dry-run` they are never RUN whatever this says -- a hook is an arbitrary script, so running one is a mutation a preview may not perform -- and the preview says so on stderr and in the payload's `pre_pre_push_hooks_skipped` member. They are still DISCOVERED, with the exit 24 and 25 refusals that discovery can produce; `--no-pre-push-hook` skips discovery too |
+| `--pre-push-hook` / `--no-pre-push-hook` | optional; omitted means the hooks run | Run pre-pre-push hook scripts before pushing. Under `--dry-run` they are never run whatever this says -- a hook is an arbitrary script, so running one is a mutation a preview may not perform -- and the preview says so on stderr and in the payload's `pre_pre_push_hooks_skipped` member. Only EXECUTION is skipped, though: they are still DISCOVERED, with the exit 24 and 25 refusals that discovery can produce, and `--no-pre-push-hook` skips discovery along with execution |
 | `--force-with-lease` / `--no-force-with-lease` | optional; omitted means an ordinary push | Force push, pinning each ref to the SHA safegit just observed on the remote. Forcing is consequential: it is confirmed at the terminal, and `--approve-consequential` answers it in advance |
 
 ### Required Choice: `--refs`
