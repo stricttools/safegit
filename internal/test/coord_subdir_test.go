@@ -194,7 +194,7 @@ func TestCoordSubdirResetHardRefusesUntrackedFromSubdir(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // B1. skip-worktree preservation across the index sync
-//     (git.ListSkipWorktreeFiles, git.go:230; used by SyncMainIndex)
+//     (git.ListSkipWorktreeFiles, used by git.ReconcileMainIndex)
 // ---------------------------------------------------------------------------
 
 // TestCoordSubdirSkipWorktreeSurvivesCommitFromRoot is the control: a plain
@@ -224,11 +224,13 @@ func TestCoordSubdirSkipWorktreeSurvivesCommitFromRoot(t *testing.T) {
 // TestCoordSubdirSkipWorktreeSurvivesCommitFromSubdir asserts that the same
 // commit, issued from a subdirectory, preserves the same flag.
 //
-// commit.go calls git.SyncMainIndex, which collects the flags to restore with
-// `git ls-files -v` (git.go:230). That listing is cwd-scoped, so from sub/ the
-// root-level entry is not collected, `git read-tree HEAD` clears it, and
-// nothing restores it: the flag is silently lost, and the local-only content
-// the operator hid behind it becomes visible to every later tree operation.
+// The commit pipeline reconciles the shared index through
+// git.ReconcileMainIndex, which collects the flags to restore with
+// git.ListSkipWorktreeFiles (`git ls-files -v -z`). That listing is cwd-scoped,
+// so from sub/ the root-level entry is not collected, the reconciliation's
+// `git read-tree HEAD` clears it, and nothing restores it: the flag is silently
+// lost, and the local-only content the operator hid behind it becomes visible
+// to every later tree operation.
 func TestCoordSubdirSkipWorktreeSurvivesCommitFromSubdir(t *testing.T) {
 	dir, sub := coordSubdirRepo(t)
 
@@ -256,8 +258,8 @@ func TestCoordSubdirSkipWorktreeSurvivesCommitFromSubdir(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // B2. tracked-but-gitignored protection across read-tree --reset -u
-//     (git.ListTrackedIgnoredFiles, git.go:248; used by
-//      SyncMainIndexWithWorktree, git.go:333, reached from rewrite_result.go:189)
+//     (git.ListTrackedIgnoredFiles, used by git.SyncMainIndexWithWorktree,
+//      reached from the scrub finalization in rewrite_result.go)
 // ---------------------------------------------------------------------------
 
 // TestCoordSubdirScrubProtectsTrackedIgnoredFromRoot is the control: a scrub
@@ -295,10 +297,10 @@ func TestCoordSubdirScrubProtectsTrackedIgnoredFromRoot(t *testing.T) {
 // TestCoordSubdirScrubProtectsTrackedIgnoredFromSubdir asserts the identical
 // outcome when the scrub is issued from a subdirectory.
 //
-// SyncMainIndexWithWorktree collects the paths to protect with
-// `git ls-files -i -c --exclude-standard` (git.go:248). From sub/ that listing
-// is empty, so the function takes its "no tracked+gitignored files" fast path
-// (git.go:340) and runs `read-tree --reset -u` with no content save/restore and
+// git.SyncMainIndexWithWorktree collects the paths to protect with
+// git.ListTrackedIgnoredFiles (`git ls-files -i -c --exclude-standard`). From
+// sub/ that listing is empty, so the function takes its "no tracked+gitignored
+// files" fast path and runs `read-tree --reset -u` with no content save/restore and
 // no skip-worktree preservation at all -- the local-only file outside the
 // subtree is left to whatever read-tree does to it.
 func TestCoordSubdirScrubProtectsTrackedIgnoredFromSubdir(t *testing.T) {
