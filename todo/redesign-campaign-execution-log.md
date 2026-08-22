@@ -1544,6 +1544,38 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
   (asserts `.git/worktrees/side/safegit` while the fixture names the
   worktree `linked-side`; vacuously true since it was written).
+## Phase 9 checklist pass closure
+
+- All 42 Appendix A rows and every log-recorded Phase 9 row resolved
+  (fixed / verified-true / pre-healed-verified per the healer's ledger);
+  11 commits, one per doc file or coherent cluster; build/vet clean;
+  full suite green twice (after the main.go and coord_cmd.go help
+  edits); zero test pins needed; the generated exit-table block
+  untouched (no registry Meaning changed).
+- LOG CORRECTION (code wins over an earlier entry here): the
+  environment-constraint sentence saying doctor is the recovery path
+  when flock(2) is unavailable was WRONG — doctor's --action fix goes
+  through ReclaimIfStale, which itself needs flock; `safegit unlock` is
+  the unconditional force-release (its own code comment names it the
+  last resort). Docs state unlock as the recovery path; doctor takes the
+  strict reclamation path.
+- Appendix row 12's third claim ("bypass warning on the next mutating
+  command") described behavior that exists NOWHERE in the tree; docs now
+  describe doctor's bypass_detect check only.
+- Ratified unbriefed decisions: hook remove/hook migrate sections added
+  (the Phase-5 row about missing command coverage implied them); the
+  seven passthrough --help strings edited in coord_cmd.go, where row
+  16's text actually lives, not main.go.
+- Handed to the fresh-eyes reader: the commands guide has NO sections
+  for merge-continue / cherry-pick-continue / revert-continue — three
+  commands with rich contracts entirely undocumented there (a
+  completeness gap, not a false claim, hence outside the checklist).
+- Row-1/2 refinements as built: the dry-run row now states what a
+  preview DOES do (quarantine writes outside the repo; reads including
+  network reads still happen); the backup network promise is scoped to
+  backup's own dry run; push's section states --dry-run still
+  ls-remotes.
+
 ## Phase 7 remediation closure — PHASE 7 CLOSED
 
 - All seven items done red-first; eight commits; full -race green; tree
