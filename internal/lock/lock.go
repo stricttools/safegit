@@ -56,6 +56,23 @@ const (
 // the same level. That is the entire deadlock argument: a total order over the
 // two levels, with no cycle to close.
 //
+// One acquisition crosses REPOSITORIES, and it does not close a cycle either.
+// A commit in a submodule (commit, amend, reword, mv, revert, undo, a
+// conclusion) auto-bumps the parent's gitlink by spawning `safegit commit` in
+// the PARENT worktree while still holding the submodule's own operation lock.
+// So a submodule's operation lock can be held while the parent worktree's is
+// acquired -- an edge from child to parent. Nothing ever acquires in the
+// opposite direction: a commit in the parent never reaches into a submodule's
+// operation lock, and the rewrite locks are a disjoint namespace taken strictly
+// inside an operation lock rather than across one. The edge therefore runs one
+// way through the submodule tree and there is no cycle.
+//
+// The consequence an operator meets: two sibling submodules bumping the same
+// parent at the same time SERIALIZE on the parent's operation lock, and the one
+// that waits out lock.acquireTimeoutSeconds fails its bump with
+// exitcode.LockTimeout -- after its own commit has already been made, since the
+// bump happens after it.
+//
 // The one consequence worth stating out loud: a passthrough holds the operation
 // lock for the FULL duration of the git command it wraps, including an
 // interactive `rebase -i`'s editor session. A second safegit process in the same

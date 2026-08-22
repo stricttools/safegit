@@ -98,9 +98,11 @@ const (
 	// operation, or an in-progress git sequencer state, owns the working tree.
 	// Produced by checkout, pull, merge, rebase, reset, bisect, cherry-pick,
 	// revert and backup restore, and by commit (including its --amend and
-	// reword forms) and undo, which refuse outright while git has a merge,
+	// reword forms), mv and undo, which refuse outright while git has a merge,
 	// cherry-pick, revert, rebase or mailbox application in flight -- naming
-	// the operation and the command that ends it.
+	// the operation and the command that ends it. mv asks the question before
+	// the first rename rather than leaving it to the commit pipeline, so a mv
+	// run against a sequencer state moves nothing at all.
 	//
 	// The three conclusion commands -- merge-continue, cherry-pick-continue and
 	// revert-continue -- produce it from the other direction, for the two ways a
@@ -124,7 +126,9 @@ const (
 	//   - the repo-wide rewrite lock: scrub file, scrub match, scrub run,
 	//     author rewrite;
 	//   - the worktree operation lock: checkout, pull, merge, rebase, reset,
-	//     bisect, cherry-pick, revert, commit, commit --amend, reword, undo;
+	//     bisect, cherry-pick, revert, commit, commit --amend, reword, mv, undo,
+	//     and the three conclusion commands -- merge-continue,
+	//     cherry-pick-continue and revert-continue;
 	//   - a per-ref CAS lock: undo, and the commit pipeline's own acquisition
 	//     inside the operation lock, which commit, commit --amend and reword
 	//     reach through pipelineExitCode.
