@@ -56,9 +56,10 @@ type intakeEntry struct {
 	untrack bool
 }
 
-// namedPath records one explicitly named file argument, so a second argument
-// resolving to the same canonical path can be refused by the spelling the
-// caller actually typed rather than by the path both happen to mean.
+// namedPath records one explicitly named argument -- a file, or a directory to
+// expand -- so a second argument resolving to the same canonical path can be
+// refused by the spelling the caller actually typed rather than by the path
+// both happen to mean.
 type namedPath struct {
 	arg   string
 	hunks bool
@@ -435,15 +436,24 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 			}
 		}
 
+		if prev, clash := named[rel]; clash && (prev.hunks || spec.Hunks != nil) {
+			// Two arguments naming one path, saying different things about it.
+			// Without this the second entry is silently dropped by the dedup
+			// below, and a hunk selection the caller stated turns into the
+			// whole file.
+			//
+			// A DIRECTORY takes part too, which is why the check is here rather
+			// than inside the single-path branch below. `--hunks dir:1` calls
+			// its path a file -- a hunk selection is a statement about one
+			// file's content -- so the pairing was invisible to a check that
+			// only ran for arguments the expansion had already ruled out, and
+			// the contradiction was discovered several steps later by trying to
+			// read hunks out of a directory.
+			return nil, conflictingSpellings(rel, prev, spec.Path, spec.Hunks != nil)
+		}
+		named[rel] = namedPath{arg: spec.Path, hunks: spec.Hunks != nil}
+
 		if !isDir {
-			if prev, clash := named[rel]; clash && (prev.hunks || spec.Hunks != nil) {
-				// Two arguments naming one file, saying different things about
-				// it. Without this the second entry is silently dropped by the
-				// dedup below, and a hunk selection the caller stated turns
-				// into the whole file.
-				return nil, conflictingSpellings(rel, prev, spec.Path, spec.Hunks != nil)
-			}
-			named[rel] = namedPath{arg: spec.Path, hunks: spec.Hunks != nil}
 			if err := p.validateNamedPath(ctx, repoRoot, rel, baseRev, spec); err != nil {
 				return nil, err
 			}

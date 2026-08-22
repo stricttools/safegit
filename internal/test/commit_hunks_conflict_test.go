@@ -131,6 +131,74 @@ func TestAmendSamePathDifferentSpellingIsRefused(t *testing.T) {
 		"commit", "--amend", "-m", "both ways", "--hunks", "a.go:1", "--", "./a.go")
 }
 
+// TestCommitDirectoryWholeAndInHunksIsRefused: the same contradiction with a
+// DIRECTORY on the positional side.
+//
+// A --hunks element declares its path a file (a hunk selection is a statement
+// about one file's content), so the conflict check used to skip the pairing
+// entirely: the directory argument went down the expansion branch, recorded
+// nothing, and the run failed several steps later trying to read hunks out of a
+// directory. It is the same contradiction as every other pairing in this file
+// and gets the same refusal.
+func TestCommitDirectoryWholeAndInHunksIsRefused(t *testing.T) {
+	dir, _ := hunksConflictRepo(t)
+
+	stderr := assertConflictRefused(t, dir, dir,
+		"commit", "-m", "a directory and a hunk selection of it", "--hunks", "sub:1", "--", "sub")
+	if !strings.Contains(stderr, "sub") || !strings.Contains(stderr, "--hunks") {
+		t.Errorf("the refusal must name the path and the flag it clashes with; stderr: %s", stderr)
+	}
+	if strings.Contains(stderr, "no hunks found") {
+		t.Errorf("the contradiction must be refused at intake, not discovered by trying to stage it; stderr: %s", stderr)
+	}
+
+	// The other argument order, and a spelling that has to be canonicalized
+	// before the two can be seen as one path.
+	assertConflictRefused(t, dir, dir,
+		"commit", "-m", "the other way round", "--hunks", "./sub:1", "--", "sub")
+}
+
+// stagingLine returns the line of stderr that reports a staging failure, so an
+// assertion about what that message names cannot be satisfied (or defeated) by
+// some other line of output.
+func stagingLine(t *testing.T, stderr, needle string) string {
+	t.Helper()
+	for _, line := range strings.Split(stderr, "\n") {
+		if strings.Contains(line, needle) {
+			return line
+		}
+	}
+	t.Fatalf("no line of stderr contains %q:\n%s", needle, stderr)
+	return ""
+}
+
+// TestStagingFailureNamesTheRepoRelativePath: every path safegit says back to
+// the caller is repo-relative and canonical -- that is the spelling the
+// arguments, the payload and the tree all use. The staging errors were the two
+// that printed the absolute path instead, which names a file the caller never
+// typed and could not have.
+func TestStagingFailureNamesTheRepoRelativePath(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFileAt(t, filepath.Join(dir, "sub", "blob.bin"), "\x00\x01\x02\x00\xff\xfe")
+	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "seed", "--", "sub/blob.bin"); code != 0 {
+		t.Fatalf("seed commit failed (%d): %s", code, stderr)
+	}
+	testutil.WriteFileAt(t, filepath.Join(dir, "sub", "blob.bin"), "\x00\x01\x02\x00\xff\x00\x42")
+
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "hunks of a binary file", "--hunks", "sub/blob.bin:1")
+	if code != exitcode.BinaryHunkSpec {
+		t.Fatalf("a hunk spec on a binary file exited %d, want %d; stderr: %s", code, exitcode.BinaryHunkSpec, stderr)
+	}
+
+	line := stagingLine(t, stderr, "staging hunks of")
+	if !strings.Contains(line, "sub/blob.bin") {
+		t.Errorf("the failure must name the path repo-relative; got: %s", line)
+	}
+	if strings.Contains(line, dir) {
+		t.Errorf("the failure printed the absolute path, which is not a spelling the caller used; got: %s", line)
+	}
+}
+
 // TestCommitDistinctPathsSpelledDifferentlyAreNotAConflict is the control: the
 // check is about one file named twice, not about a command line carrying both a
 // positional and a --hunks element. Two different files are two different

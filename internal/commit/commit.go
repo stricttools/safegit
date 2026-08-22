@@ -61,11 +61,16 @@ var ErrTreeUnchanged = errors.New("the commit's tree is identical to its parent'
 // and it exits exitcode.BinaryHunkSpec so a caller can act on it. The returned
 // error WRAPS the CommitError rather than being one, which is why every reader
 // of these errors uses errors.As.
-func stagingHunksError(absPath string, err error) error {
+//
+// The path it names is the REPO-RELATIVE canonical one, which is what the
+// arguments, the payload and the tree all speak in. It used to print the
+// absolute path the staging call happens to take, naming a file the caller
+// never typed and could not have.
+func stagingHunksError(relPath string, err error) error {
 	if errors.Is(err, stage.ErrBinaryFile) {
 		err = &CommitError{Code: exitcode.BinaryHunkSpec, Message: err.Error(), Err: err}
 	}
-	return fmt.Errorf("staging hunks of %s: %w", absPath, err)
+	return fmt.Errorf("staging hunks of %s: %w", relPath, err)
 }
 
 // Pipeline orchestrates the full commit flow.
@@ -695,15 +700,18 @@ func (p *Pipeline) stageAll(ctx context.Context, indexPath, repoRoot string, fil
 			}
 			continue
 		}
+		// The staging calls take the absolute path because they reach for the
+		// file; the MESSAGES take the repo-relative one, because that is the
+		// spelling every other thing safegit says back to the caller uses.
 		absPath := git.Anchor(repoRoot, entry.path)
 		if entry.hunks != nil {
 			if err := stage.StageHunks(ctx, indexPath, absPath, entry.hunks); err != nil {
-				return stagingHunksError(absPath, err)
+				return stagingHunksError(entry.path, err)
 			}
 			continue
 		}
 		if err := p.stageFile(ctx, indexPath, absPath); err != nil {
-			return fmt.Errorf("staging %s: %w", absPath, err)
+			return fmt.Errorf("staging %s: %w", entry.path, err)
 		}
 	}
 	return nil
