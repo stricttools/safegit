@@ -101,6 +101,84 @@ func TestMovedRetractRefusesARecordAlreadyRetracted(t *testing.T) {
 	assertNoCommitHappened(t, dir, "retract it")
 }
 
+// A refusal names EVERY bad id, not just the first. A caller who typed three
+// ids and got two wrong should be told both verdicts in one go rather than
+// discover them one command at a time -- and the two verdicts are different
+// verdicts, so naming only one would also hide which kind of wrong the other
+// id is.
+func TestMovedRetractNamesEveryBadIdInOneRefusal(t *testing.T) {
+	dir, retractable := seedRetractable(t)
+	const absent = "01BX5ZZKBKACTAV9WEVGEMMVRZ"
+
+	// A second record, retracted straight away, so one of the ids in the
+	// refusal below is wrong in the "already retracted" way rather than the
+	// "names nothing" way.
+	if _, stderr, code := runSafegit(t, dir, "mv", "-m", "move b", "b.txt -> moved-b.txt"); code != 0 {
+		t.Fatalf("second mv failed (code %d): %s", code, stderr)
+	}
+	alreadyRetracted := movedRecordsIn(t, commitMessageOf(t, dir, "HEAD"))[0][0]
+	testutil.WriteFile(t, dir, "c.txt", "c\n")
+	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "retract the second",
+		"--moved-retract", alreadyRetracted, "--", "c.txt"); code != 0 {
+		t.Fatalf("first retraction failed (code %d): %s", code, stderr)
+	}
+
+	// One good id and two bad ones: the good one buys nothing, and both bad
+	// ones are named.
+	testutil.WriteFile(t, dir, "c.txt", "c again\n")
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "retract three things",
+		"--moved-retract", retractable,
+		"--moved-retract", absent,
+		"--moved-retract", alreadyRetracted,
+		"--", "c.txt")
+	if code != exitcode.MoveNotBorneOut {
+		t.Fatalf("exit %d, want %d (MoveNotBorneOut): %s", code, exitcode.MoveNotBorneOut, stderr)
+	}
+	for _, id := range []string{absent, alreadyRetracted} {
+		if !strings.Contains(stderr, id) {
+			t.Errorf("the refusal does not name %s: %s", id, stderr)
+		}
+	}
+	if !strings.Contains(stderr, "no move record") {
+		t.Errorf("the refusal does not carry the absent-id verdict: %s", stderr)
+	}
+	if !strings.Contains(stderr, "already retracted") {
+		t.Errorf("the refusal does not carry the already-retracted verdict: %s", stderr)
+	}
+	if !strings.Contains(stderr, "2 of 3") {
+		t.Errorf("the refusal does not count two bad ids out of three: %s", stderr)
+	}
+	assertNoCommitHappened(t, dir, "retract the second")
+}
+
+// A record the commit BEING AMENDED declared itself is not retractable in that
+// same amend. The declarations and the retractions of an amend are judged
+// against the FIRST PARENT of the tip being replaced -- that is the step the
+// amended commit describes -- and the record is not in that history yet. An
+// amend that wants the record gone drops it by not declaring it, which is what
+// an amend is for.
+func TestAmendCannotRetractARecordTheAmendedCommitDeclared(t *testing.T) {
+	dir, id := seedRetractable(t)
+	tipBefore := testutil.Rev(t, dir, "HEAD")
+
+	_, stderr, code := runSafegit(t, dir, "commit", "--amend", "--moved-retract", id)
+	if code != exitcode.MoveNotBorneOut {
+		t.Fatalf("exit %d, want %d (MoveNotBorneOut): %s", code, exitcode.MoveNotBorneOut, stderr)
+	}
+	if !strings.Contains(stderr, id) {
+		t.Errorf("the refusal does not name the id: %s", stderr)
+	}
+	if !strings.Contains(stderr, "no move record") {
+		t.Errorf("the refusal does not say the id names nothing in the base: %s", stderr)
+	}
+	if got := testutil.Rev(t, dir, "HEAD"); got != tipBefore {
+		t.Errorf("the refused amend replaced the tip (%s -> %s)", tipBefore, got)
+	}
+	if strings.Contains(commitMessageOf(t, dir, "HEAD"), "Moved-Retract:") {
+		t.Error("the refused amend wrote the retraction anyway")
+	}
+}
+
 func TestAmendAcceptsMovedRetract(t *testing.T) {
 	dir, id := seedRetractable(t)
 
