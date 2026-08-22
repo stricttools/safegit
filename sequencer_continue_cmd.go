@@ -142,6 +142,14 @@ func (op continueOp) report(flags globalFlags, out conclusionResult) {
 		fmt.Printf(" %d file(s) would be committed, %d parent(s), %d declared resolution(s)\n",
 			len(out.commit.Files), len(out.commit.Parents), len(out.declared))
 		fmt.Printf(" the %s state files would then be removed\n", op.kind)
+		if written, removed := worktreeEffects(out.declared); len(written)+len(removed) > 0 {
+			if len(written) > 0 {
+				fmt.Printf(" %d working-tree file(s) would be overwritten with the resolved content: %s\n", len(written), joinPaths(written))
+			}
+			if len(removed) > 0 {
+				fmt.Printf(" %d working-tree file(s) would be deleted: %s\n", len(removed), joinPaths(removed))
+			}
+		}
 		return
 	}
 
@@ -150,29 +158,39 @@ func (op continueOp) report(flags globalFlags, out conclusionResult) {
 	if out.author != nil {
 		fmt.Printf(" author preserved: %s <%s>\n", out.author.Name, out.author.Email)
 	}
-	// The working tree is never written by a conclusion: `ours`, `theirs` and
-	// `delete` all resolve from the INDEX, so the file on disk still holds
-	// whatever it held -- conflict markers included -- and git reports it
-	// modified straight after the conclusion. Saying so is not optional: an
-	// operator who does not know it commits the markers with their next
-	// `safegit commit`.
-	if fromIndex := indexResolvedPaths(out.declared); len(fromIndex) > 0 {
-		fmt.Printf(" %d path(s) resolved from the index, not from disk: %s\n", len(fromIndex), joinPaths(fromIndex))
-		fmt.Printf("   the working-tree file(s) are unchanged and may still carry conflict markers; `git diff` shows the difference\n")
+	// What the conclusion did to the working tree, stated because it wrote
+	// there: `ours` and `theirs` replace the file on disk with the content that
+	// was committed (git's own `checkout --ours`), and `delete` removes it (git's
+	// own `rm`). A `worktree` resolution needs no line -- the file on disk was
+	// the source.
+	written, removed := worktreeEffects(out.declared)
+	if len(written) > 0 {
+		fmt.Printf(" %d working-tree file(s) written with the resolved content: %s\n", len(written), joinPaths(written))
+	}
+	if len(removed) > 0 {
+		fmt.Printf(" %d working-tree file(s) deleted: %s\n", len(removed), joinPaths(removed))
 	}
 }
 
-// indexResolvedPaths lists the paths whose committed content came from the
-// index rather than from the working tree, which are exactly the ones whose
-// file on disk the conclusion left behind.
-func indexResolvedPaths(declared []resolution) []string {
-	var out []string
+// worktreeEffects splits the declared resolutions into the paths whose
+// working-tree file the conclusion overwrites and the ones whose file it
+// deletes. A `worktree` resolution appears in neither: its file on disk is
+// where the committed content came from.
+//
+// The split is by KEYWORD, not by what the stages hold, so it is the same
+// answer before the commit (a preview) and after it (the report). A stage the
+// conflict does not have turns an overwrite into a deletion on disk, which the
+// listing already says and which this line does not try to predict.
+func worktreeEffects(declared []resolution) (written, removed []string) {
 	for _, r := range declared {
-		if r.Choice != resolveWorktree {
-			out = append(out, r.Path)
+		switch r.Choice {
+		case resolveOurs, resolveTheirs:
+			written = append(written, r.Path)
+		case resolveDelete:
+			removed = append(removed, r.Path)
 		}
 	}
-	return out
+	return written, removed
 }
 
 // messageSubject renders something to head a preview line with. A preview has
@@ -210,7 +228,8 @@ func continueFlags(op continueOp, theirsHelp string) []strictcli.Flag {
 		strictcli.StringFlag("resolve",
 			"resolve one conflicted path, as 'path=ours|theirs|worktree|delete' (repeatable, once per path; the split is on the last '=', so a path containing one stays intact). "+
 				"The keywords are defined by INDEX STAGE: ours is the stage-2 blob -- "+op.oursText+"; theirs is the stage-3 blob -- "+theirsHelp+"; "+
-				"worktree is the file's current content on disk; delete leaves the path out of the commit without touching the file. "+
+				"worktree is the file's current content on disk; delete leaves the path out of the commit. "+
+				"ours and theirs also WRITE the chosen content into the working tree (git's own checkout --ours), and delete removes the file from disk (git's own rm). "+
 				"Paths are repository-relative. Omitted, every conflicted path is unresolved, which is a refusal listing them",
 			strictcli.Repeatable(), strictcli.Unique(false), strictcli.Optional(), strictcli.ValidateFn(validateResolveSelection)),
 		strictcli.StringFlag("resolve-file",
