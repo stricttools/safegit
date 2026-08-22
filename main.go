@@ -252,7 +252,7 @@ func newApp() *strictcli.App {
 		case "cherry-pick":
 			return runGuardedPassthrough(gf, "cherry-pick", args)
 		case "revert":
-			return runGuardedPassthrough(gf, "revert", args)
+			return runRevert(gf, args)
 		}
 		return exitcode.General
 	}

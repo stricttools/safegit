@@ -263,6 +263,10 @@ func runMerge(flags globalFlags, args []string) int {
 	}
 	defer release()
 
+	if code := refuseOwnedConclusion(flags, gitDir, "merge", args); code != 0 {
+		return code
+	}
+
 	if code := coordGuard(flags, gitDir, "merge"); code != 0 {
 		return code
 	}
@@ -467,6 +471,10 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 		return code
 	}
 	defer release()
+
+	if code := refuseOwnedConclusion(flags, gitDir, gitCmd, args); code != 0 {
+		return code
+	}
 
 	if code := coordGuard(flags, gitDir, gitCmd); code != 0 {
 		return code
