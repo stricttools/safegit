@@ -490,6 +490,7 @@ safegit --json scan --pattern "token" --entire-history
 
 - **Read-only**: Scan never writes any objects or modifies history.
 - **Full object store coverage**: Scans all reachable blobs, commit messages, tag annotations, and non-object files (working tree, git config, hooks).
+- **Non-object matches say which coordinate system their path is in.** A match found inside git's OWN state -- `.git/config`, `COMMIT_EDITMSG`, the hook directories, safegit's own `.git/safegit` (everything there except the rewrite journal) -- carries `in_git_dir: true` in the payload and a path relative to the git directory. Every other path is repository-relative. The one exception is a location git resolves OUTSIDE the git directory, which today means a redirected `core.hooksPath`: still git's state, so the marker is still true, but the path stays absolute, because rendered relative it would name a file that is not there.
 - **Binary skip**: Binary blobs (containing NUL bytes in the first 8 KB) are automatically skipped.
 - **Trailer separation**: When `--target` includes `trailers`, commit matches are split into body-only and trailer-only subsets.
 
