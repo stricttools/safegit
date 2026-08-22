@@ -20,15 +20,16 @@ import (
 // `safegit revert` of a SINGLE commit, restructured.
 //
 // As a plain passthrough, git authored the commit: it carried none of safegit's
-// trailers, none of safegit's commit-time machinery ran, the author was
-// whoever ran the command rather than the commit being reverted, and git left
-// its AUTO_MERGE behind.
+// trailers, none of safegit's commit-time machinery ran, and git left its
+// AUTO_MERGE behind.
 //
 // All of it goes away by splitting the operation where git itself splits it:
 // `git revert --no-commit` COMPUTES the inverse patch and stages it, and the
 // conclusion engine (the same one behind `safegit revert-continue`) turns that
 // staged result into a commit -- pipeline-authored, trailers injected,
-// commit-msg hook run, author preserved.
+// commit-msg hook run. The IDENTITY is deliberately unchanged from the
+// passthrough: a revert is a new change of the reverter's own, so it records
+// the operator, exactly as git's own revert does.
 //
 // The state cleanup is not a nicety of that split but a requirement of it. A
 // plumbing conclusion of `revert --no-commit` leaves REVERT_HEAD, MERGE_MSG and
@@ -192,8 +193,8 @@ func runRestructuredRevert(flags globalFlags, args []string) int {
 // into a safegit commit, through the same engine `safegit revert-continue` runs.
 //
 // It reads the state git just wrote rather than anything it was told: the
-// commit being reverted comes from REVERT_HEAD (so the author is preserved from
-// the right commit) and the message from MERGE_MSG. Nothing here is a second
+// commit being reverted comes from REVERT_HEAD (so the report names the right
+// commit) and the message from MERGE_MSG. Nothing here is a second
 // implementation of the conclusion -- the resolution vocabulary, the marker
 // verification and the state cleanup are the ones in sequencer_continue.go.
 func concludeComputedRevert(flags globalFlags, gitDir, sgDir string) int {
@@ -240,7 +241,11 @@ func concludeComputedRevert(flags globalFlags, gitDir, sgDir string) int {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
 	}
-	author, err := sequencer.SourceAuthor(ctx, state)
+	// A revert authors as the OPERATOR, which is git's own revert semantics and
+	// therefore what the restructured form has to reproduce: nothing is pinned,
+	// and the identity reported is the one git will use. Same resolution as
+	// `safegit revert-continue`, from the same one place.
+	pinned, recorded, err := op.conclusionAuthorship(ctx, state)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
@@ -256,7 +261,7 @@ func concludeComputedRevert(flags globalFlags, gitDir, sgDir string) int {
 	result, err := p.Execute(ctx, commit.CommitRequest{
 		Message:   message,
 		IndexBase: commit.IndexBaseSharedIndex,
-		Author:    &author,
+		Author:    pinned,
 		OplogOp:   op.command,
 		Sequencer: &coord.SequencerContext{Kind: sequencer.KindRevert},
 	})
@@ -267,7 +272,7 @@ func concludeComputedRevert(flags globalFlags, gitDir, sgDir string) int {
 		die(pipelineExitCode(err), err.Error())
 	}
 
-	out := conclusionResult{state: state, commit: result, declared: declared, author: &author}
+	out := conclusionResult{state: state, commit: result, declared: declared, author: recorded}
 	if err := finishConclusion(ctx, gitDir, state, result, nil, sides, declared); err != nil {
 		die(exitcode.General, err.Error())
 	}
