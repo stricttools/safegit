@@ -347,6 +347,29 @@ existing entries are never rewritten.
 - testdata/exit-sites.txt needs one regeneration after Phase 8's
   commits (queued for the Phase 4 implementor's closeout).
 
+## Phase 8 remediation ratifications
+
+- All eight audit items done with red-first proof; the false-lease path
+  from a failed observation reproduced exactly as predicted before the
+  fix. remoteReadError routes ALL remote-observation failures (single
+  and bulk) to exit 40 — one unreadable remote, one answer.
+- The transport probe found two MORE dead patterns beyond the audit's
+  list ("failed to connect" and "broken pipe" never matched curl's
+  "Failed to connect to" / strerror's "Broken pipe" — case-sensitive
+  Contains). Every pattern is now a multi-word phrase (ref names cannot
+  contain spaces), attributed to its source layer, with the captured
+  real samples living in the test fixture as the re-derivation
+  authority. Two patterns (early EOF, remote end hung up) are marked as
+  not-locally-probed.
+- The local-refs-moved retry refusal exits 40 (same family as the two
+  existing retry-window refusals) and is UNCONDITIONAL (a moved local
+  ref is a problem whether or not hooks ran; the invariant is "the push
+  set and the hooks' input are decided once").
+- gitShim generalized to record full argv per interception (needed to
+  assert re-pinned leases); PushFailed's Meaning rewritten (it fires
+  before any push in the observation-failure arms) with the table
+  regenerated.
+
 ## Ratified Phase 4 (P4a: 4.1/4.2) decisions
 
 - Exit 30 RewriteRefused (Tier A, nothing moved) and 31
