@@ -57,6 +57,7 @@ Use `safegit commit` instead of `git add` + `git commit` whenever multiple sessi
 | `--trailer` | | optional | Add a key-value trailer line to the commit message (repeatable) |
 | `--hunks` | | optional; omitted means every named file is committed whole | Commit only the selected hunks of one file, as `path:1,3` or `path:2-4`; repeatable, once per path |
 | `--untrack` | | optional; omitted means nothing is untracked | Stop tracking a path, leaving the file on disk: the commit records its removal from the index (repeatable) |
+| `--moved` | | optional; omitted means the commit declares no moves | Declare that content moved, as `'old -> new'` (repeatable). End BOTH paths with a slash for a whole subtree. The old path must be tracked in the commit's parent and gone from disk, and the new one must exist |
 
 ### Arguments
 
@@ -109,6 +110,16 @@ safegit commit -m "add notes" -- 'sprint:1'
 # Stop tracking a build directory and record the .gitignore pattern in one commit
 safegit commit -m "stop tracking build output" --untrack dist/bundle.js -- .gitignore
 
+# Declare a move: both halves are named as ordinary paths, and the record goes
+# into the commit message
+safegit commit -m "move the parser" --moved 'src/parse.go -> internal/parse/parse.go' -- src/parse.go internal/parse/parse.go
+
+# Declare a whole subtree move with one record (both sides end in a slash)
+safegit commit -m "move src to lib" --moved 'src/ -> lib/' -- src lib
+
+# Add the record to a move that was already committed without one
+safegit commit --amend --moved 'src/parse.go -> internal/parse/parse.go'
+
 # Allow an empty commit (no file changes)
 safegit commit --allow-empty -m "trigger CI rebuild"
 ```
@@ -119,7 +130,7 @@ safegit commit --allow-empty -m "trigger CI rebuild"
 - **CAS ref updates**: Branch refs are updated using `git update-ref` with the expected old value. If another session committed between staging and ref update, the CAS fails and the operation retries (up to `commit.casMaxAttempts`, default 5).
 - **Per-ref locking**: A lock file is acquired for the target ref before the CAS update, with PID liveness checks to detect and recover from stale locks left by crashed processes.
 - **Oplog recording**: Every commit, amend, and reword is logged to an append-only operation log, enabling `safegit undo`.
-- **Rename detection**: When a file is renamed (old path deleted, new path created), safegit auto-stages the deletion of the old path.
+- **Declared moves, never detected**: safegit never infers a rename from file contents and never stages a path the caller did not name. A move is stated with `--moved 'old -> new'`, checked against the repository (the old path tracked in the commit's parent and gone from disk, the new one present), and written into the commit message as a `Moved:` record with its own identifier. Both halves of the move are still ordinary arguments -- committing the deletion of the old path is naming it. A record that turns out to be wrong is corrected by RETRACTING it (`Moved-Retract: <id>` in a later commit), never by editing it.
 
 ## undo
 
@@ -1255,6 +1266,7 @@ would commit still holds a complete conflict region) after git has already run.
 | 16 | A pre-commit or commit-msg hook refused the commit |
 | 17 | A conclusion's declared resolutions do not match the conflicted paths in the index |
 | 18 | A conclusion's content still holds a complete conflict region |
+| 19 | A declared move (--moved) is contradicted by the repository |
 | 20 | Pre-pre-push hook failed |
 | 21 | Pre-pre-push hook timed out |
 | 22 | The remote backup slot holds work missing from the local history |
