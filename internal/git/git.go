@@ -658,6 +658,34 @@ type AuthorInfo struct {
 	Date  string // raw git date format: "1234567890 +0200"
 }
 
+// FirstParentRange lists the commits a branch would LOSE by moving from `to`
+// back to `from`, newest first. An empty `from` means the branch would lose
+// everything reachable from `to`, which is what deleting the ref does.
+//
+// The walk is FIRST-PARENT, and that is the whole definition rather than a
+// detail of it. A merge commit's second parent is the side that was merged IN:
+// those commits were never made by the branch, and moving the branch back to
+// the merge's first parent does not undo them -- it undoes the merge. Walking
+// every parent would report a whole merged-in branch as commits the move
+// discards, which is a different and untrue statement.
+func FirstParentRange(ctx context.Context, from, to string) ([]string, error) {
+	spec := to
+	if from != "" {
+		spec = from + ".." + to
+	}
+	out, _, err := Run(ctx, "rev-list", "--first-parent", spec)
+	if err != nil {
+		return nil, err
+	}
+	var commits []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			commits = append(commits, line)
+		}
+	}
+	return commits, nil
+}
+
 // ConfiguredAuthor is the identity git itself would record as the AUTHOR of a
 // commit created right now: `git var GIT_AUTHOR_IDENT`, which is git's own
 // resolution of the environment, the repository config and the global config.
