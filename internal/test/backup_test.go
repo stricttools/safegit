@@ -194,6 +194,52 @@ func TestBackupOverwritesDivergedSlotWithFlag(t *testing.T) {
 	}
 }
 
+// TestBackupRefusesWhenTheSlotMovesInsideTheWindow separates the backup's two
+// refusals, which used to be one.
+//
+// BackupDiverged is the ANCESTRY refusal: safegit read the slot, found commits
+// the local history does not contain, and stopped before pushing. This is the
+// other one -- the slot was fine when safegit read it and moved before the push
+// arrived, which is a concurrent backup of the same branch from another machine.
+// The lease is what refuses it, and the lease is the same mechanism `push` uses,
+// so it gets the same exit code rather than being flattened into "backup push
+// failed" with a bare exit 40 and none of git's reasoning.
+//
+// The shim moves the slot in exactly that window, so the race is deterministic.
+func TestBackupRefusesWhenTheSlotMovesInsideTheWindow(t *testing.T) {
+	dir, remoteDir := newRepoWithRemote(t)
+	commitFileIn(t, dir, "one.txt", "one\n", "first")
+	if _, stderr, code := runSafegit(t, dir, "backup", "backup", "origin"); code != 0 {
+		t.Fatalf("seeding the slot failed (code %d): %s", code, stderr)
+	}
+	// A commit from "another machine", parked on a slot of its own so its
+	// objects are already on the remote when the shim points main's slot at it.
+	foreign := pushForeignBackup(t, remoteDir, "elsewhere")
+
+	commitFileIn(t, dir, "two.txt", "two\n", "second")
+
+	env, pushes := gitShim(t, "push",
+		`"$REALGIT" --git-dir=`+remoteDir+` update-ref refs/backups/main `+foreign)
+
+	_, stderr, code := runSafegitEnv(t, dir, env, "backup", "backup", "origin")
+	if code != exitcode.PushLeaseRejected {
+		t.Errorf("a slot that moved under the lease must exit %d (PushLeaseRejected), got %d; stderr: %s",
+			exitcode.PushLeaseRejected, code, stderr)
+	}
+	if code == exitcode.BackupDiverged {
+		t.Error("BackupDiverged is the ancestry refusal, decided before the push; this refusal came from the lease")
+	}
+	if !strings.Contains(stderr, "backup") || !strings.Contains(stderr, "refs/backups/main") {
+		t.Errorf("the refusal must say which slot moved and that it was a backup; stderr: %s", stderr)
+	}
+	if got := remoteRefSHA(t, remoteDir, "refs/backups/main"); got != foreign {
+		t.Errorf("the refused backup overwrote the other machine's slot: %s, want %s", got, foreign)
+	}
+	if n := len(pushes()); n != 1 {
+		t.Errorf("a lease rejection is terminal; %d pushes were attempted", n)
+	}
+}
+
 // TestBackupSecondBackupFastForwards: re-backing up the same branch after more
 // commits replaces the slot without needing any override.
 func TestBackupSecondBackupFastForwards(t *testing.T) {

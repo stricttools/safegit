@@ -199,8 +199,20 @@ const (
 	// match, scrub run and author rewrite.
 	RewriteIncomplete = 31
 
-	// PushFailed means `git push` itself failed after safegit's retry policy
-	// was exhausted. Produced by push and by `backup backup`.
+	// PushFailed means the push did not get through. It covers `git push`
+	// itself failing after safegit's retry policy was exhausted, and the three
+	// ways the window around a push can defeat it:
+	//
+	//   - the remote could not be OBSERVED, before the first attempt or when
+	//     re-reading it before a retry. safegit pins --force-with-lease to the
+	//     SHA it observed, so an unreadable remote is not an answer it may
+	//     substitute a guess for;
+	//   - the re-read found no refs to push at all;
+	//   - the re-read found a LOCAL ref at a SHA the pre-pre-push hooks never
+	//     saw. safegit refuses rather than publish un-validated content, and it
+	//     does not re-run the hooks mid-retry.
+	//
+	// Produced by push and by `backup backup`.
 	PushFailed = 40
 
 	// PushLeaseRejected means git refused the push because a --force-with-lease
@@ -211,9 +223,13 @@ const (
 	// look at what arrived, and decide again. It is a separate code from
 	// PushFailed because the two ask for different things: PushFailed says the
 	// push did not get through, this says it got through and was refused.
-	// Produced by push, which is the only command that pins leases from
-	// observations it took itself (`backup backup` pins one too, but its slot is
-	// tool-owned and its refusal is BackupDiverged).
+	//
+	// Produced by push and by `backup backup`, the two commands that pin leases
+	// from observations they took themselves. For a backup it means another
+	// machine wrote the same branch's slot inside that window. It is distinct
+	// from BackupDiverged, which is the ANCESTRY refusal: that one is decided
+	// from a slot safegit read and found to hold unfamiliar commits, and nothing
+	// is pushed at all.
 	PushLeaseRejected = 41
 
 	// Internal marks an invariant safegit believes cannot be violated -- a
@@ -258,7 +274,7 @@ func All() []Entry {
 		{BackupNoSlot, "BackupNoSlot", "The branch has no backup slot on the remote"},
 		{RewriteRefused, "RewriteRefused", "A history rewrite was refused before any ref moved (nothing changed)"},
 		{RewriteIncomplete, "RewriteIncomplete", "A history rewrite stands, but post-rewrite verification found residue or skipped the working-tree sync"},
-		{PushFailed, "PushFailed", "Git push failed"},
+		{PushFailed, "PushFailed", "The push did not get through: git push failed, or the refs could not be safely re-read around it"},
 		{PushLeaseRejected, "PushLeaseRejected", "The remote ref moved after safegit observed it, so the --force-with-lease expectation no longer matched"},
 		{Internal, "Internal", "Internal invariant violated (a bug)"},
 	}
