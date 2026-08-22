@@ -47,7 +47,23 @@ The following git operations are forbidden in multi-session worktrees because th
 - `git stash` (hides working tree state from other sessions)
 - `git restore` / `git checkout -- <file>` (destroys uncommitted work from other sessions)
 
-safegit provides guarded passthroughs for `checkout`, `pull`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick`, and `revert`. Each takes the worktree operation lock for the whole operation and then checks for uncommitted changes before handing the arguments to git.
+safegit provides guarded passthroughs for `checkout`, `pull`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick`, and `revert`. Each takes the worktree operation lock for the whole operation before handing the arguments to git. The uncommitted-work check then runs for all of them except `reset` (only `--hard`, the only form that mutates the working tree) and `bisect` (only the tree-moving subcommands: `good`, `bad`, `old`, `new`, `reset`, `start`).
+
+`revert` of a SINGLE commit is not a plain passthrough: `git revert --no-commit` computes the inverse patch and safegit's own pipeline commits it, so the commit carries safegit's trailers and `safegit undo` reverses it. Reverting more than one commit is git's sequencer and git authors those commits.
+
+### Concluding an operation git stopped
+
+When git parks a merge, cherry-pick or revert on a conflict, safegit -- not git -- finishes it:
+
+| State | Conclude with | Abandon with |
+|-------|---------------|--------------|
+| merge in progress | `safegit merge-continue` | `git merge --abort` |
+| cherry-pick in progress | `safegit cherry-pick-continue` | `git cherry-pick --abort` |
+| revert in progress | `safegit revert-continue` | `git revert --abort` |
+
+`safegit merge --continue`, `safegit cherry-pick --continue` and `safegit revert --continue` are refused with exit 5 and name the command above; a rebase's and a mailbox application's `--continue` stay git's own. Every conflicted path is declared with `--resolve 'path=ours|theirs|worktree|delete'` (or in a `--resolve-file` TOML), and a conclusion refuses rather than guessing: exit 17 when the declared paths are not exactly the conflicted ones, exit 18 when the content it would commit still holds a conflict block. See the Commands Guide for the full surface.
+
+For automation, two properties are the ones to design around. First, the conclusion is non-interactive by construction -- there is no editor anywhere in it, and the message defaults to git's own draft with its comment block stripped. Second, concluding a QUEUED cherry-pick or revert (more than one commit) is DELEGATED to git's own `--continue`: those commits are git's, so they carry none of safegit's trailers, `safegit undo` will not reverse them, and `-m`, `--trailer` and `--dry-run` are refused rather than silently ignored.
 
 ## rlsbl release workflow
 
@@ -178,8 +194,10 @@ The `--remap-shas-in` flag (available on `scrub file`, `scrub match`, and `scrub
 
 ```
 safegit scrub match --pattern "SECRET_KEY" --replace "REDACTED" \
-  --remap-shas-in ".rlsbl/changes/*.jsonl" --reason "leaked API key"
+  --remap-shas-in ".rlsbl/changes/*.jsonl" --reason "leaked API key" --entire-history
 ```
+
+The range is a required choice on all three: `--entire-history` or `--from <sha>`, never a default.
 
 ## Environment variables
 
@@ -233,6 +251,7 @@ When safegit detects it is running inside a git submodule, two additional behavi
   "exit_code": 0,
   "payload": {"version": 1, "dry_run": true, "file": "secret.txt", "commit_count": 3},
   "dry_run": true,
+  "writes": null,
   "preview": [
     {"seq": 1, "verb": "run", "kind": "proc_mutate", "recorded": true,
      "detail": "git update-ref refs/heads/main <rewritten> 9e46d1bb"}
@@ -243,6 +262,8 @@ When safegit detects it is running inside a git submodule, two additional behavi
 ```
 
 Parse the whole stream: there is no trailing would-do log to cut off, and no second document to skip.
+
+Two members are the framework's and are the same on every safegit command. `writes` is the write set of a command declaring an update contract; safegit declares none, so it is always `null` -- present, never absent. `preview` is the effect log, and it is populated in BOTH modes: on a real run each record carries `"recorded": false`, meaning the effect was performed rather than recorded. **Read `dry_run` to tell the two apart, never the presence of `preview`.**
 
 Each command that produces a payload **declares its JSON Schema**, and the framework validates the value against that declaration before writing it -- a wrong shape fails the run instead of shipping. `safegit --dump-schema` publishes every declaration verbatim.
 
