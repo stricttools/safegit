@@ -57,8 +57,23 @@ type ScrubMatchResult struct {
 	OldHead           string            `json:"old_head,omitempty"`
 	NewHead           string            `json:"new_head,omitempty"`
 	PreRewriteRemotes map[string]string `json:"pre_rewrite_remotes,omitempty"`
-	CleanupOK         *bool             `json:"cleanup_ok,omitempty"`
-	CleanupErrors     []string          `json:"cleanup_errors,omitempty"`
+	// SubmodulePreRewriteRemotes is the same state for the SUBMODULES a run
+	// rewrote, nested one entry per submodule path.
+	//
+	// The nesting is not decoration. Two submodules of one parent routinely
+	// carry the same refnames -- `refs/remotes/origin/main` is what `git
+	// submodule add` leaves in every one of them -- so a single refname-keyed
+	// object can hold only one of them and silently drops the rest. The
+	// submodule path is the only key that tells them apart, and it is also the
+	// only key that says which repository a recorded SHA belongs to.
+	//
+	// It is a separate member from PreRewriteRemotes rather than a nested form
+	// of it, so that one key never has two shapes: pre_rewrite_remotes is
+	// always THIS repository's remote-tracking state, and this is always the
+	// submodules'.
+	SubmodulePreRewriteRemotes map[string]map[string]string `json:"submodule_pre_rewrite_remotes,omitempty"`
+	CleanupOK                  *bool                        `json:"cleanup_ok,omitempty"`
+	CleanupErrors              []string                     `json:"cleanup_errors,omitempty"`
 	// SyncSkipped is true when the working-tree sync was deliberately not
 	// performed because work that was not this rewrite's appeared while the
 	// refs were moving. The refs still moved; the working tree was left alone.
@@ -92,9 +107,11 @@ var scrubMatchPayloadSchema = strictcli.SchemaObject(
 		"old_head":            strictcli.SchemaType("string"),
 		"new_head":            strictcli.SchemaType("string"),
 		"pre_rewrite_remotes": scrubRewritesSchema,
-		"cleanup_ok":          strictcli.SchemaType("boolean"),
-		"cleanup_errors":      strictcli.SchemaArray(strictcli.SchemaType("string")),
-		"sync_skipped":        strictcli.SchemaType("boolean"),
+		// Dynamic keys at both levels: submodule path, then refname.
+		"submodule_pre_rewrite_remotes": strictcli.SchemaObject(nil, nil, scrubRewritesSchema),
+		"cleanup_ok":                    strictcli.SchemaType("boolean"),
+		"cleanup_errors":                strictcli.SchemaArray(strictcli.SchemaType("string")),
+		"sync_skipped":                  strictcli.SchemaType("boolean"),
 	},
 	[]string{"version", "dry_run", "pattern"},
 	false,
@@ -1165,16 +1182,26 @@ func submoduleOnlyMatchPayload(
 	}
 
 	tags := []TagRewrite{}
-	preRewriteRemotes := map[string]string{}
+	// Keyed by submodule path, never flat-merged by refname: two submodules of
+	// one parent routinely carry the same refnames, so a flat merge keeps
+	// whichever one happened to be iterated last and loses the others.
+	// subResults is built one entry per subScrubResults entry, in that order,
+	// so the two are read together.
+	preRewriteRemotes := map[string]map[string]string{}
 	tagsRewritten := 0
 	cleanupOK := true
 	var cleanupErrors []string
-	for _, sr := range subResults {
+	for i, sr := range subResults {
 		tags = append(tags, sr.TagRewrites...)
 		tags = append(tags, sr.AnnotationTagRewrites...)
 		tagsRewritten += sr.TagsRewrittenCount
-		for refname, sha := range sr.PreRewriteRemotes {
-			preRewriteRemotes[refname] = sha
+		if len(sr.PreRewriteRemotes) > 0 && i < len(subScrubResults) {
+			path := subScrubResults[i].sub.RelativePath
+			remotes := make(map[string]string, len(sr.PreRewriteRemotes))
+			for refname, sha := range sr.PreRewriteRemotes {
+				remotes[refname] = sha
+			}
+			preRewriteRemotes[path] = remotes
 		}
 		if !sr.CleanupOK {
 			cleanupOK = false
@@ -1183,20 +1210,22 @@ func submoduleOnlyMatchPayload(
 	}
 
 	return ScrubMatchResult{
-		Version:           1,
-		DryRun:            false,
-		Pattern:           pattern,
-		Rewrites:          map[string]string{},
-		Tags:              tags,
-		CommitsRewritten:  intPtr(commits),
-		BlobsReplaced:     intPtr(blobs),
-		MessagesModified:  intPtr(messages),
-		TagsRewritten:     intPtr(tagsRewritten),
-		OldHead:           oldHead,
-		PreRewriteRemotes: preRewriteRemotes,
-		CleanupOK:         boolPtr(cleanupOK),
-		CleanupErrors:     nonNilStrings(cleanupErrors),
-		SyncSkipped:       syncSkipped,
+		Version:          1,
+		DryRun:           false,
+		Pattern:          pattern,
+		Rewrites:         map[string]string{},
+		Tags:             tags,
+		CommitsRewritten: intPtr(commits),
+		BlobsReplaced:    intPtr(blobs),
+		MessagesModified: intPtr(messages),
+		TagsRewritten:    intPtr(tagsRewritten),
+		OldHead:          oldHead,
+		// PreRewriteRemotes is deliberately absent: on this branch the PARENT's
+		// refs never moved, so it has no pre-rewrite state to record.
+		SubmodulePreRewriteRemotes: preRewriteRemotes,
+		CleanupOK:                  boolPtr(cleanupOK),
+		CleanupErrors:              nonNilStrings(cleanupErrors),
+		SyncSkipped:                syncSkipped,
 	}
 }
 
