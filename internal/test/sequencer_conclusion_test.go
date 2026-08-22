@@ -579,53 +579,11 @@ func TestConclusionDetachedHeadGuidanceWorks(t *testing.T) {
 	assertNoSequencerResidue(t, dir, "detached-HEAD remedy")
 }
 
-// TestQueuedSequenceIsRefusedUntilDelegation: a QUEUED cherry-pick or revert is
-// refused rather than half-concluded. Concluding one step natively and removing
-// the state-file set would take the rest of the queue with it, so until the
-// delegation to git's own --continue exists, the refusal is the honest answer
-// and it says what the operator can do instead.
-func TestQueuedSequenceIsRefusedUntilDelegation(t *testing.T) {
-	dir := newRepo(t)
-	testutil.WriteFile(t, dir, "c.txt", "base\n")
-	testutil.WriteFile(t, dir, "d.txt", "base\n")
-	safegitCommitEnv(t, dir, conclusionSession, "base", "c.txt", "d.txt")
-
-	testutil.Git(t, dir, "branch", "side")
-	testutil.WriteFile(t, dir, "c.txt", "main\n")
-	safegitCommitEnv(t, dir, conclusionSession, "main", "c.txt")
-
-	testutil.Git(t, dir, "switch", "side")
-	testutil.WriteFile(t, dir, "c.txt", "side one\n")
-	first := safegitCommitEnv(t, dir, conclusionSession, "side one", "c.txt")
-	testutil.WriteFile(t, dir, "d.txt", "side two\n")
-	second := safegitCommitEnv(t, dir, conclusionSession, "side two", "d.txt")
-	testutil.Git(t, dir, "switch", "main")
-
-	if _, stderr, code := runSafegitEnv(t, dir, conclusionSession, "cherry-pick", first, second); code == 0 {
-		t.Fatalf("the fixture needs a mid-queue conflict: %s", stderr)
-	}
-	if !testutil.FileExists(filepath.Join(dir, ".git", "sequencer")) {
-		t.Fatal("the fixture must leave a sequencer queue behind")
-	}
-
-	tip := testutil.Rev(t, dir, "HEAD")
-	_, stderr, code := runSafegitEnv(t, dir, conclusionSession, "cherry-pick-continue", "--resolve", "c.txt=theirs")
-	if code == 0 {
-		t.Fatalf("a queued cherry-pick must not be concluded natively: %s", stderr)
-	}
-	if !strings.Contains(stderr, "QUEUED") {
-		t.Errorf("the refusal does not say the sequence is queued:\n%s", stderr)
-	}
-	if !strings.Contains(stderr, "cherry-pick --continue") {
-		t.Errorf("the refusal does not name what to do instead:\n%s", stderr)
-	}
-	if head := testutil.Rev(t, dir, "HEAD"); head != tip {
-		t.Errorf("HEAD moved to %s despite the refusal (was %s)", head, tip)
-	}
-	if !testutil.FileExists(filepath.Join(dir, ".git", "sequencer")) {
-		t.Error("the refusal destroyed the queue it declined to conclude")
-	}
-}
+// A QUEUED cherry-pick or revert is not concluded natively -- concluding one
+// step and removing the state-file set would take the rest of the queue with it
+// -- so it is DELEGATED to git's own --continue instead. Every assertion about
+// that delegation lives in sequencer_delegation_test.go; this file covers the
+// single-operation conclusions the pipeline writes itself.
 
 // TestUndoOfAConclusionSaysTheStateIsNotRestored: undo reverses the ref move a
 // conclusion made, and says plainly that it does not put the operation back in

@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/sequencer"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
@@ -57,15 +59,51 @@ type continueAuthor struct {
 	Email string `json:"email"`
 }
 
-// pickRevertPayload is continuePayload plus the preserved author.
+// pickRevertPayload is continuePayload plus the members only the two queueable
+// commands have: the preserved author, and the three facts that say whether
+// safegit or git wrote the commits.
 type pickRevertPayload struct {
 	continuePayload
 	Author continueAuthor `json:"author"`
+	// QueueDelegated is false here by construction: this shape is what the
+	// pipeline path reports. The delegated path reports delegatedPayload.
+	QueueDelegated bool `json:"queue_delegated"`
+	// Head is the branch tip after the conclusion, null under --dry-run. It
+	// equals SHA on this path and is the only commit name the delegated path
+	// can give, so a consumer reads one member either way.
+	Head *string `json:"head"`
+	// CommitsCreated is 1 here, 0 under --dry-run, and however many git made on
+	// the delegated path.
+	CommitsCreated int `json:"commits_created"`
+}
+
+// delegatedPayload is what a QUEUED cherry-pick or revert conclusion reports.
+//
+// The pipeline members are ABSENT rather than null: safegit created no commit,
+// so there is no sha, no tree, no parent list, no changed-path list, no
+// compare-and-swap attempt count and no author it chose. Reporting nulls for
+// them would invite a consumer to treat them as answers; leaving them out says
+// the operation had none. The schema below therefore requires only the members
+// both shapes carry.
+type delegatedPayload struct {
+	Operation      string               `json:"operation"`
+	Ref            string               `json:"ref"`
+	QueueDelegated bool                 `json:"queue_delegated"`
+	Head           *string              `json:"head"`
+	CommitsCreated int                  `json:"commits_created"`
+	Resolutions    []continueResolution `json:"resolutions"`
+	StateCleared   bool                 `json:"state_cleared"`
+	DryRun         bool                 `json:"dry_run"`
 }
 
 // continuePayloadSchema builds a conclusion's payload schema. The three
 // commands declare their own, from this one construction, so a member can never
 // be present in one command's document and absent from its schema.
+//
+// withAuthor selects the two commands that can also DELEGATE (cherry-pick and
+// revert): the preserved author and the delegation members ride together
+// because they belong to the same pair. merge-continue has neither -- a merge
+// preserves no author and can never be queued.
 func continuePayloadSchema(withAuthor bool) map[string]interface{} {
 	members := map[string]interface{}{
 		"operation": strictcli.SchemaType("string"),
@@ -98,7 +136,17 @@ func continuePayloadSchema(withAuthor bool) map[string]interface{} {
 			[]string{"name", "email"},
 			false,
 		)
-		required = append(required, "author")
+		members["queue_delegated"] = strictcli.SchemaType("boolean")
+		members["head"] = strictcli.SchemaType("string", "null")
+		members["commits_created"] = strictcli.SchemaType("integer")
+
+		// The delegated document carries none of the pipeline's members, so
+		// they leave the required set for these two commands: the three
+		// delegation members plus the ones both shapes carry are what a
+		// consumer may always read. `queue_delegated` is the discriminator
+		// that says which of the two shapes arrived.
+		required = []string{"operation", "ref", "resolutions", "state_cleared", "dry_run",
+			"queue_delegated", "head", "commits_created"}
 	}
 	return strictcli.SchemaObject(members, required, false)
 }
@@ -125,9 +173,16 @@ func (op continueOp) report(flags globalFlags, out conclusionResult) {
 		DryRun:       flags.dryRun,
 	}
 	if out.author != nil {
+		created := 1
+		if flags.dryRun {
+			created = 0
+		}
 		flags.payload(pickRevertPayload{
 			continuePayload: base,
 			Author:          continueAuthor{Name: out.author.Name, Email: out.author.Email},
+			QueueDelegated:  false,
+			Head:            base.SHA,
+			CommitsCreated:  created,
 		})
 	} else {
 		flags.payload(base)
@@ -170,6 +225,72 @@ func (op continueOp) report(flags globalFlags, out conclusionResult) {
 	if len(removed) > 0 {
 		fmt.Printf(" %d working-tree file(s) deleted: %s\n", len(removed), joinPaths(removed))
 	}
+}
+
+// reportDelegated emits the payload and the human rendering of a conclusion
+// GIT performed.
+//
+// The delegation is stated first and plainly, because it changes who the
+// commits belong to: they carry none of safegit's trailers, safegit's own
+// commit-msg handling never ran, and `safegit undo` will not reverse them. An
+// operator who reads only the first line still learns the thing that matters
+// about this run.
+func reportDelegated(flags globalFlags, op continueOp, out delegatedOutcome) {
+	head := out.head
+	flags.payload(delegatedPayload{
+		Operation:      op.kind.String(),
+		Ref:            currentRefName(flags),
+		QueueDelegated: true,
+		Head:           &head,
+		CommitsCreated: out.created,
+		Resolutions:    reportedResolutions(out.declared),
+		StateCleared:   out.stateCleared,
+		DryRun:         false,
+	})
+
+	if flags.silent() {
+		return
+	}
+
+	verb := strings.TrimSuffix(op.command, "-continue")
+	fmt.Printf("[%s] git concluded the queued %s: 'git %s --continue' authored the commits\n",
+		shortSHA(out.head), op.kind, verb)
+	fmt.Printf(" %s, %d declared resolution(s) staged into safegit's index copy\n",
+		commitCountText(out.created), len(out.declared))
+	if out.stateCleared {
+		fmt.Printf(" the queue is finished and git removed its own state files\n")
+	} else {
+		fmt.Printf(" the queue is NOT finished: git stopped again and its state files are still in place\n")
+	}
+	fmt.Printf(" these commits are git's: no safegit trailers, safegit's commit-msg handling did not run, and 'safegit undo' does not reverse them\n")
+
+	written, removed := worktreeEffects(out.declared)
+	if len(written) > 0 {
+		fmt.Printf(" %d working-tree file(s) written with the resolved content before the delegation: %s\n", len(written), joinPaths(written))
+	}
+	if len(removed) > 0 {
+		fmt.Printf(" %d working-tree file(s) deleted before the delegation: %s\n", len(removed), joinPaths(removed))
+	}
+}
+
+// commitCountText renders the commit count, including the one case where it
+// could not be taken -- which is stated rather than rounded to a number.
+func commitCountText(created int) string {
+	if created < 0 {
+		return "the number of commits created could not be counted"
+	}
+	return fmt.Sprintf("%d commit(s) created", created)
+}
+
+// currentRefName resolves the branch the conclusion committed onto, for the
+// payload's ref member. The delegated path never had a CommitResult to read it
+// off, and an unreadable ref is reported empty rather than guessed.
+func currentRefName(flags globalFlags) string {
+	ref, err := git.HeadRef(flags.ctx())
+	if err != nil {
+		return ""
+	}
+	return ref
 }
 
 // worktreeEffects splits the declared resolutions into the paths whose

@@ -541,6 +541,18 @@ func RunPassthrough(ctx context.Context, args ...string) error {
 // environment entry must not silently get different terminal or directory
 // behavior.
 func RunPassthroughWithEnv(ctx context.Context, env []string, args ...string) error {
+	return RunPassthroughTo(ctx, env, os.Stdout, args...)
+}
+
+// RunPassthroughTo is RunPassthroughWithEnv with the child's STDOUT sink named
+// by the caller.
+//
+// It exists for machine mode: under --json safegit's stdout carries exactly one
+// document, the framework's envelope, and a passthrough child writing its own
+// progress there would put a second document beside it. The caller passes
+// os.Stderr instead, which is where `push` already routes git's stdout for the
+// same reason. Stderr and stdin are wired to the terminal either way.
+func RunPassthroughTo(ctx context.Context, env []string, stdout io.Writer, args ...string) error {
 	cmd, err := gitexec.Command(
 		gitexec.WithoutRootPin(ctx, gitexec.ExemptGuardedPassthrough),
 		gitexec.Spec{Args: args, Env: env},
@@ -549,7 +561,7 @@ func RunPassthroughWithEnv(ctx context.Context, env []string, args ...string) er
 		return err
 	}
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }

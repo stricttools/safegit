@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -502,11 +503,35 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 // typed. Every other context-carried override still applies.
 func runPassthrough(flags globalFlags, gitCmd string, args []string) int {
 	ctx := flags.ctx()
-	if err := git.RunPassthrough(ctx, append([]string{gitCmd}, args...)...); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return exitErr.ExitCode()
-		}
-		return exitcode.General
+	return passthroughExitCode(git.RunPassthrough(ctx, append([]string{gitCmd}, args...)...))
+}
+
+// passthroughStdout names where a passthrough child's stdout goes.
+//
+// In machine mode safegit's stdout carries exactly one document -- the
+// framework's envelope -- so a child writing its own progress there would put a
+// second document beside it and break every consumer that parses the stream.
+// git's output is not discarded for that: it goes to stderr, which is what
+// `push` already does with git's stdout under --json.
+func passthroughStdout(flags globalFlags) io.Writer {
+	if flags.json {
+		return os.Stderr
 	}
-	return 0
+	return os.Stdout
+}
+
+// passthroughExitCode turns the error of a passthrough git invocation into the
+// process exit code safegit propagates: git's own code when git ran and said
+// no, and exitcode.General when the failure happened before git could speak.
+//
+// It is shared by the guarded passthroughs and by the delegated conclusion, so
+// "what does safegit exit when git exits N" has one answer for both.
+func passthroughExitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		return exitErr.ExitCode()
+	}
+	return exitcode.General
 }
