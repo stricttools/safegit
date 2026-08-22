@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
@@ -335,11 +336,12 @@ func TestScrubMatchSurgicalReflog(t *testing.T) {
 	}
 }
 
-// TestScrubMatchStashWarning creates a stash containing SECRET_ABC,
-// runs scrub match, and verifies that the verification scan detects the
-// secret in stash objects and exits with code 1 (CRITICAL warning).
-// Stash blobs are not rewritten because stash commits are on refs/stash,
-// not on any branch's ancestry.
+// TestScrubMatchStashWarning creates a stash containing SECRET_ABC, runs scrub
+// match, and verifies that the post-rewrite scan detects the secret in stash
+// objects and exits RewriteIncomplete: the rewrite STANDS -- the committed
+// history is clean -- and the nonzero code names what survived outside it.
+// Stash blobs are not rewritten because stash commits are on refs/stash, not on
+// any branch's ancestry.
 func TestScrubMatchStashWarning(t *testing.T) {
 	dir := newRepo(t)
 
@@ -372,10 +374,11 @@ func TestScrubMatchStashWarning(t *testing.T) {
 		"--entire-history",
 	)
 
-	// The command exits 1 because the verification scan detects SECRET_ABC
-	// in stash blobs that were not rewritten.
-	if code != 1 {
-		t.Fatalf("expected exit code 1 (verification failure due to stash), got %d: stdout=%s stderr=%s", code, stdout, stderr)
+	// The command exits RewriteIncomplete because the post-rewrite scan detects
+	// SECRET_ABC in stash blobs that were not rewritten.
+	if code != exitcode.RewriteIncomplete {
+		t.Fatalf("expected exit code %d (the rewrite stands, residue survives in the stash), got %d: stdout=%s stderr=%s",
+			exitcode.RewriteIncomplete, code, stdout, stderr)
 	}
 
 	// stderr should contain CRITICAL warning about secret still present

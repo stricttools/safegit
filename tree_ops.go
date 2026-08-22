@@ -109,37 +109,58 @@ func lookupBlobAtPath(ctx context.Context, treeSHA string, filePath string) stri
 	return ""
 }
 
+// treeRewrite is one tree transformation, cached: the tree the operation
+// produced, and the paths -- relative to the tree that was transformed -- whose
+// entries it decided to change.
+//
+// The paths are the operation's own DECLARATION of what it set out to change,
+// collected while the decisions are being made rather than re-derived from the
+// result afterwards. Tier A verification checks the produced commits against
+// this declaration, so a re-derivation would be comparing the rewrite to itself.
+type treeRewrite struct {
+	SHA   string
+	Paths []string
+}
+
 // replaceInTreeByBlobMap walks a tree recursively and replaces any blob whose
 // SHA is a key in blobMap with the corresponding value. Subtrees are recursed
 // into. Gitlink entries (submodules, ObjectType "commit") are passed through
 // unchanged unless gitlinkMap is non-nil and contains a mapping for the SHA.
 // If no entries match, the original treeSHA is returned unchanged.
-func replaceInTreeByBlobMap(ctx context.Context, treeSHA string, blobMap map[string]string, gitlinkMap map[string]string, cache map[string]string) (string, error) {
+//
+// It returns the paths whose entries it replaced, relative to treeSHA, so the
+// caller can declare per commit what the rewrite is supposed to change. The
+// cache carries those paths with each cached tree: a cache hit short-circuits
+// the recursion, and without them a tree seen twice would report its changes
+// only the first time.
+func replaceInTreeByBlobMap(ctx context.Context, treeSHA string, blobMap map[string]string, gitlinkMap map[string]string, cache map[string]treeRewrite) (string, []string, error) {
 	if cached, ok := cache[treeSHA]; ok {
-		return cached, nil
+		return cached.SHA, cached.Paths, nil
 	}
 
 	entries, err := git.LsTree(ctx, treeSHA)
 	if err != nil {
-		return "", fmt.Errorf("ls-tree %s: %w", treeSHA, err)
+		return "", nil, fmt.Errorf("ls-tree %s: %w", treeSHA, err)
 	}
 
-	changed := false
+	var changedPaths []string
 	for i, e := range entries {
 		switch e.ObjectType {
 		case "blob":
 			if newSHA, ok := blobMap[e.SHA]; ok {
 				entries[i].SHA = newSHA
-				changed = true
+				changedPaths = append(changedPaths, e.Path)
 			}
 		case "tree":
-			newSubSHA, err := replaceInTreeByBlobMap(ctx, e.SHA, blobMap, gitlinkMap, cache)
+			newSubSHA, subPaths, err := replaceInTreeByBlobMap(ctx, e.SHA, blobMap, gitlinkMap, cache)
 			if err != nil {
-				return "", err
+				return "", nil, err
 			}
 			if newSubSHA != e.SHA {
 				entries[i].SHA = newSubSHA
-				changed = true
+				for _, p := range subPaths {
+					changedPaths = append(changedPaths, e.Path+"/"+p)
+				}
 			}
 		case "commit":
 			// Gitlink (submodule reference). Pass through unchanged unless
@@ -147,21 +168,21 @@ func replaceInTreeByBlobMap(ctx context.Context, treeSHA string, blobMap map[str
 			if gitlinkMap != nil {
 				if newSHA, ok := gitlinkMap[e.SHA]; ok {
 					entries[i].SHA = newSHA
-					changed = true
+					changedPaths = append(changedPaths, e.Path)
 				}
 			}
 		}
 	}
 
-	if !changed {
-		cache[treeSHA] = treeSHA
-		return treeSHA, nil
+	if len(changedPaths) == 0 {
+		cache[treeSHA] = treeRewrite{SHA: treeSHA}
+		return treeSHA, nil, nil
 	}
 
 	newTreeSHA, err := git.MkTree(ctx, entries)
 	if err != nil {
-		return "", fmt.Errorf("mktree: %w", err)
+		return "", nil, fmt.Errorf("mktree: %w", err)
 	}
-	cache[treeSHA] = newTreeSHA
-	return newTreeSHA, nil
+	cache[treeSHA] = treeRewrite{SHA: newTreeSHA, Paths: changedPaths}
+	return newTreeSHA, changedPaths, nil
 }

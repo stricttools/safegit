@@ -88,10 +88,16 @@ func setupFinalizeRepo(t *testing.T) (string, context.Context, string, *RewriteR
 		t.Fatalf("expected 1 rewritten commit, got %d", rewritten)
 	}
 
+	// The walk rewrote one commit's message and nothing else, which is exactly
+	// what Finalize's Tier A verification checks the rewritten commits against.
+	intent := PerPathIntent()
+	intent.Declare(c2, nil, true)
+
 	sgDir := filepath.Join(dir, ".git", "safegit")
 	result := &RewriteResult{
 		ShaMap:         shaMap,
 		RewrittenCount: rewritten,
+		Intent:         intent,
 		OldHeadSHA:     c2,
 		SgDir:          sgDir,
 		Reason:         "unit test rewrite",
@@ -100,11 +106,18 @@ func setupFinalizeRepo(t *testing.T) (string, context.Context, string, *RewriteR
 	return dir, ctx, sgDir, result
 }
 
-// TestFinalizeWritesStartRecordBeforeVerifyFailure simulates a failure late in
-// the Finalize pipeline (injected failing verify step) and asserts that the
-// start and refs records were already persisted, while the complete record is
-// absent. This proves the write-at-entry ordering: a crash at any step after
-// entry leaves the commit map recoverable.
+// TestFinalizeWritesStartRecordBeforeVerifyFailure injects a failing Tier B
+// verification -- the post-refs, post-cleanup slot -- and asserts that the
+// journal is COMPLETE anyway: a Tier B finding cannot undo a rewrite, so the
+// rewrite stands, every phase record is written, and the finding is reported
+// for the caller to exit nonzero about.
+//
+// The ordering this pins is the one the journal exists for: the start and refs
+// records were persisted before anything could fail this late, so a crash at
+// any step after the refs move leaves the commit map recoverable. The
+// complementary property -- a TIER A failure writes NO record at all, because
+// it aborts before the start record -- is pinned by
+// TestFinalizeTierAFailureWritesNoRecords.
 func TestFinalizeWritesStartRecordBeforeVerifyFailure(t *testing.T) {
 	_, ctx, sgDir, result := setupFinalizeRepo(t)
 	oldHead := result.OldHeadSHA
@@ -113,20 +126,29 @@ func TestFinalizeWritesStartRecordBeforeVerifyFailure(t *testing.T) {
 		return fmt.Errorf("injected verification failure")
 	}
 	flags := globalFlags{quiet: true}
-	err := result.Finalize(ctx, flags, "scrub file", nil, failingVerify)
-	if err == nil {
-		t.Fatal("Finalize should have returned the injected verification error")
+	err := result.Finalize(ctx, flags, "scrub file", RewriteHooks{TierB: failingVerify})
+	if err != nil {
+		t.Fatalf("a Tier B finding must not abort Finalize: %v", err)
+	}
+	if len(result.TierBFailures) != 1 {
+		t.Fatalf("TierBFailures = %v, want the one injected finding", result.TierBFailures)
+	}
+	if result.TierBExit(0) == 0 {
+		t.Error("a Tier B finding must turn the command's exit code nonzero")
 	}
 
 	lines := readRewriteMapLines(t, sgDir)
-	if len(lines) != 2 {
-		t.Fatalf("expected 2 rewrite map lines (start, refs), got %d: %v", len(lines), lines)
+	if len(lines) != 3 {
+		t.Fatalf("expected 3 rewrite map lines (start, refs, complete), got %d: %v", len(lines), lines)
 	}
 	if lines[0]["phase"] != "start" {
 		t.Errorf("line 0 phase = %v, want start", lines[0]["phase"])
 	}
 	if lines[1]["phase"] != "refs" {
 		t.Errorf("line 1 phase = %v, want refs", lines[1]["phase"])
+	}
+	if lines[2]["phase"] != "complete" {
+		t.Errorf("line 2 phase = %v, want complete", lines[2]["phase"])
 	}
 	if lines[0]["old_head"] != oldHead {
 		t.Errorf("start old_head = %v, want %v", lines[0]["old_head"], oldHead)
@@ -171,7 +193,7 @@ func TestFinalizeWritesCompleteRecord(t *testing.T) {
 	oldHead := result.OldHeadSHA
 
 	flags := globalFlags{quiet: true}
-	if err := result.Finalize(ctx, flags, "scrub file", nil, nil); err != nil {
+	if err := result.Finalize(ctx, flags, "scrub file", RewriteHooks{}); err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
 
@@ -224,11 +246,12 @@ func TestFinalizeNoRewritesWritesNoRecords(t *testing.T) {
 	sgDir := filepath.Join(dir, ".git", "safegit")
 	result := &RewriteResult{
 		ShaMap:     map[string]string{c1: c1},
+		Intent:     PerPathIntent(),
 		OldHeadSHA: c1,
 		SgDir:      sgDir,
 		OpName:     "scrub-file",
 	}
-	if err := result.Finalize(ctx, globalFlags{quiet: true}, "scrub file", nil, nil); err != nil {
+	if err := result.Finalize(ctx, globalFlags{quiet: true}, "scrub file", RewriteHooks{}); err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
 	if lines := readRewriteMapLines(t, sgDir); len(lines) != 0 {

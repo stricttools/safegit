@@ -111,13 +111,18 @@ func validateRemapGlobs(globs []string) {
 // so the same subtree mounted at different paths may remap differently — a
 // tree-SHA-keyed cache would be unsound. The expensive per-blob work is
 // cached in blobCache instead (see remapState).
-func (rs *remapState) remapTree(ctx context.Context, treeSHA, pathPrefix string, shaMap map[string]string) (string, error) {
+//
+// The second return value is the list of paths remapped, relative to treeSHA,
+// which the caller adds to the commit's declared change set: a remapped file is
+// a file the operation decided to change, and Tier A verification would
+// otherwise read it as an unexplained change.
+func (rs *remapState) remapTree(ctx context.Context, treeSHA, pathPrefix string, shaMap map[string]string) (string, []string, error) {
 	entries, err := git.LsTree(ctx, treeSHA)
 	if err != nil {
-		return "", fmt.Errorf("ls-tree %s: %w", treeSHA, err)
+		return "", nil, fmt.Errorf("ls-tree %s: %w", treeSHA, err)
 	}
 
-	changed := false
+	var changedPaths []string
 	for i, e := range entries {
 		switch e.ObjectType {
 		case "blob":
@@ -127,33 +132,35 @@ func (rs *remapState) remapTree(ctx context.Context, treeSHA, pathPrefix string,
 			}
 			newSHA, err := rs.remapBlob(ctx, e.SHA, shaMap)
 			if err != nil {
-				return "", fmt.Errorf("remapping hashes in %s: %w", fullPath, err)
+				return "", nil, fmt.Errorf("remapping hashes in %s: %w", fullPath, err)
 			}
 			if newSHA != e.SHA {
 				entries[i].SHA = newSHA
-				changed = true
+				changedPaths = append(changedPaths, e.Path)
 			}
 		case "tree":
-			newSubSHA, err := rs.remapTree(ctx, e.SHA, pathPrefix+e.Path+"/", shaMap)
+			newSubSHA, subPaths, err := rs.remapTree(ctx, e.SHA, pathPrefix+e.Path+"/", shaMap)
 			if err != nil {
-				return "", err
+				return "", nil, err
 			}
 			if newSubSHA != e.SHA {
 				entries[i].SHA = newSubSHA
-				changed = true
+				for _, p := range subPaths {
+					changedPaths = append(changedPaths, e.Path+"/"+p)
+				}
 			}
 			// Gitlinks (ObjectType "commit") pass through untouched.
 		}
 	}
 
-	if !changed {
-		return treeSHA, nil
+	if len(changedPaths) == 0 {
+		return treeSHA, nil, nil
 	}
 	newTreeSHA, err := git.MkTree(ctx, entries)
 	if err != nil {
-		return "", fmt.Errorf("mktree: %w", err)
+		return "", nil, fmt.Errorf("mktree: %w", err)
 	}
-	return newTreeSHA, nil
+	return newTreeSHA, changedPaths, nil
 }
 
 // remapBlob reads a blob, remaps 40-hex commit hashes in its content, writes

@@ -357,11 +357,10 @@ func opScope(op *RecipeOperation) *string {
 	return op.Scope
 }
 
-// rewriteTagAnnotationsRecipe rewrites tag annotations using recipe operations.
-// Each operation is applied in topological order, and only operations targeting
-// "tags" (or all targets) are applied.
-func rewriteTagAnnotationsRecipe(ctx context.Context, flags globalFlags, cmd string, recipe *ParsedRecipe, shaMap map[string]string) ([]TagRewrite, int) {
-	tagRewrites, tagsRewritten, err := forEachAnnotatedTag(ctx, shaMap, func(refname, header, body string) (string, error) {
+// recipeTagBodyTransform builds the annotation transform for a recipe: each
+// operation that targets tags is applied to the tag body in topological order.
+func recipeTagBodyTransform(recipe *ParsedRecipe) TagBodyTransformFunc {
+	return func(refname, header, body string) (string, error) {
 		newBody := body
 		for _, idx := range recipe.TopoOrder {
 			op := recipe.Operations[idx]
@@ -382,16 +381,7 @@ func rewriteTagAnnotationsRecipe(ctx context.Context, flags globalFlags, cmd str
 			}
 		}
 		return newBody, nil
-	})
-	if err != nil {
-		die(exitcode.General, fmt.Sprintf("rewriting tag annotations: %v", err))
 	}
-	if tagsRewritten > 0 && flags.verbose {
-		for _, tr := range tagRewrites {
-			fmt.Fprintf(os.Stderr, "  tag annotation %s: %s -> %s\n", tr.Refname, shortSHA(tr.OldSHA), shortSHA(tr.NewSHA))
-		}
-	}
-	return tagRewrites, tagsRewritten
 }
 
 // scrubRunDiff previews what a recipe would change without modifying any objects.

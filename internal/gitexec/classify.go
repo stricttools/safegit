@@ -135,6 +135,11 @@ var verbs = []Verb{
 	},
 	{Name: "commit-tree", Base: MutatesObjects},
 	{Name: "diff", Base: ObserveOnly},
+	{
+		Name: "diff-index",
+		Base: ObserveOnly,
+		Note: "compares the index and working tree against a commit; it writes nothing (refreshing the index's stat cache is opt-in via --refresh, which safegit never passes)",
+	},
 	{Name: "diff-tree", Base: ObserveOnly},
 	{Name: "fetch", Base: MutatesObjects | MutatesRefs | Network},
 	{Name: "for-each-ref", Base: ObserveOnly},

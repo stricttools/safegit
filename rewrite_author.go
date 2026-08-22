@@ -183,7 +183,8 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 
 	infof(flags, "Rewriting commits...\n")
-	shaMap, nameChanged, err := rewriteCommits(ctx, oldName, newName, oldEmail, newEmail, flags.verbose)
+	intent := IdentityIntent()
+	shaMap, nameChanged, err := rewriteCommits(ctx, oldName, newName, oldEmail, newEmail, intent, flags.verbose)
 	if err != nil {
 		die(exitcode.General, fmt.Sprintf("rewriting commits: %v", err))
 	}
@@ -219,9 +220,12 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		},
 	}
 
-	// VerifyFunc: captures pre-rewrite snapshot in closure, takes post-rewrite
-	// snapshot after cleanup has run (inside Finalize), then compares.
-	verifyFunc := func(ctx context.Context) error {
+	// Tier B: captures the pre-rewrite snapshot in the closure, takes the
+	// post-rewrite snapshot after cleanup has run (inside Finalize), then
+	// compares. It sits in the Tier B slot because it can only run once the
+	// refs have moved -- the snapshot it compares against is a snapshot of what
+	// the refs reach.
+	tierB := func(ctx context.Context) error {
 		infof(flags, "Capturing post-rewrite snapshot...\n")
 		after, err := captureSnapshot(ctx)
 		if err != nil {
@@ -243,16 +247,20 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 			for _, f := range failures {
 				fmt.Fprintf(os.Stderr, "  FAIL: %s\n", f)
 			}
-			return fmt.Errorf("VERIFICATION FAILED")
+			return fmt.Errorf("the rewritten history does not match the pre-rewrite snapshot in %d respect(s)", len(failures))
 		}
 
 		infof(flags, "Verification passed: all checks OK\n")
 		return nil
 	}
 
-	// Finalize: updateRefs, cleanup, verify, index sync, oplog, push hint
-	if err := result.Finalize(ctx, flags, cmd, nil, verifyFunc); err != nil {
-		die(exitcode.General, err.Error())
+	// Finalize: verify, move refs, sync, cleanup, verify again, oplog, push hint.
+	// The intent is identity-only: every commit's tree must come through
+	// untouched and its message too, except at the commits where an
+	// identity-bearing trailer was rewritten, which the walk declared.
+	result.Intent = intent
+	if err := result.Finalize(ctx, flags, cmd, RewriteHooks{TierB: tierB}); err != nil {
+		dieFinalize("", err)
 	}
 
 	// The one computation both renderings read: the three counts below are the
@@ -296,7 +304,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 			total, nameChanged, parentOnly)
 	}
 
-	return 0
+	return result.TierBExit(exitcode.OK)
 }
 
 // RewriteAuthorResult is what `author rewrite` reports -- in both modes and in
@@ -722,7 +730,12 @@ func compareIntSlices(label string, before, after []int) string {
 // name matches oldName or a parent SHA was remapped by an earlier rewrite.
 // Returns the old-to-new SHA mapping, the count of commits whose name was
 // actually changed, and any error.
-func rewriteCommits(ctx context.Context, oldName, newName, oldEmail, newEmail string, verbose bool) (map[string]string, int, error) {
+// rewriteCommits rewrites the author and committer identity across history. It
+// fills intent with the one thing about a commit's CONTENT this rewrite may
+// change: an identity-bearing trailer in the message. Tier A holds it to that
+// -- trees identical everywhere, messages changed only where a trailer was
+// rewritten.
+func rewriteCommits(ctx context.Context, oldName, newName, oldEmail, newEmail string, intent *RewriteIntent, verbose bool) (map[string]string, int, error) {
 	// Get all commits in topo-order with parents before children.
 	args := append([]string{"rev-list", "--topo-order", "--reverse"}, refGlobs...)
 	out, _, err := git.Run(ctx, args...)
@@ -780,6 +793,7 @@ func rewriteCommits(ctx context.Context, oldName, newName, oldEmail, newEmail st
 			newMsg := trailer.ReplaceIdentity(info.Message, oldName, newName, oldEmail, newEmail)
 			if newMsg != info.Message {
 				xform.Message = newMsg
+				intent.Declare(sha, nil, true)
 			}
 		}
 		return xform, nil
@@ -789,93 +803,6 @@ func rewriteCommits(ctx context.Context, oldName, newName, oldEmail, newEmail st
 	}
 
 	return shaMap, nameChanged, nil
-}
-
-// updateRefs updates all branch and tag refs to point to rewritten commits.
-// For annotated tags, the tag object itself is rewritten if its target commit
-// changed or its tagger name matches oldName. Stash refs are skipped.
-func updateRefs(ctx context.Context, shaMap map[string]string, oldName, newName, oldEmail, newEmail string, verbose bool) ([]TagRewrite, error) {
-	out, _, err := git.Run(ctx, "for-each-ref", "--format=%(refname) %(objecttype) %(objectname)", "refs/heads/", "refs/tags/", "refs/remotes/")
-	if err != nil {
-		return nil, fmt.Errorf("listing refs: %w", err)
-	}
-
-	var tagRewrites []TagRewrite
-	lines := git.SplitNonEmpty(out)
-	for _, line := range lines {
-		parts := strings.SplitN(line, " ", 3)
-		if len(parts) != 3 {
-			continue
-		}
-		refname, objecttype, objectname := parts[0], parts[1], parts[2]
-
-		// Skip stash refs.
-		if strings.HasPrefix(refname, "refs/stash") {
-			continue
-		}
-
-		// Skip symbolic refs like refs/remotes/origin/HEAD -- updating
-		// them with git update-ref would convert them to regular refs.
-		if strings.HasPrefix(refname, "refs/remotes/") && strings.HasSuffix(refname, "/HEAD") {
-			continue
-		}
-
-		switch objecttype {
-		case "commit":
-			// Branch or lightweight tag pointing directly at a commit.
-			newSHA, ok := shaMap[objectname]
-			if !ok || newSHA == objectname {
-				continue
-			}
-			if err := git.UpdateRef(ctx, refname, newSHA, objectname); err != nil {
-				return tagRewrites, fmt.Errorf("updating ref %s: %w", refname, err)
-			}
-			if strings.HasPrefix(refname, "refs/tags/") {
-				tagRewrites = append(tagRewrites, TagRewrite{Refname: refname, OldSHA: objectname, NewSHA: newSHA, Annotated: false})
-			}
-			if verbose {
-				fmt.Fprintf(os.Stderr, "  %-20s %s -> %s\n", refname, objectname[:12], newSHA[:12])
-			}
-
-		case "tag":
-			// Annotated tag object -- rewrite if its target changed or
-			// tagger name matches.
-			newTagSHA, err := rewriteAnnotatedTag(ctx, objectname, shaMap, oldName, newName, oldEmail, newEmail)
-			if err != nil {
-				return tagRewrites, fmt.Errorf("rewriting annotated tag %s: %w", refname, err)
-			}
-			if newTagSHA == objectname {
-				continue
-			}
-			if err := git.UpdateRef(ctx, refname, newTagSHA, objectname); err != nil {
-				return tagRewrites, fmt.Errorf("updating annotated tag ref %s: %w", refname, err)
-			}
-			tagRewrites = append(tagRewrites, TagRewrite{Refname: refname, OldSHA: objectname, NewSHA: newTagSHA, Annotated: true})
-			if verbose {
-				fmt.Fprintf(os.Stderr, "  %-20s %s -> %s\n", refname, objectname[:12], newTagSHA[:12])
-			}
-		}
-	}
-
-	// Handle detached HEAD: if HEAD is not on a branch, update it directly.
-	_, _, symErr := git.Run(ctx, "symbolic-ref", "HEAD")
-	if symErr != nil {
-		// HEAD is detached.
-		headSHA, err := git.RevParse(ctx, "HEAD")
-		if err != nil {
-			return tagRewrites, fmt.Errorf("reading detached HEAD: %w", err)
-		}
-		if newSHA, ok := shaMap[headSHA]; ok && newSHA != headSHA {
-			if err := git.UpdateRef(ctx, "HEAD", newSHA, headSHA); err != nil {
-				return tagRewrites, fmt.Errorf("updating detached HEAD: %w", err)
-			}
-			if verbose {
-				fmt.Fprintf(os.Stderr, "  %-20s %s -> %s\n", "HEAD (detached)", headSHA[:12], newSHA[:12])
-			}
-		}
-	}
-
-	return tagRewrites, nil
 }
 
 // rewriteAnnotatedTag rewrites an annotated tag object if its target commit
@@ -960,9 +887,9 @@ func rewriteAnnotatedTag(ctx context.Context, tagObjectSHA string, shaMap map[st
 	// Reconstruct the full tag object content.
 	content := strings.Join(lines, "\n") + "\n\n" + body
 
-	newSHA, _, err := git.RunWithEnvStdin(ctx, nil, []byte(content), "hash-object", "-t", "tag", "-w", "--stdin")
+	newSHA, err := git.HashObjectWriteTag(ctx, []byte(content))
 	if err != nil {
 		return "", fmt.Errorf("writing rewritten tag object: %w", err)
 	}
-	return strings.TrimSpace(newSHA), nil
+	return newSHA, nil
 }

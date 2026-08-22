@@ -92,8 +92,11 @@ func executeScrubRecipe(
 		die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
 	}
 
+	// A search that matches nothing is a successful answer, not a failure --
+	// but it is stated in the terms the operator asked in, so "it worked" and
+	// "it found nothing" can never be confused for each other.
 	if len(results.Matches) == 0 && len(gitlinkMap) == 0 {
-		infof(flags, "No matches found. Nothing to rewrite.\n")
+		infof(flags, "0 commits contained the pattern. Nothing was rewritten and no history changed.\n")
 		return 0, nil
 	}
 
@@ -177,7 +180,7 @@ func executeScrubRecipe(
 		len(blobMap), commitMatchCount, tagMatchCount)
 
 	if len(blobMap) == 0 && commitMatchCount == 0 && tagMatchCount == 0 && len(gitlinkMap) == 0 {
-		infof(flags, "No replacements needed. Nothing to rewrite.\n")
+		infof(flags, "0 commits contained the pattern within scope. Nothing was rewritten and no history changed.\n")
 		return 0, nil
 	}
 
@@ -212,30 +215,36 @@ func executeScrubRecipe(
 	infof(flags, "Rewriting %d commits...\n", commitCount)
 
 	messagesModified := 0
-	treeCache := make(map[string]string)
+	treeCache := make(map[string]treeRewrite)
 
 	var remap *remapState
 	if len(remapGlobs) > 0 {
 		remap = newRemapState(remapGlobs, shas)
 	}
 
+	// What this walk decides to change, per commit, declared as it decides it.
+	// Tier A checks the rewritten commits against it before any ref moves.
+	intent := PerPathIntent()
+
 	shaMap, rewrittenCount, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 		var xform CommitTransform
 
 		// Replace blobs in tree
-		newTreeSHA, err := replaceInTreeByBlobMap(ctx, info.Tree, blobMap, gitlinkMap, treeCache)
+		newTreeSHA, changedPaths, err := replaceInTreeByBlobMap(ctx, info.Tree, blobMap, gitlinkMap, treeCache)
 		if err != nil {
 			return CommitTransform{}, fmt.Errorf("replacing blobs in tree for commit %s: %w", sha, err)
 		}
+		intent.Declare(sha, changedPaths, false)
 		// Remap full commit hashes in glob-matched files against the growing
 		// SHA map (time-varying transform: runs after the static blob map and
 		// never shares the static tree cache).
 		if remap != nil {
-			remappedTreeSHA, err := remap.remapTree(ctx, newTreeSHA, "", shaMap)
+			remappedTreeSHA, remappedPaths, err := remap.remapTree(ctx, newTreeSHA, "", shaMap)
 			if err != nil {
 				return CommitTransform{}, fmt.Errorf("commit %s: %w", sha, err)
 			}
 			newTreeSHA = remappedTreeSHA
+			intent.Declare(sha, remappedPaths, false)
 		}
 		if newTreeSHA != info.Tree {
 			xform.TreeSHA = newTreeSHA
@@ -265,6 +274,7 @@ func executeScrubRecipe(
 		if newMessage != info.Message {
 			xform.Message = newMessage
 			messagesModified++
+			intent.Declare(sha, nil, true)
 		}
 
 		return xform, nil
@@ -285,33 +295,39 @@ func executeScrubRecipe(
 	oplogExtra["blobsReplaced"] = len(blobMap)
 	oplogExtra["messagesModified"] = messagesModified
 
-	// Annotation rewrite closure: applies recipe operations to tag annotations,
-	// respecting per-op target filters for "tags". Finalize stores the returned
-	// rewrites on the RewriteResult (and persists them in the rewrite map).
-	parentAnnotFunc := func(ctx context.Context, shaMap map[string]string) ([]TagRewrite, int, error) {
-		annotationTagRewrites, tagsRewritten := rewriteTagAnnotationsRecipe(ctx, flags, cmd, recipe, shaMap)
-		oplogExtra["tagsRewritten"] = tagsRewritten
-		return annotationTagRewrites, tagsRewritten, nil
-	}
-
-	// Verification closure: re-scan for each operation's pattern.
-	exitCode := exitcode.OK
-	parentVerifyFunc := func(ctx context.Context) error {
-		infof(flags, "Verifying secret removal...\n")
+	// Tier A: every operation's pattern must be absent from the history that is
+	// about to be published -- read from the tips the ref update plan carries,
+	// which is the only way to ask the question before the refs move.
+	tierA := func(ctx context.Context, plan *RefUpdatePlan) error {
+		infof(flags, "Checking the rewritten history for surviving matches...\n")
 		for i, op := range recipe.Operations {
 			pat := recipe.Patterns[i]
-			verifyErr := verifySecretRemovedScoped(ctx, pat, opScope(&op))
-			if verifyErr != nil {
-				fmt.Fprintf(os.Stderr, "CRITICAL (operation %d, pattern %q): %v\n", i, op.Pattern, verifyErr)
-				exitCode = exitcode.General
+			if err := verifyPatternAbsentFromTips(ctx, pat, opScope(&op), plan.NewTips); err != nil {
+				return fmt.Errorf("operation %d (pattern %q): %v", i, op.Pattern, err)
 			}
 		}
-		if exitCode == 0 {
-			infof(flags, "Verification passed: no matches found in object stores.\n")
-		} else {
-			fmt.Fprintln(os.Stderr, "Run 'git reflog expire --expire=now --all && git gc --prune=now' to force cleanup.")
-		}
 		return nil
+	}
+
+	// Tier B: the whole object store, after cleanup. This one can see what the
+	// rewrite does not cover -- a stash, a note, an unpruned pack -- and cannot
+	// run before cleanup by design, so its findings never abort: they exit
+	// nonzero with the rewrite standing.
+	tierB := func(ctx context.Context) error {
+		infof(flags, "Verifying secret removal...\n")
+		var findings []string
+		for i, op := range recipe.Operations {
+			pat := recipe.Patterns[i]
+			if verifyErr := verifySecretRemovedScoped(ctx, pat, opScope(&op)); verifyErr != nil {
+				findings = append(findings, fmt.Sprintf("operation %d (pattern %q): %v", i, op.Pattern, verifyErr))
+			}
+		}
+		if len(findings) == 0 {
+			infof(flags, "Verification passed: no matches found in object stores.\n")
+			return nil
+		}
+		defer fmt.Fprintln(os.Stderr, "Run 'git reflog expire --expire=now --all && git gc --prune=now' to force cleanup.")
+		return fmt.Errorf("%s", strings.Join(findings, "\n  "))
 	}
 
 	// Build policy data for single-operation recipes.
@@ -333,6 +349,7 @@ func executeScrubRecipe(
 	result := RewriteResult{
 		ShaMap:         shaMap,
 		RewrittenCount: rewrittenCount,
+		Intent:         intent,
 		OldHeadSHA:     oldHeadSHA,
 		SgDir:          sgDir,
 		Reason:         reason,
@@ -340,8 +357,12 @@ func executeScrubRecipe(
 		OplogExtra:     oplogExtra,
 		PolicyData:     policyData,
 	}
-	if err := result.Finalize(ctx, flags, cmd, parentAnnotFunc, parentVerifyFunc); err != nil {
-		die(exitcode.General, err.Error())
+	if err := result.Finalize(ctx, flags, cmd, RewriteHooks{
+		AnnotateTag: recipeTagBodyTransform(recipe),
+		TierA:       tierA,
+		TierB:       tierB,
+	}); err != nil {
+		dieFinalize("", err)
 	}
 
 	// Populate post-execution metrics for callers. (TagsRewrittenCount and
@@ -349,7 +370,7 @@ func executeScrubRecipe(
 	result.BlobsReplaced = len(blobMap)
 	result.MessagesModified = messagesModified
 
-	return exitCode, &result
+	return result.TierBExit(exitcode.OK), &result
 }
 
 // estimateCommitCount returns the number of commits in the rewrite range.
@@ -378,74 +399,8 @@ func estimateCommitCount(ctx context.Context, fromSHA string, entireHistory bool
 // TagBodyTransformFunc transforms the body of an annotated tag. It receives the
 // tag's refname, full header text, and body text. It returns the new body (or
 // the same body if no change is needed) and any error.
-type TagBodyTransformFunc func(refname, header, body string) (newBody string, err error)
-
-// forEachAnnotatedTag enumerates all annotated tags, splits each into header
-// and body, calls fn for body transformation, and writes the new tag object
-// + updates the ref when the body changed. The shaMap is available for callers
-// that need commit SHA remapping in the future but is currently unused.
 //
-// Returns the list of rewritten tags, count of tags rewritten, and any error.
-// Errors from fn are propagated immediately (aborting further tags).
-func forEachAnnotatedTag(ctx context.Context, shaMap map[string]string, fn TagBodyTransformFunc) ([]TagRewrite, int, error) {
-	out, _, err := git.Run(ctx, "for-each-ref", "--format=%(refname) %(objecttype) %(objectname)", "refs/tags/")
-	if err != nil {
-		return nil, 0, fmt.Errorf("listing tags: %w", err)
-	}
-
-	var tagRewrites []TagRewrite
-	tagsRewritten := 0
-	lines := git.SplitNonEmpty(out)
-	for _, line := range lines {
-		parts := strings.SplitN(line, " ", 3)
-		if len(parts) != 3 {
-			continue
-		}
-		refname, objecttype, objectname := parts[0], parts[1], parts[2]
-
-		if objecttype != "tag" {
-			continue
-		}
-
-		// Read the tag object.
-		tagContent, _, err := git.Run(ctx, "cat-file", "-p", objectname)
-		if err != nil {
-			return tagRewrites, tagsRewritten, fmt.Errorf("reading tag object %s: %w", objectname, err)
-		}
-
-		// Split into header and body.
-		headerEnd := strings.Index(tagContent, "\n\n")
-		if headerEnd < 0 {
-			// No body -- nothing to transform.
-			continue
-		}
-		header := tagContent[:headerEnd]
-		body := tagContent[headerEnd+2:]
-
-		newBody, err := fn(refname, header, body)
-		if err != nil {
-			return tagRewrites, tagsRewritten, fmt.Errorf("transforming tag %s: %w", refname, err)
-		}
-
-		if newBody == body {
-			continue
-		}
-
-		// Reconstruct tag object and write it.
-		newContent := header + "\n\n" + newBody
-		newTagSHA, _, err := git.RunWithEnvStdin(ctx, nil, []byte(newContent), "hash-object", "-t", "tag", "-w", "--stdin")
-		if err != nil {
-			return tagRewrites, tagsRewritten, fmt.Errorf("writing rewritten tag annotation for %s: %w", refname, err)
-		}
-		newTagSHA = strings.TrimSpace(newTagSHA)
-
-		if err := git.UpdateRef(ctx, refname, newTagSHA, objectname); err != nil {
-			return tagRewrites, tagsRewritten, fmt.Errorf("updating tag ref %s: %w", refname, err)
-		}
-
-		tagRewrites = append(tagRewrites, TagRewrite{Refname: refname, OldSHA: objectname, NewSHA: newTagSHA, Annotated: true})
-		tagsRewritten++
-	}
-
-	return tagRewrites, tagsRewritten, nil
-}
+// A rewrite hands one of these to Finalize, which applies it while it plans the
+// ref updates: the new tag objects are written before Tier A verification runs,
+// and the refs that point at them move with every other ref afterwards.
+type TagBodyTransformFunc func(refname, header, body string) (newBody string, err error)
