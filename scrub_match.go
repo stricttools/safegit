@@ -340,9 +340,9 @@ func scrubMatchDryRun(ctx context.Context, flags globalFlags, cmd string, compil
 
 	// Only object-store matches are rewritable, and only the ones the scope
 	// filter keeps. The execute path returns before a single ref moves in both
-	// of those cases -- "No matches found. Nothing to rewrite." when the scan
-	// finds nothing, "No matches found within scope. Nothing to rewrite." when
-	// --scope leaves nothing -- so a preview that minted the rewrite here
+	// of those cases -- it says "0 commits contained the pattern" when the scan
+	// finds nothing, and the same with "within scope" when --scope leaves
+	// nothing -- so a preview that minted the rewrite here
 	// promised four mutations (update-ref, reflog expire, repack, prune) that a
 	// real run would never make. This is the guard scrubRunDryRun already has.
 	// Non-object matches (working tree files, .git/config, hooks) are reported
@@ -559,7 +559,7 @@ func scrubMatchExecute(
 			}
 		}
 		if !anySubMatches {
-			infof(flags, "No matches found. Nothing to rewrite.\n")
+			infof(flags, "0 commits contained the pattern. Nothing was rewritten and no history changed.\n")
 			return 0
 		}
 	}
@@ -663,7 +663,7 @@ func scrubMatchExecute(
 	}
 	if blobMatchCount == 0 && commitMatchCount == 0 && tagMatchCount == 0 &&
 		totalSubBlobCount == 0 && totalSubCommitCount == 0 && totalSubTagCount == 0 {
-		infof(flags, "No matches found within scope. Nothing to rewrite.\n")
+		infof(flags, "0 commits contained the pattern within scope. Nothing was rewritten and no history changed.\n")
 		return 0
 	}
 
