@@ -174,6 +174,31 @@ const (
 	// Produced by `backup restore`.
 	BackupNoSlot = 23
 
+	// RewriteRefused means a history rewrite was refused by the verification
+	// that runs BEFORE any ref moves: the rewritten commits existed only as
+	// unreachable objects, and the check found the rewrite did not do what the
+	// operation declared it would (a commit changed a path no operation asked
+	// to change, a declared change is missing, the scrubbed content survived in
+	// the rewritten trees, the named file appears in no commit at all), or the
+	// working tree acquired foreign state while the rewrite was running. In
+	// every case NOTHING moved: no ref, no tag, no rewrite-journal record, and
+	// the original history is exactly as it was. Produced by scrub file, scrub
+	// match, scrub run and author rewrite.
+	RewriteRefused = 30
+
+	// RewriteIncomplete means the rewrite itself STANDS -- refs moved, the
+	// journal is complete, the new history is the repository's history -- but
+	// something after it did not finish cleanly: an old object survived the
+	// prune, the scrubbed pattern is still reachable somewhere the rewrite does
+	// not cover (a stash, a note), a ref still points at a pre-rewrite SHA, or
+	// the working-tree sync was skipped because foreign staged state appeared
+	// while the rewrite ran. It is a separate code from RewriteRefused because
+	// the two ask for opposite things: RewriteRefused says nothing happened and
+	// the command can be re-run, this says the rewrite happened and the named
+	// residue is what still needs attention. Produced by scrub file, scrub
+	// match, scrub run and author rewrite.
+	RewriteIncomplete = 31
+
 	// PushFailed means `git push` itself failed after safegit's retry policy
 	// was exhausted. Produced by push and by `backup backup`.
 	PushFailed = 40
@@ -231,6 +256,8 @@ func All() []Entry {
 		{PushHookTimeout, "PushHookTimeout", "Pre-pre-push hook timed out"},
 		{BackupDiverged, "BackupDiverged", "The remote backup slot holds work missing from the local history"},
 		{BackupNoSlot, "BackupNoSlot", "The branch has no backup slot on the remote"},
+		{RewriteRefused, "RewriteRefused", "A history rewrite was refused before any ref moved (nothing changed)"},
+		{RewriteIncomplete, "RewriteIncomplete", "A history rewrite stands, but post-rewrite verification found residue or skipped the working-tree sync"},
 		{PushFailed, "PushFailed", "Git push failed"},
 		{PushLeaseRejected, "PushLeaseRejected", "The remote ref moved after safegit observed it, so the --force-with-lease expectation no longer matched"},
 		{Internal, "Internal", "Internal invariant violated (a bug)"},

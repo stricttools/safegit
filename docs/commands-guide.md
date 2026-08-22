@@ -1208,6 +1208,8 @@ coordination guard, an uninitialized repository, a rejected argument).
 | 21 | Pre-pre-push hook timed out |
 | 22 | The remote backup slot holds work missing from the local history |
 | 23 | The branch has no backup slot on the remote |
+| 30 | A history rewrite was refused before any ref moved (nothing changed) |
+| 31 | A history rewrite stands, but post-rewrite verification found residue or skipped the working-tree sync |
 | 40 | Git push failed |
 | 41 | The remote ref moved after safegit observed it, so the --force-with-lease expectation no longer matched |
 | 70 | Internal invariant violated (a bug) |
