@@ -25,10 +25,11 @@ import (
 //     escapes the scan that covers its siblings one directory up -- even though
 //     hook discovery treats both locations as hooks.
 //
-// The tests assert the observable contract, not an implementation: an install
-// that REFUSES the colliding basename satisfies (1) exactly as well as one that
-// renames or namespaces it, and (3) is satisfied by any sweep that reaches the
-// discovery set, wherever that set lives.
+// All three are resolved by one move -- safegit's hooks into its own store --
+// and the tests now assert that resolution: (1) the basenames cannot collide,
+// so the install succeeds and git's hook is untouched; (2) uninstall takes the
+// store with the rest of .git/safegit; (3) the sweep reaches the whole
+// discovery set at any depth.
 
 var hookSafetyEnv = []string{"CLAUDE_CODE_SESSION_ID=hook-safety-test"}
 
@@ -82,13 +83,13 @@ func hookSafetyFileMatchPaths(t *testing.T, dir, pattern string) []string {
 
 // TestHookInstallDoesNotClobberNativeGitHook: installing a script whose
 // basename collides with a native git hook must not destroy the hook already
-// there. `hook install` may refuse the collision, or install somewhere that
-// does not collide -- what it must not do is overwrite the operator's existing
-// .git/hooks/pre-commit and report success.
+// there. The resolution is settled and it is the store move: safegit's hooks
+// live in .git/safegit/hooks, git's live in .git/hooks, so the basename cannot
+// collide at all and the install SUCCEEDS while the native hook is untouched.
 //
-// The collision is not hypothetical: safegit's own commit pipeline executes
-// .git/hooks/pre-commit (internal/commit/commit.go runPreCommitHook), so the
-// clobbered file is one safegit itself depends on.
+// The collision was not hypothetical: safegit's own commit pipeline executes
+// git's pre-commit hook (internal/commit/hooks.go), so the clobbered file was
+// one safegit itself depends on.
 func TestHookInstallDoesNotClobberNativeGitHook(t *testing.T) {
 	dir := newRepo(t)
 
@@ -111,12 +112,14 @@ func TestHookInstallDoesNotClobberNativeGitHook(t *testing.T) {
 
 	stdout, stderr, code := runSafegitEnv(t, dir, hookSafetyEnv, "hook", "install", srcPath)
 	if code != 0 {
-		// Acceptable outcome: install refuses to take over a native hook name.
-		// It must say so rather than failing for an unrelated reason.
-		if stderr == "" {
-			t.Fatalf("hook install failed with exit %d but printed no explanation", code)
-		}
-		t.Logf("hook install refused the colliding basename (exit %d): %s", code, stderr)
+		t.Fatalf("hook install refused a basename that no longer collides with anything (exit %d): %s", code, stderr)
+	}
+	// The installed copy is safegit's own, in safegit's own store.
+	installed := filepath.Join(dir, ".git", "safegit", "hooks", "pre-commit")
+	if body, err := hookSafetyRead(t, installed); err != nil {
+		t.Errorf("install did not write %s: %v", installed, err)
+	} else if body != srcBody {
+		t.Errorf("the installed hook is not the source script:\nwant:\n%s\ngot:\n%s", srcBody, body)
 	}
 
 	nativeAfter, readErr := hookSafetyRead(t, nativePath)

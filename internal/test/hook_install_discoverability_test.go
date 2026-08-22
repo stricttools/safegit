@@ -14,20 +14,16 @@ import (
 // so installing `my-check.sh` reports success and produces a file that `hook
 // list` never lists and `hook run`/`push` never execute -- a silent no-op.
 //
-// The tests below assert the contract rather than either fix: after a
-// SUCCESSFUL install the script must be discoverable and runnable. An install
-// that refuses an unusable basename is equally acceptable, so a hard error is
-// accepted as long as it is a real nonzero exit with an explanation. What is
-// not acceptable is exit 0 plus an invisible file.
-//
-// The tests deliberately assert nothing about WHICH directory the hook lands
-// in: whether the hooks area stays at .git/hooks or moves under .git/safegit is
-// a separate open question, and this contract holds either way.
+// The resolution is settled, so the tests assert it directly: the store is a
+// DIRECTORY that discovery walks whole, at any depth, and a hook is addressed
+// by its store-relative name. Every basename is therefore installable and
+// discoverable, and an install that reported success must produce a hook that
+// `hook list` names and `hook run` executes.
 
 // TestHookInstallArbitraryBasenameIsDiscoverable: `hook install my-check.sh`
-// must either make the script discoverable (list names it, run executes it) or
-// refuse outright. Reporting success while installing something no code path
-// can ever see is the defect.
+// installs a hook under that name and it runs. Reporting success while
+// installing something no code path can ever see was the defect; the store
+// walking whole is what makes the name a non-question.
 func TestHookInstallArbitraryBasenameIsDiscoverable(t *testing.T) {
 	dir := newRepo(t)
 
@@ -37,13 +33,7 @@ func TestHookInstallArbitraryBasenameIsDiscoverable(t *testing.T) {
 
 	stdout, stderr, code := runSafegit(t, dir, "hook", "install", src)
 	if code != 0 {
-		// Acceptable outcome: install refuses a basename discovery cannot see.
-		// It must say so rather than failing for some unrelated reason.
-		if stderr == "" {
-			t.Fatalf("hook install failed with exit %d but printed no explanation", code)
-		}
-		t.Logf("hook install refused the source basename (exit %d): %s", code, stderr)
-		return
+		t.Fatalf("hook install refused an ordinary basename (exit %d): %s", code, stderr)
 	}
 
 	// Install reported success, so the hook must actually be a hook.
