@@ -1578,6 +1578,50 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## Bulk-edit forensics and the orxtra assessment (investigation closure)
+
+- Both named invocations recovered VERBATIM from the subagent
+  transcripts (the real store is under the profile's projects dir; the
+  /tmp task paths are symlinks). Both ran blind: wrote first, counted
+  after, no zero-match refusal, no dry run; the import insertion could
+  silently no-op on a non-matching prefix; the two test-body appends
+  are non-idempotent. The def-deletion helper in a sibling transcript
+  uses a brace heuristic that would mangle any function containing a
+  bare column-0 "}" line, and its MISSING report continues past the
+  miss instead of aborting.
+- SCALE CORRECTION: this was never two incidents. A transcript-wide
+  scan for in-place bulk mutation via Bash (python heredoc with
+  .write, sed -i, cat >> heredoc) finds ~325 calls across 31 subagent
+  transcripts (heaviest single transcript: 56); only two were
+  self-reported. Caveat: the scan is a pattern count, not an audit —
+  some calls are scratch-file writes or new-file creation — but the
+  in-place-mutation pattern was pervasive, not exceptional. The
+  "two violations" framing in earlier log entries is understated;
+  the user's new batch-operation rule (dry-run first, examine, then
+  execute) is the governing discipline for campaign 2 briefs.
+- No bulk-edit script was ever committed; scripts/ holds only the
+  durable inspection/generation tools.
+- ORXTRA ASSESSMENT (for the user's design thinking; nothing written
+  into that repo): no Starlark exists in orxtra's readable surface —
+  the real system is capability-scoped sandboxed-Python tools defined
+  as validated TOML files, with no bash tool at all (the Part-1 class
+  is structurally impossible there). Verdict: yes-with-gaps — the
+  SAFETY half is covered (zero-match on edit is already a hard error;
+  everything routes through the real tools with path containment,
+  write scope, saferm, safegit commit), the PREVIEW half is missing.
+  Five concrete additions would implement the user's batch rule
+  exactly: (1) preview mode plumbed into the fs.write tools
+  (record-instead-of-perform, the classification already exists);
+  (2) a string-vs-file diff primitive; (3) a read-only occurrence
+  count primitive (assert-before-mutate); (4) replace_all exposed on
+  the edit capability (an 11-occurrence single-file replace is
+  currently inexpressible and forces the raw read+write fallback);
+  (5) multi_edit's per-edit zero-match raised from soft failure-list
+  to hard error. Filing these as an orxtra todo awaits the user's
+  word (the Starlark design lives where this session cannot read).
+- Investigation residue: one stray grep-redirect file briefly created
+  in the repo, saferm'd (archived, recoverable), tree verified clean.
+
 ## USER RULINGS (2026-08-23, chain resumption)
 
 - TRACKED HOOKS: FINAL, permanently settled — keep as-is, documented
