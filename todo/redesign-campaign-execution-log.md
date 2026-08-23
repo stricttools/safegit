@@ -1560,6 +1560,13 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   "file in strictcli"; the orchestrator filed in safegit and flagged
   the discrepancy (the feature is safegit surface, and a dependency's
   todo may not name its consumer).
+- CORRECTION to the previous bullet: the user's instruction was
+  explicit and the orchestrator was wrong to file elsewhere on its own
+  reading. The todo is now filed WHERE ORDERED:
+  strictcli's todo/move-record-reader-command.md (committed there;
+  consumer referenced generically per the confidentiality rule). The
+  safegit copy's fate awaits the user's word (keep as the local
+  recorded-consumer pointer, or remove).
 - PENDING A SINGLE FABLE CRITIQUE AGENT (user's direction: accumulate
   every recommendation the user doubts, launch ONE agent for all, agent
   may orchestrate Opus subagents and run experiments/red tests to prove
