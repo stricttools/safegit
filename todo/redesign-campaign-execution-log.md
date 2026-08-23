@@ -1578,6 +1578,45 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## Divergences healing closure (campaign 2, step 2)
+
+- All six healing fixes committed (docs/divergences.md only): the
+  rerere justification rewritten (the old text was false for
+  --resolve path=worktree, which IS an operator hand-edit — verified
+  at the resolveWorktree seam); the submodule auto-bump entry states
+  undo's after-the-rollback ordering as a pinned known defect instead
+  of overclaiming "every command refuses before writing"; the
+  cwd-scoping entry now describes the real ten-row three-kind
+  exemption table; the moves entry flipped to provisional with the
+  supersession sentence (the user overturned its direction); the
+  preamble lists provisional entries by name instead of counting
+  (counts go stale, lists cannot); four missing behaviors cataloged
+  as provisional-newly-cataloged entries (dirty-tree refusal with its
+  exact verified scope incl. reset --hard-only and the bisect
+  subcommand set; commit-refuses-mid-operation; reset --hard's
+  refusal boundary stated with what is NOT covered; the hook timeout
+  override).
+- THE HOOK-TIMEOUT CLAIM IS TRUE (verified in internal/hooks): a
+  pre-pre-push hook's first stdout line "# safegit: timeout=N"
+  replaces the configured timeout outright — no cap, no
+  lower-only rule; the override line is swallowed. An escape hatch on
+  a configured limit; cataloged as an open question naming the
+  unweighed options (cap / lower-only / drop).
+- NEW FINDINGS for the campaign-2 pile: root CLAUDE.md still says
+  "two conditions" where code and divergences agree on three consent
+  seams, and its release section may still carry the retired
+  rlsbl-release form — both need template-vs-generated verification
+  (earlier passes recorded these healed; something regressed or was
+  misverified). Code-level: the 1800s hook-timeout fallback is
+  spelled literally in three places, two of them silent <=0 fallbacks
+  at call sites — the implicit-default class; unify onto the config
+  default and decide the <=0 stance.
+- The walk-through set is now ready: the ~18 decision items (the two
+  provisional rulings, 8 ranked overturn candidates, 4 contradiction
+  pairs, 3 mixed entries, 4 newly cataloged entries — some overlap)
+  await the user's interactive review; the four unruled questions and
+  the R11 scope clarification await the chain's resumption.
+
 ## Red-test wave closure (campaign 2, step 1)
 
 - 22 red tests committed across two writers, each verified failing for
