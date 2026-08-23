@@ -1578,6 +1578,34 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## Hook timeout override: consumer sweep and ruling completion
+
+- ZERO consumers fleet-wide: no .safegit/hooks directory exists in any
+  repo; no .git/safegit/hooks store exists anywhere (50+ repos have
+  the state dir, none has hooks/); the six legacy pre-pre-push files
+  are byte-identical no-op init placeholders; grep descended into .git
+  dirs (control-verified). The integration guide — the doc a hook
+  author would read — never documents the protocol; only an
+  architecture bullet and the self-flagged divergences entry mention
+  it. It HAS shipped since v0.1.0, so removal is technically breaking
+  on a documented-in-one-bullet surface.
+- Deletion also removes two incidental defects: the first-line read
+  silently withholds a hook's first stdout line until its newline, and
+  a 2-second decision window exists during which the effective timeout
+  is undetermined.
+- RULING COMPLETED (the user's stated lean, condition satisfied): DROP
+  the override mechanism entirely — hooks get the configured timeout,
+  period. Deletion scope recorded by the sweep (hooks.go:193-311
+  family, the parser, its table test, the two doc mentions;
+  SAFEGIT_HOOK_TIMEOUT_S and the config key are a SEPARATE mechanism
+  and stay). A red test (magic line does not alter the effective
+  timeout) joins the campaign-2 set via the plan.
+- SIDE FINDING (post-release fleet chore, noted): six fleet repos
+  (their names in the sweep report) hold legacy no-op placeholder
+  hooks that will put safegit push into the exit-24 refusing state
+  once the new version installs — one hook migrate (or placeholder
+  deletion) each, after release.
+
 ## USER RULINGS (2026-08-23, second chain batch)
 
 - OPLOG BASELINE: settled — every safegit operation records branch
