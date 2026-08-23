@@ -1578,6 +1578,32 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## USER RULINGS (2026-08-23, second chain batch)
+
+- OPLOG BASELINE: settled — every safegit operation records branch
+  positions (reversibility groundwork first: the reset/rebase recovery
+  work needs exactly this data; doctor's misfires and the root-undo
+  false error fix as consequences). Per-command bypass SURFACING is
+  deferred until the baseline exists; no commitment made.
+- R11 SCOPE: settled — the auto-record-moves feature is IN the
+  release scope; the release waits for it ("one release ships the
+  completed whole"; without it the records feature's value is the
+  collapsed declared-only case the user already rejected). Its
+  red/spec tests join the campaign-2 suite.
+- HOOK TIMEOUT OVERRIDE: the user leans DROP-ENTIRELY but first wants
+  to know whether ANY consumer actually uses the magic first line.
+  Investigation dispatched (fleet-wide sweep for the literal protocol
+  string + whether the mechanism ever shipped in a released version).
+- REVERT SILENT FALLBACK: two-step directive — (1) a subagent tallies
+  EVERY command with the same shape (normally safegit-managed, silent
+  git fallback with materially different consequences: authorship,
+  trailers, undoability, safety) — dispatched; (2) once the full list
+  exists, an astute/thorough subagent generates TEN solutions, one
+  cleaner than the last, regardless of effort or scope. Ruling waits
+  on both.
+- The orxtra todo was filed and committed there
+  (data-tool batch-edit preview primitives; generically worded).
+
 ## Bulk-edit forensics and the orxtra assessment (investigation closure)
 
 - Both named invocations recovered VERBATIM from the subagent
