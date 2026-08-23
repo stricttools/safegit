@@ -590,6 +590,12 @@ func TestScrubExecuteStillRequiresCleanTree(t *testing.T) {
 //
 // The third consequence is the operator-visible one: a preview stays possible
 // while another safegit process owns the worktree.
+//
+// undo rides the same table: it is the fourth entry point that moves the branch
+// ref, it takes both of these locks on its execute path, and its preview must
+// keep taking neither. Pinning that here is what stops the fix for undo's empty
+// effects record -- minting the ref move through the effects handle -- from
+// dragging the lock acquisition above the dry-run branch along with it.
 func TestDryRunCommitFamilyTakesNoLocks(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -598,6 +604,7 @@ func TestDryRunCommitFamilyTakesNoLocks(t *testing.T) {
 		{"commit", []string{"--dry-run", "commit", "-m", "previewed", "--", "preview.txt"}},
 		{"amend with files", []string{"--dry-run", "commit", "--amend", "-m", "previewed", "--", "preview.txt"}},
 		{"reword", []string{"--dry-run", "commit", "--amend", "-m", "previewed"}},
+		{"undo", []string{"--dry-run", "undo", "--bypass-session"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := newRepo(t)
