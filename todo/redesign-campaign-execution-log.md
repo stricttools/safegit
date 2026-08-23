@@ -1578,6 +1578,36 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## Read-back reconciliation (2026-08-23, after a context loss)
+
+- The session that executed the final ruling batch ALSO ran the ONE
+  Fable plan critique and absorbed its findings into
+  todo/campaign2-plan.md revision 2 (commit 1a6f336) before its
+  context ended; the entry below lists the critique as a next step
+  because it was written as the go's instruction. THE CRITIQUE RAN.
+  Its full report was lost with that session's context; its accepted
+  findings survive ONLY as their in-plan absorptions, which the plan
+  cites by finding number (#1-#37 family, F-A3/F-A4, Tier 3) — those
+  citations are references to a lost document and carry no
+  independently readable source; the plan text itself is the record.
+- Count refinements from the critique, now authoritative: the spec
+  suite is 30 red tests plus one green control (Appendix A verified
+  exact); 63 campaign-2 commits were changelog-uncovered at critique
+  time (growing; Phase 8's scope plus Phase 9's top-up).
+- A read-back of plan revision 2 and this log found them CONSISTENT:
+  the revert single-form ruling, the reader cancellation, the
+  inverse-origin correction, the exit-code assignments, the restored
+  mv-notice subphase, and the corrected spine all agree between the
+  two files. The section headed "pre-release design review — in
+  progress" (earlier in this file) is a PARALLEL session's entry;
+  every item in it is superseded by later entries per this log's
+  standing later-supersedes rule (the narrow exit code by the family
+  code; the reader filings by the cancellation; its three deferred
+  critique items by the postponement-era rulings).
+- STANDING STATE: execution of campaign 2 is ON HOLD awaiting the
+  user's explicit go; todo/campaign2-plan.md revision 2 is the
+  executable specification; the suite is deliberately red.
+
 ## USER RULINGS (2026-08-23, plan-amendment batch) and plan amendments
 
 - REVERT: SINGLE-FORM ONLY — the git-authored passthrough arm is
