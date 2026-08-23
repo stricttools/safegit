@@ -1578,6 +1578,41 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## USER RULINGS (2026-08-23, chain resumption)
+
+- TRACKED HOOKS: FINAL, permanently settled — keep as-is, documented
+  (push-intent boundary; the blunt clone-then-push sentence). The user
+  has now ruled this repeatedly across sessions; NO future critique,
+  audit ranking, or review may re-open it without NEW FACTS (an actual
+  exploit, not a re-argument). Never ask again. The divergences
+  walk-through SKIPS this entry and the :509/:626 contradiction pair
+  resolves in its favor (the backup flag stays; the hooks stance
+  stands).
+- READER COMMAND: committed — designed in safegit's own todo (a
+  moves-query command: walk records, fold retractions, label computed
+  answers, surface malformed records). The user separately confirms
+  what actually sits in the framework's todo directory.
+- BULK-EDIT RULE (user's own formulation, replacing all prior drafts):
+  the problems were entangled and are now untangled — sed specifically
+  is the unreliable medium (pattern matching); bash/python scripting
+  is NOT a problem. Batch operations are PREFERRED over agents doing
+  manual token-burning edits, with mandatory discipline: careful,
+  dry-run capable, dry run FIRST, output examined, only then execute.
+  No mechanical way exists to ban sed inside script files (a
+  permission hook sees only direct invocations); the rule is
+  brief-level. An investigation subagent dispatched: recover the two
+  campaign bulk-edit script invocations from the session transcripts
+  and assess whether the orxtra project's Starlark script design could
+  have served them (gap list for orxtra's design thinking).
+- BYPASS DETECTION: the user asked what the oplog is FOR before
+  ruling. Answered: the oplog is undo's source of truth first, the
+  audit trail second; bypass detection is a minor piggybacking
+  consumer. Key reframe surfaced: the baseline completion (ref+tip on
+  passthrough entries) is EXACTLY the data the still-active
+  reversibility todo needs for reset/rebase recovery — it has value
+  independent of bypass surfacing. Ruling still pending with that
+  context.
+
 ## Divergences healing closure (campaign 2, step 2)
 
 - All six healing fixes committed (docs/divergences.md only): the
