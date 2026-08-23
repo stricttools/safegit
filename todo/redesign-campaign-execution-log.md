@@ -1544,6 +1544,33 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   precondition in TestUninstallFromUninitializedLinkedWorktreeRemovesTheSharedStore
   (asserts `.git/worktrees/side/safegit` while the fixture names the
   worktree `linked-side`; vacuously true since it was written).
+## USER RULINGS (2026-08-23, pre-release design review — in progress)
+
+- Partial-success exit semantics: SETTLED — nonzero stands as the
+  principle, AND the concluded-but-autostash-stored case gets its own
+  registered exit code (replacing General) so consumers can tell it
+  from real failure. Queued for the pre-release fixer. Registration
+  stays safegit-local (internal/exitcode); strictcli has no exit-code
+  declaration support — the upstream ruling request and safegit's
+  await todo already exist, no new filing needed.
+- Move-record reader: SETTLED — todo/move-record-reader-command.md
+  filed and committed; it is the recorded consumer that justifies the
+  projection API's existence (if the todo is ever abandoned, the
+  projection should be deleted, stated in the file). The user said
+  "file in strictcli"; the orchestrator filed in safegit and flagged
+  the discrepancy (the feature is safegit surface, and a dependency's
+  todo may not name its consumer).
+- PENDING A SINGLE FABLE CRITIQUE AGENT (user's direction: accumulate
+  every recommendation the user doubts, launch ONE agent for all, agent
+  may orchestrate Opus subagents and run experiments/red tests to prove
+  its theories): (1) conclusions own the worktree (resolutions write
+  disk, delete removes, autostash applies — the recommended principle);
+  (2) the JSON-contract stance "fix defects + document boundary" (mint
+  undo's would-do preview record, autostash payload member,
+  decline-no-payload stays deliberate); (3) mv rename-only plus a
+  dirty-content notice. Decisions on these three are DEFERRED until
+  the critique returns; as-built stands meanwhile.
+
 ## Phase 11 triage closure
 
 - Eight todos verified DONE against code on disk (live test run, no
