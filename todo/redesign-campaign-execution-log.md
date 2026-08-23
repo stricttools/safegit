@@ -1578,6 +1578,45 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## USER RULINGS (2026-08-23, plan-amendment batch) and plan amendments
+
+- REVERT: SINGLE-FORM ONLY — the git-authored passthrough arm is
+  deleted; multiple commits are sequential invocations; options the
+  pipeline cannot honor are refusals naming the sequential form or the
+  fact; the mode split stops existing rather than being announced;
+  revert-continue's queued path stays for raw-git-created state; a
+  divergences entry rewrite rides the change (the user confirmed it
+  and asked about others — the plan's Phase 7 enumerates: the
+  aftercare-nonzero entry generalizes, the resolution-keywords rewrite
+  notes the extended protection, and the unmerged refusal MATCHES git
+  so gets no entry).
+- FAMILY EXIT CODE: covers EVERY pipeline author (commit, amend, mv,
+  conclusions) — one meaning, payload names the failed step.
+- RACE ABORT: auto-record inference aborts loudly with a retryable
+  transient-race error when a CAS retry's inferred set differs from
+  the message-baked set.
+- OVERWRITE PROTECTION: all three destroying resolution shapes
+  (ours/theirs overwrite, declared delete, absent-stage delete), one
+  override flag.
+- UNMERGED-INDEX REFUSAL: git parity — ANY unmerged entry refuses
+  every pipeline commit (conclusions exempt); the named-paths phrasing
+  is superseded.
+- READER COMMAND: NOT PLANNED ANYWHERE — the user ordered the
+  framework-repo filing DELETED, no recreation, no safegit copy
+  (executed: saferm-archived and committed in that repo). This
+  REVERSES the earlier committed-to-a-reader ruling; the read
+  library's remaining consumer story is scrub's future backward
+  projection only.
+- INVERSE ORIGIN corrected to ruling-literal: every auto-minted
+  inverse carries the machine token (the plan's copy-the-source-origin
+  text was wrong and is amended).
+- THE GO: amend + read-back + ONE Fable critique + revisions, then
+  HOLD — execution starts only on a further explicit go.
+- All amendments applied to todo/campaign2-plan.md (non-goals, 2.3,
+  6.4, Phase 7, Appendix B); orchestrator read-back found no
+  inconsistencies introduced (the revert reshape touches no wave pin;
+  3.4/3.5 and cherry-pick's row are unaffected).
+
 ## Campaign-2 plan written (todo/campaign2-plan.md)
 
 - Five parallel grounding investigations (mode model/foundations;
