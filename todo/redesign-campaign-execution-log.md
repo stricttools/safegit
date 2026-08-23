@@ -1578,6 +1578,50 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## Campaign-2 plan written (todo/campaign2-plan.md)
+
+- Five parallel grounding investigations (mode model/foundations;
+  conclusions; effects/hooks; records/intake; docs/changelog/release)
+  verified every seam; the plan at todo/campaign2-plan.md is Phase 0
+  through Phase 10, subphased with Verify blocks, the red suite mapped
+  per subphase (Appendix A), sanctioned rewrites enumerated (Appendix
+  B), and a dependency spine. Every grounding-discovered contradiction
+  is resolved IN the plan with a [plan] origin marker, notably: the
+  seven passthroughs stay passthroughs and their dual modes are
+  DISCOVERED rows (payload schemas are legal on passthrough
+  registrations — verified); JSON capture happens only under --json
+  (human mode keeps live streaming; the framework has no tee); the
+  CAS-attempt/commit-msg-cache collision resolves as
+  per-attempt-inference with a transient-race abort on a differing
+  set; MovedLines' verbatim contract survives via additive amend
+  inference and supersede-as-retraction-plus-redeclaration; the
+  overwrite refusal's accepted set is stages UNION git's emitted
+  content and covers delete/absent-stage destruction; the unmerged
+  guard is git-parity any-unmerged with conclusions exempt; the
+  machine origin token is "observed"; the family exit code widens to
+  every pipeline author (a typed post-ref-update pipeline error);
+  exit 25 widens to any non-executable discovered hook; the stale-lock
+  doctor mints via an injected remover; the stale-autostash key is
+  probe-contingent (Phase 0.4) with a stated fallback; the
+  implicit-fallback family (the 1800s triplication plus six siblings)
+  is deleted wholesale with Validate as sole authority.
+- LOG CORRECTION: the earlier "CLAUDE.md regression" finding (the
+  divergences healer's note about "two conditions" and the retired
+  release form) was FALSE — grounding proved the template and the
+  generated file byte-consistent and current; the stale text exists
+  only in harness-injected context snapshots given to agents. The
+  plan carries no such item.
+- Grounding also settled: the changelog edit mechanics and entry ids;
+  45+ campaign-2 commits currently uncovered (Phase 8's scope); the
+  release hook WILL block on the 428-line-stale exit-sites census
+  (Phase 9 pre-empts by regenerating and committing); a
+  reader-command filing already exists in the framework repo per a
+  user order executed by another session (Phase 7 carries a one-line
+  confirmation item; nothing is built).
+- Next per the agreed sequence: orchestrator read-back of the plan,
+  then ONE adversarial critique, then revisions; EXECUTION awaits the
+  user's explicit go.
+
 ## Campaign-2 Phase 1 closure (second red-test wave)
 
 - All five pins committed and verified red for the right reason (the
