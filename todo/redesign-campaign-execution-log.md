@@ -1578,6 +1578,48 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## USER RULINGS (2026-08-23, third chain batch)
+
+- SILENT MODE SPLITS: ruled — the DECLARED MODE MODEL checked at
+  registration, plus guards DERIVED from the gitexec classification
+  table. One table, one row per (command, mode); a command with more
+  than one row must declare a required member-spelled selector
+  covering exactly its modes or registration fails; every row names
+  an authorship class, an oplog op (with Undoable explicit), and a
+  preview strategy; payload mode members, announcement text and doc
+  content are GENERATED from the declaration; run-time-DISCOVERED
+  modes get a declared "discovered" kind with a mandatory
+  unconditional announcement; reset/bisect's hand-listed guard
+  selectors are deleted and derived (default-deny for unclassified
+  argv); the failed-passthrough oplog append records outcome. This is
+  the campaign-2 structural centerpiece. (Recommended-option pick.)
+- MV MISSING DESTINATION DIRECTORY: ruled — REFUSE naming the
+  directory; a dedicated qualified flag elects creation. Overturns
+  the as-built silent mkdir; red test + divergences entry rewrite.
+- NON-EXECUTABLE HOOKS: ruling completed per the user's lean after
+  their questions were answered (a non-executable hook is always an
+  accident — hook install itself sets the bit; the "local draft"
+  scenario in the option text was the orchestrator's invented
+  hypothetical, no such artifact exists) — REFUSE BOTH: any
+  discovered non-executable hook, local or tracked, makes push refuse
+  naming the chmod fix. Kills the hybrid; divergences entry rewrite;
+  red test.
+- ESCAPING SYMLINK TARGETS: ruling completed per the user's lean —
+  REFUSE + dedicated qualified flag (was: commit with a notice). The
+  user confirmed the divergences recording requirement; the entry
+  flips from mixed/notice to a deliberate refusal. Red test; the
+  Phase 2 symlink tests' escaping-notice pins become sanctioned
+  rewrites.
+- Walk-through arithmetic after this batch: all four contradiction
+  pairs are resolved (two subsumed by the mode-model ruling, one by
+  the mv ruling, one by the hooks-FINAL ruling); the
+  resolution-keywords provisional entry was ratified earlier (flips
+  to deliberate); the moves provisional entry rewrites with the
+  feature. Remaining: the commit-hooks-order mixed entry, the two
+  newly cataloged behavior entries (dirty-tree scope,
+  commit-mid-operation), and the question of the un-itemized
+  remainder of the critique's ranked overturn candidates.
+
 ## Ten-solution ladder for the silent-mode-split class (produced; ruling pending)
 
 - The designer delivered the ladder, one solution cleaner than the
