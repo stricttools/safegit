@@ -1578,6 +1578,62 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## THE POSTPONEMENT DIRECTIVE and post-critique rulings (2026-08-23)
+
+- RELEASE POSTPONED by user directive after a three-critic adversarial
+  review of the accumulated recommendations: "we're not releasing until
+  all the work is done ... these new discoveries warrant a new plan ...
+  write red tests for everything we have found, then make the plan that
+  turns them green, and only then we can release." A second campaign:
+  red tests -> plan -> implementation -> green -> release. Phase 11's
+  release step is ON HOLD; the plan/log stay in todo/ meanwhile.
+- USER RULINGS (recommended-option picks, weakly held per convention,
+  except the postponement itself which is deliberate):
+  - Overwrite protection: a declared ours/theirs whose write would
+    destroy disk content matching NO stage REFUSES, naming worktree; a
+    dedicated qualified flag is the only way through (the
+    --allow-public-remote per-condition precedent).
+  - Exit semantics RESHAPED from the earlier narrow ruling: ONE family
+    code ("conclusion stands, aftercare did not finish") for all six
+    shapes; the JSON envelope is ALWAYS emitted (the die() paths in
+    finishConclusion become report-then-return); the payload carries
+    the full autostash state enum incl. the stash SHA plus a residue
+    list. The nonzero principle is unchanged.
+  - Effects honesty: ALL SEVEN unminted commands get real effects
+    records (undo incl. DeleteRef with its own mint site and exemption
+    row and real SHAs; unlock; both doctor-fix paths; backup backup
+    with a lease placeholder; backup restore; the submodule
+    parent-bump), plus undo gains a payload schema and joins the
+    dry-run no-lock test table.
+  - Ordinary commit REFUSES a named path holding unmerged index stages
+    regardless of in-flight state (git parity); doctor --action fix
+    gains the orphaned-unmerged repair as the refusal's named way out.
+  - Undeclared moves: witnessed subtree collapse (one observed subtree
+    record when the commit's delta fully witnesses a uniform prefix
+    mapping) plus a per-file cap with a declare-it notice for scattered
+    moves; ONE machine origin token whose documented meaning is
+    "derived by safegit, not claimed by a person" (covers both
+    delta-pairing and revert-inverse derivation).
+  - The grammar reservation (quoting-trigger keywords; bare keyword
+    after the id parses as Malformed) rides the new plan.
+  - Divergence review: heal the proven text defects and add the four
+    missing entries FIRST, then the user is walked through the ~18
+    decision items INTERACTIVELY, one per question — the user will not
+    read the file.
+- STILL UNRULED (question chain stopped by free-text; resume on the
+  user's word): the tracked-hooks security stance; bypass detection's
+  future (baseline completion); the bulk-edit process rule; the reader
+  command's home and commitment. ALSO TO CLARIFY: whether the
+  undeclared-moves feature itself is inside the new plan's release
+  scope or a campaign after it.
+- Red-test wave dispatched for the PROVEN defect findings and the ruled
+  behavior changes (the critics' verbatim drafts adapted into the
+  suite; the suite goes deliberately red — the campaign-1 spec
+  pattern). Feature-level tests for undeclared moves await the scope
+  clarification. Findings deliberately NOT tested yet because their
+  rulings are pending: the bypass-baseline misfires (doctor-after-
+  safegit-merge) and the doctor consent-under-dry-run inconsistency.
+
 ## Phase 11 triage closure
 
 - Eight todos verified DONE against code on disk (live test run, no
