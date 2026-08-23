@@ -1578,6 +1578,43 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## USER RULINGS (2026-08-23, loose-end batch after the read-back)
+
+- THE HOLD STANDS: execution of campaign 2 does not start; the plan
+  waits for a later explicit go.
+- STANDING DIRECTIVE FOR THE NEXT SESSION (the lost-critique policy,
+  user's own formulation): before anything else, DIFF the plan's last
+  committed revision against the revision before it (todo/
+  campaign2-plan.md at commit 1a6f336 vs at commit c510a55 — revision
+  2 vs revision 1) and PRESENT THE USER WITH CHOICES over what changed
+  — the critique-era absorptions and any silent decisions folded into
+  revision 2 are to be surfaced for the user's review, not left
+  standing by default. (The plan file was deliberately NOT touched
+  after this ruling so the last-vs-previous diff stays exactly the
+  rev1-to-rev2 delta.)
+- BATCH-OPERATION RULE ADOPTED GLOBALLY: written into
+  /home/m/Projects/CLAUDE.md as its own section (batch preferred;
+  dry-run capable, dry run first, output examined, then execute;
+  occurrence-count assertion + full diff review for any bulk change in
+  any medium; sed the unreliable medium, unverified change the real
+  problem; the ~325-call forensics as origin). That directory is not a
+  git repository — the edit is uncommitted by nature.
+- PLAN SUBPHASE 1.5 RATIFIED NOW by the user (was [plan], flagged for
+  the phase audit): a dry run never prompts for consent, uniformly;
+  the flag is cleared by this entry — the plan's marker text updates
+  with the next plan revision rather than now (see the diff-freeze
+  above).
+- Loose ends carrying NO open decision, accounted for: the red suite
+  needs no protective banner (ruled in campaign 1); an early patch
+  release for the shipped v0.28.0 defects is STRUCTURALLY impossible
+  under the standing model (release-once ships main, main's suite is
+  deliberately red, side branches are banned) — keeping the hold
+  knowingly extends that exposure window; the post-release fleet
+  chores stay recorded; the reader-todo absence check is a one-glance
+  triage item; the stale await-todo claim is noted at triage per todo
+  immutability; the saferm archives remain the user's alone; the
+  changelog top-up absorbs log-commit growth.
+
 ## Read-back reconciliation (2026-08-23, after a context loss)
 
 - The session that executed the final ruling batch ALSO ran the ONE
