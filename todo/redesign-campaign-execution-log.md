@@ -1578,6 +1578,44 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## Silent-mode-split tally (the full class)
+
+- TEN silent-and-consequential instances found (several reproduced
+  live), not one: (1) revert's flag-selected passthrough (13-entry
+  allowlist; git authors, no trailers, not undoable, no indication);
+  (2) revert's arity-selected passthrough (same delta, help-text
+  only); (3) revert --dry-run previews identically for both modes AND
+  records the passthrough argv even for the pipeline path; (4)
+  per-path marker-verification exemption is a bare silent skip
+  (repository attribute state the operator may never have seen); (5)
+  reset's guard fires only on literal --hard — --merge/--keep/plain
+  reset move HEAD/tree unguarded, and the in-code justification is
+  factually wrong; (6) bisect guards only good/bad/old/new/reset/start
+  — skip/run/replay/next are unguarded (the comment admits the list
+  approximates); (7) scrub file swallows the submodule-enumeration
+  error and silently disables submodule targeting (the one of four
+  sibling sites that does not warn; fails closed at Tier A blaming
+  the operator's path); (8) the scrub submodule redirect is
+  infof-only — invisible under --quiet (payload covers --json); (9)
+  --remap-shas-in accepted, validated, silently inert inside
+  submodule histories; (10) commit --hunks silently retries a failed
+  exact apply with --3way (staged content can differ from the literal
+  selection).
+- BONUS DEFECTS from the sweep: a FAILED passthrough still appends an
+  oplog entry (the audit trail records reverts that never happened —
+  coord_cmd.go's append is unconditional after the failure branch);
+  --dry-run placed after a passthrough command's name forwards to git
+  (loud, exit 129, but logged). And the near-miss worth designing
+  for: cherry-pick's clean-vs-conflicted authorship inversion spans
+  two command names (clean pick = git-authored; conflicted pick
+  concluded = pipeline-authored) with nothing saying which you got.
+- Model behavior confirmed where expected: the queued-delegation
+  notice is genuinely unconditional; push's hook skip announced in
+  three places; the rewrite sync-skip announced AND nonzero.
+- Next per the user's directive: a ten-solutions designer gets the
+  full list — ten solutions, one cleaner than the last, regardless of
+  effort or scope.
+
 ## Hook timeout override: consumer sweep and ruling completion
 
 - ZERO consumers fleet-wide: no .safegit/hooks directory exists in any
