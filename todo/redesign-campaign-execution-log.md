@@ -1578,6 +1578,47 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## Ten-solution ladder for the silent-mode-split class (produced; ruling pending)
+
+- The designer delivered the ladder, one solution cleaner than the
+  last, grounded in the real code: (1) site-local notices at all
+  twelve sites; (2) one announcement authority with a machine-readable
+  execution-mode member and an enumeration test; (3) refusals replace
+  every fallback (cannot reach the attribute-exemption case, which is
+  a legitimate declaration); (4) declared mode selectors — required
+  member-spelled choices electing pipeline vs delegated, worktree
+  checks, submodule targeting; (5) guard and skip tables DERIVED from
+  the gitexec classification (deletes the two admitted approximations
+  in reset/bisect; default-deny; orthogonal component every deeper
+  solution needs); (6) a mandatory execution receipt every mutating
+  handler returns, feeding human text, payload, oplog and exit code
+  from one object (previews same shape by construction); (7) one name
+  one class — dual commands split into distinct names under a delegate
+  group; (8) plan-then-execute — handlers build an immutable plan
+  (mode fixed before execution; mid-flight switches unrepresentable;
+  one executor owns gitexec/pipeline/oplog/effects); (9) a declared
+  mode model checked at REGISTRATION (a second mode without a
+  selector is a registration error; payload members, notices and doc
+  pages generated from the authorship column); (10) delete the second
+  authorship class entirely — every commit-creating command
+  restructured onto the pipeline, sequences become safegit's own loop
+  of single steps, and everything else reaches git through one door
+  whose NAME is the mode (a delegate command, guarded, receipted,
+  never undoable).
+- Composition facts from the ladder: the derived guard tables survive
+  under every deeper solution and are never stopgap; the receipt is
+  the plan-executor's output type (building it en route is not
+  waste, building the notice layers en route IS); hand notices inside
+  the declared model are a second authority for a generated fact; at
+  every solution above the guard tables, the preview must derive from
+  the same object as the run, the oplog must record OUTCOME as well
+  as operation, and mode belongs in payload and oplog but never in
+  the exit code.
+- The full ladder text lives in the designer's report; the user's
+  ruling is pending. An accidental empty commit made while preparing
+  this entry was immediately reversed via safegit undo (oplog carries
+  both).
+
 ## Silent-mode-split tally (the full class)
 
 - TEN silent-and-consequential instances found (several reproduced
