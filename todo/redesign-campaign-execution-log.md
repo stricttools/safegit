@@ -1578,6 +1578,40 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## Red-test wave closure (campaign 2, step 1)
+
+- 22 red tests committed across two writers, each verified failing for
+  its finding's exact reason; no previously-passing test broke; no
+  production code touched. Conclusion domain (11): the
+  deletion-vs-written report lie (both modes), the crash-window
+  degenerate re-merge, the stale-autostash cross-application plus
+  doctor's blindness to the orphan, the queued-delete destruction
+  before git commits, the missing envelope on commit-stands failures,
+  the indistinguishable stored-autostash payload, the overwrite
+  refusal (new ruling), the orphaned-unmerged commit refusal (new
+  ruling; git's real parity message recorded), and undo's auto-bump
+  pre-check ORDERING (probe sharpened the finding: undo does refuse,
+  but only after the submodule ref moved — the pin is on ordering).
+  Machine contract (11): the one-JSON-document table over all six
+  guarded commands (five leak today; checkout is a deliberate green
+  forward-guard since git writes its text to stderr there), child
+  output to stderr, undo's effects record + payload in both modes and
+  the root-undo -d shape, the undo row added GREEN to the dry-run
+  no-lock table, the five invisible-mutation pins (unlock, doctor
+  fix covering both repair paths in one test, backup backup, backup
+  restore, the submodule parent bump), and the grammar reservation
+  (keywords quoted as paths; bare keyword after the id is Malformed;
+  the keyword list spelled in the test so a shrinking production list
+  cannot hide).
+- The streaming leak's root cause was located (runGitMutation passes
+  Stream(true); strictcli's execRun wires the child's stdout to ours
+  unconditionally) and the fix seam already exists next door
+  (passthroughStdout / git.RunPassthroughTo, used today only by the
+  delegated conclusion).
+- The suite is now DELIBERATELY RED (campaign-2 specification), as it
+  was for campaign 1. CI on main is not exercised (nothing pushes
+  before the eventual release).
+
 ## THE POSTPONEMENT DIRECTIVE and post-critique rulings (2026-08-23)
 
 - RELEASE POSTPONED by user directive after a three-critic adversarial
