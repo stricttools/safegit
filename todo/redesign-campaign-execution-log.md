@@ -1578,6 +1578,38 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## Campaign-2 Phase 1 closure (second red-test wave)
+
+- All five pins committed and verified red for the right reason (the
+  Fable orchestrator re-ran every worker's test itself): mv
+  missing-destination refusal (currently mints the mkdir and
+  commits); escaping-symlink refusal (currently notice + commit;
+  non-escaping control passes); push refusal on a non-executable
+  LOCAL hook (currently skip-with-warning; no exit number asserted —
+  widening 25 vs a new code is implementation's choice); the
+  timeout-override deletion (a 60s-budget hook printing the magic
+  line is killed at ~1s today; second test pins the line forwarded
+  not swallowed, with a control against vacuity); passthrough oplog
+  branch positions (merge entry's ref and old tip empty today) and
+  failed-run distinguishability (field-for-field identical today).
+- IMPLEMENTATION FACTS refined by pin 5, for the oplog-baseline
+  phase: failed merge/rebase/reset/bisect/pull currently write NO
+  oplog entry at all (the failed-run-logged defect exists only on the
+  runGuardedPassthrough seam — cherry-pick and revert); merge already
+  records the NEW tip under its result key — only the ref and the old
+  tip are missing there. The baseline work must therefore also decide
+  the failed-run entry policy for the coord_cmd seams (record with a
+  not-performed outcome, matching the ruled "audit trail never
+  records operations that did not happen" in both directions).
+- Sanctioned-rewrite flags carried in the new tests' comments:
+  existing mv mkdir pins, the escaping-notice tests, the hook
+  skip-non-executable tests, TestParseTimeoutOverride and the
+  override doc paragraphs.
+- Suite remains deliberately red (campaign-2 spec). Phase 1 of the
+  proposed eleven-phase shape is DONE; everything else stays ON HOLD
+  for the user's separate go (global-rules edit; the plan; phases
+  2-11).
+
 ## USER RULINGS (2026-08-23, final batches) — WALK-THROUGH CLOSED, ALL WORK ON HOLD
 
 - Divergence walk-through CLOSED. Final four items all confirmed
