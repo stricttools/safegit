@@ -21,6 +21,16 @@ so concurrent commits to the same branch serialize correctly. An append-only
 operation log records every mutation. The output is standard git commits --
 teammates, CI, and code review tools see nothing unusual.
 
+## A deliberate subset
+
+safegit does not promise full git support and never will. It implements a
+small, opinionated subset of git's functionality, chosen for agent-heavy
+workflows. When a git feature, command, flag, or edge case is judged actively
+harmful or irrelevant for that workflow, safegit deliberately omits it and
+never looks back. Every such omission is recorded in
+[docs/divergences.md](docs/divergences.md), unapologetically. safegit is for
+agents, not for all humans.
+
 ## Install
 
 From source (requires the Go version `go.mod` declares -- currently 1.25.7):
