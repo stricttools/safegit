@@ -1578,6 +1578,61 @@ Appendix A under-covers the 0.6 removals; Phase 9 must also heal:
   dirty-content notice. Decisions on these three are DEFERRED until
   the critique returns; as-built stands meanwhile.
 
+## USER RULINGS (2026-08-23, final batches) — WALK-THROUGH CLOSED, ALL WORK ON HOLD
+
+- Divergence walk-through CLOSED. Final four items all confirmed
+  as-is: once-per-operation commit-hook semantics kept (hooks never
+  re-run across CAS retries; the staged-content nuance stays
+  documented); the dirty-tree refusal including untracked files
+  confirmed; the commit-refuses-mid-operation entry confirmed;
+  coverage declared COMPLETE (the un-itemized remainder of one
+  critic's overturn ranking is accepted as closed — two full
+  adversarial reads stand; any entry re-opens only on new facts).
+  Every entry in docs/divergences.md now has a settled disposition.
+- Loose-end rulings: a SECOND RED-TEST WAVE pins the five
+  post-wave-one ruled behaviors (mv missing-destination refusal,
+  escaping-symlink refusal, non-executable hooks refuse in both
+  stores, hook timeout-override deletion, oplog baseline fields on
+  passthrough entries) BEFORE the plan; feature spec tests (declared
+  mode model, auto-record-moves) are written inside their plan
+  phases. Reset/rebase recovery stays POST-campaign (the todo remains
+  active; the oplog baseline shipping in campaign 2 satisfies half
+  its precondition). The batch-operation rule (batch preferred over
+  manual edits; dry-run capable, dry run first, output examined, then
+  execute; occurrence-count check + full diff review for any bulk
+  change in any medium) is to be ADOPTED INTO THE GLOBAL RULES FILE.
+- EVERYTHING IS ON HOLD by the user's explicit instruction: the
+  second red-test wave, the global-rules-file edit, and the
+  campaign-2 plan all wait for a separate explicit go. The agreed
+  sequence when the go comes: second red-test wave -> the orchestrator
+  writes the campaign-2 plan (phased, Verify blocks, dependency
+  spine, red suite as spec, every ruling cited) -> orchestrator
+  read-back -> ONE adversarial plan critique -> revisions -> execution
+  on a further explicit go.
+- Campaign 2 design state at hold: ZERO unresolved design work. The
+  full ruled scope: declared mode model checked at registration +
+  guards derived from the gitexec classification; the
+  conclusion-incomplete family exit code with the envelope always
+  emitted and full autostash payload enum; all seven effects mints;
+  the overwrite refusal + dedicated flag; the unmerged-entries commit
+  refusal + doctor orphan repair; autostash application with its
+  ruled divergence; the crash-window idempotence check; stale
+  autostash guard + doctor check; delegation delete-after-continue;
+  the streaming-leak fix on six guarded commands; the oplog baseline;
+  hook timeout-override deletion; refuse-both non-executable hooks;
+  mv missing-destination refusal + flag; escaping-symlink refusal +
+  flag; auto-record-moves with all amendments (parent-tree blob
+  uniqueness, regular-file modes only, witnessed subtree collapse +
+  cap, one machine origin token, pinned refusal sets across retries,
+  supersede with fresh ids, completed handling-site list, scrub
+  projection visible before consent, notice timing at the winning
+  attempt); the grammar reservation; the 1800s timeout-fallback
+  unification; the CLAUDE.md regression verification; the changelog
+  corrections (the nonexistent --moved colon grammar in entry 11,
+  retyping entries 17/32 breaking, the split dry-run-uninstall fix
+  entry, covering campaign-2's own commits); divergence-entry
+  rewrites riding their implementing phases.
+
 ## USER RULINGS (2026-08-23, third chain batch)
 
 - SILENT MODE SPLITS: ruled — the DECLARED MODE MODEL checked at
