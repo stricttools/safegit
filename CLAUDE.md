@@ -4,6 +4,10 @@
 
 Concurrency-safe Git wrapper (Go CLI). When multiple AI agent sessions share one repo, standard git races on `.git/index` -- files leak between commits. safegit isolates each commit via per-invocation temporary indexes and CAS-retry ref updates. Output is standard git commits, transparent to CI and teammates.
 
+## The subset law
+
+safegit does not promise full git support and never will. It deliberately implements a small, opinionated subset of git's functionality, chosen for agent-heavy workflows. When a git feature, command, flag, or edge case is judged actively harmful or irrelevant for that workflow, safegit deliberately omits it and never looks back -- no compatibility pressure, no "but git supports it" argument. Every such omission is recorded in `docs/divergences.md`, unapologetically. safegit is for our agents, not for all humans.
+
 ## Commands
 
 | Command | Description |

@@ -3304,6 +3304,11 @@
           "anchor": "an-empty-commit-is-refused-an-empty-merge-is-not"
         },
         {
+          "level": 3,
+          "text": "`safegit commit` refuses while an operation is in flight",
+          "anchor": "safegit-commit-refuses-while-an-operation-is-in-flight"
+        },
+        {
           "level": 2,
           "text": "Where the working directory reaches",
           "anchor": "where-the-working-directory-reaches"
@@ -3454,6 +3459,11 @@
           "anchor": "hooks-left-in-the-pre-migration-location-are-a-refusal-not-a-fallback"
         },
         {
+          "level": 3,
+          "text": "A pre-pre-push hook can raise its own timeout, without a cap",
+          "anchor": "a-pre-pre-push-hook-can-raise-its-own-timeout-without-a-cap"
+        },
+        {
           "level": 2,
           "text": "Output channels, exit codes and previews",
           "anchor": "output-channels-exit-codes-and-previews"
@@ -3482,6 +3492,16 @@
           "level": 2,
           "text": "Safety and consent",
           "anchor": "safety-and-consent"
+        },
+        {
+          "level": 3,
+          "text": "A dirty working tree refuses the guarded commands, untracked files included",
+          "anchor": "a-dirty-working-tree-refuses-the-guarded-commands-untracked-files-included"
+        },
+        {
+          "level": 3,
+          "text": "`reset --hard` is refused when the tree is dirty, and only then",
+          "anchor": "reset-hard-is-refused-when-the-tree-is-dirty-and-only-then"
         },
         {
           "level": 3,
@@ -7306,6 +7326,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-22T22:07:19.400759+00:00",
+  "last_gen": "2026-08-23T21:01:22.006611+00:00",
   "theme": "minimal"
 }
