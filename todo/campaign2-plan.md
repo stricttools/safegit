@@ -39,10 +39,11 @@ probe named in its subphase.
 - Live streaming under machine mode for the guarded commands (blocked on
   the framework's tee; `todo/push-streaming-restoration.md` forbids a
   safegit-side workaround).
-- The reader command for move records (a filing exists in the framework
-  repo per a user order executed by another session; the user confirms
-  its home — Phase 7 carries the confirmation item, this plan builds
-  nothing).
+- The reader command for move records is NOT PLANNED anywhere `[user]`
+  (2026-08-23): the framework-repo filing was deleted on the user's
+  order (archived via saferm, recoverable); no safegit todo replaces
+  it. The read library's remaining consumer story is scrub's future
+  backward projection only.
 - Everything in the three contingent todos and the three
   strictcli-await todos.
 - The global-rules-file adoption of the batch-operation rule (a one-off
@@ -315,10 +316,23 @@ preview strategy is named.
 ### 2.3 Discovered-mode retrofits and fallback deletions
 
 Applying the model to the tallied instances `[user]`:
-- revert: both splits (allowlist, arity) announce and carry the payload
-  mode member; the dry-run preview derives from the mode decision so
-  the two modes preview distinctly and the recorded argv matches the
-  mode (fixing the wrong-argv record at sequencer_preview.go:66).
+- revert becomes SINGLE-FORM ONLY `[user]` (2026-08-23, superseding the
+  announce-the-split shape): the git-authored passthrough arm is
+  DELETED. `safegit revert <commit>` supports exactly the restructured
+  single-commit pipeline form; multiple commits are sequential
+  invocations (each authored, each undoable); options the pipeline
+  cannot honor (-S, --edit, --no-commit, pathspecs) and multi-commit
+  argv are refusals naming the fact and, for multi-commit, the
+  sequential form. The registration stays a passthrough (the handler
+  refuses non-single forms) and gains the payload schema of the
+  single form; its mode-table entry is ONE row, so no announcement
+  exists because no split exists. revert-continue's queued path stays
+  (raw-git reverts in mixed repos still create queued state needing
+  conclusion). The dry-run preview previews only the single form
+  (fixing the wrong-argv record at sequencer_preview.go:66 by
+  deletion); the divergences entry "A single safegit revert is split
+  at git's own seam" is REWRITTEN to the single-form ruling in the
+  same commit.
 - scrub file's submodule redirect: the infof announcement becomes the
   generated unconditional one; the payload gains the submodule member
   (schema change); the swallowed submodule-enumeration error
@@ -725,10 +739,11 @@ declare-it notice. The cap is a package const in internal/commit
   the replaced tip's first parent (a second diff-tree on the amend
   path; the existing payload delta keeps its meaning). Reword mints
   nothing (no tree change) and preserves everything `[plan]`.
-- Revert inverses: conclusionMovedRecords carries the SOURCE record's
-  origin through to the inverse (the inverse of an observed record is
-  observed; of a declared record, declared) — Record.Origin makes this
-  one field copy.
+- Revert inverses: EVERY auto-minted inverse carries the machine token
+  `[user]` (ruling-literal: the token means "derived by safegit, not
+  claimed by a person", and no person claimed the inverse regardless
+  of the source record's origin). conclusionMovedRecords sets
+  Record.Origin to observed unconditionally.
 
 ### 6.5 Payload and notices
 
@@ -801,10 +816,13 @@ the end.
   placeholder; the dry-run network claim is re-scoped to name backup
   restore's ls-remote read (the live falsehood the await-todo
   records).
-- The reader-command confirmation item: ONE line for the user — the
-  filing exists in the framework repo per their order executed
-  elsewhere; confirm its home or direct a safegit todo; this plan
-  builds nothing either way.
+- Divergence catalog additions from the late rulings: the revert entry
+  rewritten to the single-form ruling (done in 2.3's commit — verify);
+  the aftercare-nonzero entry generalized to every pipeline author
+  (3.1); the resolution-keywords entry's rewrite notes the extended
+  overwrite protection (3.6). The unmerged-entries refusal MATCHES git
+  and therefore needs no divergence entry — verify none was
+  accidentally added.
 - Finish: `--dump-schema` (writes the tracked schema; commit via rlsbl
   commit) and bare `selfdoc gen`.
 - STRUCK, with the log corrected: the earlier "CLAUDE.md regression"
@@ -927,9 +945,12 @@ deliberately changes; anything else that breaks is a defect)
   TestHookListRendersStateAndOrigin's hook-run tail;
   TestDoctorExitCodeFollowsErrorFindings's warn fixture;
   TestParseTimeoutOverride (deleted with its parser).
-- 2.3: any test pinning the silent revert fallback's silence, the
-  scrub submodule infof-only announcement, or the --hunks 3way retry
-  (the stage package's retry tests).
+- 2.3: any test pinning the silent revert fallback's silence OR the
+  passthrough revert arm's existence (multi-commit reverts, forwarded
+  exotic flags — including the 7.4-era multi-commit-emits-no-records
+  test, which becomes a refusal pin), the scrub submodule infof-only
+  announcement, and the --hunks 3way retry (the stage package's retry
+  tests).
 - 3.2: contingent — only if the 0.4 probe disproves the message shape.
 - 5.1: TestMvCreatesTheDestinationDirectory; the two scrub_moves
   fixtures moving into nonexistent directories.
