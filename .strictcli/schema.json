@@ -82,7 +82,7 @@
   },
   "project_id": "github.com/smm-h/safegit",
   "name": "safegit",
-  "version": "0.28.1-0.20260824231054-e02535d6c52b+dirty",
+  "version": "0.28.1-0.20260824233409-3e6cbd93b565+dirty",
   "help": "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "proc_observe_allowlist": [
     [
@@ -595,7 +595,7 @@
       "args": [
         {
           "name": "pairs",
-          "help": "one move each, written 'old -> new'. End BOTH paths with a slash to move a whole directory, which is recorded as ONE subtree record however many files it holds. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. Every pair is checked before the first file is touched -- the source must be tracked and on disk, the destination must be free and its directory must already exist unless --create-missing-directories says otherwise, the source must carry no uncommitted content changes, and no two pairs may speak for the same path or chain into one another -- and a failure part-way through puts back everything already moved. The commit is the rename and nothing else: each path is carried across as the blob its parent commit held, which is why a path with uncommitted content changes is refused rather than moved -- commit the content first and then move it, or move it on disk yourself and commit both at once with 'safegit commit --moved'",
+          "help": "one move each, written 'old -> new'. End BOTH paths with a slash to move a whole directory, which is recorded as ONE subtree record however many files it holds. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. Every pair is checked before the first file is touched -- the source must be tracked and on disk, the destination must be free and its directory must already exist unless --create-missing-directories says otherwise, the source must carry no uncommitted content changes, and no two pairs may speak for the same path or chain into one another -- and a failure part-way through puts back everything already moved. The commit is the move and nothing else: each path is carried across as the blob its parent commit held, which is why a path with uncommitted content changes is refused rather than moved -- commit the content first and then move it, or move it on disk yourself and commit both at once with 'safegit commit --moved'",
           "value_schema": {
             "type": "array",
             "items": {
@@ -2079,7 +2079,7 @@
     },
     "undo": {
       "name": "undo",
-      "help": "reverse the last safegit-authored operation using the oplog -- a commit, an mv, an amend, a reword, or a conclusion (merge-continue, cherry-pick-continue, revert-continue). It moves a REF and never the working tree",
+      "help": "reverse the last safegit-authored operation using the oplog -- a commit, an mv, an amend, a reword, a merge, pull, cherry-pick or revert safegit's own commit pipeline authored, or a conclusion (merge-continue, cherry-pick-continue, revert-continue). A fast-forward is REFUSED rather than reversed: the tip it moved onto is a commit git created and safegit never rolls a branch back over one. It moves a REF and never the working tree",
       "effect": "mutating",
       "payload_schema": {
         "additionalProperties": false,
@@ -2172,7 +2172,7 @@
     },
     "unlock": {
       "name": "unlock",
-      "help": "release one of SAFEGIT'S OWN lock files -- a per-ref lock, this worktree's operation lock, or the repository-wide rewrite lock -- left behind by a safegit process that was killed while holding it. It has nothing to do with git's .git/index.lock or any other lock git takes for itself. A lock whose holder is still alive is refused; ordinarily nothing needs this command, because a stale lock is reclaimed automatically by the next contender and 'safegit doctor --action fix' sweeps them, so it is the last-resort path for a filesystem where that reclamation cannot work",
+      "help": "release one of safegit's OWN lock files -- a per-ref lock, this worktree's operation lock, or the repository-wide rewrite lock -- left behind by a safegit process that was killed while holding it. It has nothing to do with git's .git/index.lock or any other lock git takes for itself. A lock whose holder is still alive is refused; ordinarily nothing needs this command, because a stale lock is reclaimed automatically by the next contender and 'safegit doctor --action fix' sweeps them, so it is the last-resort path for a filesystem where that reclamation cannot work",
       "effect": "mutating",
       "args": [
         {
