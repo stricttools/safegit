@@ -76,6 +76,9 @@ func TestRevertOfAMoveDeclaresTheMoveBack(t *testing.T) {
 	if inverse[0][0] == forward[0][0] {
 		t.Errorf("the inverse record reuses the original's id %s; it is a different claim", forward[0][0])
 	}
+	// OBSERVED, whatever the reverted record's own origin was: nobody stated
+	// this move, safegit derived it by turning the other commit's record around.
+	assertOrigins(t, msg, "observed")
 
 	// The projection follows the path forward across both commits and lands
 	// where the trees say the content actually is.
@@ -111,6 +114,7 @@ func TestRevertOfASubtreeMoveDeclaresTheSubtreeBack(t *testing.T) {
 	if len(inverse) != 1 || inverse[0][1] != "lib/ -> src/" {
 		t.Fatalf("the revert's records are %v, want one subtree inverse", inverse)
 	}
+	assertOrigins(t, commitMessageOf(t, dir, "HEAD"), "observed")
 
 	p := trailer.Forward("src/deep/two.txt", projectionChain(t, dir))
 	if p.Path != "src/deep/two.txt" || !p.Present {
@@ -269,6 +273,9 @@ func TestConflictedRevertConcludedThroughRevertContinueDeclaresTheMoveBack(t *te
 	if inverse[0][0] == forward[0][0] {
 		t.Errorf("the inverse record reuses the original's id %s; it is a different claim", forward[0][0])
 	}
+	// OBSERVED, whatever the reverted record's own origin was: nobody stated
+	// this move, safegit derived it by turning the other commit's record around.
+	assertOrigins(t, msg, "observed")
 
 	// The commit is a real revert of the move as well as a record of it.
 	paths := testutil.TreePaths(t, dir, "HEAD")
