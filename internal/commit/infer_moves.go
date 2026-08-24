@@ -179,27 +179,23 @@ func newAmendMoveInference() *moveInference {
 }
 
 // declaredPairs reads the pairs out of the move records this commit already
-// carries -- the caller's --moved declarations, and the already-minted records
-// `safegit mv` and a single revert hand in. Both are statements about this
-// commit's own moves, and both suppress.
+// carries -- the caller's --moved declarations, the already-minted records
+// `safegit mv` and a single revert hand in, and (on an amend) the records being
+// preserved from the message it replaces. Every one of them is a statement
+// about this commit's own moves, and every one of them suppresses.
+//
+// The parse is mintedRecords', which passes over a line this version cannot
+// read: an unreadable line suppresses nothing. It is the caller's own content
+// and is written to the message either way; treating it as covering some path
+// would be guessing which one.
 func declaredPairs(movedTrailers []string) []trailer.Pair {
-	if len(movedTrailers) == 0 {
+	records := mintedRecords(movedTrailers)
+	if len(records) == 0 {
 		return nil
 	}
-	var pairs []trailer.Pair
-	for _, kv := range trailer.ParseTrailerBlock(strings.Join(movedTrailers, "\n")) {
-		if kv.Key != trailer.MovedKey {
-			continue
-		}
-		record, err := trailer.ParseRecord(kv.Value)
-		if err != nil {
-			// A line this version cannot parse suppresses nothing. It is the
-			// caller's own content and is written to the message either way;
-			// treating an unreadable line as covering some path would be
-			// guessing which one.
-			continue
-		}
-		pairs = append(pairs, trailer.Pair{Old: record.Old, New: record.New})
+	pairs := make([]trailer.Pair, 0, len(records))
+	for _, r := range records {
+		pairs = append(pairs, trailer.Pair{Old: r.Old, New: r.New})
 	}
 	return pairs
 }
