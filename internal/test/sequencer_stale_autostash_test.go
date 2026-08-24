@@ -185,6 +185,27 @@ func TestDoctorFixPreviewLeavesTheOrphanedAutostashAlone(t *testing.T) {
 	if !strings.Contains(stdout, "would store") {
 		t.Errorf("the preview does not say it would store the orphaned autostash:\n%s", stdout)
 	}
+
+	// And the repair is MINTED, so a machine consumer sees both halves rather
+	// than a sentence on a stream machine mode silences.
+	env := decodeEnvelope(t, mustJSON(t, dir, "--json", "--dry-run", "doctor", "--action", "fix"))
+	if !anyDetailContains(env, "stash store") {
+		t.Errorf("no effect record describes storing the autostash: %v", effectDetails(env))
+	}
+	if !anyDetailContains(env, "MERGE_AUTOSTASH") {
+		t.Errorf("no effect record names the file the repair would remove: %v", effectDetails(env))
+	}
+}
+
+// mustJSON runs safegit in machine mode and returns stdout, failing on a
+// nonzero exit.
+func mustJSON(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	stdout, stderr, code := runSafegitEnv(t, dir, conclusionSession, args...)
+	if code != 0 {
+		t.Fatalf("%v exited %d: %s", args, code, stderr)
+	}
+	return stdout
 }
 
 // TestDoctorReportsAnOrphanedAutostash is the companion: a MERGE_AUTOSTASH with
