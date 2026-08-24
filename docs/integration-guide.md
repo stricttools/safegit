@@ -47,7 +47,7 @@ The following git operations are forbidden in multi-session worktrees because th
 - `git stash` (hides working tree state from other sessions)
 - `git restore` / `git checkout -- <file>` (destroys uncommitted work from other sessions)
 
-safegit provides guarded passthroughs for `checkout`, `pull`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick`, and `revert`. Each takes the worktree operation lock for the whole operation before handing the arguments to git. The uncommitted-work check then runs for all of them except `reset` (only `--hard`, the only form that mutates the working tree) and `bisect` (only the tree-moving subcommands: `good`, `bad`, `old`, `new`, `reset`, `start`).
+safegit provides guarded passthroughs for `checkout`, `pull`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick`, and `revert`. Each takes the worktree operation lock for the whole operation before handing the arguments to git. The uncommitted-work check then runs for all of them except `reset` (only the modes that write working-tree files: `--hard`, `--merge`, `--keep`) and `bisect` (only the stepping subcommands, the ones that check another commit out). Which forms those are is derived from safegit's git classification table rather than restated per command.
 
 `revert` of a SINGLE commit is not a plain passthrough: `git revert --no-commit` computes the inverse patch and safegit's own pipeline commits it, so the commit carries safegit's trailers and `safegit undo` reverses it. Reverting more than one commit is git's sequencer and git authors those commits.
 
