@@ -114,24 +114,28 @@ type Feature struct {
 	Used string
 }
 
-// The declared feature floors. Each is the version git's own release notes
-// give for the capability.
-var (
-	// MergeTreeWriteTree is the real merge engine: computing a merge into an
-	// object store without touching the index or the worktree.
-	MergeTreeWriteTree = Feature{
-		Name:  "git merge-tree --write-tree",
-		Floor: Version{2, 38, 0},
-		Used:  "safegit's own merge, cherry-pick and revert conclusion",
-	}
-	// AttrSource lets attribute lookups come from a tree instead of the
-	// worktree, which is what makes a worktree-free merge honor .gitattributes.
-	AttrSource = Feature{
-		Name:  "git --attr-source",
-		Floor: Version{2, 40, 0},
-		Used:  "attribute-correct merges computed without a worktree",
-	}
-)
+// The declared feature floors follow. Each carries the version git's own
+// release notes give for the capability. They are declared one at a time
+// rather than inside a `var (...)` block because the documentation extractor
+// reads a block's lines positionally: a composite literal's field names inside
+// one are picked up as if they were package-level symbols, and then nothing
+// can document them.
+
+// MergeTreeWriteTree is the real merge engine: computing a merge into an
+// object store without touching the index or the worktree.
+var MergeTreeWriteTree = Feature{
+	Name:  "git merge-tree --write-tree",
+	Floor: Version{2, 38, 0},
+	Used:  "safegit's own merge, cherry-pick and revert conclusion",
+}
+
+// AttrSource lets attribute lookups come from a tree instead of the
+// worktree, which is what makes a worktree-free merge honor .gitattributes.
+var AttrSource = Feature{
+	Name:  "git --attr-source",
+	Floor: Version{2, 40, 0},
+	Used:  "attribute-correct merges computed without a worktree",
+}
 
 // Features returns every declared feature floor.
 func Features() []Feature {
