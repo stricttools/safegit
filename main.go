@@ -364,8 +364,8 @@ func newApp() *strictcli.App {
 	app.Passthrough("checkout", "checkout a branch or ref, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work", pt, strictcli.WithEffect(strictcli.EffectMutating))
 	app.Passthrough("merge", "merge a branch into HEAD, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work. A merge git stops on a conflict is concluded by safegit, not by git: 'safegit merge --continue' is refused and names 'safegit merge-continue', which commits the merge's whole staged result with safegit's trailers on it", pt, strictcli.WithEffect(strictcli.EffectMutating))
 	app.Passthrough("rebase", "rebase the current branch onto upstream, guarded twice before git runs: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- and then a check for uncommitted work. A rebase's own --continue and --abort stay git's: safegit has no verb that finishes one", pt, strictcli.WithEffect(strictcli.EffectMutating))
-	app.Passthrough("reset", "reset HEAD with guards that prevent accidental --hard data loss. The worktree operation lock is taken for EVERY reset, because every reset moves HEAD; the uncommitted-work check applies to --hard alone, since only --hard mutates the working tree", pt, strictcli.WithEffect(strictcli.EffectMutating))
-	app.Passthrough("bisect", "binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the tree-moving subcommands (good, bad, old, new, reset, start)", pt, strictcli.WithEffect(strictcli.EffectMutating))
+	app.Passthrough("reset", "reset HEAD with guards that prevent accidental data loss. The worktree operation lock is taken for EVERY reset, because every reset moves HEAD; the uncommitted-work check applies to the modes that WRITE working-tree files -- --hard, --merge and --keep -- while --soft and --mixed move only the ref and the index. Which is which is derived from safegit's git classification table, never re-read from the argument list here", pt, strictcli.WithEffect(strictcli.EffectMutating))
+	app.Passthrough("bisect", "binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the STEPPING subcommands (start, good, bad, old, new, skip, run, replay, reset), each of which checks another commit out, and not to the reporting ones (terms, log, view). Which is which is derived from safegit's git classification table, never kept as a list here", pt, strictcli.WithEffect(strictcli.EffectMutating))
 	app.Command("push", "push refs to remote with pre-pre-push hooks and automatic retry", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		gf := globalsToFlags(ctx, kwargs)
 		prePushHook := optBool(kwargs["pre_push_hook"], true)
@@ -982,13 +982,24 @@ type consent struct {
 // publishing a branch to a remote we cannot prove is private. --json never
 // consents, and neither does any flag other than the one the site declares.
 //
-// It does NOT gate the history rewrites (scrub file/match/run, author rewrite).
-// Those declare themselves `consequential`, so the framework's confirm protocol
-// obtains consent for exactly that act before dispatch; a second prompt behind
-// it asked the same question twice and told an automated caller nothing the
-// first had not already settled.
+// It is NOT the check for the history rewrites (scrub file/match/run, author
+// rewrite). Those declare themselves `consequential`, so the framework's confirm
+// protocol obtains consent for exactly that act before dispatch; a second prompt
+// behind it asked the same question twice and told an automated caller nothing
+// the first had not already settled.
+//
+// A DRY RUN never reaches the question, at any site. Consent is about performing
+// the act, and a preview performs nothing: the effects handle records each
+// mutation instead of making it, so there is nothing to consent to and nothing a
+// refusal would protect. The uniformity is the point -- one site checking the
+// flag for itself while another asked anyway is how `--dry-run doctor --action
+// uninstall` came to refuse a preview that would have removed nothing, and how
+// the same run under --json refused twice over.
 func confirmDeliberate(flags globalFlags, c consent, format string, args ...interface{}) bool {
 	if c.granted {
+		return true
+	}
+	if flags.dryRun {
 		return true
 	}
 	if flags.json {

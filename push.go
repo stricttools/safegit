@@ -175,8 +175,9 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	// composing the command line already knows it is forcing.
 	//
 	// A dry run asks nothing: it overwrites no ref, so there is nothing to
-	// consent to.
-	if forceFlag && !flags.dryRun {
+	// consent to. That is confirmDeliberate's own rule now, uniformly across
+	// every site, so this condition names only the force.
+	if forceFlag {
 		c := consent{granted: flags.approved, flag: "--approve-consequential"}
 		if !confirmDeliberate(flags, c,
 			"Force-push to %s (%s), overwriting whatever each ref's lease expectation does not cover?", remote, remoteURL) {
