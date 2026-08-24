@@ -261,15 +261,15 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 		return code
 	}
 
-	// A merge safegit refuses is refused whether or not the run was going to
-	// happen: a preview of a command that cannot run is not a preview of
-	// anything. The command-line refusals above already work that way; this one
-	// is asked here as well because the dry run never reaches performMerge.
-	if code := refuseFetchHeadOctopus(gitDir, parsed.Revisions[0], "merge"); code != 0 {
-		return code
-	}
-
 	if flags.dryRun {
+		// A merge safegit refuses is refused whether or not the run was going to
+		// happen: a preview of a command that cannot run is not a preview of
+		// anything. Asked here because the preview never reaches performMerge,
+		// which is where the same refusal covers every real run and `pull`.
+		if code := refuseFetchHeadOctopus(gitDir, parsed.Revisions[0], "merge"); code != 0 {
+			return code
+		}
+
 		// No git merge runs: the invocation is recorded, and the outcome it
 		// would have is COMPUTED with git's own merge engine instead of guessed.
 		//

@@ -172,6 +172,21 @@ func TestMergeFetchHeadOctopusIsRefusedBeforeTheFastForward(t *testing.T) {
 	}
 }
 
+// TestMergeFetchHeadOctopusIsRefusedInAPreviewToo: a preview of a command that
+// cannot run is not a preview of anything, and nothing is recorded in the
+// would-do log for one. It is the same answer the subset refusals give a dry
+// run, reached from repository state rather than from the command line.
+func TestMergeFetchHeadOctopusIsRefusedInAPreviewToo(t *testing.T) {
+	dir := newFetchedHeadsRepo(t, true, "br1", "br2")
+	before := testutil.Rev(t, dir, "HEAD")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, fetchHeadSession, "--dry-run", "merge", "FETCH_HEAD")
+	assertOctopusRefusal(t, dir, stdout, stderr, code, exitcode.Usage, before)
+	if strings.Contains(stdout, "run: git") {
+		t.Errorf("the refused merge was still recorded as a would-do:\n%s", stdout)
+	}
+}
+
 // TestMergeFetchHeadWithOneForMergeHeadStillWorks is the control on both arms:
 // the ordinary FETCH_HEAD merge -- one branch fetched, one side to bring in --
 // is untouched by the refusal.
