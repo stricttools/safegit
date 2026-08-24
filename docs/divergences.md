@@ -474,6 +474,21 @@ Every future change that introduces a decision of this kind adds its entry here.
   `--discard-unmatched-worktree` elects the destruction and names each file it
   takes; it is the only way to say so, which is what makes it a consent flag
   rather than an escape hatch.
+- **The check is TOTAL, and that was chosen over a degraded one.** There is no
+  skip arm and no declined-check fallback. Conflict kinds with no `AUTO_MERGE`
+  emission — a delete-resolved path, an absent stage, a delete/modify, a binary
+  file, a merge-driver path — are stages-only by NATURE, so what git left on
+  disk for those IS one of the stage blobs and the check is complete there too.
+  The one shape that would have needed a skip — a content conflict git recorded
+  with no `AUTO_MERGE` at all — is refused at the front door instead: safegit's
+  own merge cannot compute one (strategy selection is refused) and
+  `merge-continue` refuses one raw git produced. A degraded check that silently
+  did less on some paths was the alternative, and refusing the input was chosen
+  over it.
+- Every path that MATERIALIZES a declaration goes through it, including the
+  re-run of a conclusion whose commit already stands: that path writes the
+  working tree from the standing commit's own tree, which is a write like any
+  other, so it is checked like any other.
 - **Ruling:** ours — **provisional, newly cataloged, awaiting review**
 
 ### Every conflicted path must be declared, and nothing else may be
