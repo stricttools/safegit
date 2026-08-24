@@ -29,8 +29,6 @@ import (
 // The record is marked recorded:true under --dry-run and recorded:false on a
 // real run, like every other minted mutation. Plus a payload, so a machine
 // consumer learns what was undone.
-//
-// These tests are RED on purpose until that exists.
 
 // undoFixture commits one file through safegit on top of newRepo's initial
 // commit and returns the parent (the rollback target) and the new tip (the
@@ -109,6 +107,66 @@ func TestUndoRecordsTheRefUpdateAndCarriesAPayload(t *testing.T) {
 	// The counterpart: the mutation the envelope must describe really happened.
 	if now := testutil.Rev(t, dir, "HEAD"); now != parent {
 		t.Errorf("undo did not roll the branch back: HEAD = %s, want %s", now, parent)
+	}
+}
+
+// TestUndoPreviewInASubmoduleRecordsBothMutationsInExecutionOrder: undoing a
+// commit made in a submodule moves the submodule's branch AND moves the
+// parent's gitlink back, which is a second commit in a second repository. A
+// preview that recorded only the first would describe half the run.
+//
+// The order is the assertion, not an incidental: the execute path moves the ref
+// and then bumps the parent, and the effect log lists what a run would do in the
+// order it would do it. It is also why the preview makes every read -- the
+// parent's config, the nested check, the gitlink -- BEFORE recording the ref
+// move: a read after a recorded-but-not-performed mutation reads a world the
+// preview has already claimed has changed.
+//
+// The counterpart outside a submodule is pinned by the tests above: exactly the
+// ref record, and nothing else.
+func TestUndoPreviewInASubmoduleRecordsBothMutationsInExecutionOrder(t *testing.T) {
+	parentDir, _ := newRepoWithSubmodule(t)
+	subDir := prepSubmoduleForCommit(t, parentDir)
+	enableAutoBump(t, parentDir)
+
+	rollbackTarget := testutil.Rev(t, subDir, "HEAD")
+	testutil.WriteFile(t, subDir, "file.txt", "committed in the submodule\n")
+	if _, stderr, code := runSafegit(t, subDir, "commit", "-m", "sub change", "--", "file.txt"); code != 0 {
+		t.Fatalf("fixture submodule commit failed (%d): %s", code, stderr)
+	}
+	tip := testutil.Rev(t, subDir, "HEAD")
+	if tip == rollbackTarget {
+		t.Fatalf("fixture: the submodule's HEAD did not advance")
+	}
+
+	stdout, stderr, code := runSafegit(t, subDir, "--json", "--dry-run", "undo", "--bypass-session")
+	if code != 0 {
+		t.Fatalf("undo --json --dry-run in a submodule failed (%d): %s", code, stderr)
+	}
+	env := decodeEnvelope(t, stdout)
+
+	mutations := procMutations(env)
+	if len(mutations) != 2 {
+		t.Fatalf("the preview recorded %d subprocess mutations, want 2 (the ref move, then the parent bump): %v",
+			len(mutations), env.Preview)
+	}
+
+	want := "update-ref refs/heads/main " + rollbackTarget + " " + tip
+	if detail, _ := mutations[0]["detail"].(string); !strings.Contains(detail, want) {
+		t.Errorf("the FIRST record must be the ref move %q -- the execute path moves the ref before it bumps the parent -- got %q", want, detail)
+	}
+	if grant, _ := mutations[1]["grant"].(string); grant != "parent-bump" {
+		t.Errorf("the SECOND record must be the parent bump (grant %q), got grant %q: %v", "parent-bump", grant, mutations[1])
+	}
+	for i, rec := range mutations {
+		if recorded, _ := rec["recorded"].(bool); !recorded {
+			t.Errorf("record %d is not marked recorded, which means the preview performed it: %v", i, rec)
+		}
+	}
+
+	// The counterpart: neither repository moved.
+	if now := testutil.Rev(t, subDir, "HEAD"); now != tip {
+		t.Errorf("the preview moved the submodule's HEAD: %s -> %s", tip, now)
 	}
 }
 

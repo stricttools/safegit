@@ -24,6 +24,8 @@ func TestDirPinExemptionTableIsEnumerated(t *testing.T) {
 		// Argv the strictcli effects handle runs, not safegit.
 		ExemptGitPush:              KindEffectsHandle,
 		ExemptCommitRefUpdate:      KindEffectsHandle,
+		ExemptUndoRefUpdate:        KindEffectsHandle,
+		ExemptBackupFetch:          KindEffectsHandle,
 		ExemptHistoryRewriteRecord: KindEffectsHandle,
 	}
 
