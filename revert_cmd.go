@@ -349,6 +349,10 @@ func refuseEmptyRevert() int {
 //
 // Which command ends the state comes from the single way-out authority, so this
 // refusal and every other message about the same state name the same command.
+//
+// DIVERGENCE: `git <verb> --continue` concludes whatever is in flight; safegit's
+// forwarded `--continue` concludes nothing and names the command that does. One
+// row for docs/divergences.md.
 func refuseOwnedConclusion(flags globalFlags, gitDir, verb string, args []string) int {
 	if !hasExactArg(args, "--continue") {
 		return 0
