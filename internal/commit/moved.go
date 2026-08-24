@@ -13,23 +13,31 @@ import (
 
 // Declared moves.
 //
-// A move is DECLARED, never detected. safegit used to read a commit that added
-// a file whose blob already existed elsewhere as a rename, and stage a deletion
-// the caller never named; that guess is gone and nothing replaces it. Blob
-// equality decides nothing here either: two identical files are two identical
-// files, and one of them being a move of the other is a fact about intent that
-// only the caller has.
-//
-// So `--moved 'old -> new'` is the caller stating it. What safegit does with
-// the statement is check it against the repository -- the old path has to be
-// something the commit's parent tracked and something the working tree no
-// longer has, and the new path has to be somewhere the commit can see -- and
-// then write it into the commit message as a record (internal/trailer), where
-// it survives every clone and every tool that has never heard of safegit.
+// A DECLARED move is the caller stating one: `--moved 'old -> new'`. What
+// safegit does with the statement is check it against the repository -- the old
+// path has to be something the commit's parent tracked and something the
+// working tree no longer has, and the new path has to be somewhere the commit
+// can see -- and then write it into the commit message as a record
+// (internal/trailer), where it survives every clone and every tool that has
+// never heard of safegit.
 //
 // The check is not a formality. A declaration the repository contradicts is
 // almost always a typo or a stale command line, and a record written from one
 // would send every later reader to a path that was never there.
+//
+// This is not the only way a record comes to exist. safegit also mints records
+// for moves a commit's own raw delta WITNESSES (infer_moves.go), and those
+// carry the `observed` origin so a reader can tell them from the ones a person
+// vouched for. What safegit still does NOT do is detect renames: no similarity
+// scoring, no diff -M, and never staging a path the caller did not name. What
+// it used to do -- read an added file whose blob existed elsewhere as a rename
+// and stage a deletion nobody asked for -- is gone and is not what inference
+// is: inference writes a RECORD and changes no tree.
+//
+// A declaration takes precedence over all of it: the paths it names leave the
+// inference's candidate sets before pairing, and a declaration of a pair an
+// observed record already carries SUPERSEDES that record (see
+// supersedeRedeclaredPairs).
 
 // movedDeclaration is one --moved element after parsing and canonicalization.
 type movedDeclaration struct {
@@ -364,8 +372,12 @@ func overlapSideName(kind trailer.OverlapKind) string {
 //     the pipeline stages from, or already in the tree the commit is built on,
 //     which is a move recorded after the fact.
 //
-// Blob equality is asked about nowhere. Two files holding identical bytes are
-// two files; whether one is the other moved is the caller's statement to make.
+// Blob equality is asked about nowhere HERE. A declaration is a statement of
+// intent, and intent is not a property of bytes: the questions above are about
+// where content is, never about what it holds. (Where safegit reads blob names
+// on its own -- the inference in infer_moves.go -- it does so only to find what
+// the delta already witnesses, and every one of its fences exists to keep that
+// reading from becoming a guess.)
 func validateMoved(ctx context.Context, repoRoot, parentRev string, tree *treeIndex, d movedDeclaration) error {
 	if parentRev == "" {
 		return movedRefusal("--moved %s declares a move out of %s, but this commit has no parent: "+

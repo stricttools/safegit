@@ -51,6 +51,14 @@ import (
 // The refusals are not silent. One aggregate line goes to stderr naming how
 // many candidates were declined and pointing at --moved, because the answer to
 // "safegit did not record my move" is always the same: declare it.
+//
+// STALE CATALOG ENTRY, flagged here rather than fixed: `docs/divergences.md`
+// still carries "Moves are declared; blob equality never decides anything",
+// which describes the declared-only stance this package overturned -- safegit
+// still detects no renames, but it does record what a delta witnesses. The
+// entry says of itself that it will be rewritten when this ships; it has
+// shipped. The correction belongs to the documentation pass that owns the
+// catalog, which has ONE writer on purpose, so no code change edits it.
 
 // regularFileModes are the two modes an inferred pair may carry on either side.
 // Everything else -- a symlink, a gitlink, a tree -- is content whose identity

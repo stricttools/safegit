@@ -11,10 +11,12 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// A move is DECLARED, never detected (see moves_test.go, which pins that
-// nothing is guessed from blob equality). `--moved 'old -> new'` is how a
-// caller states one, and what safegit does with the statement is check it
-// against the repository and then write it into the commit message as a record.
+// `--moved 'old -> new'` is how a caller STATES a move themselves, and what
+// safegit does with the statement is check it against the repository and then
+// write it into the commit message as a record. (safegit also mints records for
+// what a commit's own delta witnesses -- moves_inferred_test.go -- while still
+// detecting no renames and staging nothing from blob equality, which
+// moves_test.go pins.)
 //
 // These tests are about the whole path from a command line to a raw commit
 // object: the record that appears, the id it carries, the quoting it survives,

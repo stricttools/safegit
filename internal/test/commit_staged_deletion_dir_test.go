@@ -105,9 +105,10 @@ func TestCommitStagedDeletions_DirectoryPath(t *testing.T) {
 // TestCommitStagedDeletions_DirectoryPathWithMovedFile is the regression case.
 // One of the deleted files reappears elsewhere with identical content -- the
 // shape that used to make move detection fire on top of a directory stageFile
-// had already dropped from the temp index, producing git's exit 128. Nothing
-// infers a move from identical blobs any more, and the commit is the ordinary
-// one: two deletions and an addition.
+// had already dropped from the temp index, producing git's exit 128. Nothing is
+// STAGED from blob equality any more -- the commit is the ordinary one, two
+// deletions and an addition -- and the record safegit may mint for what the
+// delta witnesses changes no tree, so this path cannot come back.
 func TestCommitStagedDeletions_DirectoryPathWithMovedFile(t *testing.T) {
 	dir := seedDeletedDir(t, map[string]string{"a.txt": "alpha\n", "b.txt": "beta\n"})
 
@@ -131,7 +132,9 @@ func TestCommitStagedDeletions_DirectoryPathWithMovedFile(t *testing.T) {
 // anything: no deliberate move at all. An empty file was deleted with the
 // directory, an unrelated new empty file is in the same commit, and the two
 // share the empty blob -- which detection read as one being the other moved.
-// Two empty files are now two empty files, and the commit records exactly that.
+// Two empty files are now two empty files: the empty blob is fenced out of
+// safegit's own reading of a delta for this very reason, and no reading of a
+// delta stages anything in any case.
 func TestCommitStagedDeletions_DirectoryPathWithUnrelatedEmptyFile(t *testing.T) {
 	dir := seedDeletedDir(t, map[string]string{"empty.txt": "", "b.txt": "beta\n"})
 

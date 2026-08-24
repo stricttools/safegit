@@ -9,10 +9,15 @@ import (
 // rewrite, every clone and every tool that has never heard of safegit -- the
 // commit message.
 //
-// A record is a CLAIM. It is written by whoever performed the move, from what
-// that caller declared rather than from anything guessed out of blob equality,
-// and it is read back against the trees the repository actually holds (see
-// project.go). Nothing about the format asks the reader to trust it.
+// A record is a CLAIM, and it is read back against the trees the repository
+// actually holds (see project.go). Nothing about the format asks the reader to
+// trust it.
+//
+// Two kinds of claim exist, and the record says which it is (see Origin): one a
+// person DECLARED, and one safegit OBSERVED -- derived from what the commit's
+// own delta witnesses. Neither is a similarity score: safegit runs no rename
+// detection, and an observed record exists only where the objects leave one
+// answer possible.
 //
 // The grammar is one line:
 //

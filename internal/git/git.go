@@ -960,10 +960,14 @@ type ChangedPath struct {
 // answer is what the commit pipeline reports as "the files in this commit":
 // derived from the objects, never counted from the arguments a caller typed.
 //
-// Rename detection is deliberately OFF. A rename is a deletion and an addition
-// in the tree, and pairing them up is an interpretation -- one that safegit
-// used to act on automatically and no longer does. The raw delta is what a
-// reviewer of the published commit sees.
+// GIT'S rename detection is deliberately OFF, and the qualification is the
+// point: what this returns is the RAW delta -- a deletion and an addition, with
+// the modes and blob names on both sides -- which is what a reviewer of the
+// published commit sees and what safegit's own move inference reads
+// (internal/commit/infer_moves.go). That inference pairs a deletion with an
+// addition only where the objects leave one answer possible; a similarity score
+// is an interpretation of CONTENT, and safegit asks git for none, here or
+// anywhere.
 //
 // An empty fromTreeish means "compare against nothing": every path in the new
 // tree is reported as an addition. That is the root-commit case, and it is
