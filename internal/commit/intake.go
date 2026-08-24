@@ -115,6 +115,26 @@ type intake struct {
 	skipped []string
 }
 
+// untracked returns the canonical paths this operation REMOVES FROM THE INDEX
+// while leaving them on disk -- every --untrack target, expanded.
+//
+// The move inference reads it as a fence (see inferMoves): about the tree, an
+// untracked path plus a same-blob addition looks exactly like a move, and it is
+// the one shape where the tree's answer and the working tree's disagree.
+func (in *intake) untracked() map[string]bool {
+	var out map[string]bool
+	for _, e := range in.entries {
+		if !e.untrack {
+			continue
+		}
+		if out == nil {
+			out = make(map[string]bool)
+		}
+		out[e.path] = true
+	}
+	return out
+}
+
 // unmatchedSources returns EVERY argument that contributed nothing to the given
 // set of changed paths, in the order the sources were RESOLVED: the --untrack
 // arguments first, then the positional paths, each group in the order the caller

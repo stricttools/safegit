@@ -32,6 +32,13 @@ import (
 //     un-blocks the rest (a blob at two deleted paths, one of them declared,
 //     leaves the other free to be judged on its own, which it cannot be while
 //     the declared path still counts as a rival occurrence of the blob).
+//     An --UNTRACK TARGET suppresses the same way and for a stricter reason:
+//     the path leaves the index and STAYS ON DISK, so about the tree it looks
+//     moved while the file is still sitting there -- and that is the exact claim
+//     the declared spelling refuses (`--moved 'a -> b'` with a still on disk
+//     exits MoveNotBorneOut). Inference does not get to state what a declaration
+//     is refused for stating, so the candidate is dropped and REPORTED as
+//     refused, naming the flag.
 //  2. REGULAR FILES ONLY. Symlinks, gitlinks and type changes never pair; a
 //     mode change between 100644 and 100755 across a pair is fine, because
 //     making a moved file executable is still moving it.
@@ -105,6 +112,7 @@ const (
 	refusedParentNotUnique = "the deleted content also sits at another path in the parent tree"
 	refusedNewNotUnique    = "the added content also sits at another path in this commit's tree"
 	refusedOverlaps        = "the move would overlap a move this commit already states"
+	refusedUntracked       = "the old path is an --untrack target, so it is still on disk and nothing moved out of it"
 )
 
 // moveInference is the once-per-operation state the inference keeps across
@@ -214,12 +222,12 @@ func declaredPairs(movedTrailers []string) []trailer.Pair {
 // can move between attempts. A declared set that changes therefore changes the
 // inferred set, and the compare below aborts, which is the right answer: the
 // message was already composed against the earlier one.
-func (m *moveInference) records(ctx context.Context, changed []git.ChangedPath, parentTreeSHA, newTreeSHA string, declared []trailer.Pair) ([]string, error) {
+func (m *moveInference) records(ctx context.Context, changed []git.ChangedPath, parentTreeSHA, newTreeSHA string, declared []trailer.Pair, untracked map[string]bool) ([]string, error) {
 	if !m.enabled {
 		return nil, nil
 	}
 
-	pairs, refused, capped, err := inferMoves(ctx, changed, declared, parentTreeSHA, newTreeSHA)
+	pairs, refused, capped, err := inferMoves(ctx, changed, declared, untracked, parentTreeSHA, newTreeSHA)
 	if err != nil {
 		return nil, err
 	}
@@ -293,17 +301,30 @@ func samePairs(a, b []trailer.Pair) bool {
 //
 // capped is the number of records the commit would have carried when the cap
 // turned them all down, and zero otherwise.
-func inferMoves(ctx context.Context, changed []git.ChangedPath, declared []trailer.Pair, parentTreeSHA, newTreeSHA string) (pairs []trailer.Pair, refused []RefusedMove, capped int, err error) {
-	suppressed := suppressedPaths(declared)
+func inferMoves(ctx context.Context, changed []git.ChangedPath, declared []trailer.Pair, untracked map[string]bool, parentTreeSHA, newTreeSHA string) (pairs []trailer.Pair, refused []RefusedMove, capped int, err error) {
+	declaredAway := suppressedPaths(declared)
+	// The one predicate the FENCE VIEWS are built with: a path either spelling of
+	// suppression has answered for is not a rival occurrence of its blob either.
+	suppressed := func(path string) bool { return declaredAway(path) || untracked[path] }
 
-	// Fence 1 and 2, applied while the candidate sets are built: a declared
+	// Fence 1 and 2, applied while the candidate sets are built: a suppressed
 	// path is out, and anything that is not a regular file never was in.
-	deletions := map[string][]string{} // blob -> parent paths
-	additions := map[string][]string{} // blob -> new paths
+	//
+	// The two spellings part company in one way: a DECLARED path is out
+	// silently, because the caller already said what happened to it, while an
+	// --UNTRACK target is out with a refusal, because the caller said nothing
+	// about a move and may well have meant one.
+	deletions := map[string][]string{}          // blob -> parent paths
+	additions := map[string][]string{}          // blob -> new paths
+	untrackedDeletions := map[string][]string{} // blob -> untracked parent paths
 	for _, c := range changed {
 		switch c.Status {
 		case "D":
-			if !regularFileModes[c.SrcMode] || emptyBlobNames[c.SrcSHA] || suppressed(c.Path) {
+			if !regularFileModes[c.SrcMode] || emptyBlobNames[c.SrcSHA] || declaredAway(c.Path) {
+				continue
+			}
+			if untracked[c.Path] {
+				untrackedDeletions[c.SrcSHA] = append(untrackedDeletions[c.SrcSHA], c.Path)
 				continue
 			}
 			deletions[c.SrcSHA] = append(deletions[c.SrcSHA], c.Path)
@@ -313,6 +334,19 @@ func inferMoves(ctx context.Context, changed []git.ChangedPath, declared []trail
 			}
 			additions[c.DstSHA] = append(additions[c.DstSHA], c.Path)
 		}
+	}
+
+	// The --untrack fence's report: every candidate it took out of the running,
+	// named on both sides so the caller who meant a move can see what safegit
+	// would have paired and declare it themselves.
+	for sha, dels := range untrackedDeletions {
+		adds := additions[sha]
+		if len(adds) == 0 {
+			continue
+		}
+		sort.Strings(dels)
+		sort.Strings(adds)
+		refused = append(refused, RefusedMove{Old: dels, New: adds, Reason: refusedUntracked})
 	}
 
 	// The zero-candidate fast path: no blob is on both sides, so there is
@@ -325,7 +359,8 @@ func inferMoves(ctx context.Context, changed []git.ChangedPath, declared []trail
 		}
 	}
 	if len(blobs) == 0 {
-		return nil, nil, 0, nil
+		sortRefusals(refused)
+		return nil, refused, 0, nil
 	}
 	sort.Strings(blobs)
 
@@ -344,6 +379,7 @@ func inferMoves(ctx context.Context, changed []git.ChangedPath, declared []trail
 		candidates = append(candidates, candidate{old: dels[0], new: adds[0]})
 	}
 	if len(candidates) == 0 {
+		sortRefusals(refused)
 		return nil, refused, 0, nil
 	}
 

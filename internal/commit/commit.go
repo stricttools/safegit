@@ -626,7 +626,7 @@ func (p *Pipeline) tryCommit(
 	// before the message is composed, so a commit safegit is about to refuse
 	// infers nothing and so the records are on the message the commit-msg hook
 	// sees, exactly like every other piece of caller content.
-	inferred, err := inference.records(ctx, changed, parentTree, treeSHA, declaredMoves)
+	inferred, err := inference.records(ctx, changed, parentTree, treeSHA, declaredMoves, files.untracked())
 	if err != nil {
 		return nil, false, err
 	}
