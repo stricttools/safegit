@@ -117,3 +117,76 @@ func TestGitMergeContinueStoresAnUnappliableAutostash(t *testing.T) {
 		t.Errorf("the stash entry does not hold the operator's work: %q", stashed)
 	}
 }
+
+// TestGitAutostashStashMessageShape records what MERGE_AUTOSTASH's commit says
+// about itself, which is the only thing that tells a GENUINE autostash apart
+// from an unrelated commit somebody left the file pointing at.
+//
+// MERGE_AUTOSTASH is a plain file holding a SHA. Nothing in git checks that the
+// SHA is the stash git made for this merge: a stale file surviving a crashed or
+// abandoned merge, or a hand-written one, names a commit that would be applied
+// to the worktree and then deleted. So a consumer needs a shape to key on, and
+// the shape is the message git writes on the stash commit:
+//
+//	genuine autostash       "On <branch>: autostash"
+//	plain `stash create`    "WIP on <branch>: <sha> <subject>"
+//
+// The two are the SAME KIND of object (both are stash commits) and differ only
+// in this line, which is why the line is worth pinning: an operator's own
+// `git stash` entry must never be mistaken for a merge's autostash and consumed
+// by a conclusion. Reproduced live on git 2.54 and 2.55; this probe is what
+// keeps the fact from decaying into memory.
+func TestGitAutostashStashMessageShape(t *testing.T) {
+	dir, _, _ := autostashMerge(t, false)
+
+	raw, err := os.ReadFile(filepath.Join(dir, ".git", "MERGE_AUTOSTASH"))
+	if err != nil {
+		t.Fatalf("reading MERGE_AUTOSTASH: %v", err)
+	}
+	sha := strings.TrimSpace(string(raw))
+	if sha == "" {
+		t.Fatal("MERGE_AUTOSTASH is empty")
+	}
+
+	subject := strings.TrimSpace(testutil.Git(t, dir, "log", "-1", "--format=%s", sha))
+	if want := "On main: autostash"; subject != want {
+		t.Errorf("the autostash commit's subject is %q, want %q", subject, want)
+	}
+
+	// The branch name is the repository's, not a constant: the shape is
+	// "On <branch>: autostash", and a consumer matching it has to allow for
+	// whatever branch the merge ran on.
+	branch := strings.TrimSpace(testutil.Git(t, dir, "rev-parse", "--abbrev-ref", "HEAD"))
+	if want := "On " + branch + ": autostash"; subject != want {
+		t.Errorf("the autostash commit's subject is %q, want %q for branch %q", subject, want, branch)
+	}
+}
+
+// TestGitStashCreateMessageShape records the OTHER half of the same fact: an
+// ordinary stash git makes on the operator's behalf carries the WIP shape, so it
+// can never be read as an autostash.
+func TestGitStashCreateMessageShape(t *testing.T) {
+	dir := testutil.InitBareRepo(t)
+
+	testutil.WriteFile(t, dir, "f.txt", "base\n")
+	testutil.Git(t, dir, "add", "f.txt")
+	testutil.Git(t, dir, "commit", "-q", "-m", "base")
+	testutil.WriteFile(t, dir, "f.txt", "uncommitted work\n")
+
+	// `stash create` makes the stash commit and prints its SHA without touching
+	// refs/stash or the worktree -- the same object shape MERGE_AUTOSTASH names.
+	sha := strings.TrimSpace(testutil.Git(t, dir, "stash", "create"))
+	if sha == "" {
+		t.Fatal("git stash create printed no SHA, so there is nothing to read a message from")
+	}
+
+	subject := strings.TrimSpace(testutil.Git(t, dir, "log", "-1", "--format=%s", sha))
+	branch := strings.TrimSpace(testutil.Git(t, dir, "rev-parse", "--abbrev-ref", "HEAD"))
+	if prefix := "WIP on " + branch + ": "; !strings.HasPrefix(subject, prefix) {
+		t.Errorf("a plain stash's subject is %q, want it to start with %q", subject, prefix)
+	}
+	if strings.Contains(subject, "autostash") {
+		t.Errorf("a plain stash's subject %q carries the autostash word, so the two shapes "+
+			"cannot be told apart by it", subject)
+	}
+}
