@@ -20,8 +20,13 @@ import (
 // code. commit, amend and reword all end the same way -- die(code, err) -- and
 // all three read the code from here, so the three paths cannot disagree.
 //
-// Two typed sources, in order:
+// Three typed sources, in order:
 //
+//   - a *commit.PartialError, which is not a refusal at all: the ref MOVED and
+//     an aftercare step did not finish, so it is the commit-stands family code
+//     (see aftercare.go). It is checked FIRST because it is the one error whose
+//     verdict is "the operation succeeded", and every other branch below would
+//     report it as a failure to commit.
 //   - a *commit.CommitError, which carries the code the pipeline chose
 //     deliberately (WriteTree, CommitTree, CoordinationBusy, CASExhausted).
 //     errors.As rather than a type assertion: the pipeline annotates some
@@ -38,6 +43,9 @@ import (
 //
 // Anything else is General.
 func pipelineExitCode(err error) int {
+	if commitStands(err) != nil {
+		return exitcode.CommitStands
+	}
 	var ce *commit.CommitError
 	if errors.As(err, &ce) {
 		return ce.Code
@@ -148,7 +156,12 @@ func orEmpty(list []string) []string {
 	return list
 }
 
-func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, allowEscapingTargets bool, trailers []string, files []string, hunks []string, untrack []string, moved []string, movedRetract []string) {
+// runCommit is the commit family's handler, and it RETURNS its exit code rather
+// than exiting: an aftercare failure leaves a commit that stands, and reporting
+// it takes the envelope the framework emits below a handler's return (see
+// aftercare.go). Every refusal above the ref update still dies -- there is
+// nothing to report when nothing was written.
+func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, allowEscapingTargets bool, trailers []string, files []string, hunks []string, untrack []string, moved []string, movedRetract []string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -169,8 +182,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 			die(exitcode.Usage, "-F cannot be used with --amend")
 		}
 
-		runCommitAmend(flags, gitDir, messages, branch, allowEscapingTargets, trailers, files, hunks, untrack, moved, movedRetract)
-		return
+		return runCommitAmend(flags, gitDir, messages, branch, allowEscapingTargets, trailers, files, hunks, untrack, moved, movedRetract)
 	}
 
 	// Normal commit path
@@ -243,7 +255,13 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		Moved:                moved,
 		MovedRetract:         movedRetract,
 	})
-	if err != nil {
+	// A commit-stands verdict is not a refusal: the ref moved, so the run goes
+	// on to report the commit rather than dying above the envelope seam.
+	var residue []residueEntry
+	if partial := commitStands(err); partial != nil && result != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		residue = recordAftercareFailure(residue, partial.Step, err.Error())
+	} else if err != nil {
 		die(pipelineExitCode(err), err.Error())
 	}
 
@@ -255,7 +273,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	}
 
 	if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "commit", firstLine(msg)); err != nil {
-		die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+		residue = reportAftercareFailure(residue, stepParentBump, err)
 	}
 
 	flags.payload(commitPayload{
@@ -284,6 +302,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		}
 		fmt.Println()
 	}
+	return aftercareExit(residue)
 }
 
 // wouldWriteHeader is a preview's answer to the `[branch sha]` line a real
@@ -377,7 +396,7 @@ func (u effectsRefUpdate) Update(_ context.Context, ref, newSHA, expected string
 	return nil
 }
 
-func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch string, allowEscapingTargets bool, trailers []string, files []string, hunks []string, untrack []string, moved []string, movedRetract []string) {
+func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch string, allowEscapingTargets bool, trailers []string, files []string, hunks []string, untrack []string, moved []string, movedRetract []string) int {
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
@@ -400,6 +419,11 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 	defer release()
 
 	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
+
+	// Both arms accumulate their aftercare failures rather than dying on one:
+	// the amended (or reworded) commit is the branch's tip either way, and the
+	// report is what says so. See aftercare.go.
+	var residue []residueEntry
 
 	// Three ways to amend, in the order they are decided:
 	//
@@ -443,7 +467,10 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			Moved:                moved,
 			MovedRetract:         movedRetract,
 		})
-		if err != nil {
+		if partial := commitStands(err); partial != nil && result != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			residue = recordAftercareFailure(residue, partial.Step, err.Error())
+		} else if err != nil {
 			die(pipelineExitCode(err), err.Error())
 		}
 
@@ -456,7 +483,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		}
 
 		if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "amend", firstLine(msg)); err != nil {
-			die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+			residue = reportAftercareFailure(residue, stepParentBump, err)
 		}
 
 		flags.payload(commitPayload{
@@ -512,7 +539,10 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			Moved:        moved,
 			MovedRetract: movedRetract,
 		})
-		if err != nil {
+		if partial := commitStands(err); partial != nil && result != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			residue = recordAftercareFailure(residue, partial.Step, err.Error())
+		} else if err != nil {
 			die(pipelineExitCode(err), err.Error())
 		}
 
@@ -527,7 +557,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		}
 
 		if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "reword", firstLine(msg)); err != nil {
-			die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+			residue = reportAftercareFailure(residue, stepParentBump, err)
 		}
 
 		// A reword replaces a message and nothing else, so its changed-path
@@ -555,4 +585,5 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			}
 		}
 	}
+	return aftercareExit(residue)
 }

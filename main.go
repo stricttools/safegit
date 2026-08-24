@@ -277,8 +277,7 @@ func newApp() *strictcli.App {
 		untrack := kwargsStrSlice(kwargs["untrack"])
 		moved := kwargsStrSlice(kwargs["moved"])
 		movedRetract := kwargsStrSlice(kwargs["moved_retract"])
-		runCommit(gf, messages, messageFile, branch, amend, allowEmpty, allowEscapingTargets, trailers, files, hunks, untrack, moved, movedRetract)
-		return strictcli.Exit(exitcode.OK)
+		return strictcli.Exit(runCommit(gf, messages, messageFile, branch, amend, allowEmpty, allowEscapingTargets, trailers, files, hunks, untrack, moved, movedRetract))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
 		strictcli.WithTags("json"),
@@ -795,8 +794,7 @@ func newApp() *strictcli.App {
 		// Read the session handshake through the framework accessor so the
 		// dependency is declared rather than an ambient os.Getenv.
 		sessionID, _ := ctx.InfraValue(sessionIDEnvVar)
-		runUndo(globalsToFlags(ctx, kwargs), bypassSession, count, sessionID)
-		return strictcli.Exit(exitcode.OK)
+		return strictcli.Exit(runUndo(globalsToFlags(ctx, kwargs), bypassSession, count, sessionID))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
 		strictcli.WithGrants(strictcli.Grant{

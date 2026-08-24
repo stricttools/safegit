@@ -774,15 +774,22 @@ func commitMvMoves(flags globalFlags, gitDir, message string, pairs []mvPair) in
 		MovedRecords: records,
 		OplogOp:      mvOplogOp,
 	})
-	if err != nil {
+	// The commit-stands verdict is the opposite of the refusal below it: the ref
+	// moved, so the files are at their new paths AND the commit that records the
+	// moves exists. Reporting it as "the commit failed" would send the operator
+	// to make a second one. See aftercare.go.
+	var residue []residueEntry
+	if partial := commitStands(err); partial != nil && result != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		residue = recordAftercareFailure(residue, partial.Step, err.Error())
+	} else if err != nil {
 		fmt.Fprintf(os.Stderr, "error: the paths were moved, but the commit failed: %v\n", err)
 		fmt.Fprintf(os.Stderr, "  the files are at their new paths. Commit them with 'safegit commit --moved' once the cause is fixed.\n")
 		return pipelineExitCode(err)
 	}
 
 	if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, mvOplogOp, firstLine(message)); err != nil {
-		fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
-		return exitcode.General
+		residue = reportAftercareFailure(residue, stepParentBump, err)
 	}
 
 	flags.payload(mvPayload{
@@ -805,5 +812,5 @@ func commitMvMoves(flags globalFlags, gitDir, message string, pairs []mvPair) in
 			fmt.Printf(" %d move(s) recorded, %d path(s) changed\n", len(moves), len(result.Files))
 		}
 	}
-	return exitcode.OK
+	return aftercareExit(residue)
 }

@@ -2051,13 +2051,16 @@ func heldLockFiles(t *testing.T, safegitDir string) []string {
 // A failed parent bump is the one undo path that runs with BOTH locks held --
 // the worktree operation lock taken at the top of undo and the ref lock taken
 // for the rollback -- and it is reached after the rollback itself has already
-// succeeded, so the exit is unavoidable rather than a refusal that could be
-// moved earlier.
+// succeeded, so the nonzero exit is unavoidable rather than a refusal that could
+// be moved earlier.
 //
-// os.Exit runs no deferred function and only die() calls lock.ReleasePending,
-// so exiting that path any other way stranded both lock files: the next
-// contender in the submodule waits out lock.acquireTimeoutSeconds before the
-// staleness rules let it reclaim them, and doctor reports them in the meantime.
+// Neither lock may be left behind by it. The path now RETURNS the commit-stands
+// family code rather than exiting, so both defers run; before that only die()
+// released them, and any other exit stranded both files -- the next contender in
+// the submodule waiting out lock.acquireTimeoutSeconds before the staleness
+// rules let it reclaim them, and doctor reporting them in the meantime. The
+// assertion is about the lock files either way, which is what makes it survive
+// the change of mechanism.
 //
 // The failure is made deterministic by removing the parent's auto-bump setting
 // between the commit (which bumps) and the undo (which tries to bump back):
@@ -2085,7 +2088,7 @@ func TestAutoBumpUndoFailureLeavesNoLockFiles(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("the undo's parent bump was supposed to fail; stderr: %s", stderr)
 	}
-	if !strings.Contains(stderr, "auto-bump parent") {
+	if !strings.Contains(stderr, "auto-bump") {
 		t.Fatalf("the fixture failed for the wrong reason (code %d): %s", code, oneLine(stderr))
 	}
 
