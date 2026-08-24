@@ -174,7 +174,10 @@ func pullSubject(remote, branch string) string {
 //
 // The merge half is the merge payload itself rather than a flattened copy of
 // its members, because it is the same document `safegit merge` emits and a
-// consumer that can read one can read the other.
+// consumer that can read one can read the other. That is also where a pull's
+// AFTERCARE is reported: every step a pull owes after its commit is the merge
+// conclusion's, so `merge.residue` is the whole answer and a second copy of it
+// out here would be two members claiming one fact.
 type pullPayload struct {
 	Operation string `json:"operation"`
 	Remote    string `json:"remote"`
