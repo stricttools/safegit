@@ -1192,6 +1192,8 @@ safegit doctor --action uninstall
 - Removes the legacy scrub-policy file, whose content is exactly what should not be sitting on disk
 - Reclaims lock files whose holder is genuinely gone, and removes orphaned lock-publication temporaries a kill left behind
 - Cleans up submodule safegit directories the same way
+- Stores an orphaned `MERGE_AUTOSTASH` as a stash entry and then removes the file. The order is the safety: until the commit is on `refs/stash` the only name it has is the object name inside the file, so a removal-first repair would hand the operator's uncommitted work to the next `git gc`. A failure to store leaves the file exactly where it is
+- Re-stages an orphaned unmerged index -- conflict stages with no merge, cherry-pick or revert in flight to resolve them, which git and safegit both refuse every commit over. Each path's own working-tree content is staged at stage 0, and a path the working tree does not hold at all is dropped from the index, which is what resolving that conflict by deleting the file looks like. An unmerged index the operation IN FLIGHT owns is left alone: it is that operation's to resolve
 
 It does not rotate or truncate the oplog. The oplog is an append-only audit trail and is complete by design; there is no size limit and nothing prunes it silently.
 
