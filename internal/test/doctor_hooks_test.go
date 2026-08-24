@@ -51,19 +51,17 @@ func TestDoctorNamesGitHooksSafegitNeverRuns(t *testing.T) {
 func TestDoctorExitCodeFollowsErrorFindings(t *testing.T) {
 	dir := newRepo(t)
 
-	// A warning on its own: a non-executable hook in the tool-owned store.
-	nonExec := filepath.Join(localHookDir(dir), "pre-pre-push")
-	if err := os.MkdirAll(filepath.Dir(nonExec), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(nonExec, []byte("#!/bin/sh\nexit 0\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	// A warning on its own: one of git's own hooks that safegit never runs. (The
+	// non-executable-hook fixture this test used to carry is an ERROR-severity
+	// finding now -- see TestDoctorReportsANonExecutableLocalHookAsAnError --
+	// so it can no longer stand for a repository whose only findings are
+	// advisory.)
+	writeHookScript(t, filepath.Join(dir, ".git", "hooks", "prepare-commit-msg"), "true")
 	stdout, _, code := runSafegit(t, dir, "doctor", "--action", "diagnose")
 	if code != 0 {
 		t.Fatalf("warnings alone must exit 0, got %d:\n%s", code, stdout)
 	}
-	if !strings.Contains(stdout, "[WARN] hook_perms") {
+	if !strings.Contains(stdout, "[WARN] native_hooks") {
 		t.Fatalf("the warning was not reported at all:\n%s", stdout)
 	}
 
@@ -87,6 +85,34 @@ func TestDoctorExitCodeFollowsErrorFindings(t *testing.T) {
 	}
 	if _, err := os.Stat(policyPath); !os.IsNotExist(err) {
 		t.Errorf("--action fix left %s behind (err=%v)", policyPath, err)
+	}
+}
+
+// TestDoctorReportsANonExecutableLocalHookAsAnError: a hook in the tool-owned
+// live store whose mode says it cannot run stops every push and every
+// `hook run`, whichever store it sits in. Doctor says so as an error, because a
+// repository that cannot push is stopped rather than degraded, and reporting it
+// as advice would understate a push that is already failing.
+func TestDoctorReportsANonExecutableLocalHookAsAnError(t *testing.T) {
+	dir := newRepo(t)
+
+	nonExec := filepath.Join(localHookDir(dir), "pre-pre-push")
+	if err := os.MkdirAll(filepath.Dir(nonExec), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(nonExec, []byte("#!/bin/sh\nexit 0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, code := runSafegit(t, dir, "doctor", "--action", "diagnose")
+	if code != 50 {
+		t.Fatalf("a non-executable hook in the live store must exit 50, got %d:\n%s", code, stdout)
+	}
+	if !strings.Contains(stdout, "[FAIL] hook_perms") {
+		t.Fatalf("the finding must be reported at error severity:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "pre-pre-push") || !strings.Contains(stdout, "chmod") {
+		t.Errorf("the finding must name the hook and the remedy:\n%s", stdout)
 	}
 }
 

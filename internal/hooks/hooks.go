@@ -70,16 +70,37 @@ func (e *TrackedNotExecutableError) Error() string {
 		len(e.Paths), strings.Join(e.Paths, ", "))
 }
 
+// LocalNotExecutableError reports a hook in the tool-owned live store whose
+// mode says it cannot run. It is the live store's half of the same rule the
+// checkout-provided store has always been held to: a hook is disabled by
+// REMOVING it, so a mode that silently disabled one would turn an accident --
+// an editor that rewrote the file, a patch tool that dropped the bit, a copy
+// across a filesystem without modes -- into checks that quietly stopped
+// running. It used to be a skip with a warning on stderr, which is git's own
+// stance for its own hooks; the two stores answering the same accident
+// differently is what that stance cost, so it is a refusal now.
+type LocalNotExecutableError struct {
+	// Paths are the absolute paths of the offending hooks.
+	Paths []string
+}
+
+func (e *LocalNotExecutableError) Error() string {
+	return fmt.Sprintf("%d hook(s) in the tool-owned hook store are not executable: %s; "+
+		"run `chmod +x` on each, or remove the hook (`safegit hook remove <name>`) if it is meant to be gone -- a hook is disabled by removing it, never by dropping its mode",
+		len(e.Paths), strings.Join(e.Paths, ", "))
+}
+
 // Discover returns the hooks to execute, in execution order: the tracked store
 // first, then the local one, each in Rel order. It is the
 // execution-eligibility layer over Enumerate, and the only place that decides
 // what "eligible" means.
 //
 // Two states are refusals rather than filters -- a hook left in the legacy
-// location, and a repository-provided hook that is not executable -- and both
-// come back as typed errors so a caller can map them to their own exit codes. A
-// LOCAL hook that is not executable is skipped with a warning, which is git's
-// own stance for its hooks and this tool's original one.
+// location, and a discovered hook that is not executable -- and each comes back
+// as a typed error so a caller can map it to an exit code. The non-executable
+// refusal is store-independent: the live store and the checkout-provided one
+// answer a missing execute bit the same way, in their own typed errors because
+// the remedies differ by a commit, and never as a silent skip.
 //
 // What this returns is a list of scripts the caller will EXECUTE, drawn partly
 // from the checkout's own content -- see Origin for the boundary that governs
@@ -90,7 +111,7 @@ func Discover(s Store) ([]string, error) {
 		return nil, err
 	}
 
-	var legacy, trackedNonExec []string
+	var legacy, trackedNonExec, localNonExec []string
 	var hooks []string
 	for _, loc := range all {
 		if loc.Origin == OriginLegacy {
@@ -108,7 +129,7 @@ func Discover(s Store) ([]string, error) {
 			trackedNonExec = append(trackedNonExec, loc.Path)
 			continue
 		}
-		fmt.Fprintf(stderr, "warning: %s is not executable, skipping\n", loc.Path)
+		localNonExec = append(localNonExec, loc.Path)
 	}
 
 	if len(legacy) > 0 {
@@ -116,6 +137,9 @@ func Discover(s Store) ([]string, error) {
 	}
 	if len(trackedNonExec) > 0 {
 		return nil, &TrackedNotExecutableError{Paths: trackedNonExec}
+	}
+	if len(localNonExec) > 0 {
+		return nil, &LocalNotExecutableError{Paths: localNonExec}
 	}
 	return hooks, nil
 }

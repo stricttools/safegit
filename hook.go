@@ -40,20 +40,26 @@ func sharedGitDir(flags globalFlags, gitDir string) string {
 
 // hookDiscoveryExit maps a hook-discovery failure onto its exit code and dies.
 //
-// The two states discovery refuses each have their own registered code, because
-// the remedies are different commands: hooks left in the pre-migration location
-// need `hook migrate`, a hook the checkout provides that is not executable needs
-// a chmod and a commit. Anything else is a plain failure to read the store.
+// The states discovery refuses map onto two registered codes, because the
+// remedies are different commands: hooks left in the pre-migration location need
+// `hook migrate`, a hook that is not executable needs a chmod (and, in the
+// checkout-provided store, a commit of the mode change). The non-executable
+// refusal is one code over two typed errors -- the store decides the remedy's
+// wording, not the verdict. Anything else is a plain failure to read the store.
 func hookDiscoveryExit(err error) int {
 	var legacy *hooks.LegacyLocationError
 	var tracked *hooks.TrackedNotExecutableError
+	var local *hooks.LocalNotExecutableError
 	switch {
 	case errors.As(err, &legacy):
 		die(exitcode.HooksNotMigrated, legacy.Error())
 		return exitcode.HooksNotMigrated
 	case errors.As(err, &tracked):
-		die(exitcode.TrackedHookNotExecutable, tracked.Error())
-		return exitcode.TrackedHookNotExecutable
+		die(exitcode.HookNotExecutable, tracked.Error())
+		return exitcode.HookNotExecutable
+	case errors.As(err, &local):
+		die(exitcode.HookNotExecutable, local.Error())
+		return exitcode.HookNotExecutable
 	default:
 		die(exitcode.General, fmt.Sprintf("discovering hooks: %v", err))
 		return exitcode.General

@@ -188,15 +188,15 @@ func TestPushDryRunRefusesANonExecutableTrackedHook(t *testing.T) {
 	safegitCommit(t, dir, "add a committed hook without its mode", filepath.Join(".safegit", "hooks", "pre-pre-push"))
 
 	_, stderr, code := runSafegit(t, dir, "--dry-run", "push", "--refs", "head", "origin")
-	if code != exitcode.TrackedHookNotExecutable {
-		t.Errorf("a preview over a non-executable committed hook exited %d, want %d (TrackedHookNotExecutable): %s",
-			code, exitcode.TrackedHookNotExecutable, stderr)
+	if code != exitcode.HookNotExecutable {
+		t.Errorf("a preview over a non-executable committed hook exited %d, want %d (HookNotExecutable): %s",
+			code, exitcode.HookNotExecutable, stderr)
 	}
 	if !strings.Contains(stderr, "chmod +x") {
 		t.Errorf("the preview's refusal must state the remedy, got: %s", stderr)
 	}
 
-	if _, _, code := runSafegit(t, dir, "push", "--refs", "head", "origin"); code != exitcode.TrackedHookNotExecutable {
+	if _, _, code := runSafegit(t, dir, "push", "--refs", "head", "origin"); code != exitcode.HookNotExecutable {
 		t.Errorf("the executed push exited %d, so the preview is not being compared against anything", code)
 	}
 }

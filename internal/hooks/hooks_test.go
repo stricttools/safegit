@@ -3,6 +3,7 @@ package hooks
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,7 +91,11 @@ func TestDiscoverDirectory(t *testing.T) {
 	}
 }
 
-func TestSkipNonExecutable(t *testing.T) {
+// TestRefuseNonExecutableLocalHook: a missing execute bit in the live store is
+// a refusal, not a filter. Discovery answers for the whole set, so the healthy
+// hook standing beside the offender is not handed back either -- running half an
+// operator's checks would be worse than running none of them and saying so.
+func TestRefuseNonExecutableLocalHook(t *testing.T) {
 	gitDir := setupGitDir(t)
 	dDir := filepath.Join(LocalDir(gitDir), "pre-pre-push.d")
 	if err := os.MkdirAll(dDir, 0755); err != nil {
@@ -100,19 +105,24 @@ func TestSkipNonExecutable(t *testing.T) {
 	// One executable, one not
 	writeHook(t, filepath.Join(dDir, "01-good"), "#!/bin/sh\nexit 0\n")
 	// Write non-executable file
-	if err := os.WriteFile(filepath.Join(dDir, "02-bad"), []byte("#!/bin/sh\nexit 0\n"), 0644); err != nil {
+	bad := filepath.Join(dDir, "02-bad")
+	if err := os.WriteFile(bad, []byte("#!/bin/sh\nexit 0\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	hooks, err := Discover(store(gitDir))
-	if err != nil {
-		t.Fatal(err)
+	var local *LocalNotExecutableError
+	if !errors.As(err, &local) {
+		t.Fatalf("Discover() error = %v, want a *LocalNotExecutableError", err)
 	}
-	if len(hooks) != 1 {
-		t.Fatalf("expected 1 hook (skip non-executable), got %d", len(hooks))
+	if len(hooks) != 0 {
+		t.Errorf("a refusing discovery handed back %d hook(s): %v", len(hooks), hooks)
 	}
-	if filepath.Base(hooks[0]) != "01-good" {
-		t.Errorf("expected 01-good, got %s", filepath.Base(hooks[0]))
+	if len(local.Paths) != 1 || local.Paths[0] != bad {
+		t.Errorf("the refusal names %v, want just %s", local.Paths, bad)
+	}
+	if !strings.Contains(local.Error(), "chmod") {
+		t.Errorf("the refusal must state the chmod remedy: %s", local.Error())
 	}
 }
 
@@ -242,27 +252,35 @@ func TestSetOutputCapturesHookOutput(t *testing.T) {
 	}
 }
 
-func TestSetOutputCapturesDiscoverWarning(t *testing.T) {
+// TestDiscoverWritesNoWarningOfItsOwn: discovery states its verdict by
+// RETURNING it. The non-executable local hook used to produce a `skipping`
+// warning on the package's stderr and then let the push proceed; it is a typed
+// refusal now, and a refusal a caller maps to an exit code must not also be
+// half-announced behind that caller's back.
+func TestDiscoverWritesNoWarningOfItsOwn(t *testing.T) {
 	var outBuf, errBuf bytes.Buffer
 	restore := SetOutput(&outBuf, &errBuf)
 	defer restore()
 
 	gitDir := setupGitDir(t)
-	// Write a non-executable hook to trigger the warning
 	hookPath := filepath.Join(LocalDir(gitDir), "pre-pre-push")
 	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\nexit 0\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	hooks, err := Discover(store(gitDir))
-	if err != nil {
-		t.Fatal(err)
+	var local *LocalNotExecutableError
+	if !errors.As(err, &local) {
+		t.Fatalf("Discover() error = %v, want a *LocalNotExecutableError", err)
 	}
 	if len(hooks) != 0 {
 		t.Fatalf("expected 0 hooks, got %d", len(hooks))
 	}
+	if !strings.Contains(local.Error(), hookPath) {
+		t.Errorf("the refusal must name the offending hook, got %q", local.Error())
+	}
 
-	if got := errBuf.String(); !strings.Contains(got, "not executable") {
-		t.Errorf("expected stderr warning about non-executable hook, got %q", got)
+	if got := outBuf.String() + errBuf.String(); got != "" {
+		t.Errorf("discovery wrote %q; its answer is the returned error, not output", got)
 	}
 }

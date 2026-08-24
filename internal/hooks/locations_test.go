@@ -72,7 +72,20 @@ func TestEnumerateSeesWhatDiscoverFilters(t *testing.T) {
 		t.Errorf("Enumerate() = %v, want %v", got, want)
 	}
 
-	// Discover applies the eligibility rules on top of that same set.
+	// Discover applies the eligibility rules on top of that same set -- and the
+	// two rules are not the same kind of rule. A NAME that disqualifies a file
+	// is a filter (it was never a hook), while a missing execute BIT is a
+	// refusal for the whole set (it is a hook that cannot run), so the
+	// non-executable entry has to go before what Discover returns can be read at
+	// all.
+	notExecutable := filepath.Join(local, "pre-pre-push.d", "02-not-executable")
+	if _, err := Discover(store(gitDir)); err == nil {
+		t.Fatalf("Discover() ran over %s instead of refusing", notExecutable)
+	}
+	if err := os.Remove(notExecutable); err != nil {
+		t.Fatal(err)
+	}
+
 	discovered, err := Discover(store(gitDir))
 	if err != nil {
 		t.Fatal(err)
