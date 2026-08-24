@@ -141,6 +141,15 @@ func errSkippedLines(skipped int) error {
 // Returns nil if no matching entry is found. It FAILS CLOSED on an incomplete
 // log: bypass detection asks "is the tip the one safegit last wrote", and a
 // log missing lines cannot answer that.
+//
+// Two entry shapes are deliberately passed over rather than answered with:
+//
+//   - an entry carrying NO new tip. A guarded operation git refused records the
+//     ref it did not move and an empty new tip, so the position safegit really
+//     last left the branch at is still the one this returns.
+//   - an entry recording a ref DELETION (`deleted: true`), which stops the walk
+//     with no answer at all: safegit removed the ref on purpose, and everything
+//     older describes a ref that no longer exists.
 func LastRefUpdate(safegitDir, ref string) (*Entry, error) {
 	entries, skipped, err := Read(safegitDir)
 	if err != nil {
@@ -156,11 +165,22 @@ func LastRefUpdate(safegitDir, ref string) (*Entry, error) {
 		if e.Extra == nil {
 			continue
 		}
-		if entryRef, ok := e.Extra["ref"].(string); ok && entryRef == ref {
-			// Ensure the entry has a resolvable SHA in one of the known keys
-			if hasTipSHA(e.Extra) {
-				return &e, nil
-			}
+		entryRef, ok := e.Extra["ref"].(string)
+		if !ok || entryRef != ref {
+			continue
+		}
+		// safegit DELETED this ref, and every entry beneath this one describes
+		// a ref that no longer exists. Reading past it would hand back a tip
+		// the ref cannot resolve to and report safegit's own deletion as
+		// something that happened behind its back -- which is exactly what
+		// doctor did after a root undo. There is no last update to compare
+		// against, so the answer is that there is none.
+		if deleted, _ := e.Extra["deleted"].(bool); deleted {
+			return nil, nil
+		}
+		// Ensure the entry has a resolvable SHA in one of the known keys
+		if hasTipSHA(e.Extra) {
+			return &e, nil
 		}
 	}
 
