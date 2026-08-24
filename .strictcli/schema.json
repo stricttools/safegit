@@ -82,7 +82,7 @@
   },
   "project_id": "github.com/smm-h/safegit",
   "name": "safegit",
-  "version": "0.28.1-0.20260824213009-553cd4bfb3eb+dirty",
+  "version": "0.28.1-0.20260824215048-3b8095e65e6c+dirty",
   "help": "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "proc_observe_allowlist": [
     [
@@ -207,6 +207,36 @@
             },
             "type": "array"
           },
+          "moved_records": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "new": {
+                  "type": "string"
+                },
+                "old": {
+                  "type": "string"
+                },
+                "origin": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "old",
+                "new",
+                "origin"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "moves_over_cap": {
+            "type": "integer"
+          },
           "old_sha": {
             "type": [
               "string",
@@ -221,6 +251,35 @@
           },
           "ref": {
             "type": "string"
+          },
+          "refused_moves": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "new": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "old": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "old",
+                "new",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           },
           "residue": {
             "items": {
@@ -268,7 +327,10 @@
           "attempts",
           "execution_mode",
           "residue",
-          "dry_run"
+          "dry_run",
+          "moved_records",
+          "refused_moves",
+          "moves_over_cap"
         ],
         "type": "object"
       },
