@@ -82,7 +82,7 @@
   },
   "project_id": "github.com/smm-h/safegit",
   "name": "safegit",
-  "version": "0.28.1-0.20260824193104-ab717d13e51d+dirty",
+  "version": "0.28.1-0.20260824205109-45efe0d3bf5a+dirty",
   "help": "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "proc_observe_allowlist": [
     [
@@ -222,6 +222,25 @@
           "ref": {
             "type": "string"
           },
+          "residue": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "detail": {
+                  "type": "string"
+                },
+                "step": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "step",
+                "detail"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
           "sha": {
             "type": [
               "string",
@@ -248,6 +267,7 @@
           "skipped_ignored",
           "attempts",
           "execution_mode",
+          "residue",
           "dry_run"
         ],
         "type": "object"
@@ -445,6 +465,25 @@
           "ref": {
             "type": "string"
           },
+          "residue": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "detail": {
+                  "type": "string"
+                },
+                "step": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "step",
+                "detail"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
           "sha": {
             "type": [
               "string",
@@ -463,6 +502,7 @@
           "moves",
           "files",
           "attempts",
+          "residue",
           "dry_run"
         ],
         "type": "object"
