@@ -22,9 +22,42 @@ import (
 // builds a commit message, and runs safegit commit in the parent repo.
 // Returns the new commit SHA (or "" if no bump was needed) and any error.
 func autoBumpParent(ctx context.Context, flags globalFlags, parentWorkTree, subRelPath, newSubSHA, operation, firstLine string) (string, error) {
-	// Check the current parent pointer via ls-tree, in the PARENT's work tree:
-	// the repository is an argument here, which is the declared
-	// explicit-directory exemption from the repository-root pin.
+	currentSHA, err := parentGitlinkSHA(ctx, parentWorkTree, subRelPath)
+	if err != nil {
+		return "", err
+	}
+	if currentSHA == newSubSHA {
+		return "", nil // already up to date
+	}
+
+	// Defense in depth: maybeAutoBumpParent already returns before reaching
+	// this function under --dry-run. Never spawn a real parent commit here.
+	if flags.dryRun {
+		return "", nil
+	}
+
+	completed, err := runParentBumpCommit(flags, parentWorkTree, subRelPath,
+		parentBumpMessage(subRelPath, firstLine, newSubSHA, operation))
+	if err != nil {
+		return "", err
+	}
+
+	// Parse commit SHA from stdout: "[branch sha] message"
+	output := strings.TrimSpace(completed.Stdout())
+	sha := parseCommitSHA(output)
+	if sha == "" {
+		return "", fmt.Errorf("could not parse commit SHA from parent output: %q", output)
+	}
+	return sha, nil
+}
+
+// parentGitlinkSHA reads the gitlink a PARENT repository records for one of its
+// submodules -- the object name the bump would replace.
+//
+// It runs in the PARENT's work tree: the repository is an argument here, which
+// is the declared explicit-directory exemption from the repository-root pin. It
+// is a READ, so a preview may make it too (see planParentBump).
+func parentGitlinkSHA(ctx context.Context, parentWorkTree, subRelPath string) (string, error) {
 	var lsOut, lsErr bytes.Buffer
 	lsCmd, err := gitexec.Command(ctx, gitexec.Spec{
 		Args:   []string{"ls-tree", "--full-tree", "HEAD", subRelPath},
@@ -40,44 +73,39 @@ func autoBumpParent(ctx context.Context, flags globalFlags, parentWorkTree, subR
 		return "", fmt.Errorf("ls-tree in parent: %v (%s)", err, strings.TrimSpace(lsErr.String()))
 	}
 
-	// Parse SHA from ls-tree output: "160000 commit <sha>\t<path>"
+	// "160000 commit <sha>\t<path>"
 	parts := strings.Fields(lsOut.String())
 	if len(parts) < 3 {
 		return "", fmt.Errorf("unexpected ls-tree output: %q", lsOut.String())
 	}
-	currentSHA := parts[2]
-	if currentSHA == newSubSHA {
-		return "", nil // already up to date
-	}
+	return parts[2], nil
+}
 
-	// Defense in depth: maybeAutoBumpParent already returns before reaching
-	// this function under --dry-run. Never spawn a real parent commit here.
-	if flags.dryRun {
-		return "", nil
-	}
-
-	// Build commit message
-	var subject string
+// parentBumpMessage composes the parent commit's message. One builder for both
+// modes, so the argv a preview RECORDS is the argv the execute path RUNS, down
+// to the trailers -- except for triggeredBy, which a preview cannot know when
+// the sub's own commit does not exist yet and which is the placeholder there.
+func parentBumpMessage(subRelPath, firstLine, triggeredBy, operation string) string {
+	subject := fmt.Sprintf("bump %s", subRelPath)
 	if firstLine != "" {
 		subject = fmt.Sprintf("bump %s: %s", subRelPath, firstLine)
-	} else {
-		subject = fmt.Sprintf("bump %s", subRelPath)
 	}
-	msg := trailer.AppendCustom(subject, []string{
-		"Triggered-by: " + newSubSHA,
+	return trailer.AppendCustom(subject, []string{
+		"Triggered-by: " + triggeredBy,
 		"Operation: " + operation,
 	})
+}
 
-	// Get safegit binary path
+// runParentBumpCommit mints the parent's own commit through the effects handle,
+// so the self-spawn is a recorded PROC_MUTATE rather than a bare subprocess --
+// performed on an executing run, recorded instead of performed in a preview.
+// `commit` is not consequential, so the child needs no approval flag: it
+// dispatches straight through with no terminal to confirm at.
+func runParentBumpCommit(flags globalFlags, parentWorkTree, subRelPath, msg string) (strictcli.Completed, error) {
 	safegitBin, err := os.Executable()
 	if err != nil {
-		return "", fmt.Errorf("resolving safegit binary: %v", err)
+		return strictcli.Completed{}, fmt.Errorf("resolving safegit binary: %v", err)
 	}
-
-	// Run safegit commit in the parent through the effects handle, so the
-	// self-spawn is a recorded PROC_MUTATE rather than a bare subprocess.
-	// `commit` is not consequential, so the child needs no approval flag: it
-	// dispatches straight through with no terminal to confirm at.
 	completed, err := flags.effects().Run(
 		[]interface{}{safegitBin, "commit", "-m", msg, "--", subRelPath},
 		strictcli.Cwd(parentWorkTree),
@@ -85,16 +113,75 @@ func autoBumpParent(ctx context.Context, flags globalFlags, parentWorkTree, subR
 		strictcli.Resource("parent-pointer:"+subRelPath),
 	)
 	if err != nil {
-		return "", fmt.Errorf("safegit commit in parent: %v", err)
+		return strictcli.Completed{}, fmt.Errorf("safegit commit in parent: %v", err)
+	}
+	return completed, nil
+}
+
+// parentBumpPlan is a preview's answer to "would this run commit in the parent,
+// and with what argv". Every READ the decision needs is made before it exists,
+// which is what lets a caller record the ref move first and the bump second
+// without a state read in between (the dry-run doctrine).
+type parentBumpPlan struct {
+	parentWorkTree string
+	subRelPath     string
+}
+
+// planParentBump makes the parent-bump decision from reads alone: the parent
+// config (the same read requireAutoBumpDecision's dry branch makes), the nested
+// check, and the gitlink the bump would replace. It returns nil when no bump
+// would happen at all -- not a submodule, the key deliberately says no, or the
+// gitlink already names newHeadSHA -- and an error for the conditions the real
+// run refuses on, so a preview never promises a bump the real run would not
+// make.
+//
+// It creates nothing in the parent: no safegit directory, no config write.
+func planParentBump(ctx context.Context, flags globalFlags, newHeadSHA string) (*parentBumpPlan, error) {
+	parent, ok := submodule.DetectParent(ctx)
+	if !ok {
+		return nil, nil
+	}
+	parentGitDir, subRelPath := parent.GitDir, parent.SubmodulePath
+
+	cfg, err := repo.LoadConfig(parentGitDir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, errAutoBumpUnset
+	}
+	if err != nil {
+		return nil, fmt.Errorf("loading parent config: %v", err)
+	}
+	if cfg.Commit.AutoBumpParent == nil {
+		return nil, errAutoBumpUnset
+	}
+	if !*cfg.Commit.AutoBumpParent {
+		return nil, nil // explicitly disabled
 	}
 
-	// Parse commit SHA from stdout: "[branch sha] message"
-	output := strings.TrimSpace(completed.Stdout())
-	sha := parseCommitSHA(output)
-	if sha == "" {
-		return "", fmt.Errorf("could not parse commit SHA from parent output: %q", output)
+	if err := submodule.CheckNested(ctx, parentGitDir); err != nil {
+		return nil, fmt.Errorf("nested submodules detected — set commit.autoBumpParent to false in the parent")
 	}
-	return sha, nil
+
+	parentWorkTree := filepath.Dir(parentGitDir)
+	currentSHA, err := parentGitlinkSHA(ctx, parentWorkTree, subRelPath)
+	if err != nil {
+		return nil, err
+	}
+	if currentSHA == newHeadSHA {
+		// Already current: the real run makes no commit here, so the preview
+		// records none either.
+		return nil, nil
+	}
+	return &parentBumpPlan{parentWorkTree: parentWorkTree, subRelPath: subRelPath}, nil
+}
+
+// recordParentBumpPreview mints the would-do record for the parent's own commit.
+// The argv is the one the execute path runs, with previewCommitPlaceholder
+// standing in for the Triggered-by object name -- the sub's new commit, which no
+// preview can name.
+func recordParentBumpPreview(flags globalFlags, plan *parentBumpPlan, operation, firstLine string) error {
+	_, err := runParentBumpCommit(flags, plan.parentWorkTree, plan.subRelPath,
+		parentBumpMessage(plan.subRelPath, firstLine, previewCommitPlaceholder, operation))
+	return err
 }
 
 // parseCommitSHA extracts the SHA from safegit commit output.
@@ -140,8 +227,9 @@ var errAutoBumpUnset = fmt.Errorf("commit.autoBumpParent not configured in paren
 // leaves stale is stale in exactly the same way.
 //
 // A dry run validates too. An early refusal is an honest preview -- the real
-// run would refuse for exactly this reason -- and it is the only part of the
-// parent repository a preview touches: the config is READ, and nothing is
+// run would refuse for exactly this reason -- and everything a preview does in
+// the parent repository is a READ: this config read, and the nested check plus
+// the gitlink read the bump PREVIEW makes later (planParentBump). Nothing is
 // created there, not even safegit's own directory.
 func requireAutoBumpDecision(ctx context.Context, flags globalFlags) error {
 	parent, ok := submodule.DetectParent(ctx)
@@ -190,10 +278,30 @@ func maybeAutoBumpParent(ctx context.Context, flags globalFlags, gitDir, newHead
 	}
 	parentGitDir, subRelPath := parent.GitDir, parent.SubmodulePath
 
-	// A dry run must leave the parent repository entirely alone: no safegit
-	// directory created there, no config read-modify, and above all no commit.
-	// The preview says what the real run would attempt.
+	// A dry run WRITES nothing in the parent repository: no safegit directory
+	// created there, no config modified, and above all no commit. It READS it --
+	// the config, the nested check, the gitlink -- because that is what deciding
+	// whether a bump would happen takes, and a preview that skipped the decision
+	// could only describe a bump it had not established would occur.
+	//
+	// This is the ONE mint site for the parent bump, in both modes, so every
+	// caller inherits it: commit, amend, reword, mv, the pipeline-authored
+	// merge, pull, cherry-pick and revert, the three conclusions, and undo --
+	// which arranges the two halves itself so its records come out in execution
+	// order (see runUndo).
 	if flags.dryRun {
+		plan, err := planParentBump(ctx, flags, newHeadSHA)
+		if err != nil {
+			return err
+		}
+		if plan == nil {
+			// No bump would happen: the key says no, or the gitlink already
+			// names this SHA. Nothing to record and nothing to announce.
+			return nil
+		}
+		if err := recordParentBumpPreview(flags, plan, operation, firstLineMsg); err != nil {
+			return err
+		}
 		if !flags.silent() {
 			fmt.Fprintf(os.Stderr, "  parent: would bump %s pointer (dry run; parent repo untouched)\n", subRelPath)
 		}
