@@ -151,6 +151,11 @@ func assertNoSequencerResidue(t *testing.T, dir, context string) {
 // can meet -- see TestConflictedOctopusOnALaterHeadConcludesAsAnOctopus below,
 // which builds one -- so this test is about the parent list rather than about
 // the only octopus that exists.
+//
+// RAW GIT parks it, deliberately. `safegit merge` takes exactly one branch, so
+// an octopus is a state only git can now create; the conclusion's ability to
+// carry every MERGE_HEAD line is what this test is about, and it is unaffected
+// by which tool wrote the file.
 func TestOctopusConclusionCarriesEveryMergeHead(t *testing.T) {
 	dir := newRepo(t)
 
@@ -168,8 +173,8 @@ func TestOctopusConclusionCarriesEveryMergeHead(t *testing.T) {
 	testutil.WriteFile(t, dir, "m.txt", "main\n")
 	mainSHA := safegitCommitEnv(t, dir, conclusionSession, "main", "m.txt")
 
-	if _, stderr, code := runSafegitEnv(t, dir, conclusionSession, "merge", "--no-commit", "b1", "b2"); code != 0 {
-		t.Fatalf("octopus merge --no-commit failed (code %d): %s", code, stderr)
+	if out, code := testutil.GitTry(t, dir, "merge", "--no-commit", "b1", "b2"); code != 0 {
+		t.Fatalf("octopus merge --no-commit failed (code %d): %s", code, out)
 	}
 	// AssertMergeHead compares the whole file, which for an octopus holds one
 	// object name per side, so the sides are checked individually here.
@@ -222,7 +227,8 @@ func TestOctopusConclusionCarriesEveryMergeHead(t *testing.T) {
 //
 // The fixture arranges exactly that: b1 touches the first line, main touches the
 // third, so the first pairwise step merges cleanly; b2 then touches the first
-// line again and collides with b1's result.
+// line again and collides with b1's result. RAW GIT starts it, for the same
+// reason as the clean octopus above: `safegit merge` takes exactly one branch.
 func TestConflictedOctopusOnALaterHeadConcludesAsAnOctopus(t *testing.T) {
 	dir := newRepo(t)
 
@@ -242,12 +248,12 @@ func TestConflictedOctopusOnALaterHeadConcludesAsAnOctopus(t *testing.T) {
 	testutil.WriteFile(t, dir, "f.txt", "l1\nl2\nMAIN\n")
 	mainSHA := safegitCommitEnv(t, dir, conclusionSession, "main", "f.txt")
 
-	stdout, stderr, code := runSafegitEnv(t, dir, conclusionSession, "merge", "b1", "b2")
+	out, code := testutil.GitTry(t, dir, "merge", "b1", "b2")
 	if code == 0 {
-		t.Fatalf("the octopus merge succeeded; this fixture needs a conflict\nstdout=%s stderr=%s", stdout, stderr)
+		t.Fatalf("the octopus merge succeeded; this fixture needs a conflict\n%s", out)
 	}
-	if !strings.Contains(stdout+stderr, "conflict") && !strings.Contains(stdout+stderr, "CONFLICT") {
-		t.Fatalf("the octopus merge did not report a conflict (code %d)\nstdout=%s stderr=%s", code, stdout, stderr)
+	if !strings.Contains(out, "conflict") && !strings.Contains(out, "CONFLICT") {
+		t.Fatalf("the octopus merge did not report a conflict (code %d)\n%s", code, out)
 	}
 
 	// It really parked, and it parked as an octopus: both heads, and unmerged

@@ -1,14 +1,11 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/commit"
-	"github.com/smm-h/safegit/internal/conflict"
 	"github.com/smm-h/safegit/internal/coord"
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
@@ -198,7 +195,6 @@ func runRestructuredRevert(flags globalFlags, args []string) int {
 // implementation of the conclusion -- the resolution vocabulary, the marker
 // verification and the state cleanup are the ones in sequencer_continue.go.
 func concludeComputedRevert(flags globalFlags, gitDir, sgDir string) int {
-	ctx := flags.ctx()
 	op := revertContinueOp
 
 	state, err := sequencer.Read(gitDir)
@@ -214,90 +210,25 @@ func concludeComputedRevert(flags globalFlags, gitDir, sgDir string) int {
 		return exitcode.General
 	}
 
-	if _, err := git.HeadRef(ctx); err != nil {
-		return op.refuseDetachedHead(state)
-	}
-
-	// A clean compute step leaves no unmerged paths, so the declaration is
-	// empty and both checks pass over an empty set -- but they are run, not
-	// skipped, because a repository can be mid-revert with foreign unmerged
-	// entries from something else, and the conclusion refusing to guess is the
-	// same answer here as it is behind revert-continue.
-	sides, err := conflict.Stages(ctx, "")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: reading the conflicted paths from the index: %v\n", err)
-		return exitcode.General
-	}
-	var declared []resolution
-	if code := op.checkCompleteness(ctx, state, sides, declared); code != 0 {
-		return code
-	}
-	declines, code := op.verifyMarkers(ctx, state, sides, declared)
-	if code != 0 {
-		return code
-	}
-
-	message, err := op.conclusionMessage(ctx, state, nil)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return exitcode.General
-	}
-	// A revert authors as the OPERATOR, which is git's own revert semantics and
-	// therefore what the restructured form has to reproduce: nothing is pinned,
-	// and the identity reported is the one git will use. Same resolution as
-	// `safegit revert-continue`, from the same one place.
-	pinned, recorded, err := op.conclusionAuthorship(ctx, state)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return exitcode.General
-	}
-
-	// Undoing a move is a move: the records on the commit being reverted are
-	// inverted here, from the same one place `safegit revert-continue` inverts
-	// them, so a revert that hit a conflict and one that did not declare the
-	// same thing.
-	movedRecords, err := op.conclusionMovedRecords(ctx, state)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return exitcode.General
-	}
-
-	cfg, err := loadConfig(flags, gitDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: loading config: %v\n", err)
-		return exitcode.General
-	}
-
-	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
-	result, err := p.Execute(ctx, commit.CommitRequest{
-		Message:      message,
-		MovedRecords: movedRecords,
-		IndexBase:    commit.IndexBaseSharedIndex,
-		Author:       pinned,
-		OplogOp:      op.command,
-		Sequencer:    &coord.SequencerContext{Kind: sequencer.KindRevert},
+	// The conclusion itself is the shared one. What is revert's own is stated
+	// here and nowhere else: a revert that changes nothing has its own refusal,
+	// the parent bump names the operation `revert`, and the identity recorded
+	// is the OPERATOR's -- git's own revert semantics, resolved inside the
+	// engine from the same one place `revert-continue` resolves it.
+	out, exit, ok := concludeParkedOperation(flags, gitDir, sgDir, state, parkedConclusion{
+		op:           op,
+		oplogOp:      op.command,
+		parentBumpOp: "revert",
+		onEmpty:      refuseEmptyRevert,
 	})
-	if err != nil {
-		if errors.Is(err, commit.ErrTreeUnchanged) {
-			return refuseEmptyRevert()
-		}
-		die(pipelineExitCode(err), err.Error())
-	}
-
-	out := conclusionResult{state: state, commit: result, declared: declared, declines: declines, author: recorded}
-	if err := finishConclusion(ctx, gitDir, state, result, nil, sides, declared); err != nil {
-		die(exitcode.General, err.Error())
-	}
-	out.cleared = true
-
-	if err := maybeAutoBumpParent(ctx, flags, gitDir, result.SHA, "revert", firstLine(message)); err != nil {
-		die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+	if !ok {
+		return exit
 	}
 
 	// Human output only: `revert` is a passthrough command and declares no
 	// payload schema, so there is no machine document to emit here.
 	op.renderHuman(flags, out, "reverted "+shortSHA(state.Source))
-	return exitcode.OK
+	return exit
 }
 
 // refuseEmptyRevert covers a revert whose inverse patch changes nothing --

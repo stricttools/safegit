@@ -374,7 +374,20 @@ func newApp() *strictcli.App {
 		"conclude a revert git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file). For a SINGLE revert safegit writes the commit itself: one parent, YOU as both author and committer -- a revert is your own new change, not the reverted commit author's, which is git's own division and the opposite of what a cherry-pick does -- git's own message draft with its comment block stripped or -m, the repository's commit-msg hook run, and the revert's state files removed afterwards. Note the stage keywords: a revert applies an INVERSE patch, so theirs is what the reverted commit's parent held -- resolving to theirs keeps the revert, resolving to ours keeps the commit being reverted. A QUEUED sequence -- git revert with more than one commit -- is DELEGATED to git's own 'revert --continue' with safegit's index copy as its index, after the same completeness and conflict-marker checks; git authors those commits, so they carry no safegit trailers and 'safegit undo' does not reverse them, and -m, --trailer and --dry-run are refused for a queued sequence rather than silently ignored")
 
 	app.Passthrough("checkout", "checkout a branch or ref, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work", pt, strictcli.WithEffect(strictcli.EffectMutating))
-	app.Passthrough("merge", "merge a branch into HEAD, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work. A merge git stops on a conflict is concluded by safegit, not by git: 'safegit merge --continue' is refused and names 'safegit merge-continue', which commits the merge's whole staged result with safegit's trailers on it", pt, strictcli.WithEffect(strictcli.EffectMutating))
+	// merge is a passthrough REGISTRATION -- the operator's argv is git's own
+	// vocabulary and reaches the handler verbatim -- but it is no longer a
+	// guarded passthrough in behavior: safegit authors the commit. It declares
+	// a payload schema, which a passthrough may do; what it may not do is
+	// declare flags or args, which is why the subset refusals are the handler's
+	// (see merge_cmd.go).
+	app.Passthrough("merge", mergeHelp, pt,
+		strictcli.WithEffect(strictcli.EffectMutating),
+		strictcli.PayloadSchema(mergePayloadSchema),
+		strictcli.WithGrants(strictcli.Grant{
+			Name:   "parent-bump",
+			Reason: "merging in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
+			Kind:   strictcli.ProcMutate,
+		}))
 	app.Passthrough("rebase", "rebase the current branch onto upstream, guarded twice before git runs: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- and then a check for uncommitted work. A rebase's own --continue and --abort stay git's: safegit has no verb that finishes one", pt, strictcli.WithEffect(strictcli.EffectMutating))
 	app.Passthrough("reset", "reset HEAD with guards that prevent accidental data loss. The worktree operation lock is taken for EVERY reset, because every reset moves HEAD; the uncommitted-work check applies to the modes that WRITE working-tree files -- --hard, --merge and --keep -- while --soft and --mixed move only the ref and the index. Which is which is derived from safegit's git classification table, never re-read from the argument list here", pt, strictcli.WithEffect(strictcli.EffectMutating))
 	app.Passthrough("bisect", "binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the STEPPING subcommands (start, good, bad, old, new, skip, run, replay, reset), each of which checks another commit out, and not to the reporting ones (terms, log, view). Which is which is derived from safegit's git classification table, never kept as a list here", pt, strictcli.WithEffect(strictcli.EffectMutating))
