@@ -139,16 +139,22 @@ type moveInference struct {
 	// newMoveInference.
 	enabled bool
 
-	// done marks that attempt 1 has run and the three fields below hold its
-	// answer.
-	done    bool
-	pairs   []trailer.Pair
-	lines   []string
-	refused []RefusedMove
+	// done marks that attempt 1 has run and that pairs and lines hold its
+	// answer -- the pairs every later attempt is compared against, and the
+	// record lines whose ids are already in the cached message.
+	done  bool
+	pairs []trailer.Pair
+	lines []string
 
+	// refused and capped are the LATEST attempt's, overwritten every time.
+	// Unlike the records, they are not on the commit: they describe what the
+	// delta the commit was built from did not single out, and after a retry
+	// that delta is the winning attempt's.
+	//
 	// capped is how many records the commit would have carried when the cap
 	// turned them all down, and zero otherwise.
-	capped int
+	refused []RefusedMove
+	capped  int
 }
 
 // newMoveInference prepares inference for one commit operation.
@@ -231,11 +237,18 @@ func (m *moveInference) records(ctx context.Context, changed []git.ChangedPath, 
 		return nil, err
 	}
 
+	// The refusals and the cap are the WINNING attempt's, always. They are not on
+	// the commit: they describe what the delta the commit was built from did not
+	// single out, and after a retry that delta is this attempt's. Keeping attempt
+	// 1's answer would report candidates against a tree the commit was never
+	// built on. The PAIRS are attempt 1's on purpose -- their ids are in the
+	// cached message -- which is what the compare below is about.
+	m.refused = refused
+	m.capped = capped
+
 	if !m.done {
 		m.done = true
 		m.pairs = pairs
-		m.refused = refused
-		m.capped = capped
 		lines := make([]string, 0, len(pairs))
 		for _, p := range pairs {
 			// OBSERVED, always: everything minted here is safegit reading a
