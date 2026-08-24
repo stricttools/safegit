@@ -465,7 +465,13 @@ func dropOverlapping(pairs, declared []trailer.Pair) ([]trailer.Pair, []RefusedM
 type blobIndex struct {
 	at     map[string]string   // path -> blob
 	byBlob map[string][]string // blob -> paths
-	sorted []string            // every path, sorted, for a prefix query
+	// every path the tree holds, sorted, for a prefix query -- NOT only the
+	// regular files. The uniqueness fences ask about blobs, which only a
+	// regular file has, but the subtree witness (infer_subtrees.go) asks
+	// whether a prefix is EMPTY of everything else, and a symlink or a
+	// submodule pointer left behind under the old prefix is exactly the thing
+	// that makes a subtree record false.
+	sorted []string
 }
 
 // newBlobIndex lists one tree. An empty treeish is a root commit's absent
@@ -480,6 +486,7 @@ func newBlobIndex(ctx context.Context, treeish string) (*blobIndex, error) {
 		return nil, fmt.Errorf("listing %s to check what moved: %w", treeish, err)
 	}
 	for _, e := range entries {
+		b.sorted = append(b.sorted, e.Path)
 		// Only regular files can be one side of an inferred move, so only they
 		// are counted when asking whether a blob is unique.
 		if !regularFileModes[e.Mode] {
@@ -487,7 +494,6 @@ func newBlobIndex(ctx context.Context, treeish string) (*blobIndex, error) {
 		}
 		b.at[e.Path] = e.SHA
 		b.byBlob[e.SHA] = append(b.byBlob[e.SHA], e.Path)
-		b.sorted = append(b.sorted, e.Path)
 	}
 	sort.Strings(b.sorted)
 	return b, nil
