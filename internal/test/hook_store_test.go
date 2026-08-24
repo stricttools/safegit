@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
@@ -330,14 +331,20 @@ func TestHookListRendersStateAndOrigin(t *testing.T) {
 		t.Errorf("hook list did not count every location:\n%s", stdout)
 	}
 
-	// The non-executable one is skipped with a warning rather than refused:
-	// that is git's stance for its own hooks and safegit's for the live store.
+	// Listing is the diagnostic and never refuses on what it lists; RUNNING the
+	// same set does refuse. A hook is disabled by removing it, never by dropping
+	// its mode, and that rule is store-independent -- so the live store answers a
+	// missing execute bit exactly as the checkout-provided one does.
 	_, runErr, runCode := runSafegit(t, dir, "hook", "run")
-	if runCode != 0 {
-		t.Fatalf("hook run failed (%d): %s", runCode, runErr)
+	if runCode != exitcode.HookNotExecutable {
+		t.Fatalf("hook run over the non-executable %s exited %d, want %d (HookNotExecutable): %s",
+			nonExec, runCode, exitcode.HookNotExecutable, runErr)
 	}
-	if !strings.Contains(runErr, "not executable") || !strings.Contains(runErr, "20-unarmed") {
-		t.Errorf("the skip must be warned about by name, got: %s", runErr)
+	if !strings.Contains(runErr, "20-unarmed") {
+		t.Errorf("the refusal must name the offending hook, got: %s", runErr)
+	}
+	if !strings.Contains(runErr, "chmod") {
+		t.Errorf("the refusal must state the chmod remedy, got: %s", runErr)
 	}
 }
 

@@ -120,7 +120,7 @@ var doctorChecks = []doctorCheck{
 	{Name: "oplog", Severity: "error", RequiresInit: true, Fn: checkOplog},
 	{Name: "bypass_detect", Severity: "warn", RequiresInit: true, Fn: checkBypassDetect},
 	{Name: "filesystem", Severity: "warn", Fn: checkFilesystemRegistered},
-	{Name: "hook_perms", Severity: "warn", RequiresInit: true, Fn: checkHookPerms},
+	{Name: "hook_perms", Severity: "error", RequiresInit: true, Fn: checkHookPerms},
 	// Not RequiresInit: hooks can sit in the pre-migration location in a
 	// repository whose .git/safegit was later removed, and a push there
 	// re-creates the state directory and then refuses on exactly this.
@@ -443,11 +443,12 @@ func checkFilesystemRegistered(env doctorEnv) doctorFinding {
 //
 // It reads the location enumerator, so it sees exactly the set discovery sees
 // -- both stores, at any depth -- rather than re-deriving one directory's
-// layout and going quietly blind to the rest. The two stores get different
-// severities because push treats them differently: a non-executable LOCAL hook
-// is skipped with a warning, while a non-executable hook the checkout provides
-// is a hard refusal, so reporting the second as advisory would understate a push
-// that is already failing.
+// layout and going quietly blind to the rest. Both stores report at ERROR
+// severity, because push refuses on either: a repository holding one of these
+// is stopped rather than degraded, and reporting that as advice would
+// understate a push that is already failing. The two branches differ only in
+// the remedy they state -- the checkout-provided store needs the mode change
+// committed as well.
 func checkHookPerms(env doctorEnv) doctorFinding {
 	locations, err := hooks.Enumerate(hooks.Store{Worktree: env.worktree, SharedGitDir: env.sharedGitDir})
 	if err != nil {
@@ -469,11 +470,12 @@ func checkHookPerms(env doctorEnv) doctorFinding {
 		}
 	}
 	if len(tracked) > 0 {
-		return findingAt("error", "%d hook(s) in the checkout's .safegit/hooks are not executable, which every push refuses on: %s (chmod +x and commit the mode change)",
+		return findingFail("%d hook(s) in the checkout's .safegit/hooks are not executable, which every push refuses on: %s (chmod +x and commit the mode change)",
 			len(tracked), strings.Join(tracked, ", "))
 	}
 	if len(local) > 0 {
-		return findingFail("%d non-executable hook(s) in %s: %s", len(local), hooks.LocalDir(env.sharedGitDir), strings.Join(local, ", "))
+		return findingFail("%d hook(s) in %s are not executable, which every push refuses on: %s (chmod +x, or remove the hook if it is meant to be gone)",
+			len(local), hooks.LocalDir(env.sharedGitDir), strings.Join(local, ", "))
 	}
 	return findingOK("")
 }
