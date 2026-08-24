@@ -1337,6 +1337,40 @@ outside the catalog; the re-pointed tests pass.
 
 ---
 
+PHASE-6 AUDIT FINDINGS (remediated post-audit) `[plan]`:
+- The payload reported records a rewriting commit-msg hook removed
+  (minted from pre-hook lines while the commit carries the post-hook
+  message) — fixed by intersecting this run's minted ids against the
+  committed message's own records; red-first.
+- THE --UNTRACK FENCE (the review note resolved as FORCED by internal
+  consistency): the declared spelling REFUSES the same claim inference
+  minted (`--moved` with the old path still on disk exits 19), so
+  inference stating it itself contradicted the tool's own rule.
+  `req.Untrack` paths join `suppressedPaths` exactly like declared
+  paths, each suppressed candidate reported as a refused pair naming
+  --untrack; scoped to the named untrack paths (no general on-disk
+  check — a --branch commit's worktree is unrelated). Reviewable at
+  the catalog review.
+- The CAS transient-race abort gains its own REGISTERED exit code
+  (verified free slot; per the standing registry discipline — General
+  made the one purely-transient, auto-retryable abort
+  indistinguishable from real failures, in a tool built for concurrent
+  agents) and the message names the pair whose witness changed.
+- Notice honesty: the aggregate line counts PATHS (not refusal
+  entries) and the overlap refusal gets its own sentence (the
+  ambiguity wording was wrong for it); the payload's refusal set is
+  recomputed on the winning attempt (stale attempt-1 refusals fixed).
+- Hygiene: the two stale refuseRedeclaredPairs comment references; the
+  trailer grammar block documents the origin slot; the surviving
+  declared-only claim in commit_intake_edge_test.go's comment
+  rewritten. (CLAUDE.md's stale doctrine line heals at Phase 7's
+  selfdoc gen — repo-wide generated staleness, already scheduled.)
+- Audit-noted, no action: the repopulated-prefix collapse oddity is
+  harmless (the projection's answer check cannot produce a missing
+  path); content-coincidence minting within the fences is the ruled
+  design (stated plainly for the user's review); conclusion paths
+  never infer (shared-index skip verified).
+
 ## Phase 7 — Documentation
 
 After Phases 1-6. SINGLE-WRITER RULE `[user — campaign-only override
