@@ -881,6 +881,31 @@ func LsTreeRecursive(ctx context.Context, treeish string) ([]TreeEntry, error) {
 	return parseLsTreeOutput(out, false), nil
 }
 
+// LsTreePathsRecursive returns the entries a treeish holds at EXACTLY the given
+// repo-relative paths, recursively, and nothing else. A path the tree does not
+// carry is simply absent from the answer, which is how a caller learns the tree
+// does not hold it.
+//
+// It is the path-limited form of LsTreeRecursive, for a caller that wants a
+// handful of named paths out of a tree rather than all of it. `--full-tree`
+// makes both the listing and the pathspecs repository-rooted, so the answer does
+// not depend on where the process stands -- the same reason it is mandatory on
+// the two listings above.
+//
+// An empty path list returns nothing: `ls-tree` with no pathspec lists the whole
+// tree, which is the opposite of what a caller asking about no paths means.
+func LsTreePathsRecursive(ctx context.Context, treeish string, paths []string) ([]TreeEntry, error) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	args := append([]string{"ls-tree", "--full-tree", "-r", "-z", treeish, "--"}, paths...)
+	out, _, err := Run(ctx, args...)
+	if err != nil {
+		return nil, fmt.Errorf("ls-tree %s: %w", treeish, err)
+	}
+	return parseLsTreeOutput(out, false), nil
+}
+
 // ChangedPath is one entry of a recursive name-status diff between two trees.
 type ChangedPath struct {
 	// Status is git's single-letter name-status code: A, M, D, T (type

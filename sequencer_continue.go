@@ -490,7 +490,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		return exitcode.General
 	}
 	if stood != nil {
-		return op.finishWhatCrashed(ctx, flags, gitDir, state, stood, sides, declared)
+		return op.finishWhatCrashed(ctx, flags, gitDir, state, stood, sides, declared, discardUnmatched)
 	}
 
 	if code := op.checkCompleteness(ctx, state, sides, declared); code != 0 {
@@ -574,7 +574,9 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	}
 
 	if !flags.dryRun {
-		out.concludeAftercare(ctx, flags, gitDir, state, result, edits, sides, declared, op.command, message)
+		out.concludeAftercare(ctx, flags, gitDir, state, result, edits, func(ctx context.Context) error {
+			return materializeResolutions(ctx, sides, declared)
+		}, op.command, message)
 	}
 
 	op.report(flags, out)
@@ -600,12 +602,11 @@ func (out *conclusionResult) concludeAftercare(
 	state sequencer.State,
 	result *commit.CommitResult,
 	edits []commit.IndexEdit,
-	sides map[string]conflict.Sides,
-	declared []resolution,
+	materialize func(context.Context) error,
 	parentBumpOp string,
 	message string,
 ) {
-	if r := finishConclusion(ctx, gitDir, state, result, edits, sides, declared); r != nil {
+	if r := finishConclusion(ctx, gitDir, state, result, edits, materialize); r != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", r.Detail)
 		out.residue = append(out.residue, *r)
 		if state.Kind == sequencer.KindMerge && state.Autostash != "" {
@@ -811,6 +812,11 @@ func parentsMatchMergeHeads(parents, mergeHeads []string) bool {
 // whole difference from the ordinary path: nothing was authored here, so the
 // attempt count is zero and the payload's sha names a commit an earlier run
 // created.
+//
+// What the index and the working tree end up holding is read off THE COMMIT
+// rather than off this command line -- see sequencer_crash.go, which is where
+// that reading, the check on a declaration the commit contradicts, and the
+// overwrite refusal over the writes it drives all live.
 func (op continueOp) finishWhatCrashed(
 	ctx context.Context,
 	flags globalFlags,
@@ -819,12 +825,23 @@ func (op continueOp) finishWhatCrashed(
 	stood *commit.CommitResult,
 	sides map[string]conflict.Sides,
 	declared []resolution,
+	discardUnmatched bool,
 ) int {
-	edits, err := indexEditsFor(sides, declared)
+	committed, err := committedSides(ctx, stood.SHA, sides)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
 	}
+	// The command line first: what the operator SAID is checked against what the
+	// commit holds before anything on disk is looked at, exactly as the ordinary
+	// path checks the declaration before the working tree.
+	if code := op.refuseContradictedDeclarations(ctx, stood.SHA, sides, committed, declared); code != 0 {
+		return code
+	}
+	if code := op.refuseCrashWorktreeOverwrite(ctx, stood.SHA, sides, committed, discardUnmatched); code != 0 {
+		return code
+	}
+	edits := crashIndexEdits(committed)
 
 	info, err := git.ParseCommit(ctx, stood.SHA)
 	if err != nil {
@@ -849,7 +866,9 @@ func (op continueOp) finishWhatCrashed(
 	fmt.Fprintf(os.Stderr, "  mid-%s. Nothing is committed again; what is left of the conclusion is finished.\n", op.kind)
 
 	if !flags.dryRun {
-		out.concludeAftercare(ctx, flags, gitDir, state, stood, edits, sides, declared, op.command, info.Message)
+		out.concludeAftercare(ctx, flags, gitDir, state, stood, edits, func(ctx context.Context) error {
+			return materializeCommitted(ctx, committed)
+		}, op.command, info.Message)
 	}
 
 	op.reportPayload(flags, out)
@@ -997,9 +1016,10 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 
 	if !flags.dryRun {
 		// The same aftercare, in the same order and for the same reasons, as the
-		// -continue commands run. No index edits: a parked conclusion declares no
-		// resolutions, because git's compute step left nothing unmerged.
-		out.concludeAftercare(ctx, flags, gitDir, state, result, nil, sides, declared, req.parentBumpOp, message)
+		// -continue commands run. No index edits and no working-tree writes: a
+		// parked conclusion declares no resolutions, because git's compute step
+		// left nothing unmerged.
+		out.concludeAftercare(ctx, flags, gitDir, state, result, nil, nil, req.parentBumpOp, message)
 	}
 	return out, aftercareExit(out.residue), true
 }
@@ -1207,7 +1227,7 @@ func isAutostashSubject(subject string) bool {
 // owed; a non-nil one names the step that did not and carries the sentence the
 // caller prints. The chain stops at the first failure, because each step is
 // built on the one before it.
-func finishConclusion(ctx context.Context, gitDir string, state sequencer.State, result *commit.CommitResult, edits []commit.IndexEdit, sides map[string]conflict.Sides, declared []resolution) *residueEntry {
+func finishConclusion(ctx context.Context, gitDir string, state sequencer.State, result *commit.CommitResult, edits []commit.IndexEdit, materialize func(context.Context) error) *residueEntry {
 	stands := func(step string, err error) *residueEntry {
 		return &residueEntry{
 			Step:   step,
@@ -1227,8 +1247,10 @@ func finishConclusion(ctx context.Context, gitDir string, state sequencer.State,
 		return stands(commit.StepIndexReconcile, err)
 	}
 
-	if err := materializeResolutions(ctx, sides, declared); err != nil {
-		return stands(stepWorktreeResolution, err)
+	if materialize != nil {
+		if err := materialize(ctx); err != nil {
+			return stands(stepWorktreeResolution, err)
+		}
 	}
 	return nil
 }
@@ -1630,6 +1652,34 @@ func (op continueOp) refuseEmptyConclusion() int {
 	return exitcode.General
 }
 
+// refuseStrayResolutions is the half of the completeness check that both doors
+// share: a declaration may only name a path git left unmerged.
+//
+// The crash re-run runs THIS half alone. It declares nothing of its own and
+// takes the resolutions off the commit that stands, so "every conflicted path
+// must be named" is not its rule -- but a declaration naming a path that is not
+// conflicted at all is as meaningless there as it is here, and reading it as a
+// statement about the commit's content would be answering a question the
+// operator did not ask.
+func (op continueOp) refuseStrayResolutions(sides map[string]conflict.Sides, declared []resolution) int {
+	var stray []string
+	for _, r := range declared {
+		if _, conflicted := sides[r.Path]; !conflicted {
+			stray = append(stray, r.Path)
+		}
+	}
+	if len(stray) == 0 {
+		return 0
+	}
+	sort.Strings(stray)
+	fmt.Fprintf(os.Stderr, "error: %d path(s) are resolved but not conflicted:\n", len(stray))
+	for _, p := range stray {
+		fmt.Fprintf(os.Stderr, "  %s\n", p)
+	}
+	fmt.Fprintf(os.Stderr, "  a resolution names a path git left unmerged; paths are repository-relative\n")
+	return exitcode.ConclusionUnresolved
+}
+
 // checkCompleteness is the readable pre-pass in front of write-tree's own
 // refusal: a conclusion must name every conflicted path and name nothing else.
 //
@@ -1638,25 +1688,13 @@ func (op continueOp) refuseEmptyConclusion() int {
 // listing is the whole mitigation for the `theirs`-on-a-revert confusion: it is
 // printed where the decision is made, not left in help text.
 func (op continueOp) checkCompleteness(ctx context.Context, state sequencer.State, sides map[string]conflict.Sides, declared []resolution) int {
+	if code := op.refuseStrayResolutions(sides, declared); code != 0 {
+		return code
+	}
+
 	named := make(map[string]bool, len(declared))
 	for _, r := range declared {
 		named[r.Path] = true
-	}
-
-	var stray []string
-	for _, r := range declared {
-		if _, conflicted := sides[r.Path]; !conflicted {
-			stray = append(stray, r.Path)
-		}
-	}
-	if len(stray) > 0 {
-		sort.Strings(stray)
-		fmt.Fprintf(os.Stderr, "error: %d path(s) are resolved but not conflicted:\n", len(stray))
-		for _, p := range stray {
-			fmt.Fprintf(os.Stderr, "  %s\n", p)
-		}
-		fmt.Fprintf(os.Stderr, "  a resolution names a path git left unmerged; paths are repository-relative\n")
-		return exitcode.ConclusionUnresolved
 	}
 
 	var missing []string
