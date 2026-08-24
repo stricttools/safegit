@@ -7,6 +7,7 @@ import (
 
 	"github.com/smm-h/safegit/internal/coord"
 	"github.com/smm-h/safegit/internal/exitcode"
+	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/sequencer"
 	"github.com/smm-h/strictcli/go/strictcli"
@@ -158,7 +159,7 @@ func runRestructuredRevert(flags globalFlags, args []string, parsed gitArgs) int
 	// The compute step. --no-commit is what makes the two halves separable: git
 	// works out the inverse patch and stages it, and stops before the commit
 	// that would otherwise be git's.
-	if code := runGitMutation(flags, computeArgs...); code != 0 {
+	if code := runGitMutation(flags, gitexec.NoDoor, computeArgs...); code != 0 {
 		// A conflict lands here, and it is not an error path in any sense that
 		// needs handling: the repository holds the ordinary conflicted-revert
 		// state and `safegit revert-continue` concludes it. announceWayOut says

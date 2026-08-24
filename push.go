@@ -717,7 +717,7 @@ func buildGitPushArgs(remote string, refs []pushRefInfo, force bool) []string {
 // impossible. The cost is that a long push's progress arrives at the end
 // instead of live -- strictcli's Run streams or captures, with no tee.
 func execGitPush(flags globalFlags, args []string) (stderrText string, err error) {
-	argv, err := gitexec.ArgvAny(gitexec.ExemptGitPush, args...)
+	argv, err := gitexec.ArgvAny(gitexec.ExemptGitPush, gitexec.NoDoor, args...)
 	if err != nil {
 		return "", err
 	}

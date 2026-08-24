@@ -32,16 +32,26 @@ func TestSubcommandExtraction(t *testing.T) {
 	}
 }
 
+// TestValidateAcceptsDeclaredVerbs covers the VOCABULARY half of Validate: a
+// verb the table declares is not refused for being unknown.
+//
+// The verbs the table marks Authors are excluded, because for those a bare
+// invocation is precisely the shape the single-authorship boundary refuses --
+// see TestValidateRefusesEveryAuthoringVerbBare, which pins the other side of
+// this exclusion so it cannot quietly grow.
 func TestValidateAcceptsDeclaredVerbs(t *testing.T) {
 	for _, v := range Verbs() {
-		if err := Validate([]string{v.Name}); err != nil {
+		if v.Authors {
+			continue
+		}
+		if err := Validate(NoDoor, []string{v.Name}); err != nil {
 			t.Errorf("Validate refused the declared verb %q: %v", v.Name, err)
 		}
 	}
 }
 
 func TestValidateRefusesUndeclaredVerb(t *testing.T) {
-	err := Validate([]string{"filter-branch"})
+	err := Validate(NoDoor, []string{"filter-branch"})
 	if err == nil {
 		t.Fatal("Validate accepted an undeclared subcommand")
 	}

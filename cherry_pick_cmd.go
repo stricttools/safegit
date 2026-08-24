@@ -9,6 +9,7 @@ import (
 	"github.com/smm-h/safegit/internal/conflict"
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/sequencer"
 	"github.com/smm-h/strictcli/go/strictcli"
@@ -219,7 +220,7 @@ func runRestructuredCherryPick(flags globalFlags, args []string, parsed gitArgs)
 	// The compute step. --no-commit is what makes the two halves separable: git
 	// works out the pick and stages it, and stops before the commit that would
 	// otherwise be git's.
-	code = runGitMutation(flags, append([]string{"cherry-pick", "--no-commit"}, args...)...)
+	code = runGitMutation(flags, gitexec.NoDoor, append([]string{"cherry-pick", "--no-commit"}, args...)...)
 	if code != 0 {
 		// Two very different situations arrive here, and only one of them
 		// parked anything: a CONFLICT, which is the ordinary way a pick stops

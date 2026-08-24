@@ -7,6 +7,7 @@ import (
 
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/sequencer"
@@ -343,7 +344,7 @@ func performMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition, re
 	// The compute step. --no-ff and --no-commit are safegit's, always; the
 	// caller's own fast-forward and commit selections never reach it.
 	computeArgs := append([]string{"merge", "--no-ff", "--no-commit"}, req.computeArgs...)
-	if code := runGitMutation(flags, computeArgs...); code != 0 {
+	if code := runGitMutation(flags, gitexec.NoDoor, computeArgs...); code != 0 {
 		// A conflict lands here, and it is not an error path in any sense that
 		// needs handling: the repository holds the ordinary conflicted-merge
 		// state and `safegit merge-continue` concludes it. announceWayOut says
