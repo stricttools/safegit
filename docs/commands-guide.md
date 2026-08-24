@@ -219,6 +219,11 @@ error: safegit merge --continue does not conclude a merge of 5bc7ac7c; safegit d
 
 A rebase and a mailbox application are not in that set: safegit has no verb that finishes either, so `safegit rebase --continue` passes through to git untouched, and a `git am` is concluded with git's own commands.
 
+**Two shapes safegit cannot start, it will not conclude either.** Both are states only RAW git can produce now, and for both the refusal names git's own `--continue` as the way to finish what git began:
+
+- a QUEUED cherry-pick or revert -- a `.git/sequencer` directory, which `git cherry-pick a b` creates and `safegit cherry-pick` no longer can. Concluding one step of a queue natively is not possible: a conclusion removes the operation's whole state-file set, and for a queue that set includes the queue, so the remaining commands would be thrown away by the act of concluding the current one. safegit does not delegate to git instead -- it refuses, so that no commit made under a safegit command name is ever git's.
+- a raw merge shape safegit's own merge cannot produce: a `MERGE_HEAD` carrying more than one line (an octopus), or a content-conflicted path with no `AUTO_MERGE` file (the signature of a non-default strategy -- on the supported git floor a normal merge always writes one). The overwrite check reads `AUTO_MERGE` as one of the sides it accepts, so a conflict computed by a strategy that recorded nothing there would be protected by nothing.
+
 ### Declaring the resolutions
 
 Every path git left unmerged must be named exactly once, and nothing else may be named. The declaration is `--resolve 'path=<keyword>'` (repeatable) or a `--resolve-file`; the two may be combined, and a path named by both is a hard error (exit **2**) rather than an override.
@@ -287,6 +292,18 @@ error: 1 conflict marker block(s) survive in what this merge would commit:
 
 The one way past a rejection is that `.gitattributes` declaration, and it is read from the FIRST PARENT's tree -- an uncommitted edit made while the operation is in flight exempts nothing, and the working tree's own `.gitattributes` may itself be conflicted at the moment the question is asked. Only git's explicit-unset spelling (`<path> -safegit-conflict-markers`) exempts; any other value, and any typo, leaves the path checked.
 
+An exemption that fired is not silent: the check it declined to make is carried through the conclusion and reported, in the human output and in the payload's `declined_checks` member. A skipped check nobody can see is the same thing as no check at all.
+
+### Overwrite protection: exit 27
+
+`ours`, `theirs` and `delete` write the working tree (see the keyword table above), and the file they write over may hold an hour of hand-resolving that was never staged, never committed and never stashed. git's own `checkout --ours` and `rm` replace or remove it without a word, and the content is then in no object at all.
+
+So a conclusion LOOKS at the file first. Per declared path whose materialization would destroy disk content, the accepted set is the conflict's three index stages, plus the blob git itself wrote into the working tree, read verbatim out of `AUTO_MERGE`. Verbatim rather than reconstructed: a rename-mediated conflict's marker labels carry the path, and no reconstruction recovers them. A file matching none of the accepted set is a hand edit, and the conclusion refuses at exit **27** with nothing committed and the operation still in flight, naming the file and the resolution that keeps the edit (`=worktree`).
+
+The check is TOTAL over everything safegit concludes. Kinds with no `AUTO_MERGE` emission -- a delete-resolved path, an absent stage, a delete/modify, a binary file, a merge-driver path -- are stages-only by nature, and what git left on disk for those IS a stage blob. The shapes that have content conflicts with no emission at all never reach this loop: safegit's own merge cannot start them, and `merge-continue` refuses them from raw git. There is no skip arm.
+
+`--discard-unmatched-worktree` elects the destruction and names each file it takes. It is the only way to say so, which is what makes it a consent flag rather than an escape hatch.
+
 ### The message
 
 Omitted, the message is git's own draft for this operation (`MERGE_MSG`, which all three operations write) with its comment block stripped -- reproducing what git would have done at commit time, not editing the operator's text. `-m` replaces it, and repeating `-m` joins the values with a blank line between them. `--trailer` adds trailer lines. safegit's session trailer goes on after the `commit-msg` hook, so a rewriting hook cannot strip it.
@@ -312,7 +329,10 @@ A draft that is absent, or empty once its comments are stripped, with no `-m` to
 | Nothing in flight, or an operation this command does not conclude | 5 | Whatever was there; the refusal names the command that does conclude it |
 | A conflicted path unresolved, or a resolved path that is not conflicted | 17 | The operation is still in flight |
 | A complete conflict block survives in what would be committed | 18 | The operation is still in flight |
+| Materializing a declaration would write over a working-tree file that matches none of the conflict's own sides | 27 | The operation is still in flight; nothing was committed and nothing on disk was touched |
+| A raw-git queue, or a raw merge shape safegit cannot start | 5 | Whatever git left; the refusal names git's own `--continue` and `--abort` |
 | A detached HEAD | 1 | The operation is still in flight; the refusal prints the exact two commands that put HEAD on a branch |
+| The commit was created and its aftercare did not finish | 26 | The COMMIT STANDS; the payload names the created SHA and lists what was left -- see "When the commit stands and the aftercare does not" |
 
 The detached-HEAD refusal is a refusal rather than a special case because the commit pipeline is branch-shaped throughout: every commit is a compare-and-swap on a ref, and a detached HEAD has no ref to swap. The remedy it prints is deliberately NOT `git switch -c`, which git refuses outright while an operation is in flight:
 
@@ -332,6 +352,22 @@ A conclusion inside a submodule moves the parent's gitlink exactly as an ordinar
 
 **`safegit undo` reverses the ref, not the operation.** Undoing a conclusion gives back the pre-conclusion tip, but git's operation state is gone -- `MERGE_HEAD`, the message draft and the conflict stages are not restored -- so the repository is idle rather than mid-merge. It says so on stderr, and `--quiet` does not suppress that.
 
+### When the commit stands and the aftercare does not
+
+Everything after the ref update -- removing the state files, syncing the index, writing the working tree, putting back a merge's autostash, bumping a parent repository's gitlink -- is aftercare, and a failure there cannot be undone by pretending the commit did not happen. Exit **26** is the family code for exactly that: **the operation's ref move is real, and its aftercare did not finish.**
+
+It is not a silent partial success. The run emits its envelope, `exit_code` is 26, and the payload names the created SHA and carries a `residue` list of what was left. Every pipeline author shares the code -- `commit`, `--amend`, `--reword`, `mv`, `undo`, the restructured `merge`/`cherry-pick`/`revert`/`pull`, and the three conclusions -- so a caller reads one number for one meaning rather than a per-command vocabulary.
+
+**A merge's autostash** is the aftercare step with its own member. When `MERGE_AUTOSTASH` is present, the conclusion asks whose stash it is before applying it, and two facts have to agree: the stash commit's FIRST PARENT is the tip this conclusion just committed onto, and its MESSAGE carries git's own autostash shape (`On <branch>: autostash`, which is what tells it from the `WIP on <branch>: ...` an ordinary `git stash` writes). A stash that fails either is neither applied nor deleted -- the file stays where it is, the commit it names is printed with the commands that reach it, and the payload's `autostash` member says which state it was in (`applied`, `stored`, `foreign`, `pending`, `none`). Applying someone else's stash would put uncommitted work into files this merge never touched and then remove the only name that work had left. `safegit doctor` reports the same file as an orphan when no merge is in flight, and `doctor --action fix` stores its commit as a stash entry before removing the file.
+
+### A conclusion whose commit already stands
+
+A conclusion moves the ref before it removes the state files, so a process killed between the two leaves both -- and a naive re-run would build a SECOND commit out of the same state.
+
+safegit's re-run recognizes its own work instead. The op log's newest entry for this branch names an op that concludes this kind of operation and records the commit HEAD stands at, and the recognition is corroborated per kind: a merge by parentage (HEAD's parents being the branch tip plus every `MERGE_HEAD` line, which is exactly the commit this conclusion would build), a cherry-pick or revert by the SOURCE commit the entry recorded matching the parked state's own source. When they agree, nothing is committed: the index and working tree are derived from the standing COMMIT's own tree for the conflicted paths, the overwrite check above still runs, the state files go, the report names the commit that is already there, and the run exits on the aftercare's own terms. A declaration whose side's blob differs from what the standing commit holds is refused naming that commit, rather than silently ignored.
+
+The window is not closed everywhere, and the limit is stated rather than glossed: the op-log entry is written just after the ref update, so a crash in that sliver leaves no entry -- a merge is still caught by parentage, a cherry-pick or revert in it is not. A crash AFTER the state files were removed is `safegit doctor`'s to report.
+
 ### `--dry-run`
 
 A preview stages, writes the tree and builds the commit object exactly as the real run would, into a throwaway quarantine outside the repository, so the reported tree and file count are computed rather than guessed. No state file is removed, nothing is written into the working tree, and no ref moves:
@@ -343,7 +379,7 @@ would conclude the merge on main (tree dbedabbb): concluding a merge of 5bc7ac7c
  1 working-tree file(s) would be overwritten with the resolved content: [f.txt]
 ```
 
-The one case that cannot be previewed is a QUEUED cherry-pick or revert -- see those sections.
+A conclusion whose state safegit refuses outright -- a queued cherry-pick or revert, an octopus merge, a conflict computed by a non-default strategy -- meets that refusal under `--dry-run` too, before anything is recorded.
 
 ## merge-continue
 
@@ -355,7 +391,7 @@ Use it whenever `safegit merge` (or a plain `git merge`) stopped on a conflict. 
 
 ### What the commit is
 
-- **Parents:** HEAD plus EVERY `MERGE_HEAD` line, an octopus merge included.
+- **Parents:** HEAD plus the single `MERGE_HEAD` line. An octopus -- a `MERGE_HEAD` carrying more than one -- is REFUSED rather than concluded: safegit's own merge cannot start one, and every check safegit makes over a merge is written against two sides. The refusal names git's own `merge --continue` and `merge --abort`.
 - **Tree:** the merge's whole staged result, so a path the merge staged cleanly is never dropped.
 - **Author:** no identity is preserved or pinned -- a merge has no source commit to take one from, and the payload carries no `author` member for the same reason.
 - **`theirs` means:** the content merged in from the other side, named with the merge head's short SHA when there is exactly one.
@@ -396,25 +432,18 @@ Conclude a cherry-pick git stopped before committing.
 
 An empty result is refused (exit **1**): every conflicted path was resolved to content the branch already had, so the pick produces nothing. git refuses the same case for the same reason, and the message names the two ways out that exist (`git cherry-pick --skip`, `git cherry-pick --abort`).
 
-### A QUEUED sequence is delegated to git
+### A QUEUED sequence is refused
 
-`git cherry-pick <a> <b>` puts a QUEUE in git's sequencer, and it stops on the first command that conflicts. Concluding one step of it natively is not an option: a conclusion removes the operation's whole state-file set, and for a queue that set includes the queue, so the remaining commands would be thrown away by the act of concluding the current one.
-
-So safegit checks and git commits. The declared resolutions are staged into a COPY of the shared index, the same completeness and marker checks run over them, the working tree is written to match, and then git's own `cherry-pick --continue --no-edit` runs with `GIT_INDEX_FILE` pointing at that copy. Whatever git leaves in the copy afterwards is adopted as the shared index, in both outcomes.
-
-What that costs, stated on stderr on every delegated run:
+`git cherry-pick <a> <b>` puts a QUEUE in git's sequencer, and it stops on the first commit that conflicts. `safegit cherry-pick` cannot create that state any more -- it applies one commit -- so a `.git/sequencer` directory means raw git started this, and `cherry-pick-continue` refuses it:
 
 ```
-note: these commits are git's: no safegit trailers, safegit's commit-msg handling did not run, and 'safegit undo' does not reverse them
+error: safegit cherry-pick-continue does not conclude a queued cherry-pick
+  ...
+    conclude it:  git cherry-pick --continue
+    abandon it:   git cherry-pick --abort
 ```
 
-- git authors the commits, so safegit injects none of its own trailers. (A cherry-picked message still carries whatever trailers the SOURCE commit's message had -- git copies the message verbatim. What is absent is anything safegit would have added.)
-- safegit's own `commit-msg` handling never runs.
-- `safegit undo` will not reverse them. It refuses (exit **1**) naming every commit safegit did not create, rather than rolling the branch back over them.
-- `-m` and `--trailer` are refused (exit **2**) rather than silently ignored -- git writes these commits from its own message drafts, so a message safegit was handed has nowhere to go.
-- `--dry-run` is refused (exit **1**): concluding a queue means running git's `--continue`, which commits and may commit several more times, and there is nothing to show short of performing it. A single cherry-pick previews normally.
-
-If git stops again on a further conflict, safegit still reports the commits git DID make first, says the queue is not finished, names the way out, and exits with git's own code.
+Concluding one step of a queue natively is not possible: a conclusion removes the operation's whole state-file set, and for a queue that set includes the queue, so the remaining commands would be thrown away by the act of concluding the current one. The alternative -- staging the resolutions into a copy of the index and handing the rest to git -- is what safegit used to do, and it produced commits under a safegit command name that were git's: no trailers, no `commit-msg` handling, not undoable. That second authorship class is gone. safegit either writes the commit or refuses; it never signs off on git's.
 
 ### Examples
 
@@ -424,9 +453,6 @@ safegit cherry-pick-continue --resolve 'src/a.go=theirs'
 
 # The picked commit deleted a file this branch modified: take the deletion
 safegit cherry-pick-continue --resolve 'src/gone.go=theirs'
-
-# A queued sequence: resolutions only -- no -m, no --trailer, no --dry-run
-safegit cherry-pick-continue --resolve 'src/a.go=ours'
 ```
 
 ## revert-continue
@@ -454,13 +480,13 @@ The per-path listing prints this at the moment of choice, naming the commit:
 
 An empty result is refused (exit **1**): the commit's effect is already absent from the tree.
 
-### A QUEUED sequence is delegated to git
+### A QUEUED sequence is refused
 
-A revert of more than one commit is git's sequencer, and it is delegated exactly as a queued cherry-pick is, with the same checks in front of it, the same stderr note, the same refusal of `-m`, `--trailer` and `--dry-run`, and the same consequence for `safegit undo`. See the cherry-pick section above.
+A revert of more than one commit is git's sequencer, and `safegit revert` cannot create one. A `.git/sequencer` directory therefore means raw git started this, and `revert-continue` refuses it naming `git revert --continue` and `git revert --abort`, exactly as the cherry-pick conclusion does and for the same reason. See the cherry-pick section above.
 
 ### Relationship to `safegit revert`
 
-A single `safegit revert` reaches this same engine through a different door: `git revert --no-commit` computes the inverse patch, and the conclusion engine commits it. So a clean revert and one that hit a conflict and was concluded here declare the same move records, run the same marker verification, and clean up the same state files. See "One commit is safegit's; more than one is git's" in the `revert` section for the single-versus-queued split.
+A single `safegit revert` reaches this same engine through a different door: `git revert --no-commit` computes the inverse patch, and the conclusion engine commits it. So a clean revert and one that hit a conflict and was concluded here declare the same move records, run the same marker verification, and clean up the same state files.
 
 ### Examples
 
