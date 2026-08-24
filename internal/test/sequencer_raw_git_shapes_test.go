@@ -311,3 +311,42 @@ func TestOrdinaryConflictedMergeStillConcludes(t *testing.T) {
 	}
 	assertNoSequencerResidue(t, fx.dir, "ordinary conflicted merge")
 }
+
+// TestQueuedContinuePassthroughDoesNotHandGitTheAuthorship is the last route by
+// which git could still author commits behind a safegit command name.
+//
+// A queue BETWEEN STEPS -- git stopped mid-sequence and the operator committed
+// the step themselves -- leaves a clean working tree, so the coordination check
+// has nothing to refuse over, and `safegit cherry-pick --continue` would forward
+// to git, which would author every remaining commit of the queue: no safegit
+// trailers, no commit-msg handling, nothing `safegit undo` can reverse. The
+// refusal is what closes it, and it names git's own command, because the queue
+// really is git's to finish.
+func TestQueuedContinuePassthroughDoesNotHandGitTheAuthorship(t *testing.T) {
+	fx := newQueuedPickRepo(t, "cherry-pick")
+
+	// The operator commits the stopped step themselves, with git: the queue
+	// stays, CHERRY_PICK_HEAD goes, and the tree ends clean.
+	testutil.WriteFile(t, fx.dir, fx.conflicted, "resolved by hand\n")
+	testutil.Git(t, fx.dir, "add", fx.conflicted)
+	testutil.Git(t, fx.dir, "commit", "-m", "the operator's own commit mid-sequence")
+	if status := strings.TrimSpace(testutil.Git(t, fx.dir, "status", "--porcelain")); status != "" {
+		t.Fatalf("the fixture needs a CLEAN tree, so that only the refusal can stop the passthrough:\n%s", status)
+	}
+	if !testutil.FileExists(filepath.Join(fx.dir, ".git", "sequencer")) {
+		t.Fatal("the fixture must keep the queue")
+	}
+	tip := testutil.Rev(t, fx.dir, "HEAD")
+
+	_, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession, "cherry-pick", "--continue")
+	if code == 0 {
+		t.Fatalf("safegit forwarded --continue and let git author the rest of the queue:\n%s", stderr)
+	}
+	if head := testutil.Rev(t, fx.dir, "HEAD"); head != tip {
+		t.Fatalf("the branch moved to %s: git authored %s", head,
+			strings.TrimSpace(testutil.Git(t, fx.dir, "log", "--oneline", tip+"..HEAD")))
+	}
+	if !strings.Contains(stderr, "git cherry-pick --continue") {
+		t.Errorf("the refusal does not name git's own conclusion:\n%s", stderr)
+	}
+}
