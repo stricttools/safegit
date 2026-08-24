@@ -1,8 +1,7 @@
 ---
 title: internal/sequencer
-description: "Package sequencer is the single authority on the state git writes into the git directory while an operation is in flight -- a conflicted merge, a cherry-pick or revert (single or queued), a rebase, or a mailbox application."
+description: "The one reader of the state git writes while an operation is in flight -- merge, cherry-pick, revert, rebase, mailbox -- read from its files, no policy."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 17
 ---

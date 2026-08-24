@@ -1,8 +1,7 @@
 ---
 title: internal/gitversion
-description: "Package gitversion parses the installed git's version and compares it against the per-feature floors safegit depends on."
+description: "Holds the per-feature git version floors, so a command needing a newer git refuses by name and says what to upgrade to, instead of a raw error from git."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 9
 ---

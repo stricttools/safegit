@@ -1,8 +1,7 @@
 ---
 title: internal/exitcode
-description: "Package exitcode is safegit's single registry of process exit codes."
+description: "safegit's one registry of process exit codes: every number the tool returns is a named constant, and the guarded passthroughs' git codes stay outside."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 5
 ---
