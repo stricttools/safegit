@@ -530,11 +530,13 @@ safegit revert-continue --resolve 'src/a.go=ours' --resolve 'src/b.go=theirs'
 
 ## undo
 
-Reverse the last commit, amend, or reword operation by reading the append-only operation log (oplog) and restoring the previous branch ref value. Supports undoing multiple operations in one invocation and is session-scoped by default to prevent one session from accidentally rolling back another session's work.
+Reverse the last operation safegit's own commit pipeline authored, by reading the append-only operation log (oplog) and restoring the previous branch ref value. Supports undoing multiple operations in one invocation and is session-scoped by default to prevent one session from accidentally rolling back another session's work.
+
+The undoable set is every operation that ENDED IN A COMMIT SAFEGIT WROTE: a `commit`, an `mv`, an `amend`, a `reword`, a `merge`, `pull`, `cherry-pick` or `revert` the pipeline authored, and the three conclusion commands (`merge-continue`, `cherry-pick-continue`, `revert-continue`). What is excluded is excluded by construction rather than by a list: a **fast-forward** is refused, because the tip it moved onto is a commit git created and undo never rolls a branch back over one, and so is a parked, up-to-date or failed operation, which authored nothing to reverse. A queued (multi-commit) `cherry-pick` or `revert` is git's own sequencer, so those commits are not safegit's to take back either. See "The oplog baseline" for the mechanism that tells the two apart.
 
 ### When to Use
 
-Use `safegit undo` when you need to revert a recent commit, amend, or reword. It reads the oplog to find the correct rollback target, so it works even when multiple sessions have committed to the same branch.
+Use `safegit undo` when you need to reverse a recent commit, move, amend, reword, merge, pull, pick, revert or conclusion. It reads the oplog to find the correct rollback target, so it works even when multiple sessions have committed to the same branch.
 
 ### Flags
 
@@ -566,7 +568,7 @@ safegit --dry-run undo
 - **Range validation: a commit safegit did not create is never rolled over**: before anything moves, undo walks the commits the branch would LOSE -- the first-parent walk from the rollback target to where the ref actually stands -- and every one of them must be an operation this undo is reversing, according to the oplog. A plain `git commit`, a commit a rebase replayed, or anything else safegit did not author sitting in that range is a hard error (exit 1) naming the offending commit, not a commit quietly dropped out of history. The CAS above cannot answer this on its own: it pins the newest recorded tip and therefore sees only a foreign commit sitting on top of it. The refusal reaches `--dry-run` too, so a preview never announces a rollback the real run would refuse, and where the foreign commit turns out to be another safegit session's the message names `--bypass-session`.
 - **History rewrite barrier**: If a `scrub` or `rewrite-author` operation is found in the oplog while scanning for undoable operations, the undo is blocked with an error. History rewrites invalidate all prior SHAs, making earlier oplog entries unsafe to undo.
 - **Root commit undo**: Undoing the root commit (the first commit in the repo) deletes the branch ref entirely, leaving the branch in an unborn state.
-- **Undo moves a ref; it never moves the working tree**: undoing a `safegit mv` reverses the COMMIT and leaves the files at their new paths, and says so on stderr. Undoing a conclusion (`merge-continue`, `cherry-pick-continue`, `revert-continue`) gives back the pre-conclusion tip but does NOT restore git's operation state -- `MERGE_HEAD`, the message draft and the conflict stages are gone -- so the repository is idle rather than mid-merge. Both notices print whatever `--quiet` says: they are facts about what the undo did not do.
+- **Undo moves a ref; it never moves the working tree**: undoing a `safegit mv` reverses the COMMIT and leaves the files at their new paths, and says so on stderr. Undoing a merge, pull, cherry-pick or revert -- the pipeline-authored form or a conclusion (`merge-continue`, `cherry-pick-continue`, `revert-continue`) -- gives back the pre-operation tip but does NOT restore git's operation state -- `MERGE_HEAD`, the message draft and the conflict stages are gone -- so the repository is idle rather than mid-merge, and the notice says to re-run the operation to get back to a state the conclusion command can conclude. Both notices print whatever `--quiet` says: they are facts about what the undo did not do.
 - **Oplog recording**: The undo itself is logged to the oplog, enabling redo-like workflows and audit trails.
 
 ## push
@@ -714,7 +716,7 @@ The `FETCH_HEAD` octopus check is inherited whole: when the fetch marks more tha
 - **Two-phase**: `git fetch`, then the merge, as separate steps.
 - **The commit is safegit's**: except after a fast-forward, where there is no new commit at all.
 - **git's own exit code where git decided**: when the fetch fails, safegit exits with the code git returned; the merge step's refusals are safegit's own.
-- **Oplog recording**: exactly ONE entry under the op name `pull`, carrying the branch baseline (see "The oplog baseline" above), with the remote and branch alongside it. A pull whose fetch OR whose merge failed records an empty new tip and a failed outcome.
+- **Oplog recording**: exactly ONE entry under the op name `pull`, carrying the branch baseline (see "The oplog baseline" above). A pull that COMMITTED is the pipeline's own entry -- `ref`, `parent`, `sha`, `tree`, `attempts`, and no `outcome`, which is what makes it undoable. Every other ending is the recorder's, which names the remote and the branch alongside the baseline: a pull whose fetch OR whose merge failed records an empty new tip and a failed outcome, and a fast-forward records the fast-forward outcome.
 - **The payload nests the merge's**: a fetch summary plus the merge payload, so the outcome member says which of the four shapes the merge step took.
 
 ## backup
@@ -1357,7 +1359,9 @@ safegit --dry-run author rewrite --old-name "alice" --new-name "Alice Smith"
 
 The second check is only worth anything because of the first: without the lock, another process could put the repository mid-merge in the window between the check and the ref update.
 
-An in-flight operation does NOT by itself refuse one of these commands. They are how an operator reaches `rebase --continue` and `merge --abort`; refusing on state alone would refuse the way out.
+An in-flight operation does NOT by itself refuse one of these commands: the check is over the working TREE, and a state-control form invoked against a clean one still runs -- an interactive rebase parked at `edit` or `break`, where `safegit rebase --continue` is the way on, is the shape that reaches git.
+
+What that does not do is exempt the usual mid-operation case. A conflicted or parked operation dirties the tree by construction -- the conflict markers, or the staged result, ARE the dirt -- so `safegit merge --abort`, and a `rebase --continue` over staged resolutions, are refused at exit **5** like any other dirty-tree command. The refusal changes SHAPE rather than relaxing: it names the operation in flight and the commands that conclude or abandon it (`safegit merge-continue`, `git merge --abort`), instead of advice to commit the conflict, which is advice nobody can follow. Abandoning an operation is git's own command in practice, and the refusal is where safegit says so.
 
 ### Which of them forward to git, and which author their own commit
 
@@ -1383,7 +1387,9 @@ Nothing is discarded, and one thing is lost: a machine-mode run of a long rebase
 
 ### The oplog baseline
 
-Every one of these operations appends one oplog entry carrying the same three facts a commit entry carries -- the full ref name (`ref`), the tip it moved from (`parent`), the tip it ended on (`sha`) -- plus an `outcome`. The operator's own arguments ride alongside them.
+Every one of these operations appends one oplog entry carrying the same three facts a commit entry carries: the full ref name (`ref`), the tip it moved from (`parent`), the tip it ended on (`sha`). The operator's own arguments ride alongside them.
+
+**The `outcome` key is the discriminator, and it is present exactly when safegit authored NOTHING.** An entry written by the guarded-operation recorder describes what GIT did to the branch, and carries `outcome` -- `ok` or `failed`, or one of the merge's own words (`fast-forward`, `parked`, `up-to-date`). An entry written by the commit pipeline records a commit safegit made, and carries `ref`, `parent`, `sha`, `tree` and `attempts` -- plus `source` where the operation it concluded is known -- and NEVER an `outcome`, because such an entry exists only when the commit does. That absence is what `safegit undo` reads: an entry carrying the key is a ref movement it merely performed and refuses to reverse, which is how one op name (`merge`) can cover both the merge undo reverses and the fast-forward it will not.
 
 An operation git REFUSED records an empty new tip and a failed outcome. That is the mechanism rather than a formality: the readers of this log (`oplog.LastRefUpdate`, doctor's bypass check, `undo`'s per-ref filter) take the newest entry for a ref that carries a new tip, so an entry with none is passed over and the position safegit really last left the branch at is still the one they compare against.
 
@@ -1485,7 +1491,7 @@ safegit merge-continue
 - **The commit is safegit's**: trailers, the repository's `commit-msg` hook, the oplog entry, and `safegit undo` -- except after a fast-forward, where the tip is a commit git made long ago and undo refuses.
 - **git's narration is relayed, on the channels it belongs on**: at a terminal git's CONFLICT lines appear as git writes them; under `--json` they are captured and re-emitted on stderr, so stdout carries only the envelope.
 - **The way out is named**: when the merge parks, safegit prints `conclude it: safegit merge-continue` / `abandon it: git merge --abort` on stderr, from the same authority every other in-flight refusal reads.
-- **Oplog recording**: exactly ONE entry under the op name `merge`, carrying the branch baseline (see "The oplog baseline" above) plus an `outcome` -- committed, fast-forward, parked, up-to-date, or failed. A merge that was concluded later with `merge-continue` records that command's own entry instead.
+- **Oplog recording**: exactly ONE entry under the op name `merge`, carrying the branch baseline (see "The oplog baseline" above). A merge that COMMITTED is the pipeline's own entry -- `ref`, `parent`, `sha`, `tree`, `attempts` and no `outcome` at all, which is what makes it undoable. Every other ending is the recorder's, and states itself in `outcome`: `fast-forward`, `parked`, `up-to-date` or `failed`. A merge that was concluded later with `merge-continue` records that command's own entry instead.
 - **The payload says which outcome it was**: `merge`'s JSON payload carries an `outcome` member, because a fast-forward, a parked state and an up-to-date merge produce no commit and the other members are unreadable without it.
 
 ## rebase
@@ -1632,7 +1638,7 @@ safegit cherry-pick def5678
 - **The commit is safegit's**: trailers, the source author preserved, the `commit-msg` hook, the oplog entry, and `safegit undo`.
 - **A conflicted pick parks like git's**: the unmerged entries, `CHERRY_PICK_HEAD` and the message draft are all there, and the conclusion is `safegit cherry-pick-continue`. `safegit cherry-pick --continue` is refused and points there -- see "The three conclusion commands".
 - **git's narration is relayed, on the channels it belongs on**: streamed at a terminal, captured and re-emitted on stderr under `--json`.
-- **Oplog recording**: exactly ONE entry under the op name `cherry-pick`, carrying the branch baseline (see "The oplog baseline" above) plus an outcome. A pick concluded later with `cherry-pick-continue` records that command's own entry instead.
+- **Oplog recording**: exactly ONE entry under the op name `cherry-pick`, carrying the branch baseline (see "The oplog baseline" above). A pick that COMMITTED is the pipeline's own entry -- `ref`, `parent`, `sha`, `tree`, `attempts`, and no `outcome`, which is what makes it undoable; a pick that stopped or was refused is the recorder's, and says so in `outcome`. A pick concluded later with `cherry-pick-continue` records that command's own entry instead.
 
 ## revert
 
@@ -1674,7 +1680,7 @@ safegit revert def5678
 - **Coordination guard, both layers**: the worktree operation lock, then the dirty-tree check. See "The guarded commands and their two coordination layers".
 - **The commit is safegit's**: trailers, YOU as author and committer, the inverse move records, the `commit-msg` hook, the oplog entry, and `safegit undo`.
 - **A conflicted revert parks like git's**: the unmerged entries, `REVERT_HEAD` and the message draft are all there, and the conclusion is `safegit revert-continue`. `safegit revert --continue` is refused and points there -- see "The three conclusion commands".
-- **Oplog recording**: exactly ONE entry under the op name `revert`, carrying the branch baseline (see "The oplog baseline" above) plus an outcome. A revert concluded later with `revert-continue` records that command's own entry instead.
+- **Oplog recording**: exactly ONE entry under the op name `revert`, carrying the branch baseline (see "The oplog baseline" above). A single revert that COMMITTED is the pipeline's own entry -- `ref`, `parent`, `sha`, `tree`, `attempts`, and no `outcome`, which is what makes it undoable; a revert that stopped, was refused, or ran as a queued sequence git authored is the recorder's, and says so in `outcome`. A revert concluded later with `revert-continue` records that command's own entry instead.
 
 ## config show
 
