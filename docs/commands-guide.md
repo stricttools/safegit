@@ -24,7 +24,7 @@ The first five are owned by the CLI framework, not by safegit. Five consequences
 
 - **They have no short forms.** `-q`, `-n` and `-y` are gone; write `--quiet`, `--dry-run` and `--approve-consequential`. The approval flag is deliberately unwieldy so it cannot decay into muscle memory.
 - **They are recognized anywhere in the command line.** `safegit --dry-run push` and `safegit push --dry-run` are the same run. `--config-file` is safegit's own rather than the framework's, but it is registered as an app-level global, so it is accepted on either side of the subcommand too and appears under "Global flags" in every command's `--help`.
-- **Only *consequential* commands ask before they run.** Classification (`read_only` / `mutating`) decides what a dry run records; it does not decide what prompts. A command prompts only when it declares itself **consequential**, and in safegit exactly four do: `scrub file`, `scrub match`, `scrub run` and `author rewrite` -- the operations that rewrite history irreversibly. Each prompts `about to run consequential command '<name>'. Proceed? [y/N]` on a terminal, and refuses outright with `error: stdin is not interactive; a consequential command must be confirmed at a terminal` when there is no terminal to ask at. **Everything else -- `commit`, `mv`, `push`, `pull`, `undo`, `config set` and the guarded passthroughs -- runs bare, with nothing added to the command line.**
+- **Only *consequential* commands ask before they run.** Classification (`read_only` / `mutating`) decides what a dry run records; it does not decide what prompts. A command prompts only when it declares itself **consequential**, and in safegit exactly four do: `scrub file`, `scrub match`, `scrub run` and `author rewrite` -- the operations that rewrite history irreversibly. Each prompts `about to run consequential command '<name>'. Proceed? [y/N]` on a terminal, and refuses outright with `error: stdin is not interactive; a consequential command must be confirmed at a terminal` when there is no terminal to ask at. **Everything else -- `commit`, `mv`, `push`, `pull`, `undo`, `config set` and the guarded commands -- runs bare, with nothing added to the command line.**
 - **Three conditions ask on their own, and each owns its consent.** They are conditions the framework cannot see, so they are safegit's own seams rather than a fifth, sixth and seventh consequential command: `doctor --action uninstall` and `push --force-with-lease` are answered by `--approve-consequential` (the condition IS the flag the caller typed), while a `backup backup` to a remote that is public -- or whose visibility safegit cannot determine -- is answered ONLY by `--allow-public-remote`, because that fact is discovered at run time and the caller may not know it. `--json` answers none of them and refuses instead; a declined confirmation always exits nonzero.
 - **Every prompt is written to stderr, and `--quiet` never suppresses one.** That holds for the framework's own confirmation and for safegit's three run-time seams (`doctor --action uninstall`, `push --force-with-lease`, and a `backup backup` to a remote safegit cannot prove is private). stdout is a structured channel -- a command's own result, and under `--json` exactly one document -- so a question written there would interleave with the answer to a different one, and a prompt a quiet run hid would be a prompt that hangs.
 
@@ -638,13 +638,31 @@ safegit pull --merge-strategy ff
 safegit pull --merge-strategy ff-only origin main
 ```
 
+### The merge step is `safegit merge`'s
+
+A pull is a fetch followed by a merge, and the merge is the one described under `merge` above: git computes it with `--no-ff --no-commit` and safegit's own pipeline writes the commit, so a pull that merges produces a pipeline-authored commit -- trailers, the `commit-msg` hook, undoable. The strategy selector maps straight onto it:
+
+| `--merge-strategy` | What it does |
+|---|---|
+| `ff` | fast-forward where the branches allow it, otherwise a pipeline-authored merge commit |
+| `ff-only` | refuse anything but a fast-forward, with safegit's own refusal rather than git's |
+| `no-ff` | always a merge commit, even where a fast-forward was available |
+
+A fast-forward moves the ref by compare-and-swap and then puts the index and working tree in step with it; `safegit undo` refuses it, because the new tip is a commit safegit did not create.
+
+The `FETCH_HEAD` octopus check is inherited whole: when the fetch marks more than one branch for merging, the pull is refused rather than producing a many-parent commit or silently taking the first line.
+
+`--rebase` is refused, and the refusal says what to do instead. A pull's merge step is safegit's own -- it authors the commit -- while a rebase is git's replay from end to end, which is a different operation with its own door: `git fetch <remote>` then `safegit rebase <remote>/<branch>`.
+
 ### Safety Guarantees
 
-- **Coordination guard, both layers**: the worktree operation lock (a second safegit process in this worktree waits, then exits **8** naming the holder) and then the dirty-tree check (exit **5**). See "The guarded passthroughs and their two coordination layers".
-- **Explicit merge strategy**: No implicit default merge behavior -- you must choose `ff`, `ff-only`, or `no-ff`.
-- **Two-phase**: Runs `git fetch` then `git merge` as separate steps for clarity and control.
-- **git's own exit code**: When either step fails, safegit exits with the code that git returned, and the index is left exactly as git left it.
-- **Oplog recording**: the branch baseline (see "The oplog baseline" above), with the remote and branch alongside it. A pull whose fetch OR whose merge failed records an empty new tip and a failed outcome.
+- **Coordination guard, both layers**: the worktree operation lock (a second safegit process in this worktree waits, then exits **8** naming the holder) and then the dirty-tree check (exit **5**). See "The guarded commands and their two coordination layers".
+- **Explicit merge strategy**: No implicit default merge behavior -- you must choose `ff`, `ff-only`, or `no-ff`. A pull never depends on the repository's configuration to decide whether it may create a merge commit.
+- **Two-phase**: `git fetch`, then the merge, as separate steps.
+- **The commit is safegit's**: except after a fast-forward, where there is no new commit at all.
+- **git's own exit code where git decided**: when the fetch fails, safegit exits with the code git returned; the merge step's refusals are safegit's own.
+- **Oplog recording**: exactly ONE entry under the op name `pull`, carrying the branch baseline (see "The oplog baseline" above), with the remote and branch alongside it. A pull whose fetch OR whose merge failed records an empty new tip and a failed outcome.
+- **The payload nests the merge's**: a fetch summary plus the merge payload, so the outcome member says which of the four shapes the merge step took.
 
 ## backup
 
@@ -1276,20 +1294,32 @@ safegit --dry-run author rewrite --old-name "alice" --new-name "Alice Smith"
 - **Tag rewriting**: Annotated tag objects are rewritten when their tagger name/email matches the old identity.
 - **AND/OR matching**: When both `--old-name` and `--old-email` are specified, a commit must match both to be rewritten (AND). When only one is specified, any commit matching that field is rewritten (OR).
 
-## The guarded passthroughs and their two coordination layers
+## The guarded commands and their two coordination layers
 
-`checkout`, `pull`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick` and `revert` hand their arguments to git after two separate checks, in this order. Both are meant where the per-command sections below say "coordination guard".
+`switch`, `pull`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick` and `revert` all run two separate checks before anything happens, in this order. Both are meant where the per-command sections below say "coordination guard".
 
 1. **The worktree operation lock** answers "is anyone else already working here?" for the WHOLE operation. It is taken first and held for the full duration of the git command, an interactive `rebase -i`'s editor session included. A second safegit process in the same worktree waits `lock.acquireTimeoutSeconds` (default 30) and then exits **8**, naming the holder and printing the `safegit unlock safegit/operation` recovery command; it never runs concurrently. The lock is worktree-local, so two worktrees of one repository proceed independently. A `--dry-run` takes no lock -- a command that promises to change nothing must not write a file into `.git/safegit`.
 2. **The dirty-tree check** then answers "is it safe to start?" at that instant: any tracked modification (`git diff HEAD`, never the possibly-stale shared index) or any untracked file refuses the command with exit **5**, listing what is uncommitted. When git has an operation in flight, the same dirt is that operation's conflict markers and staged result, so the refusal names the operation and the command that ends it instead of advising a commit nobody can make.
 
 The second check is only worth anything because of the first: without the lock, another process could put the repository mid-merge in the window between the check and the ref update.
 
-An in-flight operation does NOT by itself refuse a passthrough. The passthroughs are how an operator reaches `rebase --continue` and `merge --abort`; refusing on state alone would refuse the way out.
+An in-flight operation does NOT by itself refuse one of these commands. They are how an operator reaches `rebase --continue` and `merge --abort`; refusing on state alone would refuse the way out.
 
-**One argument is intercepted**, for the three operations safegit concludes itself. `safegit merge --continue`, `safegit cherry-pick --continue` and `safegit revert --continue` are refused with exit **5** and name `safegit merge-continue`, `safegit cherry-pick-continue` or `safegit revert-continue` instead -- see "The three conclusion commands". The dirty-tree check would usually have caught it anyway (a repository mid-merge is dirty by construction) but not always: a merge whose result equals the current tip leaves nothing for `git diff HEAD` to report, and whether a conclusion is safegit's or git's must not depend on whether the merge happened to change a file. A rebase's or a mailbox application's `--continue` is git's own and passes through untouched.
+### Which of them forward to git, and which author their own commit
 
-`safegit revert` of a SINGLE commit is not a plain passthrough at all -- see its own section.
+Four of them hand the operator's arguments to git and let git do the work: `switch`, `rebase`, `reset` and `bisect`. Four do not: `merge`, `cherry-pick`, `revert` and `pull` use git only to COMPUTE a result (`--no-commit`, always), and safegit's own commit pipeline writes the commit. That is the single-authorship rule the whole tool now rests on -- every commit made through safegit is safegit's: trailered, `commit-msg`-hooked, oplog-recorded, and reversible with `safegit undo`.
+
+`safegit rebase` is the one declared exception, and it is uniform rather than conditional: git performs the replay and authors every replayed commit, always. The refusal that makes the rule structural lives at safegit's git-execution boundary, which refuses any git command line whose shape would let git create a commit unless the call site is a declared door -- and the rebase passthrough is the only door there is.
+
+### The allowlist
+
+Each of these commands validates its argv against an explicit allowlist BEFORE the lock is taken, before any git runs, and before the repository is read at all. An option the command honors passes; anything else is refused at exit **2**.
+
+The direction is the point. A refusal LIST answers "is this one of the things we already thought about and decided against", and an option nobody has thought about slips through it into git, where it can change what git does while safegit's checks, its record of the operation and its report are still written for something else. An allowlist answers the other question -- "is this one of the things safegit can honor" -- which is the only honest one for a tool that implements a deliberate subset.
+
+Two refusals come out of one table: a capability the table NAMES carries its own reason ("safegit's merge does not select a merge strategy, and here is why"), and everything else carries the subset law itself. `docs/divergences.md` catalogs every refused capability, with what git would do and why safegit does not.
+
+**One argument is intercepted everywhere**, for the three operations safegit concludes itself. `safegit merge --continue`, `safegit cherry-pick --continue` and `safegit revert --continue` are refused and name `safegit merge-continue`, `safegit cherry-pick-continue` or `safegit revert-continue` instead -- see "The three conclusion commands". With an operation in flight the refusal is exit **5** and names the conclusion command; with NOTHING in flight the argv still never reaches git, because a forwarded `--continue` is exactly the shape the boundary refuses, and the refusal is safegit's (exit 1, its own reason) rather than git's "no merge in progress". A rebase's or a mailbox application's `--continue` is git's own and passes through untouched.
 
 ### git's own output, and where it goes
 
@@ -1303,61 +1333,106 @@ Every one of these operations appends one oplog entry carrying the same three fa
 
 An operation git REFUSED records an empty new tip and a failed outcome. That is the mechanism rather than a formality: the readers of this log (`oplog.LastRefUpdate`, doctor's bypass check, `undo`'s per-ref filter) take the newest entry for a ref that carries a new tip, so an entry with none is passed over and the position safegit really last left the branch at is still the one they compare against.
 
-`checkout` and `bisect` are the exception, because neither moves a branch ref: a switch moves HEAD, and a bisect step parks HEAD on some other commit entirely. Their positions ride under `observed_parent` and `observed_tip`, names those readers do not consume. An entry claiming a branch position there would reset doctor's bypass-detection baseline and mask an out-of-band commit made before the switch.
+`switch` and `bisect` are the exception, because neither moves a branch ref: a switch moves HEAD, and a bisect step parks HEAD on some other commit entirely. Their positions ride under `observed_parent` and `observed_tip`, names those readers do not consume. An entry claiming a branch position there would reset doctor's bypass-detection baseline and mask an out-of-band commit made before the switch.
 
-## checkout
+## switch
 
-Checkout a branch or ref with working-tree safety guards that prevent checking out while another safegit operation is in progress, and recording the operation in the oplog.
+Move HEAD onto another BRANCH, guarded by the worktree operation lock and the uncommitted-work check, and recorded in the oplog.
 
-### When to Use
+### There is no `safegit checkout`
 
-Use `safegit checkout` instead of `git checkout` to get coordination guards that prevent checking out while another safegit operation is in progress, protecting uncommitted work from other sessions that may be sharing the same worktree.
+git's `checkout` is two commands wearing one name. It MOVES HEAD, and it RESTORES files from a commit over whatever the working tree holds. The second one destroys uncommitted work with no record anywhere -- in a shared worktree, work that may be another session's -- so safegit does not implement it. Not guarded, not refused with a flag: absent. The destructive `checkout -- <path>` shape is **inexpressible** as a safegit command line rather than refused by one, which is a stronger guarantee than any check could be.
 
-### Arguments
+What is left is the navigation half, under git's own modern name for it.
 
-All arguments are passed through to `git checkout` after the coordination guard passes. Any flag or positional argument that `git checkout` accepts can be used, including branch names, commit hashes, `--create` (`-b`), and path specs.
+### Arguments and flags
+
+`safegit switch <branch>` moves onto a branch that already exists. `safegit switch -c <new-branch>` creates one where you are standing and moves onto it (`-c` is switch's own spelling; it replaces checkout's `-b`). That is the whole surface.
+
+An argument that resolves to a commit but is NOT a branch -- a tag, an object name, `HEAD~3` -- is refused, because switching onto one detaches HEAD, and a detached HEAD is the state safegit's commit, conclusion and undo paths all refuse. The refusal prints the two ways forward: make a branch there and switch to it, or use `git switch --detach` when a detached HEAD is deliberately what you want. Note that `--detach` guards nothing here: the ARGUMENT is what detaches, so refusing the flag while accepting the argument would be a check that never fires.
+
+An argument that resolves to NOTHING is deliberately left to git, so `safegit switch no-such-thing` exits with git's own verdict on that argument rather than a message safegit invented about branches. git's DWIM reading survives with it: a name that exists only on a remote still creates and lands on a local branch tracking it, exactly as `git switch` would.
+
+Refused flags, each naming its reason: `--detach`, `-C`/`--force-create` (re-pointing an existing branch is a ref move dressed as navigation, and outside safegit's compare-and-swap), `-f`/`--force`/`--discard-changes` (throwing away uncommitted work that may be another session's), `--orphan` (a decision about the repository, not a step between branches), and `-m`/`--merge` (a dead flag through safegit: it exists to carry a dirty tree across, and the dirty-tree check refuses first). A pathspec is refused too, with the file-restoration reason above. Everything outside the allowlist is refused by the subset law.
 
 ### Examples
 
 ```bash
-safegit checkout main
-safegit checkout -b new-feature
-safegit checkout v1.0.0
+# Move onto an existing branch
+safegit switch main
+
+# Create a branch where you are standing and move onto it
+safegit switch -c new-feature
 ```
 
 ### Safety Guarantees
 
-- **Coordination guard, both layers**: the worktree operation lock first (a second safegit process in this worktree waits, then exits **8** naming the holder), then the dirty-tree check (exit **5**). See "The guarded passthroughs and their two coordination layers".
-- **git's own exit code**: When `git checkout` fails, safegit exits with the code git returned.
-- **The index is git's**: safegit does not touch the index after the checkout; whatever git left there is what remains.
-- **Oplog recording**: the RESOLVED full ref name (never the operator's argument, which for a `-b` form is the literal flag string) and the positions HEAD moved between, under `observed_parent`/`observed_tip` -- see "The oplog baseline" above. A branch creation records the zero SHA as the position it came from, because the ref did not exist.
+- **Coordination guard, both layers**: the worktree operation lock first (a second safegit process in this worktree waits, then exits **8** naming the holder), then the dirty-tree check (exit **5**). See "The guarded commands and their two coordination layers".
+- **The argument is checked against the repository, under the lock**: the branch-ness question is a state reading like any other, so it is asked after the lock is held rather than before it.
+- **git's own exit code**: when `git switch` fails, safegit exits with the code git returned.
+- **The index is git's**: safegit does not touch the index after the switch; whatever git left there is what remains.
+- **Oplog recording**: the RESOLVED full ref name (never the operator's argument, which for a `-c` form is the literal flag string) and the positions HEAD moved between, under `observed_parent`/`observed_tip` -- see "The oplog baseline" above. A branch creation records the zero SHA as the position it came from, because the ref did not exist. A refused or failed switch records an empty new tip and a failed outcome.
 
 ## merge
 
-Merge a branch into the current HEAD with working-tree safety guards that check for in-progress safegit operations and record the merge in the oplog for audit purposes.
+Merge ONE other side into the current branch. git computes the merge; safegit writes the commit.
 
-### When to Use
+### The commit is safegit's
 
-Use `safegit merge` instead of `git merge` for coordination-guarded merges that verify no other safegit operation is in progress before proceeding, preventing data loss when multiple sessions share a worktree and one session's uncommitted work could be clobbered by the merge.
+`safegit merge` is not a passthrough. git is asked to compute the merge with `--no-ff --no-commit` -- both flags always, whatever the operator passed -- and safegit's own conclusion engine turns the staged result into the commit. So a merge made through safegit carries safegit's trailers, runs the repository's `commit-msg` hook, is recorded in the oplog under the op name `merge`, and is reversible with `safegit undo`.
 
-### Arguments
+The `--no-ff` is not a preference: `--no-commit` alone cannot stop a fast-forward (git takes the fast-forward before the flag is consulted), so a bare `--no-commit` invocation racing a concurrent tip move would let git move the ref outside safegit's compare-and-swap. With `--no-ff` git always parks a merge state instead, and the conclusion's CAS ref update catches any movement.
 
-All arguments are passed through to `git merge` after the coordination guard passes. Any flag or positional argument that `git merge` accepts can be used, including branch names, `--no-ff`, `--squash`, and merge strategy options.
+**A clean merge concludes immediately**, in the same invocation: the message from `-m` or from git's own `MERGE_MSG` draft with its comment block stripped, the hook, the trailers, the CAS ref update, the state files removed. **A conflicted merge parks** exactly as it does under plain git, git's own CONFLICT narration is relayed, and the operator finishes with `safegit merge-continue`.
+
+### Exactly one side
+
+`safegit merge <committish>` takes ONE argument. An octopus merge -- several sides in one commit -- is refused: a conclusion has one staged result to check and one message to write however many sides went into it, and every check safegit makes over a merge is written against two.
+
+The argument may be a branch, a tag or an object name; there is no branch-ness requirement here, because merging from a tag detaches nothing.
+
+`FETCH_HEAD` gets its own check, because it is git's one token that expands into several heads. When the argument is spelled exactly `FETCH_HEAD` and the fetch marked more than one branch for merging, the command is refused UP FRONT -- before the fast-forward decision, so both arms are covered, and `safegit pull` inherits it. Without that check a single token would have produced a three-parent commit, or silently fast-forwarded onto the first line and dropped the rest.
+
+### Fast-forward, and who decides
+
+safegit decides fast-forward-ness itself, with a merge-base ancestry check, rather than letting git decide:
+
+- **A fast-forward** (and no `--no-ff`, and not `--no-commit`, and HEAD on a branch) moves the ref by compare-and-swap and then puts the index and working tree in step with it. The ref move alone is not enough -- it leaves the INVERSE of the incoming diff staged -- so the sync is part of the operation, not an optional tidy-up. The oplog entry records the fast-forward outcome, and **`safegit undo` refuses it**: the new tip is a commit safegit did not create, and undo never rolls a branch back over one.
+- **`--no-ff`** elects a merge commit even where a fast-forward was available.
+- **`--ff-only`** refuses a non-fast-forward -- and the refusal is **safegit's own** (the general failure code), not git's 128. Letting git make that call would let git move the ref, outside the compare-and-swap, in the race where the two branches stop being diverged between the check and the run.
+- **`--no-commit`** computes and PARKS, even when the result is clean and even when a fast-forward was available: it says the operator wants to look at the result before it becomes anything, and a fast-forward that moved the branch silently would deny exactly that. Conclude the parked state with `safegit merge-continue`. (git's own `merge --no-commit` fast-forwards anyway; safegit's does not, so the flag means one thing in every case an operator can reach.)
+
+### What the command line may say
+
+Allowed, because each of them reaches only the compute step or the message draft git writes there -- and the pipeline commits that draft: `-m`/`--message`, `-F`/`--file`, `--no-edit`, `--ff`/`--no-ff`/`--ff-only`/`--no-commit` (safegit's own selectors, which never reach git), `--signoff`/`--no-signoff`, `--log`/`--no-log`, `--into-name`, `--stat`/`--no-stat`, `--allow-unrelated-histories`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, and the state-control forms `--abort` and `--quit`.
+
+Refused by name, each with its reason: `-s`/`--strategy` and `-X`/`--strategy-option` (they change what is staged, and the conclusion's completeness and marker checks cannot see the change), `--squash` (a commit with a merge's content and none of its history), `-e`/`--edit` (safegit's commit surface has no editor; pass `-m`), `--commit` (the opposite of the `--no-commit` the compute step is pinned to -- git takes the last of the pair, so it would hand the commit back to git), `--autostash` (a dead flag: the dirty-tree check refuses before git runs, so a merge never reaches git with anything to stash), `--no-verify` (nothing of git's commit path runs here, so it would skip nothing), and `-S`/`--gpg-sign` (safegit's pipeline does not sign). Everything else is refused by the subset law.
 
 ### Examples
 
 ```bash
+# Clean merge: one pipeline-authored merge commit, concluded in this invocation
 safegit merge feature-branch
+
+# Force a merge commit even where a fast-forward was available
 safegit merge --no-ff feature-branch
+
+# Refuse anything but a fast-forward
+safegit merge --ff-only origin/main
+
+# Compute the merge and park it for inspection, then conclude it yourself
+safegit merge --no-commit feature-branch
+safegit merge-continue
 ```
 
 ### Safety Guarantees
 
-- **Coordination guard, both layers**: the worktree operation lock, then the dirty-tree check. See "The guarded passthroughs and their two coordination layers".
-- **git's own exit code**: When `git merge` fails -- including a conflicted merge -- safegit exits with the code git returned.
-- **The index is git's**: a conflicted merge keeps its unmerged entries and a `--no-commit` merge keeps its staged result; safegit does not touch the index after the merge.
-- **The way out is named**: when git stops with a merge in flight, safegit prints `conclude it: safegit merge-continue` / `abandon it: git merge --abort` on stderr, from the same authority every other in-flight refusal reads. `safegit merge --continue` is refused (exit **5**) and points at the same command -- see "The three conclusion commands".
-- **Oplog recording**: the branch baseline (see "The oplog baseline" above). The merged branch name rides alongside it.
+- **Coordination guard, both layers**: the worktree operation lock, then the dirty-tree check. See "The guarded commands and their two coordination layers".
+- **The commit is safegit's**: trailers, the repository's `commit-msg` hook, the oplog entry, and `safegit undo` -- except after a fast-forward, where the tip is a commit git made long ago and undo refuses.
+- **git's narration is relayed, on the channels it belongs on**: at a terminal git's CONFLICT lines appear as git writes them; under `--json` they are captured and re-emitted on stderr, so stdout carries only the envelope.
+- **The way out is named**: when the merge parks, safegit prints `conclude it: safegit merge-continue` / `abandon it: git merge --abort` on stderr, from the same authority every other in-flight refusal reads.
+- **Oplog recording**: exactly ONE entry under the op name `merge`, carrying the branch baseline (see "The oplog baseline" above) plus an `outcome` -- committed, fast-forward, parked, up-to-date, or failed. A merge that was concluded later with `merge-continue` records that command's own entry instead.
+- **The payload says which outcome it was**: `merge`'s JSON payload carries an `outcome` member, because a fast-forward, a parked state and an up-to-date merge produce no commit and the other members are unreadable without it.
 
 ## rebase
 
@@ -1369,18 +1444,29 @@ Use `safegit rebase` instead of `git rebase` for coordination-guarded rebasing t
 
 ### Arguments
 
-All arguments are passed through to `git rebase` after the coordination guard passes. Any flag or positional argument that `git rebase` accepts can be used, including upstream refs, `--interactive`, `--onto`, and `--autosquash`.
+`safegit rebase <upstream>` names exactly one upstream, and `--onto <newbase> <upstream>` names a new base for it. The upstream is stated on the command line rather than read from configuration. `git rebase <upstream> <branch>` -- which switches branches first -- is refused: that is a navigation safegit makes you state, so switch to the branch and then rebase it.
+
+Allowed: `--onto`, `-i`/`--interactive`, git's own state-control verbs `--continue`/`--abort`/`--skip` (which take no argument of their own), and `--autostash`.
+
+Refused by name: `--apply` and its patch-application options `--whitespace`/`-C` (the apply backend keeps its state under a directory `git am` shares, and safegit's in-flight state reader, conflict machinery and refusals are all written against the merge backend), `-x`/`--exec` (a rebase through safegit is a replay and nothing else), `-r`/`--rebase-merges` (it creates merges safegit never computed and cannot check), and `--root` (a history rewrite rather than a replay; safegit's history-rewriting surface is `safegit scrub`). A pathspec is refused: a rebase replays whole commits, and there is no part of one it can replay. Everything else is refused by the subset law.
+
+### rebase is the one place git authors commits
+
+Every other command that could create a commit through safegit creates it in safegit's own pipeline. A rebase does not: git performs the replay and AUTHORS every replayed commit, so those commits carry no safegit trailers, and `safegit undo` does not reverse them. This is uniform rather than conditional -- there is no shape of `safegit rebase` where the commits come out safegit's -- and it is declared at the git-execution boundary as the single door through which authoring argv may pass.
+
+A rebase's own `--continue` and `--abort` stay git's for the same reason: safegit has no verb that finishes one, so refusing them would leave the operator with nothing to run. A native, pipeline-authored non-interactive rebase is a deliberately deferred piece of work, tracked in `todo/pipeline-authored-rebase.md`.
 
 ### Examples
 
 ```bash
 safegit rebase main
 safegit rebase --interactive HEAD~5
+safegit rebase --onto main feature-base
 ```
 
 ### Safety Guarantees
 
-- **Coordination guard, both layers**: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included -- and then the dirty-tree check. See "The guarded passthroughs and their two coordination layers".
+- **Coordination guard, both layers**: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- and then the dirty-tree check. See "The guarded commands and their two coordination layers".
 - **git's own exit code**: When `git rebase` stops or fails, safegit exits with the code git returned.
 - **The index is git's**: a rebase stopped at a conflict keeps its unmerged entries; safegit does not touch the index after the rebase.
 - **Oplog recording**: the branch baseline (see "The oplog baseline" above). The upstream ref rides alongside it.
@@ -1395,7 +1481,11 @@ Use `safegit reset` instead of `git reset` to get selective coordination guards.
 
 ### Arguments
 
-All arguments are passed through to `git reset` after the coordination guard passes (for the working-tree-writing modes only). Any flag or positional argument that `git reset` accepts can be used, including `--soft`, `--mixed`, `--hard`, `--merge`, `--keep`, commit refs, and path specs.
+`safegit reset` takes a COMMIT, in one of five modes: `--soft`, `--mixed`, `--hard`, `--merge`, `--keep`. The arguments are forwarded to git after the coordination guard passes (for the working-tree-writing modes only).
+
+The **pathspec form** is refused, in every spelling that gives it away: `reset <commit> -- <path>`, a second revision that names a path, a bare argument that resolves to no commit but does name one, and the `--pathspec-from-file` family. `git reset <path>` writes the SHARED index entry by entry, and safegit's whole design keeps out of that file -- every commit stages into a temporary index of its own so that concurrent sessions cannot stage over each other, and a reset of one path would be the single exception, invisible to everything safegit records. To unstage part of a file, reset the whole path and commit the hunks you want with `safegit commit --hunks`.
+
+`-p`/`--patch` is refused too: it opens an interactive hunk session, and safegit's surface has no interactive mode anywhere. An argument that resolves to NEITHER a commit nor a path is deliberately left to git, so `safegit reset --hard no-such-ref` exits with git's own verdict on it.
 
 ### Examples
 
@@ -1428,7 +1518,7 @@ Use `safegit bisect` instead of `git bisect` for coordination-guarded bisecting 
 
 ### Arguments
 
-All arguments are passed through to `git bisect` after the coordination guard passes (for the stepping subcommands only). Any subcommand that `git bisect` accepts can be used, including start, good, bad, old, new, reset, skip, run, log, replay and view.
+The subcommand vocabulary safegit forwards is the one its git classification table declares -- `start`, `good`, `bad`, `old`, `new`, `skip`, `run`, `replay`, `reset`, `terms`, `log`, `view` -- and a subcommand outside it is refused. The same declaration is what tells safegit which of them write the working tree and therefore need the uncommitted-work check, so what safegit ADMITS and what it KNOWS about what it admitted cannot drift apart. bisect's OPTION allowlist is deliberately empty: every option git's bisect takes renames its terms, changes what it checks out or limits the walk, and none of them has been considered here.
 
 ### Examples
 
@@ -1445,78 +1535,92 @@ safegit bisect reset
 - **`bisect run` and build artifacts**: `git bisect run` steps by itself, so the dirty-tree check applies to the invocation and not to each step -- but a build the script performs between steps leaves whatever it wrote in the working tree. Anything the repository IGNORES never counts as dirt; a build artifact that is NOT gitignored does, and the next guarded `bisect` invocation in that worktree is refused at exit 5 until it is cleaned up or ignored.
 - **git's own exit code**: When `git bisect` fails, safegit exits with the code git returned.
 - **The index is git's**: safegit does not touch the index after the bisect step.
-- **Oplog recording**: the branch being bisected and the positions HEAD moved between, under `observed_parent`/`observed_tip` -- a bisect step moves HEAD and no branch ref, so it uses the same observed spelling `checkout` does. See "The oplog baseline" above.
+- **Oplog recording**: the branch being bisected and the positions HEAD moved between, under `observed_parent`/`observed_tip` -- a bisect step moves HEAD and no branch ref, so it uses the same observed spelling `switch` does. See "The oplog baseline" above.
 
 ## cherry-pick
 
-Cherry-pick one or more commits onto the current HEAD with coordination safety guards that check for in-progress safegit operations and record the cherry-pick in the oplog.
+Apply ONE commit onto the current branch. git computes the patch; safegit writes the commit.
 
-### When to Use
+### One commit, and the sequential form
 
-Use `safegit cherry-pick` instead of `git cherry-pick` for coordination-guarded cherry-picks that verify no other safegit operation is in progress before applying commits, protecting uncommitted work from other sessions sharing the same worktree.
+`safegit cherry-pick <commit>` takes the name of exactly ONE commit. Several commits in one command line are refused, and so are the range and revision-set spellings -- `A..B`, `A...B`, a leading `^`, `^!`, `^@`. The refusal is on the OPERATORS rather than on how many arguments were typed, and that distinction is the whole point: `git cherry-pick A..B` hands the operation to git's sequencer, queue directory and all, even where the range holds a single commit. A check that counted argv tokens would let exactly that command line through as "one commit".
 
-### Arguments
+What to do instead is what the refusal says: run the command once per commit, in the order you want them applied. Each invocation authors its own commit, and each one is separately undoable.
 
-All arguments are passed through to `git cherry-pick` after the coordination guard passes. Any flag or positional argument that `git cherry-pick` accepts can be used, including multiple commit hashes, ranges, `--no-commit`, and `--mainline`.
+### The commit is safegit's
+
+git is asked to compute the pick with `--no-commit`, and safegit's conclusion engine turns the staged result into the commit -- trailers, the repository's `commit-msg` hook, one oplog entry under the op name `cherry-pick`, and `safegit undo` reverses it. The AUTHOR is preserved from the commit being applied and the committer is you, which is git's own division: a cherry-pick applies somebody else's change, so their authorship travels with it.
+
+**One thing safegit writes itself.** `git cherry-pick --no-commit` records nothing about the picked commit -- there is no `CHERRY_PICK_HEAD` on either the clean or the conflicted path, because git only writes that file for a conflicted pick made without `-n`. The conclusion machinery, the author preservation, the marker labels, `git status` and `git cherry-pick --abort` all key on that file, so after the compute step safegit writes `.git/CHERRY_PICK_HEAD` itself, in git's own one-line format, on the clean and the conflicted path alike. The parked state then looks exactly like the one a conflicted pick leaves, and the conclusion's own state-file cleanup removes it.
+
+**A clean pick concludes immediately**, in the same invocation. **A conflicted pick parks**, `git status` shows the pick as it always did, and the operator finishes with `safegit cherry-pick-continue`.
+
+### What the command line may say
+
+Allowed: `-x`, `-s`/`--signoff` and `--no-edit` (git writes these into the message draft at the compute step, and the pipeline commits that draft), `-m`/`--mainline` (which parent of a merge commit the pick is relative to -- a compute-step question), `-n`/`--no-commit` (the operator asking for the pick to be computed and left staged; it authors nothing), `--rerere-autoupdate`/`--no-rerere-autoupdate`, and the state-control forms `--abort` and `--quit`.
+
+Refused by name: `--skip` (it moves past one commit of a SEQUENCE and keeps the rest going, and there is no sequence here -- abandon with `git cherry-pick --abort` and pick the commits you do want, one invocation each), `-e`/`--edit`, `-S`/`--gpg-sign`, `--strategy` and `-X`/`--strategy-option` (a pick computed with another strategy parks a content conflict git recorded nowhere the checks can read), `--ff` (it lets git move the branch onto the picked commit outright, outside the compare-and-swap), `--commit`, `--cleanup`, and the `--allow-empty`/`--allow-empty-message`/`--keep-redundant-commits`/`--empty` family (safegit's pipeline refuses a commit that changes nothing, and there is no flag here that turns that refusal off). Everything else is refused by the subset law.
 
 ### Examples
 
 ```bash
+# Apply one commit; the result is a pipeline-authored commit
 safegit cherry-pick abc1234
-safegit cherry-pick abc1234 def5678
+
+# Several commits: one invocation each, in the order you want them applied
+safegit cherry-pick abc1234
+safegit cherry-pick def5678
 ```
 
 ### Safety Guarantees
 
-- **Coordination guard, both layers**: the worktree operation lock, then the dirty-tree check. See "The guarded passthroughs and their two coordination layers".
-- **git's own exit code**: safegit exits with the code `git cherry-pick` returned.
-- **The index is git's**: a conflicted pick keeps its unmerged entries, `.git/sequencer` and `CHERRY_PICK_HEAD`, and a `--no-commit` pick keeps its staged result, so a raw `git cherry-pick --continue` sees exactly what it would after plain git.
-- **The conclusion is safegit's**: a conflicted pick is finished with `safegit cherry-pick-continue`, which is what the refusal names and what safegit prints on stderr when git stops. `safegit cherry-pick --continue` is refused (exit **5**) and points there -- see "The three conclusion commands".
-- **Oplog recording**: the branch baseline (see "The oplog baseline" above). The operator's arguments ride alongside it.
+- **Coordination guard, both layers**: the worktree operation lock, then the dirty-tree check. See "The guarded commands and their two coordination layers".
+- **The commit is safegit's**: trailers, the source author preserved, the `commit-msg` hook, the oplog entry, and `safegit undo`.
+- **A conflicted pick parks like git's**: the unmerged entries, `CHERRY_PICK_HEAD` and the message draft are all there, and the conclusion is `safegit cherry-pick-continue`. `safegit cherry-pick --continue` is refused and points there -- see "The three conclusion commands".
+- **git's narration is relayed, on the channels it belongs on**: streamed at a terminal, captured and re-emitted on stderr under `--json`.
+- **Oplog recording**: exactly ONE entry under the op name `cherry-pick`, carrying the branch baseline (see "The oplog baseline" above) plus an outcome. A pick concluded later with `cherry-pick-continue` records that command's own entry instead.
 
 ## revert
 
-Revert one or more commits by creating inverse patches, with coordination safety guards that check for in-progress safegit operations and record the revert in the oplog for audit purposes.
+Undo ONE commit by applying its inverse patch. git computes the patch; safegit writes the commit.
 
-### When to Use
+### One commit, and the sequential form
 
-Use `safegit revert` instead of `git revert` for coordination-guarded reverts that verify no other safegit operation is in progress before applying inverse patches, protecting uncommitted work from other sessions sharing the same worktree.
+`safegit revert <commit>` takes the name of exactly ONE commit. Several commits in one command line are refused, and so are the range and revision-set spellings -- `A..B`, `A...B`, a leading `^`, `^!`, `^@` -- for exactly the reason cherry-pick refuses them: a range hands the operation to git's sequencer even where it holds a single commit, and the refusal is on the operators rather than on the argument count. Run the command once per commit, in the order you want them reverted.
 
-### Arguments
+### The commit is safegit's
 
-All arguments are passed through to `git revert` after the coordination guard passes. Any flag or positional argument that `git revert` accepts can be used, including commit hashes, ranges, `--no-commit`, and `--mainline` for merge reverts.
+git is asked to compute the inverse patch with `--no-commit`, and safegit's conclusion engine turns the staged result into the commit -- trailers, the repository's `commit-msg` hook, git's state files (`REVERT_HEAD`, `MERGE_MSG`, `AUTO_MERGE`) cleaned up afterwards, one oplog entry under the op name `revert`, and `safegit undo` reverses it.
+
+The identity is git's own semantics and the OPPOSITE of a cherry-pick's: a revert is a new change of the reverter's, so YOU are both author and committer, not the author of the commit being reverted.
+
+**Move records are inverted.** The commit carries the INVERSE of every `Moved:` record the reverted commit declared, each under a fresh id and each marked `observed` -- undoing a move is a move. The inverses are minted through both doors, so a clean computed revert and a conflicted one concluded with `safegit revert-continue` declare the same thing. Retractions are deliberately not inverted: a retraction says "that record was wrong", and reverting the commit that said so does not make the record right again. An inverse is still minted for a record some later commit retracted, because the inverse describes THIS revert commit's own tree delta, and the trees arbitrate any wrong claim.
+
+**A clean revert concludes immediately**, in the same invocation. **A conflicted revert parks**, and the operator finishes with `safegit revert-continue` -- which reaches the same engine, so the two paths declare the same records and clean up the same state files.
+
+### What the command line may say
+
+Allowed: `-s`/`--signoff` and `--no-edit` (git writes the signoff trailer into the message draft at the compute step, and the pipeline commits that draft), `-m`/`--mainline` (which parent a merge commit is reverted relative to), `-n`/`--no-commit`, `--reference` (the line git puts in the draft naming the reverted commit), `--rerere-autoupdate`/`--no-rerere-autoupdate`, and the state-control forms `--abort` and `--quit`.
+
+Refused by name: `--skip` (there is no sequence to skip a step of -- conclude the revert you are in with `safegit revert-continue`, or drop it with `git revert --abort`), `-e`/`--edit`, `-S`/`--gpg-sign`, `--strategy` and `-X`/`--strategy-option`, `--commit`, and `--cleanup`. Everything else is refused by the subset law.
 
 ### Examples
 
 ```bash
+# Undo one commit; the result is a pipeline-authored commit
 safegit revert abc1234
-safegit revert HEAD~3..HEAD
+
+# Several commits: one invocation each
+safegit revert abc1234
+safegit revert def5678
 ```
-
-### One commit is safegit's; more than one is git's
-
-Reverting a SINGLE commit is not a plain passthrough. safegit splits the operation where git itself splits it: `git revert --no-commit` computes the inverse patch and stages it, and safegit's own conclusion engine turns that staged result into the commit. So a single revert is pipeline-authored -- safegit's trailers are on it, the repository's `commit-msg` hook runs, git's state files (`REVERT_HEAD`, `MERGE_MSG`, `AUTO_MERGE`) are cleaned up afterwards, and `safegit undo` can reverse it. The identity is deliberately git's own semantics: a revert is a new change of the reverter's, so the OPERATOR is the author, not the author of the commit being reverted.
-
-Reverting MORE THAN ONE commit is git's sequencer, and git authors those commits.
-
-**The move-record asymmetry follows from that split, and it is deliberate:**
-
-| | Single revert | Queued revert (a range, or several commits) |
-|---|---|---|
-| Who writes the commit | safegit's pipeline | git's sequencer |
-| safegit trailers | yes | none |
-| Move records | the INVERSE of every `Moved:` record the reverted commit declared, each with a fresh id | none at all |
-| `safegit undo` | reverses it | does not reverse it |
-
-Undoing a move is a move, so the inverse records are minted through both doors -- a clean computed revert and a conflicted one concluded with `safegit revert-continue` declare the same thing. Retractions are not inverted, and an inverse is still minted for a record some later commit retracted: the inverse describes this revert commit's own tree delta, and the trees arbitrate any wrong claim.
-
-Where the restructure cannot honor an option -- `--edit`, `--no-commit`, `--gpg-sign`, `--cleanup`, the sequencer verbs -- the command line stays an ordinary passthrough rather than having anything silently dropped.
 
 ### Safety Guarantees
 
-Otherwise the same guarantees as the cherry-pick command: both coordination layers before anything runs, `git revert`'s own exit code and index passed through untouched (a conflicted or `--no-commit` revert keeps its unmerged entries, staged inverse patch and `REVERT_HEAD`), the way out named when git stops mid-operation, and the operation recorded in the oplog.
-
-A conflicted revert -- single or queued -- is finished with `safegit revert-continue`, which is what safegit prints on stderr when git stops; `safegit revert --continue` is refused (exit **5**) and points there. For a single revert that command reaches the same engine the restructured revert already used, so the conflicted and the clean path declare the same move records and clean up the same state files.
+- **Coordination guard, both layers**: the worktree operation lock, then the dirty-tree check. See "The guarded commands and their two coordination layers".
+- **The commit is safegit's**: trailers, YOU as author and committer, the inverse move records, the `commit-msg` hook, the oplog entry, and `safegit undo`.
+- **A conflicted revert parks like git's**: the unmerged entries, `REVERT_HEAD` and the message draft are all there, and the conclusion is `safegit revert-continue`. `safegit revert --continue` is refused and points there -- see "The three conclusion commands".
+- **Oplog recording**: exactly ONE entry under the op name `revert`, carrying the branch baseline (see "The oplog baseline" above) plus an outcome. A revert concluded later with `revert-continue` records that command's own entry instead.
 
 ## config show
 
