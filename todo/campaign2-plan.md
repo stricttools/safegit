@@ -970,6 +970,14 @@ refusal names EVERY dirty path (aggregated human output for subtree
 moves; the machine payload lists all of them, never truncated
 `[user]`); the dry run refuses identically; the check runs with the
 other pair validations before the first filesystem mutation.
+OPEN RULING (execution-discovered, awaiting the user; as-built stands
+meanwhile): the never-truncated listing cannot ride the PAYLOAD — a
+refusal emits the envelope with `payload: null` (framework fact: no
+error-payload channel exists, and mvPayload's schema describes a
+performed mv). As built, the complete untruncated list goes to STDERR
+(which machine mode never suppresses) and the envelope carries
+exit_code 19 — the documented refusal shape. Whether a refusal payload
+should exist is the user's call at the pre-release review.
 Divergences entry ("ours": git mv moves dirty files; safegit refuses,
 naming the two routes).
 **Verify:** red-first — dirty move refuses naming the path and both
