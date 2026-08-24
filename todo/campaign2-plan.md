@@ -844,6 +844,20 @@ not detected (stated scope limit, alongside the crash-after-Cleanup
 half that is 3.6-doctor territory).
 **Verify (red to green):** the crash_window test. Green stays: the
 conclusion suite.
+AS-BUILT CORRECTION `[plan — defect in this subphase's stated key,
+found and fixed red-first]`: the oplog+sha==HEAD key FALSE-POSITIVES
+on cherry-pick/revert — after any concluded pick the tip still is the
+logged commit, so a SECOND conflicted pick read as "already concluded"
+had its state removed and its commit silently dropped. As built,
+`concludesThisState` corroborates per kind: merges by parentage (the
+plan's rule), picks/reverts by HEAD's message opening with the message
+THIS conclusion would write; regression-pinned
+(sequencer_conclusion_second_pick_test.go). The recognition op set
+also accepts the restructured commands' own op names (their immediate
+conclusions leave the same crash state). Also as built (ratified): the
+autostash enum gained `foreign` (a stash failing the ownership key —
+"none" denies the file, "pending" means not-reached); pull's residue
+reports through merge.residue (one fact, one member).
 
 ### 3.4 Deletion-honest reporting `[user]`
 worktreeEffects (the computation, sequencer_continue_cmd.go:380-390)
@@ -1227,6 +1241,13 @@ edits (entries and the preamble roster) happen HERE, in one pass —
 earlier phases only flag entries in code comments. The USER REVIEWS
 the finished catalog PRE-RELEASE and may overturn any entry, including
 every allowlist verdict from 2.6.
+
+PROCESS DEVIATION, recorded: the 3.2-3.5 implementor pre-wrote three
+catalog entries (autostash ownership, crash-window recognition, the
+overwrite refusal — all marked provisional) and did the count-free
+preamble rewording, against this phase's single-writer rule. They
+stand (no concurrent catalog writer existed; reverting is churn);
+Phase 7's single pass REVIEWS AND OWNS them — never duplicates them.
 
 Catalog work:
 - Preamble: state the subset law; replace every hard-coded count with
