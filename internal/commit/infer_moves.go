@@ -213,18 +213,15 @@ func (m *moveInference) records(ctx context.Context, changed []git.ChangedPath, 
 		m.capped = capped
 		lines := make([]string, 0, len(pairs))
 		for _, p := range pairs {
-			record, err := trailer.NewRecord(p.Old, p.New)
+			// OBSERVED, always: everything minted here is safegit reading a
+			// delta, never a person stating a move, and the token is what lets a
+			// reader tell the two apart without asking anybody.
+			record, err := trailer.NewRecord(p.Old, p.New, trailer.OriginObserved)
 			if err != nil {
 				// Every pair was validated before it got here, so this is an id
 				// minting failure and nothing else.
 				return nil, fmt.Errorf("minting a move record for %s: %w", trailer.EncodePair(p.Old, p.New), err)
 			}
-			// SEAM for subphase 6.4: the `observed` origin token goes on the
-			// record HERE, once Record carries an Origin field and the encoder
-			// emits it. Until then a minted record is written in the same
-			// spelling as a declared one -- the grammar reserves the origin slot
-			// and refuses a bare keyword standing in it, so writing the token
-			// early would produce a record this version cannot read back.
 			lines = append(lines, trailer.RecordLine(record))
 		}
 		m.lines = lines

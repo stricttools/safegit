@@ -238,7 +238,12 @@ func RewriteMessage(message string, transform func(string) string) (string, erro
 			if r, err := ParseRecord(value); err == nil {
 				old, new := transform(r.Old), transform(r.New)
 				if old != r.Old || new != r.New {
-					rewritten := Record{ID: r.ID, Old: old, New: new}
+					// The ORIGIN travels with the record, untransformed: a
+					// rewrite changes what the paths say, never who established
+					// the claim. Re-encoding without it would demote every
+					// record safegit derived to a claim a person made, silently,
+					// on every scrub that touched the message.
+					rewritten := Record{ID: r.ID, Old: old, New: new, Origin: r.Origin}
 					if err := ValidatePair(old, new); err != nil {
 						return "", &RecordTransformError{
 							Line:   line,

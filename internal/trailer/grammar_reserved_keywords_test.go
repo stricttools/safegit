@@ -35,11 +35,12 @@ import (
 // triggered by membership in it, and the parser refuses a bare member where a
 // path token is expected.
 //
-// SANCTIONED LATER (plan subphase 6.4): the origin-token work makes `observed`
-// VALID in the post-id slot. When that ships, the `keyword before a pair`
-// subtests below are sanctioned to be rewritten (observed becomes legal there;
-// declared/derived stay reserved and refused). That rewrite is not a break of
-// this specification -- it is the planned second half of the reservation.
+// SANCTIONED AND DONE (plan subphase 6.4): the origin-token work made
+// `observed` VALID in the post-id slot, so the `keyword before a pair` subtest
+// below now expects a RECORD for it and a refusal for the other two. The rest
+// of the reservation is untouched: `declared` and `derived` are refused exactly
+// as before, and the quoted spelling still names the path in every case. The
+// round trip of the token itself is pinned in origin_test.go.
 
 // reservedOriginKeywords is the set the origin slot will draw from. It is
 // spelled out here rather than imported from the production code on purpose:
@@ -97,21 +98,43 @@ func TestReservedOriginKeywordsAreQuotedAsPaths(t *testing.T) {
 }
 
 // TestBareReservedKeywordAfterTheIdIsMalformed: a hand-written line that puts a
-// bare keyword where the origin token will go is not a record. Two shapes, and
-// the second is the one that matters most: `<id> observed -> y` parses today as
-// a move FROM a path called observed, which is precisely the reading the
+// bare keyword where the origin token goes is not a record -- unless the
+// keyword is one the origin slot has since been given a meaning for.
+//
+// `observed` is that one word: it is the ORIGIN TOKEN, so `<id> observed x -> y`
+// is a record safegit itself writes. The reservation is what made that possible
+// without ambiguity, and the other two words stay reserved and refused, waiting
+// for whatever gives them a meaning.
+//
+// The second shape stays refused for all three: `<id> observed -> y` is an
+// origin token followed by half a pair, which is not a move -- and it is
+// emphatically not a move FROM a path called observed, which is the reading the
 // reservation exists to make impossible.
 func TestBareReservedKeywordAfterTheIdIsMalformed(t *testing.T) {
 	for _, keyword := range reservedOriginKeywords {
 		for _, tc := range []struct {
 			name  string
 			value string
+			// legal marks the one combination the origin slot now accepts.
+			legal bool
 		}{
-			{"keyword before a pair", keyword + " x.txt -> y.txt"},
-			{"keyword as the old path", keyword + " -> y.txt"},
+			{name: "keyword before a pair", value: keyword + " x.txt -> y.txt", legal: keyword == string(OriginObserved)},
+			{name: "keyword as the old path", value: keyword + " -> y.txt"},
 		} {
 			t.Run(keyword+"/"+tc.name, func(t *testing.T) {
 				value := aValidRecordID + " " + tc.value
+
+				if tc.legal {
+					record, err := ParseRecord(value)
+					if err != nil {
+						t.Fatalf("ParseRecord(%q): %v; the origin token is legal in that slot", value, err)
+					}
+					want := Record{ID: aValidRecordID, Old: "x.txt", New: "y.txt", Origin: OriginObserved}
+					if record != want {
+						t.Errorf("ParseRecord(%q) = %+v, want %+v", value, record, want)
+					}
+					return
+				}
 
 				if record, err := ParseRecord(value); err == nil {
 					t.Errorf("ParseRecord(%q) returned the record %+v; a bare reserved keyword must be refused, never read as a path", value, record)

@@ -212,7 +212,7 @@ func TestRecordRoundTripsThroughItsTrailerLine(t *testing.T) {
 		if name == "" {
 			continue
 		}
-		r, err := NewRecord(name, "dest/"+name+".moved")
+		r, err := NewRecord(name, "dest/"+name+".moved", OriginDeclared)
 		if err != nil {
 			t.Fatalf("NewRecord(%q): %v", name, err)
 		}
@@ -260,7 +260,7 @@ func TestParseRecordRefusalsAndIDPlacement(t *testing.T) {
 }
 
 func TestSubtreeForm(t *testing.T) {
-	r, err := NewRecord("src/old/", "src/new/")
+	r, err := NewRecord("src/old/", "src/new/", OriginDeclared)
 	if err != nil {
 		t.Fatalf("NewRecord: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestSubtreeForm(t *testing.T) {
 	if r.OldPrefix() != "src/old" || r.NewPrefix() != "src/new" {
 		t.Errorf("prefixes are %q and %q", r.OldPrefix(), r.NewPrefix())
 	}
-	file, err := NewRecord("src/old", "src/new")
+	file, err := NewRecord("src/old", "src/new", OriginDeclared)
 	if err != nil {
 		t.Fatalf("NewRecord: %v", err)
 	}
