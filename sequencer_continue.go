@@ -546,6 +546,146 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	return exit
 }
 
+// parkedConclusion describes one IMMEDIATE conclusion: the operation git has
+// just computed and parked, concluded on the spot rather than left for the
+// operator to conclude by hand.
+//
+// It is the second door into the engine above, and the one the RESTRUCTURED
+// commands come in by. `safegit merge` and `safegit revert` split their work
+// where git itself splits it -- a `--no-commit` compute step that stages the
+// result, then a conclusion that turns the staged result into a commit -- so
+// the commit they produce is the pipeline's, with safegit's trailers, the
+// repository's commit-msg hook, the compare-and-swap ref update and the state
+// cleanup. Nothing here is a second implementation of any of that: it is the
+// same sequence runContinue runs, with the differences that are genuinely
+// per-command lifted into this struct.
+type parkedConclusion struct {
+	// op selects the engine's per-operation vocabulary: which state kind is
+	// being concluded, whose author identity is recorded, how the incoming side
+	// is described.
+	op continueOp
+	// oplogOp names the operation in the op log, and parentBumpOp names it in
+	// the "Operation:" trailer of a parent-submodule bump. They are ONE name
+	// for a merge, which is the command's own; a restructured revert still
+	// records its pipeline entry under the conclusion command's name while
+	// naming itself `revert` to the parent bump, so the two are separate
+	// fields rather than one with a caveat.
+	oplogOp      string
+	parentBumpOp string
+	// messages replace git's own draft, exactly as the conclusion commands' -m
+	// does. Empty means the draft git wrote during the compute step, which is
+	// where an operator's own `-m` has already been recorded.
+	messages []string
+	trailers []string
+	// allowEmpty carries the pipeline's tree-unchanged exemption. A merge
+	// commit records its parents whether or not the tree changed; a revert that
+	// changes nothing is a revert of something already absent.
+	allowEmpty bool
+	// onEmpty words the refusal for a conclusion whose result changes nothing.
+	// It is per-command because the ways out are, and it is only ever called
+	// when allowEmpty is false.
+	onEmpty func() int
+}
+
+// concludeParkedOperation turns the state git just parked into a commit,
+// through the engine `safegit merge-continue` and its siblings run.
+//
+// ok reports whether the conclusion happened; a false ok has already printed
+// its own refusal and exit carries the code. A TRUE ok can still carry a
+// nonzero exit: restoring an autostash can fail after a commit that stands, and
+// the caller reports the conclusion either way.
+func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequencer.State, req parkedConclusion) (out conclusionResult, exit int, ok bool) {
+	ctx := flags.ctx()
+	op := req.op
+
+	if _, err := git.HeadRef(ctx); err != nil {
+		return out, op.refuseDetachedHead(state), false
+	}
+
+	// A clean compute step leaves no unmerged paths, so the declaration is
+	// empty and both checks pass over an empty set -- but they are RUN, not
+	// skipped, because a repository can be mid-operation with foreign unmerged
+	// entries from something else, and the conclusion refusing to guess is the
+	// same answer here as it is behind the -continue commands.
+	sides, err := conflict.Stages(ctx, "")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: reading the conflicted paths from the index: %v\n", err)
+		return out, exitcode.General, false
+	}
+	var declared []resolution
+	if code := op.checkCompleteness(ctx, state, sides, declared); code != 0 {
+		return out, code, false
+	}
+	declines, code := op.verifyMarkers(ctx, state, sides, declared)
+	if code != 0 {
+		return out, code, false
+	}
+
+	message, err := op.conclusionMessage(ctx, state, req.messages)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return out, exitcode.General, false
+	}
+	pinned, recorded, err := op.conclusionAuthorship(ctx, state)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return out, exitcode.General, false
+	}
+	// Undoing a move is a move: a revert inverts the records on the commit it
+	// undoes, from the same one place the -continue command inverts them, so a
+	// revert that hit a conflict and one that did not declare the same thing.
+	movedRecords, err := op.conclusionMovedRecords(ctx, state)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return out, exitcode.General, false
+	}
+
+	cfg, err := loadConfig(flags, gitDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: loading config: %v\n", err)
+		return out, exitcode.General, false
+	}
+
+	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
+	result, err := p.Execute(ctx, commit.CommitRequest{
+		Message:      message,
+		Trailers:     req.trailers,
+		MovedRecords: movedRecords,
+		DryRun:       flags.dryRun,
+		ExtraParents: state.MergeHeads,
+		IndexBase:    commit.IndexBaseSharedIndex,
+		Author:       pinned,
+		OplogOp:      req.oplogOp,
+		AllowEmpty:   req.allowEmpty,
+		Sequencer:    &coord.SequencerContext{Kind: state.Kind},
+	})
+	if err != nil {
+		if errors.Is(err, commit.ErrTreeUnchanged) {
+			return out, req.onEmpty(), false
+		}
+		die(pipelineExitCode(err), err.Error())
+	}
+
+	out = conclusionResult{state: state, commit: result, declared: declared, declines: declines, author: recorded}
+
+	exit = exitcode.OK
+	if !flags.dryRun {
+		if err := finishConclusion(ctx, gitDir, state, result, nil, sides, declared); err != nil {
+			die(exitcode.General, err.Error())
+		}
+		out.cleared = true
+
+		if err := maybeAutoBumpParent(ctx, flags, gitDir, result.SHA, req.parentBumpOp, firstLine(message)); err != nil {
+			die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+		}
+
+		// LAST, and after the state files are gone -- the same order and the
+		// same reason as runContinue's.
+		exit = consumeAutostash(ctx, gitDir, state)
+	}
+	return out, exit, true
+}
+
 // consumeAutostash puts back the uncommitted work git set aside before this
 // merge began, which is what `git merge --continue` does with MERGE_AUTOSTASH
 // and what safegit's conclusion owes an operator who reached the conflict

@@ -28,9 +28,32 @@ var undoableOps = map[string]string{
 	"mv":                   "parent",
 	"amend":                "oldSha",
 	"reword":               "oldSha",
+	"merge":                "parent",
 	"merge-continue":       "parent",
 	"cherry-pick-continue": "parent",
 	"revert-continue":      "parent",
+}
+
+// authoredByPipeline reports whether an entry records a commit SAFEGIT MADE, as
+// opposed to a ref movement it merely performed.
+//
+// The discriminator is the outcome field, and it is exact rather than a
+// heuristic: the commit pipeline writes ref/parent/sha/tree/attempts and never
+// an outcome, because a commit entry exists only when the commit does. Every
+// entry that carries an outcome comes from the guarded-operation recorder,
+// where the entry describes what GIT did to the branch -- a merge that
+// fast-forwarded onto somebody else's commits, a merge left parked, an
+// operation git refused.
+//
+// It is why `safegit merge` can share one op name across both: the merge it
+// authors is undoable, and the fast-forward it performs is not, because the
+// commits a fast-forward moved onto are not safegit's to take back off.
+func authoredByPipeline(e oplog.Entry) bool {
+	if e.Extra == nil {
+		return false
+	}
+	_, hasOutcome := e.Extra["outcome"]
+	return !hasOutcome
 }
 
 // conclusionOps are the operations whose undo is PARTIAL by construction.
@@ -42,6 +65,7 @@ var undoableOps = map[string]string{
 // a repository git considers idle, not one it considers mid-merge. Saying so is
 // the whole point of these ops being distinguishable from a plain commit.
 var conclusionOps = map[string]string{
+	"merge":                "merge",
 	"merge-continue":       "merge",
 	"cherry-pick-continue": "cherry-pick",
 	"revert-continue":      "revert",
@@ -139,6 +163,11 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	liveSteps := 0
 	var targetEntry *oplog.Entry
 	var mostRecentTipSHA string // TipSHA of the most recent live undoable entry
+	// notOurs is the newest entry whose OP is undoable but whose commit safegit
+	// did not author -- a fast-forward, the one shape that puts a ref move
+	// safegit performed and a commit it did not create in the same entry. It is
+	// kept only so the refusal can name it.
+	var notOurs *oplog.Entry
 	// reversing is the tip each live undoable step recorded: exactly the
 	// commits this undo claims to be taking back off the branch, and what the
 	// range check below measures the branch's actual history against.
@@ -153,8 +182,20 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 			continue
 		}
 
-		// Check if this op is undoable
-		if _, isUndoable := undoableOps[e.Op]; !isUndoable {
+		// Check if this op is undoable. An op name alone does not settle it:
+		// `merge` names both the merge safegit authored and the fast-forward it
+		// performed onto commits git created, and only the first is safegit's
+		// to take back.
+		if _, isUndoable := undoableOps[e.Op]; !isUndoable || !authoredByPipeline(e) {
+			if isUndoable {
+				// Remembered so the refusal below can say WHY nothing was
+				// found, rather than reporting an empty log.
+				if notOurs == nil {
+					copied := e
+					notOurs = &copied
+				}
+				continue
+			}
 			// Scrub and rewrite-author operations invalidate all prior SHAs in
 			// the oplog. We cannot safely undo anything before them.
 			if strings.HasPrefix(e.Op, "scrub-") || e.Op == "rewrite-author" {
@@ -188,6 +229,15 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 
 	if targetEntry == nil {
 		if liveSteps == 0 {
+			if notOurs != nil {
+				outcome, _ := notOurs.Extra["outcome"].(string)
+				die(exitcode.General, fmt.Sprintf(
+					"no undoable operations found for %s in the oplog\n"+
+						"  the last thing safegit did to this branch was a %s (%s), which created no commit of its own.\n"+
+						"  undo reverses commits safegit authored; the commits this branch moved onto are git's,\n"+
+						"  and taking them back off is a reset rather than an undo.",
+					refShortName(ref), notOurs.Op, outcome))
+			}
 			die(exitcode.General, fmt.Sprintf("no undoable operations found for %s in the oplog", refShortName(ref)))
 		}
 		die(exitcode.General, fmt.Sprintf("only %d undoable operations available, requested %d", liveSteps, count))

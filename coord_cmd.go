@@ -215,6 +215,11 @@ func readOplogPosition(flags globalFlags) oplogPosition {
 // safegit really last left the branch at is still the one bypass detection
 // compares against. The outcome field says the same thing in words, so an
 // operator reading the log does not have to infer a refusal from an absence.
+//
+// `more` is merged LAST, so an operation with more than two outcomes states its
+// own: a merge records `fast-forward`, `parked` or `up-to-date` there, each of
+// which is a different thing from the bare ok this function would otherwise
+// write. Nothing else in an entry may be restated that way.
 func appendOperationEntry(flags globalFlags, sgDir, op string, pos oplogPosition, ok bool, more map[string]interface{}) {
 	if flags.dryRun {
 		// A preview writes nothing, the oplog included. The failure sites reach
@@ -407,51 +412,6 @@ func runPull(flags globalFlags, mode pullMode, remote string, branch string) int
 	}
 
 	appendOperationEntry(flags, sgDir, "pull", pos, true, where)
-	return 0
-}
-
-func runMerge(flags globalFlags, args []string) int {
-	gitDir := mustGitDir()
-	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return exitcode.NotInitialized
-	}
-	sgDir := repo.SafegitDir(gitDir)
-
-	release, code := acquireOperationLock(flags, gitDir, "merge")
-	if code != 0 {
-		return code
-	}
-	defer release()
-
-	if code := refuseOwnedConclusion(flags, gitDir, "merge", args); code != 0 {
-		return code
-	}
-
-	if code := coordGuard(flags, gitDir, "merge"); code != 0 {
-		return code
-	}
-
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: safegit merge <branch>")
-		return exitcode.Usage
-	}
-
-	if flags.dryRun {
-		// No git merge runs: the invocation is recorded, and the outcome it
-		// would have is COMPUTED with git's own merge engine instead of guessed.
-		return previewSequencerOperation(flags, "merge", args)
-	}
-
-	pos := readOplogPosition(flags)
-	where := map[string]interface{}{"branch": args[0]}
-	if code := runGitMutation(flags, append([]string{"merge"}, args...)...); code != 0 {
-		appendOperationEntry(flags, sgDir, "merge", pos, false, where)
-		announceWayOut(flags, gitDir)
-		return code
-	}
-
-	appendOperationEntry(flags, sgDir, "merge", pos, true, where)
 	return 0
 }
 
