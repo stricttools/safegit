@@ -1425,7 +1425,33 @@ plan defect)
   refusal pin; delegated-payload schema tests deleted with the shape;
   `unmergedCount` (sequencer_delegation_test.go:109) RELOCATED to a
   surviving file before the deletion (commit_unmerged_index_test.go:48
-  imports it).
+  imports it). Added during execution:
+  TestVerificationHoldsWithoutAnAutoMergeToReadFrom — its subject (a
+  no-AUTO_MERGE merge verified anyway) is the exact shape 2.7 refuses;
+  converted to the refusal pin (the cherry-pick reconstruction sibling
+  is untouched — the refusal is merge-scoped);
+  TestPickAndRevertContinuePassthroughsNameSafegitsCommand re-fixtured
+  onto a single-form fixture (its old fixture was a queue, now a
+  different claim); undo_foreign's delegated-conclusion test reshaped
+  to drive the queue with raw git (its undo subject survives).
+  Ratified execution decisions: coord.WayOutOf is queue- and
+  octopus-aware (a refusal must name a way out that works); a
+  forwarded `--continue` on merge/cherry-pick/revert is refused
+  whenever ANY state is in flight — the clean-tree mid-queue
+  `--continue` was the last route by which git could author commits
+  behind a safegit command name (reproduced red-first; forced by the
+  deliberate single-authorship ruling). The conclusion payloads'
+  `head` and `commits_created` members are QUEUE members under the
+  minus-the-queue-members rule and are DELETED now that one shape
+  remains (2.1's rider executes the schema change). FOR THE PHASE 7
+  REVIEW: the presentation of the 2.6 verdicts must include each
+  command's ALLOWED set (the implementor-judged compute/message-draft
+  entries — merge's -F/--log/--into-name/--stat/
+  --allow-unrelated-histories/--rerere-autoupdate, cherry-pick's -x,
+  -s/--signoff on pick/revert) alongside the refusal entries, and
+  switch's DWIM reading (a remote-only branch name still creates and
+  lands on a local branch; unresolvable arguments fall through to
+  git's own error) is stated in its entry for the user's verdict.
 - 2.8 (--hunks): pins of the 3way retry if any exist at the
   commit_hunks seams (verify; the stage package has none).
 - 3.2: no rewrites (the fallback was never built; the probe confirmed
