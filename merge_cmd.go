@@ -188,16 +188,19 @@ const octopusReason = "a conclusion has one staged result to check and one messa
 
 // runRestructuredMerge is the whole flow.
 func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int {
+	// FIRST, and before the repository is touched at all: a command line
+	// safegit itself refuses is refused without a lock, without an
+	// auto-initialization and without a git call.
+	if code := refuseUnsupportedMerge(parsed); code != 0 {
+		return code
+	}
+
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
-
-	if code := refuseUnsupportedMerge(parsed); code != 0 {
-		return code
-	}
 
 	// A merge concluded in a submodule moves the parent's gitlink exactly as an
 	// ordinary commit does, so the parent must have answered the auto-bump
@@ -253,6 +256,11 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 			other, refShortName(pos.ref))
 		fmt.Fprintf(os.Stderr, "  the two branches have both moved on, so bringing them together needs a merge commit.\n")
 		fmt.Fprintf(os.Stderr, "  Re-run without --ff-only to make one, or rebase this branch onto %s instead.\n", other)
+		// Recorded, like every other verdict on the merge itself. The
+		// command-line refusals above record nothing, and the line between them
+		// is where the answer comes from: those are about what was typed, this
+		// one is about where the branch stands, and only the second is a fact
+		// about the repository that an audit trail is for.
 		appendOperationEntry(flags, sgDir, "merge", pos, false, mergeExtra(other, oplogOutcomeFailed))
 		return exitcode.General
 	}
@@ -422,7 +430,7 @@ func reportMergeWithoutCommit(flags globalFlags, pos oplogPosition, outcome, new
 		Operation:      "merge",
 		Outcome:        outcome,
 		Ref:            pos.ref,
-		SHA:            optionalSHA(newTip),
+		SHA:            strPtr(newTip),
 		Parents:        []string{},
 		Tree:           nil,
 		Files:          []string{},
@@ -473,18 +481,16 @@ func withoutMergeSelectors(args []string) []string {
 	return out
 }
 
-// strPtr and optionalSHA render the payload's two nullable members. An outcome
-// that created no commit has no tree, and one that moved no ref has no new tip;
-// both are null rather than empty, because a consumer reading "" would have to
-// know it means "there was none".
+// strPtr renders the payload's nullable members. An outcome that created no
+// commit has no tree, and one that moved no ref has no new tip; both are null
+// rather than empty, because a consumer reading "" would have to know it means
+// "there was none".
 func strPtr(s string) *string {
 	if s == "" {
 		return nil
 	}
 	return &s
 }
-
-func optionalSHA(sha string) *string { return strPtr(sha) }
 
 // mergePayload is what `safegit merge` puts in the envelope's payload.
 //
