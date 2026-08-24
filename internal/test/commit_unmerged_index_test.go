@@ -152,6 +152,68 @@ func TestConclusionsCommitWhileTheIndexIsUnmerged(t *testing.T) {
 	}
 }
 
+// TestDoctorFixRepairsAnOrphanedUnmergedIndex is the other half of the refusal:
+// exit 28 names `safegit doctor --action fix` as the way out, and a refusal that
+// names a way out which does not work is worse than no refusal at all.
+//
+// The repair re-stages the working tree's own content at stage 0, which is what
+// the operator resolving the conflict by hand meant to happen. Its verdict is
+// not the message it prints: it is that the index carries no unmerged entries
+// afterwards and the commit the guard refused now succeeds.
+func TestDoctorFixRepairsAnOrphanedUnmergedIndex(t *testing.T) {
+	fx := newOrphanedUnmergedRepo(t)
+
+	// The operator's own resolution, made in the working tree, which is exactly
+	// the content the repair must stage.
+	const resolved = "l1\nresolved by hand\nl3\n"
+	testutil.WriteFile(t, fx.dir, "conflicted.txt", resolved)
+
+	stdout, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession, "doctor", "--action", "fix")
+	if code != 0 {
+		t.Fatalf("doctor --action fix exited %d\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	if n := unmergedCount(t, fx.dir); n != 0 {
+		t.Fatalf("the repair left %d unmerged index entr(ies) behind\nstdout=%s", n, stdout)
+	}
+
+	// The promise the refusal makes, kept: a commit in this repository works.
+	before := testutil.Rev(t, fx.dir, "HEAD")
+	stdout, stderr, code = runSafegitEnv(t, fx.dir, conclusionSession,
+		"commit", "-m", "the commit the guard refused", "--", "conflicted.txt")
+	if code != 0 {
+		t.Fatalf("a commit after the repair exited %d; the refusal's way out does not work\nstdout=%s\nstderr=%s",
+			code, stdout, stderr)
+	}
+	if head := testutil.Rev(t, fx.dir, "HEAD"); head == before {
+		t.Fatal("HEAD did not move; the commit after the repair created nothing")
+	}
+	if got, _ := testutil.Show(t, fx.dir, "HEAD", "conflicted.txt"); got != resolved {
+		t.Errorf("the commit records %q, want the resolved content %q", got, resolved)
+	}
+}
+
+// TestDoctorFixPreviewLeavesTheUnmergedIndexAlone: the preview stages nothing.
+// An index a preview had quietly resolved would be the one repair nobody asked
+// for -- and it is the index git itself is refusing commits over.
+func TestDoctorFixPreviewLeavesTheUnmergedIndexAlone(t *testing.T) {
+	fx := newOrphanedUnmergedRepo(t)
+	before := unmergedCount(t, fx.dir)
+	if before == 0 {
+		t.Fatal("the fixture must carry unmerged entries")
+	}
+
+	stdout, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession, "doctor", "--action", "fix", "--dry-run")
+	if code != 0 {
+		t.Fatalf("doctor --action fix --dry-run exited %d\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	if got := unmergedCount(t, fx.dir); got != before {
+		t.Errorf("the preview changed the index: %d unmerged entries, was %d", got, before)
+	}
+	if !strings.Contains(stdout, "would re-stage") {
+		t.Errorf("the preview does not say it would re-stage the unmerged path:\n%s", stdout)
+	}
+}
+
 // assertNoCommittedMarkers fails when any commit reachable from any ref holds a
 // version of path that still carries conflict markers.
 func assertNoCommittedMarkers(t *testing.T, dir, path string) {

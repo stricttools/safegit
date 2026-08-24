@@ -246,7 +246,7 @@ func TestForceRelease(t *testing.T) {
 	ref := "refs/heads/main"
 
 	// Force release when no lock exists should error
-	err := ForceRelease(sgDir, ref)
+	err := ForceRelease(sgDir, ref, os.Remove)
 	if err == nil {
 		t.Fatal("expected error when no lock held")
 	}
@@ -257,7 +257,7 @@ func TestForceRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = ForceRelease(sgDir, ref)
+	err = ForceRelease(sgDir, ref, os.Remove)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -28,8 +28,10 @@ const (
 
 	// KindEffectsHandle: safegit does not construct this subprocess -- the
 	// strictcli effects handle does, so that --dry-run records the invocation
-	// instead of performing it -- and the argv is directory-independent (it
-	// names refs and remotes, never paths).
+	// instead of performing it. The pin cannot be applied to a process safegit
+	// does not start, so each such site is directory-independent (an argv naming
+	// refs and remotes, never paths) or DECLARES the working directory to the
+	// effects handle itself, which is the pin's own value stated at the site.
 	KindEffectsHandle ExemptionKind = "effects-handle"
 )
 
@@ -66,6 +68,9 @@ const (
 	ExemptUndoRefUpdate ExemptionID = "main.effectsUndoRefUpdate"
 	// ExemptBackupFetch covers main.fetchSlotObjects' fetch invocation.
 	ExemptBackupFetch ExemptionID = "main.fetchSlotObjects"
+	// ExemptDoctorRepair covers main.runRepairGit, the git invocations
+	// `doctor --action fix` makes to repair git's own leftovers.
+	ExemptDoctorRepair ExemptionID = "main.runRepairGit"
 )
 
 // DirPinExemption is one row of the table.
@@ -130,6 +135,11 @@ var dirPinExemptions = []DirPinExemption{
 		ID:     ExemptBackupFetch,
 		Kind:   KindEffectsHandle,
 		Reason: "the fetch that downloads a backup slot's objects before a restore fast-forwards onto it; the argv names a remote and a ref, never a path, and the effects handle starts the process so --dry-run can record it instead",
+	},
+	{
+		ID:     ExemptDoctorRepair,
+		Kind:   KindEffectsHandle,
+		Reason: "the doctor repairs' own git invocations -- storing an orphaned autostash as a stash entry, writing a working-tree blob, re-staging or dropping an index entry -- minted through the effects handle so a preview records them; the argv names working-tree paths, so the site hands the effects handle the repository root as the child's working directory, which is the pin's own value",
 	},
 	{
 		ID:     ExemptHistoryRewriteRecord,

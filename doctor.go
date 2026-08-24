@@ -340,7 +340,7 @@ func checkInitialized(env doctorEnv) doctorFinding {
 }
 
 func checkTmpDirs(env doctorEnv) doctorFinding {
-	orphans, err := index.GarbageCollectDryRun(env.sgDir)
+	orphans, err := index.GarbageCollectPlan(env.sgDir)
 	if err != nil {
 		return findingFail("%v", err)
 	}
@@ -360,8 +360,8 @@ func checkStaleLocks(env doctorEnv) doctorFinding {
 	if len(found.Stale) > 0 {
 		parts = append(parts, fmt.Sprintf("%d stale lock(s): %s", len(found.Stale), strings.Join(found.Stale, ", ")))
 	}
-	if found.Temps > 0 {
-		parts = append(parts, fmt.Sprintf("%d orphaned lock-publication temp file(s)", found.Temps))
+	if n := len(found.TempPaths); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d orphaned lock-publication temp file(s)", n))
 	}
 	if len(parts) > 0 {
 		return findingFail("%s (run 'safegit doctor --action fix' to clean)", strings.Join(parts, "; "))
@@ -614,31 +614,71 @@ func checkGitVersion(env doctorEnv) doctorFinding {
 //
 // It reports rather than repairs, and deliberately removes nothing: a diagnosis
 // that quietly deleted the only name a piece of work has left would be the loss
-// it exists to prevent.
+// it exists to prevent. The repair is `--action fix`, which STORES the commit as
+// a stash entry before removing the file -- so the work gains a name it did not
+// have instead of losing the only one it had.
 func checkOrphanedAutostash(env doctorEnv) doctorFinding {
-	path := filepath.Join(env.gitDir, sequencer.FileMergeAutostash)
-	if _, err := os.Stat(path); err != nil {
-		// No file: nothing to say, rather than a state to report as healthy.
-		return findingNone()
-	}
-	state, err := sequencer.Read(env.gitDir)
-	if err != nil {
+	state, found, err := readAutostash(env.gitDir)
+	switch {
+	case err != nil:
 		return findingFail("%s is present and git's in-flight state could not be read: %v",
 			sequencer.FileMergeAutostash, err)
-	}
-	if state.Kind == sequencer.KindMerge {
+	case state == autostashAbsent:
+		// No file: nothing to say, rather than a state to report as healthy.
+		return findingNone()
+	case state == autostashOwned:
 		return findingOK(fmt.Sprintf("%s belongs to the merge in flight", sequencer.FileMergeAutostash))
 	}
 
-	sha := "an unreadable object name"
-	if raw, err := os.ReadFile(path); err == nil {
-		if trimmed := strings.TrimSpace(string(raw)); trimmed != "" {
-			sha = trimmed
-		}
+	sha := found.sha
+	if sha == "" {
+		sha = "an unreadable object name"
 	}
 	return findingFail("%s is present with no merge in flight: it names %s, a stash-shaped commit whose "+
-		"content no ref reaches (recover it with 'git stash apply %s', then remove %s)",
-		sequencer.FileMergeAutostash, sha, sha, path)
+		"content no ref reaches (run 'safegit doctor --action fix', which stores it as a stash entry and "+
+		"removes %s, or recover it by hand with 'git stash apply %s')",
+		sequencer.FileMergeAutostash, sha, found.path, sha)
+}
+
+// autostashState is what one reading of MERGE_AUTOSTASH concluded.
+type autostashState int
+
+const (
+	// autostashAbsent: no MERGE_AUTOSTASH at all.
+	autostashAbsent autostashState = iota
+	// autostashOwned: a merge is in flight and the file is its own.
+	autostashOwned
+	// autostashOrphaned: the file is there and no merge is.
+	autostashOrphaned
+)
+
+// autostashRepair names an orphaned MERGE_AUTOSTASH: the file, and the
+// stash-shaped commit it holds ("" when the file's content does not name one).
+type autostashRepair struct {
+	path string
+	sha  string
+}
+
+// readAutostash is the ONE reading of the orphaned-autostash condition: the
+// health check reports what it returns and `--action fix` repairs exactly the
+// state it named, so the two can never disagree about what an orphan is.
+func readAutostash(gitDir string) (autostashState, *autostashRepair, error) {
+	path := filepath.Join(gitDir, sequencer.FileMergeAutostash)
+	if _, err := os.Stat(path); err != nil {
+		return autostashAbsent, nil, nil
+	}
+	state, err := sequencer.Read(gitDir)
+	if err != nil {
+		return autostashAbsent, nil, err
+	}
+	if state.Kind == sequencer.KindMerge {
+		return autostashOwned, nil, nil
+	}
+	found := &autostashRepair{path: path}
+	if raw, err := os.ReadFile(path); err == nil {
+		found.sha = strings.TrimSpace(string(raw))
+	}
+	return autostashOrphaned, found, nil
 }
 
 // checkLegacyScrubPolicies reports a leftover scrub-policies.jsonl.
@@ -655,99 +695,152 @@ func checkLegacyScrubPolicies(env doctorEnv) doctorFinding {
 	return findingFail("%s is left over from an older safegit; nothing reads it and every line holds a verbatim scrub pattern, which for a secret scrub is the secret itself (run 'safegit doctor --action fix' to delete it)", p)
 }
 
+// doctorFixPlan is everything `--action fix` would change in this repository's
+// own state, computed by READS alone: the orphan tmp directories, the two
+// legacy files, the lock residue, and the two repairs of git's own state.
+//
+// One plan serves both modes. Before it, the dry branch and the executing branch
+// each re-derived what to do, and the two could disagree -- a repair added to
+// one was simply absent from the other's preview. Now the mint below either
+// performs the plan or records it through the effects handle, and the report
+// says which.
+type doctorFixPlan struct {
+	orphanTmpDirs  []string
+	legacyQueueDir string
+	legacyPolicies string
+	// locks is the SCAN, which is what a preview reports and records. An
+	// executing run re-walks through the reclamation authority instead (see
+	// cleanLocks), because a lock judged stale a moment ago may have a live
+	// holder by the time the sweep reaches it.
+	locks lockScan
+	// autostash is an orphaned MERGE_AUTOSTASH, nil when there is none.
+	autostash *autostashRepair
+	// unmerged is an orphaned unmerged index -- stage 1/2/3 entries with no
+	// operation in flight -- nil when there is none.
+	unmerged *unmergedRepair
+}
+
+// planDoctorFix reads the repository and answers what a fix would change. It
+// mutates nothing, which is what lets `--action diagnose` and a `--dry-run` fix
+// share the same answer as the real one.
+func planDoctorFix(ctx context.Context, gitDir, sgDir string, lockDirs []string, worktree string) (doctorFixPlan, error) {
+	var plan doctorFixPlan
+
+	orphans, err := index.GarbageCollectPlan(sgDir)
+	if err != nil {
+		return plan, err
+	}
+	plan.orphanTmpDirs = orphans
+
+	// The legacy queue directory (removed in v0.2).
+	queueDir := filepath.Join(sgDir, "queue")
+	if info, err := os.Stat(queueDir); err == nil && info.IsDir() {
+		plan.legacyQueueDir = queueDir
+	}
+
+	// The legacy scrub-policy file. It is removed rather than migrated: nothing
+	// reads it, and its content is exactly what should not be sitting on disk.
+	legacyPolicies := filepath.Join(sgDir, legacyScrubPolicyFile)
+	if _, err := os.Stat(legacyPolicies); err == nil {
+		plan.legacyPolicies = legacyPolicies
+	}
+
+	// Both lock trees: the shared one and this worktree's own.
+	plan.locks = scanLocks(lockDirs)
+
+	if _, found, err := readAutostash(gitDir); err == nil {
+		plan.autostash = found
+	}
+
+	repair, err := planUnmergedRepair(ctx, gitDir, worktree)
+	if err != nil {
+		return plan, err
+	}
+	plan.unmerged = repair
+
+	return plan, nil
+}
+
 // doctorFix performs cleanup: orphan tmp dirs, legacy queue dir, the legacy
-// scrub-policy file and stale locks. With --dry-run it only reports what would
-// be done.
+// scrub-policy file, stale locks, and the two repairs of git's own leftovers --
+// an orphaned autostash and an orphaned unmerged index. Every mutation is minted
+// through the effects handle, so a `--dry-run` records it instead of performing
+// it and machine mode carries the whole set.
 func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 	sgDir := repo.SafegitDir(gitDir)
+	lockDirs := lockTrees(ctx, gitDir)
 
+	plan, err := planDoctorFix(ctx, gitDir, sgDir, lockDirs, flags.root.resolve())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(exitcode.General)
+	}
+
+	verb := "removed"
 	if flags.dryRun {
-		orphanDirs, err := index.GarbageCollectDryRun(sgDir)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(exitcode.General)
+		verb = "would remove"
+	}
+	remove := mintedRemover(flags, "safegit-state:")
+
+	removedTmp := 0
+	for _, dir := range plan.orphanTmpDirs {
+		if rmErr := remove(dir); rmErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: removing %s: %v\n", dir, rmErr)
+			continue
 		}
+		removedTmp++
+	}
 
-		// Check for legacy queue directory.
-		queueDir := filepath.Join(sgDir, "queue")
-		hasLegacyQueue := false
-		if info, err := os.Stat(queueDir); err == nil && info.IsDir() {
-			hasLegacyQueue = true
+	queueRemoved := false
+	if plan.legacyQueueDir != "" {
+		if rmErr := remove(plan.legacyQueueDir); rmErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: removing %s: %v\n", plan.legacyQueueDir, rmErr)
+		} else {
+			queueRemoved = true
 		}
+	}
 
-		// Check for the legacy scrub-policy file.
-		legacyPolicies := filepath.Join(sgDir, legacyScrubPolicyFile)
-		hasLegacyPolicies := false
-		if _, err := os.Stat(legacyPolicies); err == nil {
-			hasLegacyPolicies = true
+	policiesRemoved := false
+	if plan.legacyPolicies != "" {
+		if rmErr := remove(plan.legacyPolicies); rmErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: removing %s: %v\n", plan.legacyPolicies, rmErr)
+		} else {
+			policiesRemoved = true
 		}
+	}
 
-		// Both lock trees: the shared one and this worktree's own.
-		found := scanLocks(lockTrees(ctx, gitDir))
-
-		if !flags.silent() {
-			fmt.Printf("would remove %d orphan tmp dir(s)\n", len(orphanDirs))
-			if hasLegacyQueue {
-				fmt.Println("would remove legacy queue directory")
-			}
-			if hasLegacyPolicies {
-				fmt.Printf("would remove legacy scrub-policy file %s\n", legacyPolicies)
-			}
-			if len(found.Stale) > 0 {
-				fmt.Printf("would remove %d stale lock(s): %s\n", len(found.Stale), strings.Join(found.Stale, ", "))
-			}
-			if found.Temps > 0 {
-				fmt.Printf("would remove %d orphaned lock-publication temp file(s)\n", found.Temps)
+	// The locks. A preview records what the scan found; an executing run goes
+	// through the reclamation authority, which re-judges each lock under its own
+	// flock and can only remove the exact stale file it judged.
+	locks := plan.locks
+	if flags.dryRun {
+		for _, path := range append(append([]string{}, locks.StalePaths...), locks.TempPaths...) {
+			if rmErr := remove(path); rmErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: recording the removal of %s: %v\n", path, rmErr)
 			}
 		}
 	} else {
-		// Actual cleanup.
-		removed, err := index.GarbageCollect(sgDir)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(exitcode.General)
+		locks = cleanLocks(lockDirs, mintedRemover(flags, "lock:"))
+	}
+
+	if !flags.silent() {
+		fmt.Printf("%s %d orphan tmp dir(s)\n", verb, removedTmp)
+		if queueRemoved {
+			fmt.Printf("%s legacy queue directory\n", verb)
 		}
-
-		// Clean up legacy queue directory (removed in v0.2).
-		queueDir := filepath.Join(sgDir, "queue")
-		queueRemoved := false
-		if info, err := os.Stat(queueDir); err == nil && info.IsDir() {
-			os.RemoveAll(queueDir)
-			queueRemoved = true
+		if policiesRemoved {
+			fmt.Printf("%s legacy scrub-policy file %s\n", verb, plan.legacyPolicies)
 		}
-
-		// Delete the legacy scrub-policy file. It is removed rather than
-		// migrated: nothing reads it, and its content is exactly what should
-		// not be sitting on disk.
-		legacyPolicies := filepath.Join(sgDir, legacyScrubPolicyFile)
-		policiesRemoved := false
-		if _, err := os.Stat(legacyPolicies); err == nil {
-			if rmErr := os.Remove(legacyPolicies); rmErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: removing %s: %v\n", legacyPolicies, rmErr)
-			} else {
-				policiesRemoved = true
-			}
+		if len(locks.Stale) > 0 {
+			fmt.Printf("%s %d stale lock(s): %s\n", verb, len(locks.Stale), strings.Join(locks.Stale, ", "))
 		}
-
-		// Both lock trees: the shared one and this worktree's own.
-		cleaned := cleanLocks(lockTrees(ctx, gitDir))
-
-		if !flags.silent() {
-			fmt.Printf("removed %d orphan tmp dir(s)\n", removed)
-			if queueRemoved {
-				fmt.Println("removed legacy queue directory")
-			}
-			if policiesRemoved {
-				fmt.Printf("removed legacy scrub-policy file %s\n", legacyPolicies)
-			}
-			if len(cleaned.Stale) > 0 {
-				fmt.Printf("removed %d stale lock(s): %s\n", len(cleaned.Stale), strings.Join(cleaned.Stale, ", "))
-			}
-			if cleaned.Temps > 0 {
-				fmt.Printf("removed %d orphaned lock-publication temp file(s)\n", cleaned.Temps)
-			}
+		if len(locks.TempPaths) > 0 {
+			fmt.Printf("%s %d orphaned lock-publication temp file(s)\n", verb, len(locks.TempPaths))
 		}
 	}
+
+	fixOrphanedAutostash(flags, plan.autostash)
+	fixOrphanedUnmergedIndex(flags, gitDir, plan.unmerged)
 
 	// Submodule safegit directory cleanup (runs in both dry-run and normal mode;
 	// doctorFixSubmodule handles dry-run internally).
@@ -777,42 +870,49 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 // reached by running doctor inside it.
 func doctorFixSubmodule(flags globalFlags, name, sgDir string) {
 	dirs := []string{sgDir}
-
+	verb := "removed"
 	if flags.dryRun {
-		orphans, err := index.GarbageCollectDryRun(sgDir)
-		if err != nil && !flags.silent() {
-			fmt.Fprintf(os.Stderr, "warning: [%s] scanning orphan tmp dirs: %v\n", name, err)
+		verb = "would remove"
+	}
+	remove := mintedRemover(flags, "safegit-state:")
+
+	orphans, err := index.GarbageCollectPlan(sgDir)
+	if err != nil && !flags.silent() {
+		fmt.Fprintf(os.Stderr, "warning: [%s] scanning orphan tmp dirs: %v\n", name, err)
+	}
+	removedTmp := 0
+	for _, dir := range orphans {
+		if rmErr := remove(dir); rmErr != nil {
+			if !flags.silent() {
+				fmt.Fprintf(os.Stderr, "warning: [%s] removing %s: %v\n", name, dir, rmErr)
+			}
+			continue
 		}
-		found := scanLocks(dirs)
-		if !flags.silent() {
-			if len(orphans) > 0 {
-				fmt.Printf("[%s] would remove %d orphan tmp dir(s)\n", name, len(orphans))
-			}
-			if len(found.Stale) > 0 {
-				fmt.Printf("[%s] would remove %d stale lock(s): %s\n", name, len(found.Stale), strings.Join(found.Stale, ", "))
-			}
-			if found.Temps > 0 {
-				fmt.Printf("[%s] would remove %d orphaned lock-publication temp file(s)\n", name, found.Temps)
-			}
-		}
-		return
+		removedTmp++
 	}
 
-	removed, err := index.GarbageCollect(sgDir)
-	if err != nil && !flags.silent() {
-		fmt.Fprintf(os.Stderr, "warning: [%s] cleaning orphan tmp dirs: %v\n", name, err)
+	// Same split as the parent's sweep: a preview records what the scan found,
+	// an executing run goes through the reclamation authority.
+	locks := scanLocks(dirs)
+	if flags.dryRun {
+		for _, path := range append(append([]string{}, locks.StalePaths...), locks.TempPaths...) {
+			if rmErr := remove(path); rmErr != nil && !flags.silent() {
+				fmt.Fprintf(os.Stderr, "warning: [%s] recording the removal of %s: %v\n", name, path, rmErr)
+			}
+		}
+	} else {
+		locks = cleanLocks(dirs, mintedRemover(flags, "lock:"))
 	}
-	cleaned := cleanLocks(dirs)
 
 	if !flags.silent() {
-		if removed > 0 {
-			fmt.Printf("[%s] removed %d orphan tmp dir(s)\n", name, removed)
+		if removedTmp > 0 {
+			fmt.Printf("[%s] %s %d orphan tmp dir(s)\n", name, verb, removedTmp)
 		}
-		if len(cleaned.Stale) > 0 {
-			fmt.Printf("[%s] removed %d stale lock(s): %s\n", name, len(cleaned.Stale), strings.Join(cleaned.Stale, ", "))
+		if len(locks.Stale) > 0 {
+			fmt.Printf("[%s] %s %d stale lock(s): %s\n", name, verb, len(locks.Stale), strings.Join(locks.Stale, ", "))
 		}
-		if cleaned.Temps > 0 {
-			fmt.Printf("[%s] removed %d orphaned lock-publication temp file(s)\n", name, cleaned.Temps)
+		if len(locks.TempPaths) > 0 {
+			fmt.Printf("[%s] %s %d orphaned lock-publication temp file(s)\n", name, verb, len(locks.TempPaths))
 		}
 	}
 }
@@ -833,10 +933,15 @@ type lockScan struct {
 	// Stale names the locks whose holder is gone, in the same vocabulary
 	// `safegit unlock` accepts, so the finding tells an operator what to type.
 	Stale []string
-	// Temps counts orphaned lock-publication temporary files: a kill between
-	// creating one and linking it into place leaves a file that no lock walk
-	// sees and that nothing ever cleans up.
-	Temps int
+	// StalePaths is the same set as files. A NAME is what an operator types; a
+	// PATH is what the removal is of, and what an effect record must carry --
+	// "main.lock" appears once per worktree of a repository, so a record naming
+	// only that would not say which file went.
+	StalePaths []string
+	// TempPaths names the orphaned lock-publication temporary files: a kill
+	// between creating one and linking it into place leaves a file that no lock
+	// walk sees and that nothing ever cleans up.
+	TempPaths []string
 }
 
 // lockTrees returns every safegit directory whose locks/ subtree belongs to this
@@ -870,15 +975,12 @@ func scanLocks(dirs []string) lockScan {
 			switch {
 			case lock.IsLockFile(info.Name()):
 				if lock.IsStale(path) {
-					name := lock.NameFromPath(sgDir, path)
-					if name == "" {
-						name = path
-					}
-					found.Stale = append(found.Stale, name)
+					found.Stale = append(found.Stale, lockDisplayName(sgDir, path))
+					found.StalePaths = append(found.StalePaths, path)
 				}
 			case lock.IsPublicationTemp(info.Name()):
 				if isOrphanedPublicationTemp(path, info) {
-					found.Temps++
+					found.TempPaths = append(found.TempPaths, path)
 				}
 			}
 			return nil
@@ -901,6 +1003,16 @@ func isOrphanedPublicationTemp(path string, info os.FileInfo) bool {
 	return time.Since(info.ModTime()) > publicationTempGrace
 }
 
+// lockDisplayName is how a lock file is named to an operator: the vocabulary
+// `safegit unlock` accepts, falling back to the path when the file is not under
+// the tree's locks/ subtree.
+func lockDisplayName(sgDir, path string) string {
+	if name := lock.NameFromPath(sgDir, path); name != "" {
+		return name
+	}
+	return path
+}
+
 // cleanLocks removes what scanLocks found: stale locks through the reclamation
 // authority, orphaned publication temps directly.
 //
@@ -914,7 +1026,11 @@ func isOrphanedPublicationTemp(path string, info os.FileInfo) bool {
 //
 // A temp file needs no such care: nothing acquires it, and the orphan test is
 // what keeps a live publication out of the sweep.
-func cleanLocks(dirs []string) lockScan {
+//
+// remove is the minted removal both kinds go through, so every file this sweep
+// deletes appears in the effect log -- a sweep is exactly the operation whose
+// extent nobody can reconstruct afterwards.
+func cleanLocks(dirs []string, remove func(string) error) lockScan {
 	var removed lockScan
 	for _, sgDir := range dirs {
 		locksRoot := filepath.Join(sgDir, "locks")
@@ -924,16 +1040,13 @@ func cleanLocks(dirs []string) lockScan {
 			}
 			switch {
 			case lock.IsLockFile(info.Name()):
-				if lock.ReclaimIfStale(path) {
-					name := lock.NameFromPath(sgDir, path)
-					if name == "" {
-						name = path
-					}
-					removed.Stale = append(removed.Stale, name)
+				if lock.ReclaimIfStale(path, remove) {
+					removed.Stale = append(removed.Stale, lockDisplayName(sgDir, path))
+					removed.StalePaths = append(removed.StalePaths, path)
 				}
 			case lock.IsPublicationTemp(info.Name()):
-				if isOrphanedPublicationTemp(path, info) && os.Remove(path) == nil {
-					removed.Temps++
+				if isOrphanedPublicationTemp(path, info) && remove(path) == nil {
+					removed.TempPaths = append(removed.TempPaths, path)
 				}
 			}
 			return nil

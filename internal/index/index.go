@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -113,49 +112,16 @@ func (t *TmpIndex) Cleanup() error {
 	return os.RemoveAll(t.Dir)
 }
 
-// GarbageCollect removes tmp directories whose owning PID is no longer alive.
-// Returns the count of directories removed.
-func GarbageCollect(safegitDir string) (removed int, err error) {
-	tmpBase := filepath.Join(safegitDir, "tmp")
-
-	entries, err := os.ReadDir(tmpBase)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return 0, nil
-		}
-		return 0, fmt.Errorf("reading tmp dir: %w", err)
-	}
-
-	var errs []error
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		pid, ok := parsePIDFromDirName(entry.Name())
-		if !ok {
-			continue
-		}
-
-		if !processAlive(pid) {
-			dirPath := filepath.Join(tmpBase, entry.Name())
-			if rmErr := os.RemoveAll(dirPath); rmErr != nil {
-				errs = append(errs, fmt.Errorf("removing %s: %w", dirPath, rmErr))
-				continue
-			}
-			removed++
-		}
-	}
-
-	if len(errs) > 0 {
-		return removed, errors.Join(errs...)
-	}
-	return removed, nil
-}
-
-// GarbageCollectDryRun reports orphan tmp directories without removing them.
-// Returns the directory names that would be cleaned.
-func GarbageCollectDryRun(safegitDir string) ([]string, error) {
+// GarbageCollectPlan reports the tmp directories whose owning PID is no longer
+// alive, as full PATHS, and removes nothing.
+//
+// It is the whole scanner: the caller decides what to do with what it found.
+// That split is what lets `safegit doctor` diagnose with it, preview with it,
+// and repair with it -- the repair removing each planned path through the
+// effects handle, so a dry run records the removals it would make instead of
+// making them, and machine mode carries them. A scanner that removed as it
+// walked could not be asked what it would do without doing it.
+func GarbageCollectPlan(safegitDir string) ([]string, error) {
 	tmpBase := filepath.Join(safegitDir, "tmp")
 
 	entries, err := os.ReadDir(tmpBase)
@@ -166,7 +132,7 @@ func GarbageCollectDryRun(safegitDir string) ([]string, error) {
 		return nil, fmt.Errorf("reading tmp dir: %w", err)
 	}
 
-	var names []string
+	var paths []string
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -176,10 +142,10 @@ func GarbageCollectDryRun(safegitDir string) ([]string, error) {
 			continue
 		}
 		if !processAlive(pid) {
-			names = append(names, entry.Name())
+			paths = append(paths, filepath.Join(tmpBase, entry.Name()))
 		}
 	}
-	return names, nil
+	return paths, nil
 }
 
 // parsePIDFromDirName extracts the PID from a directory name of format "<pid>-<random>".

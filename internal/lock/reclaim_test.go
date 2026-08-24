@@ -55,7 +55,7 @@ func TestReclaimLockedAbortsWhenPathReplaced(t *testing.T) {
 	}
 
 	// Only now does the loser reach its removal step.
-	got, pid := reclaimLocked(loser, lp)
+	got, pid := reclaimLocked(loser, lp, os.Remove)
 	if got != reclaimRestart {
 		t.Errorf("outcome = %d, want reclaimRestart (%d) -- the loser acted on a file it no longer held", got, reclaimRestart)
 	}
@@ -82,7 +82,7 @@ func TestReclaimLockedRemovesStaleLock(t *testing.T) {
 	if f == nil {
 		t.Fatalf("openForReclaim declined a stale lock (outcome %v)", outcome)
 	}
-	got, pid := reclaimLocked(f, lp)
+	got, pid := reclaimLocked(f, lp, os.Remove)
 	if got != reclaimDone {
 		t.Errorf("outcome = %d, want reclaimDone (%d)", got, reclaimDone)
 	}
@@ -106,7 +106,7 @@ func TestReclaimLockedLeavesLiveLock(t *testing.T) {
 	if f == nil {
 		t.Fatalf("openForReclaim declined to open a lock file (outcome %v)", outcome)
 	}
-	got, _ := reclaimLocked(f, lp)
+	got, _ := reclaimLocked(f, lp, os.Remove)
 	if got != reclaimNone {
 		t.Errorf("outcome = %d, want reclaimNone (%d)", got, reclaimNone)
 	}

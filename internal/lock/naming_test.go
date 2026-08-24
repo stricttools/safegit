@@ -92,7 +92,7 @@ func TestReclaimIfStaleRemovesOnlyDeadHolders(t *testing.T) {
 	if err := os.WriteFile(dead, []byte("pid=999999999\nop=commit\nhost="+host+"\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if !ReclaimIfStale(dead) {
+	if !ReclaimIfStale(dead, os.Remove) {
 		t.Error("ReclaimIfStale did not reclaim a lock whose holder is gone")
 	}
 	if _, err := os.Stat(dead); !os.IsNotExist(err) {
@@ -104,7 +104,7 @@ func TestReclaimIfStaleRemovesOnlyDeadHolders(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer live.Release()
-	if ReclaimIfStale(live.LockPath) {
+	if ReclaimIfStale(live.LockPath, os.Remove) {
 		t.Error("ReclaimIfStale removed a lock this very process holds")
 	}
 	if _, err := os.Stat(live.LockPath); err != nil {
@@ -157,7 +157,7 @@ func TestReleaseLeavesAReplacedLockAlone(t *testing.T) {
 	// fresh lock, compressed.
 	replaceOutOfBand := func(t *testing.T, base, ref string, held *RefLock) os.FileInfo {
 		t.Helper()
-		if err := ForceRelease(base, ref); err != nil {
+		if err := ForceRelease(base, ref, os.Remove); err != nil {
 			t.Fatalf("force-releasing the held lock: %v", err)
 		}
 		newcomer, err := tryCreate(held.LockPath, "newcomer")

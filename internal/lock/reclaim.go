@@ -76,7 +76,15 @@ func openForReclaim(path string) (*os.File, reclaimOutcome) {
 // path is already gone", "another contender holds the flock right now" and "this
 // filesystem cannot flock". All of those mean leave it alone and look again
 // later, which is the fail-closed direction.
-func ReclaimIfStale(path string) bool {
+//
+// remove is how the file is unlinked, and it is a parameter because doctor's
+// sweep mints its removals through the effects handle -- so a preview records
+// them and machine mode carries them -- while the acquire path unlinks
+// directly. It MUST report a missing path as an error: reclaimLocked reads a
+// nil error as "the stale lock was removed", so a remover with RemoveAll
+// semantics would turn every vanished path into a reclamation this process
+// claims to have performed.
+func ReclaimIfStale(path string, remove func(string) error) bool {
 	if !IsStale(path) {
 		return false
 	}
@@ -84,7 +92,7 @@ func ReclaimIfStale(path string) bool {
 	if f == nil {
 		return false
 	}
-	outcome, _ := reclaimLocked(f, path)
+	outcome, _ := reclaimLocked(f, path, remove)
 	return outcome == reclaimDone
 }
 
@@ -109,7 +117,7 @@ func ReclaimIfStale(path string) bool {
 // either blocked on our flock -- and will fail the identity check itself once it
 // gets in, because by then we have unlinked the file it opened -- or already
 // sees the path gone.
-func reclaimLocked(f *os.File, path string) (reclaimOutcome, int) {
+func reclaimLocked(f *os.File, path string, remove func(string) error) (reclaimOutcome, int) {
 	defer f.Close()
 
 	held, err := f.Stat()
@@ -127,7 +135,7 @@ func reclaimLocked(f *os.File, path string) (reclaimOutcome, int) {
 	if !stale {
 		return reclaimNone, 0
 	}
-	if err := os.Remove(path); err != nil {
+	if err := remove(path); err != nil {
 		// Could not remove it -- wait it out rather than spinning.
 		return reclaimNone, 0
 	}
