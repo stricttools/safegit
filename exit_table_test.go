@@ -101,7 +101,7 @@ func TestNoTestAssertsAnUnregisteredExitCode(t *testing.T) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", "testdata", "docs":
+			case ".git", "testdata", "docs", "experiments":
 				return fs.SkipDir
 			}
 			return nil

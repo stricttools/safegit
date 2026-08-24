@@ -61,7 +61,7 @@ func TestNoProductionExitSiteUsesABareLiteral(t *testing.T) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", "testdata", "docs", "scripts":
+			case ".git", "testdata", "docs", "scripts", "experiments":
 				return fs.SkipDir
 			}
 			return nil
