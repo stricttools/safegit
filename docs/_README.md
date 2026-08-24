@@ -64,17 +64,31 @@ asking you to confirm.
 
 :-: table-commands
 
-Tree-mutating commands (`checkout`, `pull`, `merge`, `rebase`, `reset`,
-`bisect`, `cherry-pick`, `revert`) are passed through with coordination guards.
-Reverting a single commit is the exception: git computes the inverse patch and
-safegit commits it, so it carries safegit's trailers and `safegit undo` reverses
-it.
+Tree-mutating commands (`switch`, `pull`, `merge`, `rebase`, `reset`, `bisect`,
+`cherry-pick`, `revert`) run behind two coordination guards -- the worktree
+operation lock, then the uncommitted-work check -- and each validates its
+command line against an explicit allowlist first, so an option safegit has not
+considered is refused rather than passed to git.
+
+**Every commit safegit makes is safegit's own.** `merge`, `cherry-pick`,
+`revert` and `pull` use git only to compute a result and then write the commit
+through safegit's pipeline: trailered, `commit-msg`-hooked, recorded, and
+reversible with `safegit undo`. Each of them applies ONE thing, and a
+multi-commit or revision-range command line is refused naming the sequential
+form. `safegit rebase` is the one declared exception, where git replays and
+authors, always.
+
+Branch navigation is `safegit switch` (a branch name, or `-c` to make one).
+There is no `safegit checkout` and no file-restoration mode at all: git's
+`checkout -- <path>` destroys uncommitted work with no record anywhere, so it is
+inexpressible here rather than refused.
 
 When git parks a merge, cherry-pick or revert on a conflict, safegit finishes it
 rather than git: `merge-continue`, `cherry-pick-continue` and `revert-continue`
 take one `--resolve 'path=ours|theirs|worktree|delete'` per conflicted path and
 write the commit themselves, refusing a declaration that does not match the
-conflict or content that still holds a conflict block.
+conflict, content that still holds a conflict block, or a working-tree write
+that would destroy a hand edit no side of the conflict accounts for.
 
 ## How it works
 
