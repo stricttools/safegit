@@ -31,8 +31,12 @@ type IndexStage0 struct {
 //
 // indexPath names the index to write, and an empty indexPath writes the
 // repository's shared index -- the same convention UnmergedStages reads by. The
-// shared index is written by exactly one caller, the conclusion's own
-// reconciliation, and always under the worktree operation lock.
+// shared index has TWO writers, and both hold the worktree operation lock while
+// they write: the conclusion's own reconciliation, through here, and `safegit
+// doctor --action fix`'s repair of an ORPHANED unmerged index, which re-stages
+// the working tree's own content through the effects handle (so a preview
+// records the invocations instead of performing them) and therefore does not
+// come through this function. The lock is what keeps the two from interleaving.
 func SetIndexStage0(ctx context.Context, indexPath string, entries []IndexStage0) error {
 	if len(entries) == 0 {
 		return nil
