@@ -69,7 +69,7 @@ When git parks a merge, cherry-pick or revert on a conflict, safegit -- not git 
 
 Two shapes safegit cannot START are also ones it will not CONCLUDE, and the refusal names git's own `--continue` as the way to finish what git began: a QUEUED cherry-pick or revert (a `.git/sequencer` directory, which only raw git can create now), and an octopus merge or a content conflict computed by a non-default strategy. See the Commands Guide for the full surface.
 
-For automation, two properties are the ones to design around. First, the conclusion is non-interactive by construction -- there is no editor anywhere in it, and the message defaults to git's own draft with its comment block stripped. Second, concluding a QUEUED cherry-pick or revert (more than one commit) is DELEGATED to git's own `--continue`: those commits are git's, so they carry none of safegit's trailers, `safegit undo` will not reverse them, and `-m`, `--trailer` and `--dry-run` are refused rather than silently ignored.
+For automation, two properties are the ones to design around. First, the conclusion is non-interactive by construction -- there is no editor anywhere in it, and the message defaults to git's own draft with its comment block stripped. Second, every commit a conclusion produces is safegit's -- there is no shape where a safegit command name gets you a commit git authored -- so trailers, the `commit-msg` hook and `safegit undo` hold uniformly, and the states safegit cannot write for you meet a refusal naming git's own commands rather than a quiet handover.
 
 ## rlsbl release workflow
 
