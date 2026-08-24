@@ -212,6 +212,16 @@ func TestDoctorFixPreviewLeavesTheUnmergedIndexAlone(t *testing.T) {
 	if !strings.Contains(stdout, "would re-stage") {
 		t.Errorf("the preview does not say it would re-stage the unmerged path:\n%s", stdout)
 	}
+
+	// The repair is MINTED, so machine mode -- which silences the sentence above
+	// -- still carries it.
+	env := decodeEnvelope(t, mustJSON(t, fx.dir, "--json", "--dry-run", "doctor", "--action", "fix"))
+	if !anyDetailContains(env, "update-index") {
+		t.Errorf("no effect record describes the re-staging: %v", effectDetails(env))
+	}
+	if !anyDetailContains(env, "conflicted.txt") {
+		t.Errorf("no effect record names the path that would be re-staged: %v", effectDetails(env))
+	}
 }
 
 // assertNoCommittedMarkers fails when any commit reachable from any ref holds a
