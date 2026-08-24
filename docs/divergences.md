@@ -591,7 +591,7 @@ Every future change that introduces a decision of this kind adds its entry here.
   It is not a silent partial success and not a bare number either. The run emits
   its machine envelope — the code is returned rather than exited through, so the
   document is written — and the payload names the created commit and lists what
-  was left, including the autostash's own state. The unappliable autostash is
+  was left, including the autostash's own state. An autostash that will not apply is
   the case that first forced this: the commit stands, the stash is stored as
   `stash@{0}`, the message names it and the commands that reach it, and a script
   that read `0` would never have looked at the message. The exit code is the one
