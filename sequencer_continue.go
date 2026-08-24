@@ -484,7 +484,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	// BEFORE the completeness check, because in this state the answer to "is
 	// this conclusion still to be made" is already no: the commit exists, and
 	// what is left is the cleanup a crash interrupted. See alreadyConcluded.
-	stood, err := op.alreadyConcluded(ctx, sgDir, state, messages)
+	stood, err := op.alreadyConcluded(ctx, sgDir, state)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
@@ -543,6 +543,9 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		IndexEdits:   edits,
 		Author:       pinned,
 		OplogOp:      op.command,
+		// The operation's own identity in the log entry, so a re-run after a
+		// crash can tell this conclusion from an earlier one's.
+		OplogSource: state.Source,
 		// A merge commit records its parents whether or not it changes a single
 		// byte, so the pipeline's tree-unchanged refusal does not apply to one.
 		// The cherry-pick and revert conclusions produce ordinary single-parent
@@ -662,16 +665,15 @@ func conclusionOplogOps(kind sequencer.Kind) []string {
 // mint a SECOND commit whose extra parent was already an ancestor of its first
 // -- a degenerate merge -- and report it as a clean success.
 //
-// The evidence is safegit's own, and it is two facts for a merge:
+// The evidence is safegit's own, and it is always two facts:
 //
 //   - the OP LOG's last entry for this branch names one of the ops that
 //     conclude this kind of operation and records the commit HEAD stands at.
 //     The pipeline appends that entry immediately after the ref update and
 //     before anything else, so in this window it is already written.
-//   - for a MERGE, HEAD's parent set is HEAD-before plus every MERGE_HEAD line,
-//     which is exactly the commit this conclusion would build. It corroborates
-//     the log rather than replacing it: a foreign merge commit with the same
-//     parents is not something safegit's own log would name.
+//   - the entry describes THIS operation rather than an earlier one, which is
+//     concludesThisState's question: a merge's parentage, a pick's or a
+//     revert's recorded source commit.
 //
 // ACKNOWLEDGED WINDOW: the pipeline's ref update and its op-log append are two
 // steps, so a crash BETWEEN them leaves no entry. A merge is still recognized
@@ -684,7 +686,7 @@ func conclusionOplogOps(kind sequencer.Kind) []string {
 // It FAILS CLOSED on an unreadable op log: a log that is missing lines cannot
 // answer the question, and answering "no" from one would be the double commit
 // this exists to prevent.
-func (op continueOp) alreadyConcluded(ctx context.Context, sgDir string, state sequencer.State, messages []string) (*commit.CommitResult, error) {
+func (op continueOp) alreadyConcluded(ctx context.Context, sgDir string, state sequencer.State) (*commit.CommitResult, error) {
 	ref, err := git.HeadRef(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("reading which branch HEAD is on: %w", err)
@@ -716,7 +718,7 @@ func (op continueOp) alreadyConcluded(ctx context.Context, sgDir string, state s
 	if err != nil {
 		return nil, fmt.Errorf("reading the commit %s the operation log names: %w", shortSHA(head), err)
 	}
-	if !op.concludesThisState(ctx, state, info, messages) {
+	if !op.concludesThisState(state, entry, info) {
 		return nil, nil
 	}
 
@@ -758,23 +760,32 @@ func (op continueOp) alreadyConcluded(ctx context.Context, sgDir string, state s
 //     followed by every MERGE_HEAD line, so a commit concluding a different
 //     merge has different parents.
 //   - a CHERRY-PICK or REVERT produces an ordinary single-parent commit, whose
-//     parent list says nothing at all. What is checked instead is the MESSAGE:
-//     the commit must carry the message this conclusion would write -- git's
-//     own draft for the operation in flight, or the caller's own -m -- as its
-//     opening text, since the pipeline appends its trailers after it.
+//     parent list says nothing at all. What is checked instead is the SOURCE:
+//     the entry records the commit the conclusion was applying, and it has to be
+//     the very commit CHERRY_PICK_HEAD or REVERT_HEAD names now.
 //
-// Both err towards NOT recognizing: an unrecognized crash window commits again,
-// which is the old behavior, while a misrecognized one throws away an operation
-// the operator asked for.
-func (op continueOp) concludesThisState(ctx context.Context, state sequencer.State, info git.CommitInfo, messages []string) bool {
+// The source is anchored to the operation rather than to anything a commit's
+// text can share. Corroborating by MESSAGE, which this did first, cannot
+// separate two picks of commits with the same subject -- a branch of `wip`
+// commits is the ordinary case, not a contrived one -- and the second of them
+// was swallowed: state removed, commit never made, exit 0.
+//
+// It FAILS CLOSED on an entry that carries no source at all, which is every
+// entry written before the key existed: an entry that cannot say which
+// operation it concluded is not evidence that it concluded this one.
+//
+// Both directions err towards NOT recognizing: an unrecognized crash window
+// commits again, which is the old behavior, while a misrecognized one throws
+// away an operation the operator asked for.
+func (op continueOp) concludesThisState(state sequencer.State, entry *oplog.Entry, info git.CommitInfo) bool {
 	if op.kind == sequencer.KindMerge {
 		return parentsMatchMergeHeads(info.Parents, state.MergeHeads)
 	}
-	want, err := op.conclusionMessage(ctx, state, messages)
-	if err != nil {
+	if state.Source == "" {
 		return false
 	}
-	return strings.HasPrefix(strings.TrimSpace(info.Message), strings.TrimSpace(want))
+	logged, _ := entry.Extra["source"].(string)
+	return logged != "" && logged == state.Source
 }
 
 // parentsMatchMergeHeads reports whether a commit's parents are exactly what
@@ -964,8 +975,12 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 		IndexBase:    commit.IndexBaseSharedIndex,
 		Author:       pinned,
 		OplogOp:      req.oplogOp,
-		AllowEmpty:   req.allowEmpty,
-		Sequencer:    &coord.SequencerContext{Kind: state.Kind},
+		// The same identity the -continue commands record: an immediate
+		// conclusion leaves the same crash state, so its entry has to answer the
+		// same question.
+		OplogSource: state.Source,
+		AllowEmpty:  req.allowEmpty,
+		Sequencer:   &coord.SequencerContext{Kind: state.Kind},
 	})
 	out = conclusionResult{state: state, commit: result, declared: declared, sides: sides, declines: declines, author: recorded, autostash: noAutostash()}
 	if partial := commitStands(err); partial != nil && result != nil {
