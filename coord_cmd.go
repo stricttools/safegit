@@ -42,7 +42,24 @@ func runGitMutation(flags globalFlags, args ...string) int {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
 	}
-	done, err := flags.effects().Run(argv, strictcli.Stream(true), strictcli.Check(false))
+	// Streaming is HUMAN mode only. Stream(true) wires the child's stdout to
+	// safegit's own, which is exactly right at a terminal and exactly wrong in
+	// machine mode: stdout there carries one document, the framework's envelope,
+	// and git's narration written in front of it ("Auto-merging ...", "CONFLICT
+	// ...", "Fast-forward") makes the stream unparseable. Under --json the child
+	// is CAPTURED instead and re-emitted afterwards, its stdout joining its
+	// stderr on stderr -- the same routing `push` already uses, and nothing is
+	// discarded. Check(false) behaves identically either way, so git's own exit
+	// code still rides the Completed.
+	//
+	// The cost, stated because it is real: machine mode loses LIVE output. A long
+	// rebase says nothing until it finishes. The framework offers no tee, and a
+	// second copy written by safegit would duplicate every line at a terminal.
+	opts := []strictcli.EffectOption{strictcli.Check(false)}
+	if !flags.json {
+		opts = append(opts, strictcli.Stream(true))
+	}
+	done, err := flags.effects().Run(argv, opts...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
@@ -72,6 +89,17 @@ func runGitMutation(flags globalFlags, args ...string) int {
 		// the argv this function actually builds rather than trusting the
 		// reasoning.
 		return 0
+	}
+	if flags.json {
+		// Captured rather than streamed, so it has to be put back. passthroughStdout
+		// answers stderr in machine mode, which is where both of the child's streams
+		// go: the envelope owns stdout.
+		if out := done.Stdout(); out != "" {
+			fmt.Fprint(passthroughStdout(flags), out)
+		}
+		if errText := done.Stderr(); errText != "" {
+			fmt.Fprint(os.Stderr, errText)
+		}
 	}
 	return done.ExitCode()
 }

@@ -679,8 +679,14 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   data as its payload and a declared JSON Schema validated at emission.
   Everything that is not the result goes to stderr: notices, warnings, prompts,
   a passthrough child's output in machine mode, and git's own stdout during a
-  push under `--json`. There is no JSON error object; an error path writes to
-  stderr and exits nonzero.
+  push under `--json`. That holds for the guarded commands too — `checkout`,
+  `pull`, `merge`, `rebase`, `reset` and `bisect` stream git's output live at a
+  terminal and CAPTURE it under `--json`, re-emitting both of the child's streams
+  on stderr afterwards. Nothing is discarded, and the cost is stated rather than
+  hidden: a machine-mode run of a long operation says nothing until it finishes,
+  because the framework offers no tee and a second copy written by safegit would
+  duplicate every line at a terminal. There is no JSON error object; an error
+  path writes to stderr and exits nonzero.
 - **Ruling:** ours — deliberate
 
 ### `--dry-run` is uniform, and refused where it would lie

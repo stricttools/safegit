@@ -1279,6 +1279,12 @@ An in-flight operation does NOT by itself refuse a passthrough. The passthroughs
 
 `safegit revert` of a SINGLE commit is not a plain passthrough at all -- see its own section.
 
+### git's own output, and where it goes
+
+At a terminal these commands STREAM git's output live: whatever git writes appears as it writes it. Under `--json` they CAPTURE it instead and re-emit it when git finishes, with both of the child's streams going to stderr -- stdout there carries exactly one document, the framework's envelope, and git's narration written in front of it would make the stream unparseable.
+
+Nothing is discarded, and one thing is lost: a machine-mode run of a long rebase or merge says nothing until it ends.
+
 ### The oplog baseline
 
 Every one of these operations appends one oplog entry carrying the same three facts a commit entry carries -- the full ref name (`ref`), the tip it moved from (`parent`), the tip it ended on (`sha`) -- plus an `outcome`. The operator's own arguments ride alongside them.
