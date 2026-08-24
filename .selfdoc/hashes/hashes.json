@@ -116,6 +116,11 @@
     "description": "3eb2d2174322266a5cbe86259ace62028f394b753b18ae3acef00edbdee28330",
     "schema_hash": "abf1cfbbab2177cf422028dcc01afa9db8d11f0ade3dacf8d8297afed36ea36f"
   },
+  "en/cli-switch.md": {
+    "content": "37434084f67d66ffb28ce930622cfb974c7c6f7df32af7d1cb4fdff7593be7c5",
+    "description": "798c7ff8767387a876a12835b7602dfb5983a775a5caf48b521bcfa53e5dea97",
+    "seed_hash": "798c7ff8767387a876a12835b7602dfb5983a775a5caf48b521bcfa53e5dea97"
+  },
   "en/cli-undo.md": {
     "content": "213c24d188bfdc6f11ae912ec311e4beb7ae0b9e41348f5be02d88369670056c",
     "description": "a1db2666d783369602dcb645df73c7602434680c046737eb8a8649b5ce95fafb",
