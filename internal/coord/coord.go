@@ -29,10 +29,19 @@ type DirtyState struct {
 	// advice is impossible to follow there and the refusal says so instead.
 	//
 	// It is a fact carried alongside the dirt, not part of the verdict: an
-	// in-flight operation does NOT by itself make a clean tree dirty. The
-	// guarded passthroughs are how an operator reaches `rebase --continue` and
-	// `merge --abort`, and refusing them whenever git has something in flight
-	// would refuse exactly the commands that end it.
+	// in-flight operation does NOT by itself make a clean tree dirty, so a
+	// state-control passthrough over a clean tree -- an interactive rebase
+	// parked at `edit` or `break`, where `safegit rebase --continue` is the way
+	// on -- still runs.
+	//
+	// What that does not do is relax the check for the usual mid-operation
+	// case. A conflicted or parked operation dirties the tree by construction:
+	// the conflict markers, or the staged result, ARE the dirt. So `safegit
+	// merge --abort` and a `rebase --continue` over staged resolutions are
+	// refused at exit 5 like any other dirty-tree command. The refusal changes
+	// SHAPE rather than relaxing -- it names the operation in flight and the
+	// commands that conclude or abandon it, instead of advice to commit the
+	// conflict, which is advice nobody can follow.
 	Sequencer sequencer.State
 }
 
