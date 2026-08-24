@@ -1022,6 +1022,23 @@ green.
   fast-forward", submodule fix lines) survive beside the new records.
 **Verify (red to green):** unlock and doctor-fix mint tests; the 3.2
 fix-half pin; the 3.6 repair pin.
+AS-BUILT notes (ratified): the 3.6 repair uses one stdin-free
+`git update-index --add -- <path>` per path (probed: collapses stages
+1/2/3 to stage 0) instead of the plan's HashObjectWriteBytes +
+SetIndexStage0 — Effects.Run cannot feed stdin (the known framework
+gap), and the replacement additionally gets modes, clean filters and
+symlinks right; missing-from-disk paths get --force-remove. A THIRD
+exemption row (main.runRepairGit) joined the anticipated two, with
+KindEffectsHandle's doc widened to cover declared-Cwd sites; the
+restore's EXECUTE-path merge is minted too (a real mutation invisible
+in machine mode is the phase's own defect); the parent-bump preview
+propagates the real path's refusals instead of swallowing them.
+Appendix-B addition: internal/lock/lock_test.go's ForceRelease call
+sites (signature gained the remover parameter). Phase 7 rows: the
+health-check table's merge_autostash row gains the fix-action
+sentence; classify.go's stale `stash` row note; doctorFix's
+IsInitialized precondition (an uninitialized repo's fix repairs
+nothing — unreachable from the exit-28 path, noted for the audit).
 
 ### 4.3 Backup
 - backup backup: the dry path mints the push argv with a placeholder
