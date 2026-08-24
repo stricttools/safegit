@@ -151,10 +151,17 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	sgDir := repo.SafegitDir(gitDir)
 
 	// Enumerate submodules to detect if file path targets a submodule.
+	//
+	// A failure here is fatal. It used to be dropped, and continuing with no
+	// submodules is not a degraded answer but a WRONG one: the target path is
+	// then judged to be an ordinary file of the parent, so a scrub aimed at a
+	// path inside a submodule rewrites the parent's history and leaves the
+	// content exactly where it is. Nothing has moved at this point, so the
+	// operator repairs the repository and re-runs the same command line.
 	subs, subErr := submodule.Enumerate(ctx, gitDir)
 	if subErr != nil {
-		// Non-fatal: continue without submodule support.
-		subs = nil
+		die(exitcode.General, fmt.Sprintf("enumerating submodules: %v\n"+
+			"A scrub cannot decide what it rewrites without this. Nothing was changed.", subErr))
 	}
 
 	// Check if the file path starts with a submodule's relative path.
