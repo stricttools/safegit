@@ -35,8 +35,6 @@ import (
 // deliberately about PRESENCE and identification, not about exact argv: what is
 // broken is that the machine-readable effects are empty, and the fix is that
 // they are not.
-//
-// These tests are RED on purpose until that exists.
 
 // effectDetails returns every effect record's detail string, whatever its kind.
 // Unlike procMutations it does not presume the mutation is a subprocess: a lock

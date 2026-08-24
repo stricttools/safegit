@@ -25,7 +25,7 @@ func TestDirPinExemptionTableIsEnumerated(t *testing.T) {
 		ExemptGitPush:              KindEffectsHandle,
 		ExemptCommitRefUpdate:      KindEffectsHandle,
 		ExemptUndoRefUpdate:        KindEffectsHandle,
-		ExemptBackupFetch:          KindEffectsHandle,
+		ExemptBackupRestoreGit:     KindEffectsHandle,
 		ExemptDoctorRepair:         KindEffectsHandle,
 		ExemptHistoryRewriteRecord: KindEffectsHandle,
 	}

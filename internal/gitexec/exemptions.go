@@ -66,8 +66,9 @@ const (
 	// argv shapes differ (undo also deletes a ref), and reusing the commit row
 	// would make its identifier name a site it does not cover.
 	ExemptUndoRefUpdate ExemptionID = "main.effectsUndoRefUpdate"
-	// ExemptBackupFetch covers main.fetchSlotObjects' fetch invocation.
-	ExemptBackupFetch ExemptionID = "main.fetchSlotObjects"
+	// ExemptBackupRestoreGit covers main.runBackupGit, the invocations
+	// `backup restore` mints.
+	ExemptBackupRestoreGit ExemptionID = "main.runBackupGit"
 	// ExemptDoctorRepair covers main.runRepairGit, the git invocations
 	// `doctor --action fix` makes to repair git's own leftovers.
 	ExemptDoctorRepair ExemptionID = "main.runRepairGit"
@@ -132,9 +133,9 @@ var dirPinExemptions = []DirPinExemption{
 		Reason: "undo's compare-and-swap ref move -- and, for a root undo, the ref DELETION -- minted through the effects handle in both modes; the argv names a ref and object names out of the operation log and resolves against no directory",
 	},
 	{
-		ID:     ExemptBackupFetch,
+		ID:     ExemptBackupRestoreGit,
 		Kind:   KindEffectsHandle,
-		Reason: "the fetch that downloads a backup slot's objects before a restore fast-forwards onto it; the argv names a remote and a ref, never a path, and the effects handle starts the process so --dry-run can record it instead",
+		Reason: "a restore's two invocations -- the fetch that downloads the backup slot's objects, and the --ff-only merge onto them -- minted through the effects handle so --dry-run records each and performs neither; both argv name a remote, a ref or an object name, and resolve against no directory",
 	},
 	{
 		ID:     ExemptDoctorRepair,

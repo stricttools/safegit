@@ -10,8 +10,10 @@ import (
 
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/oplog"
 	"github.com/smm-h/safegit/internal/repo"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
 // backupRefPrefix is the safegit-owned remote namespace. Each branch gets one
@@ -22,6 +24,13 @@ const backupRefPrefix = "refs/backups/"
 
 // backupRef returns the backup slot ref for a branch.
 func backupRef(branch string) string { return backupRefPrefix + branch }
+
+// previewLeasePlaceholder stands where the lease's expected SHA goes in a
+// recorded push. A backup's lease is pinned to the slot's value READ FROM THE
+// REMOTE a moment before the push, and a preview contacts no remote at all, so
+// there is no such value for it to carry -- the same reasoning, and the same
+// spelling convention, as previewCommitPlaceholder.
+const previewLeasePlaceholder = "<slot-sha>"
 
 // currentBranch returns the checked-out branch name (not the full ref).
 func currentBranch(ctx context.Context, flags globalFlags, cmd string) string {
@@ -48,16 +57,74 @@ func remoteSlotSHA(ctx context.Context, flags globalFlags, cmd, remote, ref stri
 }
 
 // fetchSlotObjects downloads the slot's objects so its commits can be inspected
-// locally (ancestry checks, restore merges). Returns the fetched SHA.
+// locally, and returns the fetched SHA.
+//
+// It is `backup backup`'s own fetch, and it is deliberately NOT minted through
+// the effects handle: what a network READ is under the effects regime is a
+// framework question that has not been answered yet, and this fetch happens only
+// on an executing backup, where nothing is being previewed. `backup restore`'s
+// fetch IS minted, because a restore preview has to describe it -- see
+// runBackupGit.
 func fetchSlotObjects(ctx context.Context, flags globalFlags, cmd, remote, ref string) string {
 	if _, stderr, err := git.Run(ctx, "fetch", remote, ref); err != nil {
 		die(exitcode.General, fmt.Sprintf("fetching %s from %s: %v\n%s", ref, remote, err, strings.TrimSpace(stderr)))
 	}
+	return resolveFetchHead(ctx)
+}
+
+// resolveFetchHead reads what the last fetch brought. It runs on the EXECUTE
+// path only: a preview performed no fetch, so FETCH_HEAD either does not exist
+// or still names whatever an earlier command left there, and a preview that read
+// it would report a stale answer as this run's.
+func resolveFetchHead(ctx context.Context) string {
 	sha, err := git.RevParse(ctx, "FETCH_HEAD")
 	if err != nil {
 		die(exitcode.General, fmt.Sprintf("resolving fetched backup: %v", err))
 	}
 	return sha
+}
+
+// mintSlotFetch is `backup restore`'s half of the fetch: the invocation alone,
+// minted, with no FETCH_HEAD read after it. The read is the caller's, on the
+// execute path only.
+func mintSlotFetch(flags globalFlags, remote, ref string) error {
+	_, stderr, err := runBackupGit(flags, "backup-slot:"+ref, "fetch", remote, ref)
+	if err != nil {
+		if trimmed := strings.TrimSpace(stderr); trimmed != "" {
+			return fmt.Errorf("%v\n%s", err, trimmed)
+		}
+		return err
+	}
+	return nil
+}
+
+// runBackupGit mints one of `backup restore`'s two git invocations -- the fetch
+// of the slot, and the fast-forward onto it -- through the effects handle, so a
+// preview RECORDS each and performs neither, and a real restore leaves both in
+// the envelope's effect log.
+//
+// It returns git's own stdout and stderr, which the fast-forward's caller reads:
+// a refusal there is the one the operator has to see verbatim. In a preview
+// nothing ran, so both are empty.
+func runBackupGit(flags globalFlags, resource string, args ...string) (stdout, stderr string, err error) {
+	argv, err := gitexec.ArgvAny(gitexec.ExemptBackupRestoreGit, gitexec.NoDoor, args...)
+	if err != nil {
+		return "", "", err
+	}
+	done, err := flags.effects().Run(argv, strictcli.Resource(resource), strictcli.Check(false))
+	if err != nil {
+		return "", "", err
+	}
+	if flags.dryRun {
+		// Recorded instead of performed: the carrier is unsettled and asking it
+		// anything would panic.
+		return "", "", nil
+	}
+	stdout, stderr = done.Stdout(), done.Stderr()
+	if code := done.ExitCode(); code != 0 {
+		return stdout, stderr, fmt.Errorf("git %s exited %d", args[0], code)
+	}
+	return stdout, stderr, nil
 }
 
 // --- remote exposure ---
@@ -215,7 +282,17 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 	// the slot, and the ancestry check all need the network, so a preview would
 	// otherwise prompt about exposure and fail outright on an unreachable
 	// remote -- neither of which a preview may do.
+	//
+	// It still MINTS the push, with the lease pinned to a placeholder: the
+	// machine-readable effect record is the whole point of a preview, and an
+	// envelope that promised a backup while recording nothing described a run
+	// that changes nothing. The placeholder keeps the `--force-with-lease=`
+	// spelling, because that prefix is what selects the force-push grant.
 	if flags.dryRun {
+		lease := "--force-with-lease=" + slot + ":" + previewLeasePlaceholder
+		if _, err := execGitPush(flags, []string{"push", "--no-verify", lease, remote, "HEAD:" + slot}); err != nil {
+			die(exitcode.General, fmt.Sprintf("recording the push: %v", err))
+		}
 		infof(flags, "Would back up %s (%s) to backup slot %s on %s\n", branch, headSHA[:12], slot, remote)
 		infof(flags, "  equivalent git command: git push --no-verify --force-with-lease=%s:<slot sha observed at run time> %s HEAD:%s\n", slot, remote, slot)
 		infof(flags, "  the slot's current SHA, the ancestry check against it, and the lease pinned to it are resolved when the backup runs; no remote was contacted\n")
@@ -377,7 +454,25 @@ func runBackupRestore(flags globalFlags, remote string) int {
 				"list what is there with: safegit backup list %s", slot, remote, remote))
 	}
 
+	// The preview's two records, in the order the execute path performs them:
+	// the fetch, then the fast-forward. Neither is performed. The fast-forward
+	// names the SLOT's own SHA rather than FETCH_HEAD, because the preview
+	// fetched nothing and FETCH_HEAD would name whatever an earlier command
+	// left there -- and the slot's SHA is exactly what the fetch would put in
+	// it, read a moment ago and real.
+	//
+	// That read is itself an `ls-remote`, so `backup restore --dry-run` does
+	// contact the remote. It is the one network read a preview here makes, it
+	// is stated rather than hidden, and whether the effects regime should carry
+	// network READS at all is the framework question this and the backup fetch
+	// both wait on.
 	if flags.dryRun {
+		if err := mintSlotFetch(flags, remote, slot); err != nil {
+			die(exitcode.General, fmt.Sprintf("recording the fetch: %v", err))
+		}
+		if _, _, err := runBackupGit(flags, "ref:HEAD", "merge", "--ff-only", slotSHA); err != nil {
+			die(exitcode.General, fmt.Sprintf("recording the fast-forward: %v", err))
+		}
 		infof(flags, "Would fast-forward %s from backup slot %s on %s (%s -> %s)\n",
 			branch, slot, remote, oldHead[:12], slotSHA[:12])
 		infof(flags, "  equivalent git commands: git fetch %s %s && git merge --ff-only FETCH_HEAD\n", remote, slot)
@@ -385,9 +480,12 @@ func runBackupRestore(flags globalFlags, remote string) int {
 		return 0
 	}
 
-	fetched := fetchSlotObjects(ctx, flags, cmd, remote, slot)
+	if err := mintSlotFetch(flags, remote, slot); err != nil {
+		die(exitcode.General, fmt.Sprintf("fetching %s from %s: %v", slot, remote, err))
+	}
+	fetched := resolveFetchHead(ctx)
 
-	stdout, stderr, err := git.Run(ctx, "merge", "--ff-only", "FETCH_HEAD")
+	stdout, stderr, err := runBackupGit(flags, "ref:HEAD", "merge", "--ff-only", "FETCH_HEAD")
 	if stdout != "" {
 		outf(flags, "%s", stdout)
 	}
