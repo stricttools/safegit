@@ -52,7 +52,7 @@
         ]
       },
       {
-        "reason": "**Declared move records on `commit` and `amend`.** `--moved old:new` writes a checked record into the commit message and `--moved-retract <id>` withdraws one by id; a pair that nests inside itself, that duplicates a record the commit already declares, or that chains onto another declaration is refused, and every record carries its own id.",
+        "reason": "**Declared move records on `commit` and `amend`.** `--moved 'old -> new'` writes a checked record into the commit message and `--moved-retract <id>` withdraws one by id; a pair that nests inside itself, that duplicates a record the commit already declares, or that chains onto another declaration is refused, and every record carries its own id.",
         "entries": [
           {
             "version": "unreleased",
