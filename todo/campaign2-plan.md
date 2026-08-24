@@ -587,6 +587,35 @@ expectations get the same op-name care as 2.2's).
 commit; `--rebase` refuses; oplog baseline entry present under Op
 "pull".
 
+EXECUTION CORRECTIONS after 2.3-2.5 (executed by 2.6/2.7) `[plan]`:
+- `-s`/`-X` are REFUSED on cherry-pick and revert too, matching merge.
+  Forced for `-s` by 3.5's ruled totality (a pick computed with
+  `-s resolve` parks a content conflict with NO AUTO_MERGE — exactly
+  the shape 3.5's "safegit cannot start them" premise excludes); `-X`
+  joins for uniformity with merge's stated reason (weakly held; every
+  refusal is reviewable at the divergences review). The as-built 2.3/
+  2.4 honor-list carrying them is corrected in 2.6's allowlist pass.
+- The dry-run would-do logs of merge AND cherry-pick still record the
+  bare operator argv while the execute paths run the compute argv
+  (`git merge --no-ff --no-commit ...`, `git cherry-pick --no-commit
+  ...`); revert already records its compute argv. All three record the
+  COMPUTE argv (the dry-run doctrine: records are what the execute
+  path performs). The plan's earlier "their recorded argv are correct"
+  premise was written before the restructure and is obsolete.
+- The multi-commit queue-replay path in sequencer_preview.go
+  (replayOrder's range reversal, previewReplay's multi-step loop) is
+  unreachable after 2.3/2.4's refusals — DELETED in 2.7 with the
+  delegation machinery (superseded dead code).
+- 2.3's probe found `--commit` trailing safegit's prepended
+  `--no-commit` wins (git's last-wins) and would have moved the ref
+  outside CAS — refused in both tables; 2.6's allowlists must keep
+  that refusal.
+- `--no-verify` does not exist on git cherry-pick/revert (moot there);
+  it DOES exist on git merge and 2.2's table does not carry it — 2.6's
+  default-deny allowlist covers it and `-S`/`--gpg-sign` on merge with
+  explicit reasons (the pipeline runs the commit-msg hook and does not
+  sign; silent ignoring is the killed shape).
+
 ### 2.6 The allowlist and the switch rename `[user — full allowlist now]`
 Every guarded git-forwarding command validates its forwarded argv
 against an explicit allowlist BEFORE anything runs; unlisted tokens are
