@@ -57,6 +57,8 @@ entry, whatever its direction says.
 >   concluded](#an-autostash-is-applied-only-when-it-belongs-to-the-merge-being-concluded)
 > - [A conclusion whose commit already stands finishes the cleanup, and commits
 >   nothing](#a-conclusion-whose-commit-already-stands-finishes-the-cleanup-and-commits-nothing)
+> - [A working-tree write that would destroy a hand edit is
+>   refused](#a-working-tree-write-that-would-destroy-a-hand-edit-is-refused)
 
 Every future change that introduces a decision of this kind adds its entry here.
 
@@ -354,6 +356,26 @@ Every future change that introduces a decision of this kind adds its entry here.
   review. Both the preview and the report say, path by path, which files were
   written and which were deleted.
 - **Ruling:** git-like — **provisional, awaiting review**
+
+### A working-tree write that would destroy a hand edit is refused
+
+- **git's idiom:** `git checkout --ours <path>` and `git rm <path>` do what they
+  say to whatever is on disk. If the file holds an hour of hand-resolving that
+  was never staged, never committed and never stashed, it is replaced or removed
+  without a word — the content is in no object and nothing can bring it back.
+- **safegit:** a conclusion looks at the file before it writes over it. Per
+  declared path, the ACCEPTED SET is the conflict's index stages plus the blob
+  git itself wrote into the working tree, read verbatim out of `AUTO_MERGE`
+  (never reconstructed — a rename-mediated conflict's marker labels carry the
+  path and no reproduction recovers them). A file matching none of them is a
+  hand edit, and the conclusion refuses at exit 27 with nothing committed and
+  the operation still in flight, naming the file and the resolution that keeps
+  the edit (`=worktree`). It covers `delete` and an absent stage too, both of
+  which remove the file rather than write one.
+  `--discard-unmatched-worktree` elects the destruction and names each file it
+  takes; it is the only way to say so, which is what makes it a consent flag
+  rather than an escape hatch.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
 
 ### Every conflicted path must be declared, and nothing else may be
 
