@@ -459,7 +459,7 @@ func dirtyMoveReason(ctx context.Context, repoRoot string, p *mvPair) string {
 	// The two routes, in the order the intents divide: the edit is its own
 	// change, or the edit belongs with the move.
 	return fmt.Sprintf("%s\n"+
-		"       A move is a move: this command commits the rename and nothing else, so the edit\n"+
+		"       A move is a move: this command commits the move and nothing else, so the edit\n"+
 		"       would be left behind uncommitted at a path you did not name. Either commit the\n"+
 		"       content first and then move it, or move it on disk yourself and commit both at\n"+
 		"       once with: safegit commit --moved '%s' -- %s",
