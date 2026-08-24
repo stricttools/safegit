@@ -30,6 +30,9 @@ import (
 //	a backslash                    it is the escape character
 //	the literal arrow token "->"   the pair separator; quoting it means a bare
 //	                               token can never contain the separator's shape
+//	a reserved origin keyword      the token slot after a record's id is where
+//	                               an origin word will stand; a bare keyword
+//	                               there is an origin, never a path
 //
 // The escape SPELLING is git's own (\n, \t, \" and friends, everything else in
 // exactly three octal digits), because these values sit in commit messages that
@@ -48,6 +51,36 @@ import (
 // costs nothing and is what is shared.
 const arrowToken = "->"
 
+// originSlotKeywords are the words the grammar keeps for the ORIGIN slot -- the
+// token position immediately after a record's id, which today may hold a bare
+// path and will later hold a word saying how the claim was established.
+//
+// Reserving them is what keeps the grammar unambiguous at its own first token:
+// a reader must never have to decide whether `observed` after the id is an
+// origin or a path that happens to carry that name. The reservation costs the
+// path nothing -- `"observed"` is still the path, the quoted spelling decodes
+// back to the bare word, and only the ambiguous BARE spelling is given up.
+//
+// Membership is exact. A path named `observed/a.txt` or `observedly` is not a
+// keyword and is written bare as before.
+//
+// The list is named for the SLOT rather than spelled `reservedOriginKeywords`
+// because the specification test that pins this behavior owns that name in this
+// package, deliberately: it writes the list out itself so a shrinking
+// production list cannot hide behind an import.
+var originSlotKeywords = map[string]struct{}{
+	"observed": {},
+	"declared": {},
+	"derived":  {},
+}
+
+// isReservedOriginKeyword reports whether a token is exactly one of the words
+// the origin slot reserves.
+func isReservedOriginKeyword(s string) bool {
+	_, ok := originSlotKeywords[s]
+	return ok
+}
+
 // needsQuoting reports whether a token has to be written in quoted form. See
 // the trigger table above.
 func needsQuoting(s string) bool {
@@ -55,6 +88,9 @@ func needsQuoting(s string) bool {
 		return true
 	}
 	if strings.Contains(s, arrowToken) {
+		return true
+	}
+	if isReservedOriginKeyword(s) {
 		return true
 	}
 	for i := 0; i < len(s); i++ {

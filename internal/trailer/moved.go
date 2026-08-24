@@ -215,11 +215,34 @@ func ParseRecord(value string) (Record, error) {
 		return Record{}, fmt.Errorf("move record %q begins with %q, which is not a %d-character record id",
 			value, id, idLength)
 	}
-	old, new, err := ParsePair(value[space+1:])
+	rest := value[space+1:]
+	// The slot right after the id is the one the grammar reserves for an origin
+	// word (cquote.go). A BARE keyword standing there is refused rather than
+	// read as a path: the encoder never writes one (it quotes the keyword), so
+	// a line carrying it was hand-written, and the two readings -- an origin, or
+	// a path whose name is the keyword -- cannot both be honored. Refusing is
+	// what keeps the choice from being made by guess. The quoted spelling is
+	// untouched and still means the path.
+	if first := firstToken(rest); isReservedOriginKeyword(first) {
+		return Record{}, fmt.Errorf("move record %q puts the reserved word %q where a path is expected; "+
+			"write %q to name a path with that spelling", value, first, `"`+first+`"`)
+	}
+	old, new, err := ParsePair(rest)
 	if err != nil {
 		return Record{}, err
 	}
 	return Record{ID: id, Old: old, New: new}, nil
+}
+
+// firstToken returns the leading whitespace-delimited token of s, verbatim --
+// unquoted tokens included, which is the point: the reservation is about the
+// BARE spelling, so the token is compared exactly as it was written.
+func firstToken(s string) string {
+	s = strings.TrimLeft(s, " ")
+	if i := strings.IndexByte(s, ' '); i >= 0 {
+		return s[:i]
+	}
+	return s
 }
 
 // NewRecord mints an id and returns the record for one declared pair. The pair
