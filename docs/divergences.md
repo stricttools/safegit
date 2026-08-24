@@ -9,6 +9,20 @@ safegit wraps git, so every command it offers stands next to something git
 already does. Most of the time the two agree. This document is the catalog of
 the places where they do not, or where they only appear to.
 
+## The subset law
+
+safegit does not promise full git support and never will. It deliberately
+implements a small, opinionated subset of git's functionality, chosen for
+agent-heavy workflows. When a git feature, command, flag or edge case is judged
+actively harmful or irrelevant for that workflow, safegit deliberately omits it
+and never looks back — no compatibility pressure, no "but git supports it"
+argument. Every such omission is recorded here, unapologetically. safegit is for
+our agents, not for all humans.
+
+That law is why this document exists in the shape it does. An entry is not an
+apology for a gap; it is the record of a decision, with what git does beside it
+so a reader can see exactly what they are giving up and why.
+
 ## What is in here
 
 An entry belongs in this catalog when safegit's design philosophy — hard errors
@@ -32,18 +46,7 @@ review** for one that has not yet been confirmed and may be overturned. A
 behavior newly cataloged here is provisional until it has been reviewed as an
 entry, whatever its direction says.
 
-> **The provisional entries.** These are rulings that were made and are still
-> open:
->
-> - [Resolution keywords write the working
->   tree](#resolution-keywords-write-the-working-tree) — it went git-like, and
->   the alternative reading is still on the table.
-> - [Moves are declared; blob equality never decides
->   anything](#moves-are-declared-blob-equality-never-decides-anything) — the
->   declared-only stance has been overturned: undeclared moves are to be recorded
->   automatically, and the entry will be rewritten when that ships.
->
-> And these are behaviors newly cataloged and not yet reviewed as entries:
+> **The provisional entries**, listed rather than counted, are these:
 >
 > - [A dirty working tree refuses the guarded commands, untracked files
 >   included](#a-dirty-working-tree-refuses-the-guarded-commands-untracked-files-included)
@@ -51,14 +54,29 @@ entry, whatever its direction says.
 >   flight](#safegit-commit-refuses-while-an-operation-is-in-flight)
 > - [`reset` is refused when the tree is dirty, in exactly the modes that write
 >   to it](#reset-is-refused-when-the-tree-is-dirty-in-exactly-the-modes-that-write-to-it)
-> - [A pre-pre-push hook can raise its own timeout, without a
->   cap](#a-pre-pre-push-hook-can-raise-its-own-timeout-without-a-cap)
 > - [An autostash is applied only when it belongs to the merge being
 >   concluded](#an-autostash-is-applied-only-when-it-belongs-to-the-merge-being-concluded)
+>   — its stated limit is part of what it awaits.
 > - [A conclusion whose commit already stands finishes the cleanup, and commits
 >   nothing](#a-conclusion-whose-commit-already-stands-finishes-the-cleanup-and-commits-nothing)
 > - [A working-tree write that would destroy a hand edit is
 >   refused](#a-working-tree-write-that-would-destroy-a-hand-edit-is-refused)
+> - [`--ff-only` is refused by safegit, with safegit's own exit
+>   code](#ff-only-is-refused-by-safegit-with-safegits-own-exit-code)
+> - [`--no-commit` parks a merge that git would have
+>   fast-forwarded](#no-commit-parks-a-merge-that-git-would-have-fast-forwarded)
+> - [A fast-forward is safegit's own ref move, and `undo` refuses
+>   it](#a-fast-forward-is-safegits-own-ref-move-and-undo-refuses-it)
+> - [`FETCH_HEAD` is refused when the fetch marked more than one
+>   branch](#fetch_head-is-refused-when-the-fetch-marked-more-than-one-branch)
+> - [An `--untrack`ed path never pairs into an observed
+>   move](#an-untracked-path-never-pairs-into-an-observed-move)
+> - and every entry under [The subset boundary](#the-subset-boundary), which is
+>   where the allowlist verdicts live.
+>
+> Every entry under "The subset boundary" is a verdict about what safegit will
+> not do, and every one of them is open at the review: overturning one means
+> putting a capability back into an allowlist, not writing new machinery.
 
 Every future change that introduces a decision of this kind adds its entry here.
 
@@ -116,14 +134,26 @@ Every future change that introduces a decision of this kind adds its entry here.
   never move another repository's pointer by accident.
 - **Ruling:** ours — deliberate
 
-### A symlink whose target leaves the repository is committed, with a notice
+### A symlink whose target leaves the repository is refused
 
-- **git's idiom:** git records the link text and says nothing.
-- **safegit:** the same object is committed — refusing would make safegit
-  stricter than git for no safety it can actually provide — but one line goes to
-  stderr saying that the link will not resolve in anyone else's checkout.
-- **Ruling:** mixed (the commit is git's behavior, the notice is safegit's) —
-  deliberate
+- **git's idiom:** git records the link text and says nothing. Whether that text
+  resolves anywhere is not git's problem.
+- **safegit:** committing such a link is REFUSED (exit 29), naming the literal
+  target, with nothing staged and nothing committed. A link whose target
+  resolves outside the repository is a fact about one machine: in anybody
+  else's checkout it resolves to nothing, or — worse — to a different file that
+  happens to sit at that absolute path, which is a reference the repository
+  cannot honor and cannot be seen to be dishonoring. The earlier answer was to
+  commit it with a warning line, and that is exactly the shape this tool refuses
+  everywhere else: a warning nobody reads in front of a mistake nobody wanted.
+  `--allow-escaping-targets` elects committing it and restores the notice line;
+  it is the only way to say so. The refusal covers ADDING or STAGING escaping
+  link content, which is where such a link enters history; `safegit mv` moving
+  an already-tracked one is untouched, because a move-only commit carries the
+  blob across without re-reading the link. An ABSOLUTE target that resolves
+  INSIDE the repository is accepted, which is machine-specific in the same way
+  and is listed for the review rather than defended.
+- **Ruling:** ours — deliberate
 
 ### `--untrack` removes the index entry and leaves the file on disk
 
@@ -187,11 +217,11 @@ Every future change that introduces a decision of this kind adds its entry here.
   unanswered question is a hard error, not a guess in either direction. `commit`,
   `--amend`, `--reword`, `safegit mv` and the three conclusions raise that
   refusal **before** anything is written, so nothing moves in either repository.
-  `safegit undo` reaches the same refusal only *after* it has moved the
-  submodule's ref back, which produces exactly the outcome the check exists to
-  prevent: a submodule whose branch moved and a parent whose gitlink did not,
-  reported as an error. That ordering is a known defect with a test pinning the
-  correct behavior, and undo is being brought in line with the rest.
+  `safegit undo` now raises it in the same place: the decision is required
+  between loading the config and taking the operation lock, so the refusal fires
+  before any ref moves, exactly as it does on every other commit-family route.
+  It used to fire only *after* the submodule's ref had been moved back, which
+  produced the outcome the check exists to prevent.
 - **Ruling:** ours — deliberate
 
 ### An empty commit is refused; an empty merge is not
@@ -248,9 +278,8 @@ Every future change that introduces a decision of this kind adds its entry here.
   rewrites does not depend on where it was invoked. Paths a **caller typed**
   are unaffected: they are resolved against the invoking shell's directory
   before any git call is built. The exemptions are enumerated in code, in one
-  table (`internal/gitexec/exemptions.go`) that currently holds ten rows in three
-  kinds, each with its reason; an identifier the table does not declare cannot
-  escape the pin at all. A site given a **git directory and work tree as its own
+  table (`internal/gitexec/exemptions.go`), each row naming its kind and its
+  reason; an identifier the table does not declare cannot escape the pin at all. A site given a **git directory and work tree as its own
   arguments** — submodule enumeration, a cross-repository scan, the parent-pointer
   read — has no operator directory left for a pin to correct. A **passthrough**
   forwards the operator's own argv to git in the operator's own directory,
@@ -302,42 +331,98 @@ Every future change that introduces a decision of this kind adds its entry here.
   says why.
 - **Ruling:** ours — deliberate
 
-### A rebase's and a mailbox application's `--continue` stay git's
+### `safegit rebase` is the one door where git authors the commits
 
-- **git's idiom:** `git rebase --continue`, `git am --continue`.
-- **safegit:** untouched, and passed straight through. safegit has no verb that
-  finishes a rebase, so refusing one would leave the operator with nothing to
-  run. The refusal above is scoped to the three operations safegit actually
-  concludes, read from one shared authority rather than a hand-written list.
-- **Ruling:** git-like — deliberate
+- **git's idiom:** git replays the commits and authors every one of them, and
+  `git rebase --continue` / `git am --continue` finish what stopped.
+- **safegit:** every other commit made through safegit is safegit's own —
+  trailered, `commit-msg`-hooked, oplog-recorded, undoable. A rebase is the
+  single declared exception, and it is UNIFORM rather than conditional: git
+  performs the replay and authors every replayed commit, always, in every shape
+  of `safegit rebase` there is. There is no run-time split to reason about and
+  no announcement to read; what safegit adds is the worktree operation lock
+  (held for the whole rebase, an interactive one's editor session included), the
+  uncommitted-work check, the argv allowlist and the oplog entry.
 
-### Conclusion commits are pipeline-authored; a queued sequence stays git-authored
+  The exception is enforced structurally rather than maintained by convention.
+  safegit's git-execution boundary refuses any invocation whose verb-and-flag
+  shape would let git create a commit, unless the call site carries a DECLARED
+  DOOR — and the rebase passthrough is the only door in the table. That is what
+  makes "git never authors a commit through safegit, except `safegit rebase`" a
+  property of the code rather than a promise about it.
 
-- **git's idiom:** git writes the concluding commit itself.
-- **safegit:** for a **single** merge, cherry-pick or revert, safegit builds the
-  commit: git's message draft with its comment block stripped, the repository's
-  `commit-msg` hook run, safegit's trailers injected, the operation's whole
-  state-file set removed, and the result reversible with `safegit undo`. For a
-  **queued** sequence — `git cherry-pick a b` — safegit stages the declared
-  resolutions into a copy of the index and hands the rest of the queue to git's
-  own `--continue` with that copy as its index, because concluding one step
-  natively would throw the remaining queue away. Those commits are git's: no
-  trailers, no `commit-msg` handling, not undoable. That boundary is stated on
-  stderr on every delegated run, unconditionally, and `-m`, `--trailer` and
-  `--dry-run` are **refused** there rather than silently ignored.
-- **Ruling:** ours, with the boundary drawn explicitly at the queue — deliberate
+  A rebase's and a mailbox application's `--continue` stay git's for the same
+  reason: safegit has no verb that finishes either, so refusing one would leave
+  the operator with nothing to run. The refusal above is scoped to the three
+  operations safegit actually concludes, read from one shared authority rather
+  than a hand-written list.
 
-### A single `safegit revert` is split at git's own seam
+  Replacing this with a native, pipeline-authored non-interactive rebase is
+  deliberately deferred work rather than an accepted permanent state; it is
+  tracked in `todo/pipeline-authored-rebase.md`.
+- **Ruling:** git-like, and the only one of its kind — deliberate
 
-- **git's idiom:** `git revert <sha>` computes the inverse patch and commits it
-  in one step, authoring the commit itself.
-- **safegit:** for exactly one commit, and only when every option on the command
-  line is one safegit has considered, the operation is split where git already
-  splits it: `git revert --no-commit` computes and stages the inverse patch, and
-  safegit's conclusion engine commits it. Anything else — a range, an
-  unresolvable revision, a pathspec, an option outside the allowlist — is an
-  ordinary guarded passthrough. Nothing is ever silently dropped; an option
-  safegit has not considered simply takes the passthrough route.
+### Every commit made through safegit is safegit's; the ones it cannot write, it refuses
+
+- **git's idiom:** git writes the concluding commit itself, whatever the shape
+  of the operation.
+- **safegit:** safegit builds the commit — git's message draft with its comment
+  block stripped, the repository's `commit-msg` hook run, safegit's trailers
+  injected, the operation's whole state-file set removed, the result reversible
+  with `safegit undo`. That holds for a conclusion (`merge-continue`,
+  `cherry-pick-continue`, `revert-continue`) and equally for `safegit merge`,
+  `cherry-pick`, `revert` and `pull`, which use git only to COMPUTE a result
+  with `--no-commit` and then commit it through the same pipeline.
+
+  There used to be a second answer for the shapes safegit could not write
+  itself. A QUEUED sequence — `git cherry-pick a b` — was DELEGATED: safegit
+  staged the declared resolutions into a copy of the index and handed the rest
+  of the queue to git's own `--continue`, and the resulting commits were git's,
+  with no trailers, no `commit-msg` handling and no way to undo them. It said so
+  on stderr every time. That whole authorship class is **deleted**. A commit
+  made under a safegit command name is safegit's, or it is not made.
+
+  So a queue is now REFUSED instead. `safegit cherry-pick` and `safegit revert`
+  take one commit, so a `.git/sequencer` directory can only have come from raw
+  git, and the conclusion commands refuse it naming git's own `--continue` and
+  `--abort` — finish with git what git started. The same rule reaches two merge
+  shapes safegit's own merge cannot produce: an octopus `MERGE_HEAD` (more sides
+  than every check over a merge is written for) and a content conflict with no
+  `AUTO_MERGE` file, which is the signature of a non-default strategy and leaves
+  the overwrite refusal with nothing to compare a working-tree file against.
+
+  What an operator loses is real and is stated plainly: safegit will not help
+  you finish a multi-commit sequence or an octopus. What they gain is that no
+  commit bearing a safegit command name is ever one safegit did not write, check
+  and record.
+- **Ruling:** ours — deliberate
+
+### `safegit revert` and `safegit cherry-pick` are split at git's own seam
+
+- **git's idiom:** `git revert <sha>` and `git cherry-pick <sha>` compute and
+  commit in one step, authoring the commit themselves, and take any number of
+  revisions.
+- **safegit:** the operation is split where git already splits it. `git <verb>
+  --no-commit` computes and stages the patch, and safegit's conclusion engine
+  commits it — trailers, the `commit-msg` hook, the state files cleaned up, one
+  oplog entry, and `safegit undo` reverses it. A conflicted compute parks
+  exactly as it does under plain git and is finished with the matching
+  `-continue` command, which reaches the same engine, so the clean and the
+  conflicted path produce the same kind of commit.
+
+  There is **no second arm**. An earlier design fell back to an ordinary
+  passthrough for anything the split could not honor, which meant an option
+  nobody had considered quietly changed who authored the commit. Now the command
+  line is validated against an allowlist first, and an option outside it is
+  refused (see [The subset boundary](#the-subset-boundary)).
+
+  One detail is safegit's own rather than git's: `git cherry-pick --no-commit`
+  writes no `CHERRY_PICK_HEAD` on either the clean or the conflicted path, while
+  `git revert --no-commit` does write `REVERT_HEAD` on both. The conclusion
+  machinery, the author preservation, git's own status output and
+  `git cherry-pick --abort` all key on that file, so safegit writes it itself
+  after the compute, in git's own one-line format, uniformly. The parked state
+  then looks exactly like the one a conflicted pick leaves under plain git.
 - **Ruling:** ours — deliberate
 
 ### Resolution keywords write the working tree
@@ -352,10 +437,20 @@ Every future change that introduces a decision of this kind adds its entry here.
   marker-carrying file sitting in the working tree, one `safegit commit -- x`
   away from committing the very conflict markers the conclusion just resolved
   away. The alternative reading — that a conclusion declares what goes into the
-  **commit** and should not touch the operator's files — is the one under
-  review. Both the preview and the report say, path by path, which files were
+  **commit** and should not touch the operator's files — was weighed and not
+  taken. Both the preview and the report say, path by path, which files were
   written and which were deleted.
-- **Ruling:** git-like — **provisional, awaiting review**
+
+  What settled it is that the write is no longer unguarded. A materialization
+  that would destroy content matching no side of the conflict is now REFUSED
+  rather than performed (see [A working-tree write that would destroy a hand
+  edit is refused](#a-working-tree-write-that-would-destroy-a-hand-edit-is-refused)),
+  which removes the case the alternative reading existed to protect: the file
+  git's own `checkout --ours` would have overwritten without a word is exactly
+  the file safegit stops for. Writing the tree keeps the keyword meaning what an
+  operator means by it, and the protection is now stronger than either reading
+  would have been on its own.
+- **Ruling:** git-like — deliberate
 
 ### A working-tree write that would destroy a hand edit is refused
 
@@ -456,19 +551,32 @@ Every future change that introduces a decision of this kind adds its entry here.
   recording.
 - **Ruling:** ours — deliberate
 
-### An autostash that cannot be applied exits nonzero
+### The commit stands and the aftercare did not: one exit code says so
 
-- **git's idiom:** `git merge --continue` applies the autostash git set aside in
-  `.git/MERGE_AUTOSTASH` and prints `Applied autostash.`. When the apply
-  conflicts, git stores the stash commit on `refs/stash`, removes the file, says
-  the changes are safe in the stash — and **exits 0**. The merge is finished, so
-  as far as git is concerned the command succeeded.
-- **safegit:** the conclusion mirrors every part of that except the exit code.
-  The commit stands, the stash is stored as `stash@{0}`, the message names it
-  and the two commands that reach it — and `safegit merge-continue` exits
-  nonzero. A conclusion that could not put the operator's uncommitted work back
-  is a partial outcome, and a script that reads `0` will not look at the
-  message. The exit code is the only channel a caller cannot ignore.
+- **git's idiom:** git's verdict is about the operation. `git merge --continue`
+  applies the autostash git set aside in `.git/MERGE_AUTOSTASH` and prints
+  `Applied autostash.`; when the apply conflicts, git stores the stash commit on
+  `refs/stash`, removes the file, says the changes are safe in the stash — and
+  **exits 0**. The merge is finished, so as far as git is concerned the command
+  succeeded. The same holds generally: once git has made the commit it was asked
+  for, what happens afterwards rarely changes the exit code.
+- **safegit:** everything after the ref update is AFTERCARE — removing the state
+  files, syncing the index, writing the working tree, putting an autostash back,
+  bumping a parent repository's gitlink — and a failure there gets its own exit
+  code, **26**, whose meaning is exactly "the operation's ref move is real, and
+  a step after it did not finish". Every pipeline author shares it: `commit`,
+  `--amend`, `--reword`, `mv`, `undo`, `merge`, `cherry-pick`, `revert`, `pull`
+  and the three conclusions, so a caller reads one number for one meaning rather
+  than a vocabulary per command.
+
+  It is not a silent partial success and not a bare number either. The run emits
+  its machine envelope — the code is returned rather than exited through, so the
+  document is written — and the payload names the created commit and lists what
+  was left, including the autostash's own state. The unappliable autostash is
+  the case that first forced this: the commit stands, the stash is stored as
+  `stash@{0}`, the message names it and the commands that reach it, and a script
+  that read `0` would never have looked at the message. The exit code is the one
+  channel a caller cannot ignore, and the payload is where the detail lives.
 - **Ruling:** ours — deliberate
 
 ### A conclusion whose commit already stands finishes the cleanup, and commits nothing
@@ -482,15 +590,33 @@ Every future change that introduces a decision of this kind adds its entry here.
   already an ancestor of its first.
 - **safegit:** the re-run recognizes its own work. The op log's last entry for
   the branch names one of the ops that conclude this kind of operation and
-  records the commit HEAD stands at — and for a merge, HEAD's parents are the
-  branch tip plus every `MERGE_HEAD` line, which is exactly the commit this
-  conclusion would build. When both agree, nothing is committed: the state
-  files, the index and the working tree are put in step with the commit that is
-  already there, the report names it, and the run exits on the aftercare's own
-  terms. The window is not closed everywhere — the op-log entry is written just
-  after the ref update, so a cherry-pick or revert killed between those two
-  lines is not recognized, and a crash after the state files were removed is
-  `safegit doctor`'s to report.
+  records the commit HEAD stands at — and that is then corroborated against the
+  operation itself, differently per kind, because the tip alone lies:
+  - a **merge** by parentage. HEAD's parents are the branch tip plus the
+    `MERGE_HEAD` line, which is exactly the commit this conclusion would build.
+  - a **cherry-pick or revert** by SOURCE. The pipeline records the sha it
+    applied on the conclusion's own op-log entry, and recognition requires that
+    logged source to equal the parked state's `Source`. Corroborating by the
+    message the conclusion would write was tried first and was wrong: after any
+    concluded pick the tip still IS the logged commit, so a second pick of a
+    commit whose subject matched read as "already concluded", had its state
+    removed and its work silently dropped. The source sha cannot collide that
+    way.
+
+  When they agree, nothing is committed: the index and working tree are put in
+  step with the commit that is already there — derived from THAT commit's own
+  tree for the conflicted paths, so no unmerged stage survives the claim that
+  the two are in step — the overwrite refusal still runs over every path it
+  would materialize, the state files go, the report names the commit, and the
+  run exits on the aftercare's own terms. A declaration whose side's blob
+  differs from what the standing commit holds is refused naming that commit
+  rather than silently ignored.
+
+  The window is not closed everywhere, and the limit is stated rather than
+  glossed: the op-log entry is written just after the ref update, so a crash in
+  that sliver leaves no entry — a merge is still caught by parentage, a
+  cherry-pick or revert in it is not. A crash after the state files were removed
+  is `safegit doctor`'s to report.
 - **Ruling:** ours — **provisional, newly cataloged, awaiting review**
 
 ### An autostash is applied only when it belongs to the merge being concluded
@@ -540,24 +666,49 @@ Every future change that introduces a decision of this kind adds its entry here.
 
 ## Moves
 
-### Moves are declared; blob equality never decides anything
+### Moves are recorded, never detected by similarity
 
-- **git's idiom:** renames are **detected** after the fact. `git log --follow`,
-  `git diff -M` and every rename-aware view guess from content similarity, with
-  a threshold that can be tuned and that changes the answer.
-- **safegit:** safegit detects nothing. A move is stated — `--moved 'old ->
-  new'` on a commit, or performed outright by `safegit mv` — and the statement is
-  checked against the repository: the old path must be tracked in the commit's
-  parent and gone from disk, the new one must exist. A declaration the
-  repository contradicts is a hard error (exit 19), never a record. The record
-  written into the commit message is what every later reader resolves against
-  the trees, and no similarity score is consulted at any point. A record is
-  never edited — correcting one is a retraction plus a new declaration in one
-  commit, because editing the commit that carries it would rewrite history. The
-  declared-only stance described here is being superseded: it has been directed
-  that an undeclared move be recorded automatically from the commit's own delta,
-  and this entry will be rewritten when that ships.
-- **Ruling:** ours — **provisional, awaiting review**
+- **git's idiom:** renames are **detected** after the fact and never recorded.
+  `git log --follow`, `git diff -M` and every rename-aware view guess from
+  content similarity, with a threshold that can be tuned and that changes the
+  answer. Ask the same repository twice with different settings and you get
+  different history.
+- **safegit:** a move is a RECORD in the commit message, written when the commit
+  is made, and no similarity score is consulted at any point. There is still no
+  `diff -M`, no threshold, and no path staged that the caller did not name. What
+  changed is who may state the record: a person, or safegit reading the commit's
+  own delta.
+
+  A **declared** record is `--moved 'old -> new'` (or `safegit mv`, which
+  performs the move and mints the record in one invocation), checked against the
+  repository — the old path tracked in the commit's parent and gone from disk,
+  the new one present — and a declaration the repository contradicts is a hard
+  error (exit 19), never a record.
+
+  An **observed** record is one safegit minted from the commit's own RAW DELTA,
+  and it carries the token `observed` after its id so a reader can tell a claim
+  safegit derived from one a person made. The conditions are exact rather than
+  probabilistic, which is what separates this from detection: the same blob
+  leaves one path and arrives at another, both sides are regular files, the
+  pairing is one-to-one, and the blob sits at exactly one path in each tree once
+  the declared and `--untrack`ed paths are taken out. A blob with two candidates
+  on either side mints nothing — there are no tie-breaks. A uniform directory
+  move collapses to ONE subtree record; past the scattered-move cap the commit
+  records none of them and says so on stderr, pointing at `--moved`; every
+  candidate a fence declined rides the commit payload with its reason.
+
+  A declaration outranks the reading for the paths it names, so a pair is never
+  stated twice — and declaring a pair that an OBSERVED record on the commit
+  being amended already carries SUPERSEDES it, writing that record's retraction
+  and the new declaration together. A record is never edited, whatever its
+  origin: correcting one is a retraction plus a new declaration in one commit,
+  because editing the commit that carries it would rewrite history.
+
+  The consequence a consumer repository feels: the records go onto the message
+  BEFORE the `commit-msg` hook runs, so a hook that rejects unknown trailer keys
+  or rewrites trailer blocks will now meet `Moved:` lines on commits nobody
+  declared a move for.
+- **Ruling:** ours — deliberate
 
 ### `safegit mv` commits the move and nothing else
 
@@ -569,18 +720,6 @@ Every future change that introduces a decision of this kind adds its entry here.
   content changes at a moved path stay uncommitted and are a separate commit — a
   move is a move. This also makes a preview and a real run compute the same tree.
 - **Ruling:** git-like — deliberate
-
-### `safegit mv` creates a missing destination directory
-
-- **git's idiom:** `git mv a.txt sub/a.txt` fails with `destination directory
-  does not exist` when `sub/` is not there.
-- **safegit:** the destination's parent directory is created when it is missing,
-  and a failure part-way through the move set removes exactly the directories
-  this invocation added — nothing that was already there. The reasoning is that
-  every pair is validated before the first filesystem mutation anyway, so
-  refusing at the last step over a directory safegit is about to create is a
-  refusal with no safety in it.
-- **Ruling:** ours — deliberate
 
 ### `safegit undo` of a move reverses the commit, not the files
 
@@ -678,16 +817,29 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   precisely so the set can be read before anything is pushed.
 - **Ruling:** ours — deliberate
 
-### A non-executable hook: skipped when it is local, refused when the checkout provides it
+### A non-executable hook is a refusal, in either store
 
 - **git's idiom:** git ignores a hook it cannot execute, silently.
-- **safegit:** a hook in the tool-owned local store is skipped with a warning,
-  which is git's stance. A hook the **checkout** provides is a refusal (exit 25):
-  such a hook is disabled by deleting the file and committing that, never by
-  dropping its mode, so a lost executable bit — a filesystem without modes, a
-  patch applied by a tool that drops them — would otherwise turn into checks that
-  quietly stopped running.
-- **Ruling:** mixed — deliberate
+- **safegit:** a discovered pre-pre-push hook without its execute bit is a
+  REFUSAL (exit 25), wherever it lives — the tool-owned live store or the
+  store the checkout provides — and on `safegit push` and `safegit hook run`
+  alike. `hook run` in particular does not report "no hooks to run": a command
+  whose whole purpose is to say whether the checks pass must not exit 0 because
+  a check was passed over.
+
+  A hook is disabled by REMOVING it, never by dropping its mode. A lost
+  executable bit — a filesystem without modes, a patch applied by a tool that
+  drops them, an archive extracted without them — would otherwise turn into
+  checks that quietly stopped running, which is the one failure this whole
+  subsystem exists to prevent. The earlier split (skip the local one, refuse the
+  tracked one) made the answer depend on which directory the file happened to be
+  in, and the mode bit is no more trustworthy in one than the other.
+
+  `safegit hook list` still LISTS such a hook, marked `NOT EXECUTABLE` — the
+  listing is the diagnostic, and the hook an operator is asking about is usually
+  the one that is not running — and `safegit doctor`'s `hook_perms` check
+  reports the condition at error severity.
+- **Ruling:** ours — deliberate
 
 ### Hooks left in the pre-migration location are a refusal, not a fallback
 
@@ -701,32 +853,6 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   discovery refuses.
 - **Ruling:** ours — deliberate
 
-### A pre-pre-push hook can raise its own timeout, without a cap
-
-- **git's idiom:** git puts no time limit on a hook at all. A hook that hangs
-  hangs the command, and there is nothing for a hook to override because there is
-  nothing to override.
-- **safegit:** each pre-pre-push hook runs under a timeout —
-  `hooks.preprepush.timeoutSeconds` from the repository's safegit config, 1800
-  seconds by default — and on expiry safegit signals the hook's whole process
-  group with `SIGTERM`, waits five seconds, then `SIGKILL`s it; the push exits
-  with the hook-timeout code. The number is handed to the hook in
-  `SAFEGIT_HOOK_TIMEOUT_S`. The hook can also **replace** it: when the first line
-  it writes to stdout is `# safegit: timeout=NNN`, that value in seconds becomes
-  the effective limit for that run. Any positive integer is accepted, with no
-  ceiling and no comparison against the configured value, so the same mechanism
-  that lets a slow hook ask for more time lets any hook set a limit the
-  repository's configuration never sanctioned. The line is consumed rather than
-  printed. safegit waits up to two seconds for that first line; a hook that has
-  printed nothing by then runs under the configured timeout. This one is
-  cataloged rather than defended: a configured limit that the limited script can
-  rewrite for itself is the shape "No bare `--force`, anywhere" refuses
-  everywhere else in this document, and the honest options — cap the override,
-  make it lower-only, or drop it and require the config edit — have not been
-  weighed against each other yet.
-- **Ruling:** ours, and an open question — **provisional, newly cataloged,
-  awaiting review**
-
 ---
 
 ## Output channels, exit codes and previews
@@ -735,13 +861,21 @@ safegit's pre-pre-push hooks, which are its own subsystem.
 
 - **git's idiom:** 1 for a conflicted merge, 128 or 129 for a fatal error, and a
   vocabulary per command.
-- **safegit:** `checkout`, `pull`, `merge`, `rebase`, `reset`, `bisect`,
-  `cherry-pick` and `revert` report git's verdict verbatim once git has run.
-  Those codes are deliberately absent from safegit's own registry: a registry row
+- **safegit:** `switch`, `rebase`, `reset` and `bisect` forward the operator's
+  arguments to git and report git's verdict verbatim once git has run. Those
+  codes are deliberately absent from safegit's own registry: a registry row
   would claim ownership of a number safegit does not choose. A code from one of
   those commands is safegit's own only when the failure happened **before** git
-  ran — the coordination check, an uninitialized repository, a rejected argument.
-- **Ruling:** git-like — deliberate
+  ran — the coordination check, an uninitialized repository, a rejected
+  argument.
+
+  `merge`, `cherry-pick`, `revert` and `pull` are only half in that set. git's
+  verdict on the COMPUTE step still surfaces — a conflicted merge exits 1 the
+  way git does, and the operation parks — but the commit is safegit's, so the
+  pipeline's own codes reach these commands after git has already run: 17 and 18
+  for a conclusion's refusals, 27 for an overwrite, 26 when the commit stands
+  and its aftercare did not finish.
+- **Ruling:** git-like where git decided, ours where safegit did — deliberate
 
 ### Every other exit code comes from one registry
 
@@ -763,15 +897,28 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   `--json`, exactly one document, the framework's envelope, with the command's
   data as its payload and a declared JSON Schema validated at emission.
   Everything that is not the result goes to stderr: notices, warnings, prompts,
-  a passthrough child's output in machine mode, and git's own stdout during a
-  push under `--json`. That holds for the guarded commands too — `checkout`,
-  `pull`, `merge`, `rebase`, `reset` and `bisect` stream git's output live at a
-  terminal and CAPTURE it under `--json`, re-emitting both of the child's streams
-  on stderr afterwards. Nothing is discarded, and the cost is stated rather than
-  hidden: a machine-mode run of a long operation says nothing until it finishes,
-  because the framework offers no tee and a second copy written by safegit would
-  duplicate every line at a terminal. There is no JSON error object; an error
-  path writes to stderr and exits nonzero.
+  a guarded child's output in machine mode, and git's own stdout during a
+  push under `--json`. That holds for the guarded commands too — `switch`,
+  `pull`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick` and `revert` stream
+  git's output live at a terminal and CAPTURE it under `--json`, re-emitting both
+  of the child's streams on stderr afterwards. Nothing is discarded, and two
+  costs are stated rather than hidden: a machine-mode run of a long operation
+  says nothing until it finishes, because the framework offers no tee and a
+  second copy written by safegit would duplicate every line at a terminal; and
+  the capture decodes as text, so a child writing non-UTF-8 bytes fails that
+  decode and the run degrades to the general failure code instead of reporting
+  git's own verdict. At a terminal, where the output is streamed rather than
+  captured, the same command is unaffected.
+
+  There is no JSON error OBJECT — safegit never writes a second, error-shaped
+  document, because the envelope is the only document machine mode has. What a
+  failure produces on stdout is one of three shapes, and a consumer has to
+  handle all three: an envelope WITH a payload (exit 26, where the payload names
+  the commit that stands and the aftercare that did not finish), an envelope
+  with `payload: null` (a refusal that reached dispatch — a payload schema
+  describes a performed operation, and there is no error-payload channel), or
+  nothing at all where the path exits before dispatch. The human-readable reason
+  is on stderr in all three.
 - **Ruling:** ours — deliberate
 
 ### `--dry-run` is uniform, and refused where it would lie
@@ -805,7 +952,7 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   across and refuse only where the operation would actually overwrite one of
   them, and untracked files are none of their business at all — `git reset
   --hard` does not even look at an untracked file, let alone stop for one.
-- **safegit:** `checkout`, `pull`, `merge`, `rebase`, `cherry-pick`, `revert`,
+- **safegit:** `switch`, `pull`, `merge`, `rebase`, `cherry-pick`, `revert`,
   the working-tree-writing `reset` modes and the stepping `bisect` subcommands
   all run one coordination check before git is started, and **any** dirt refuses
   the command at exit 5 (`CoordinationBusy`), with the offending paths listed.
@@ -835,8 +982,9 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   unchanged, with one check in front: when the argv names a mode that writes
   working-tree files — `--hard`, `--merge` or `--keep` — the dirty-tree guard
   above runs first, and any dirt refuses the command at exit 5. `--soft`,
-  `--mixed`, a pathspec reset and a bare `reset` are unguarded, because none of
-  them touches the working tree. Which modes are which is not read here at all:
+  `--mixed` and a bare `reset` are unguarded, because none of them touches the
+  working tree. The pathspec form is not unguarded but ABSENT: it is refused
+  outright (see [The subset boundary](#the-subset-boundary)). Which modes are which is not read here at all:
   the classification table declares reset's effects and the guard reads that one
   view, so the vocabulary is stated in one place rather than approximated at the
   call site. The **operation lock**, by contrast, is taken unconditionally for
