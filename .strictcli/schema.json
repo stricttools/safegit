@@ -82,7 +82,7 @@
   },
   "project_id": "github.com/smm-h/safegit",
   "name": "safegit",
-  "version": "0.28.1-0.20260824184939-6c9370d02f98+dirty",
+  "version": "0.28.1-0.20260824193104-ab717d13e51d+dirty",
   "help": "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "proc_observe_allowlist": [
     [
@@ -702,6 +702,15 @@
             }
           },
           "presence": "optional"
+        },
+        {
+          "name": "discard-unmatched-worktree",
+          "help": "destroy working-tree content that matches no side of the conflict. A resolution that writes a stage over the file on disk, or deletes it, is refused when what is there is neither an index stage nor the content git itself wrote -- that is a hand edit, held in no commit, no stage and no stash. Passing this elects the destruction and names each file it takes. Omitted, and with --no-discard-unmatched-worktree, such a path is refused and nothing is committed; resolve it to 'worktree' to commit the edit instead",
+          "value_schema": {
+            "type": "boolean"
+          },
+          "presence": "optional",
+          "negatable": true
         }
       ],
       "tags": [
@@ -919,6 +928,15 @@
             }
           },
           "presence": "optional"
+        },
+        {
+          "name": "discard-unmatched-worktree",
+          "help": "destroy working-tree content that matches no side of the conflict. A resolution that writes a stage over the file on disk, or deletes it, is refused when what is there is neither an index stage nor the content git itself wrote -- that is a hand edit, held in no commit, no stage and no stash. Passing this elects the destruction and names each file it takes. Omitted, and with --no-discard-unmatched-worktree, such a path is refused and nothing is committed; resolve it to 'worktree' to commit the edit instead",
+          "value_schema": {
+            "type": "boolean"
+          },
+          "presence": "optional",
+          "negatable": true
         }
       ],
       "tags": [
@@ -1136,6 +1154,15 @@
             }
           },
           "presence": "optional"
+        },
+        {
+          "name": "discard-unmatched-worktree",
+          "help": "destroy working-tree content that matches no side of the conflict. A resolution that writes a stage over the file on disk, or deletes it, is refused when what is there is neither an index stage nor the content git itself wrote -- that is a hand edit, held in no commit, no stage and no stash. Passing this elects the destruction and names each file it takes. Omitted, and with --no-discard-unmatched-worktree, such a path is refused and nothing is committed; resolve it to 'worktree' to commit the edit instead",
+          "value_schema": {
+            "type": "boolean"
+          },
+          "presence": "optional",
+          "negatable": true
         }
       ],
       "tags": [
@@ -1212,6 +1239,25 @@
           "ref": {
             "type": "string"
           },
+          "residue": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "detail": {
+                  "type": "string"
+                },
+                "step": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "step",
+                "detail"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
           "sha": {
             "type": [
               "string",
@@ -1239,6 +1285,7 @@
           "state_cleared",
           "attempts",
           "declined_checks",
+          "residue",
           "dry_run"
         ],
         "type": "object"
@@ -1497,6 +1544,25 @@
               "ref": {
                 "type": "string"
               },
+              "residue": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "detail": {
+                      "type": "string"
+                    },
+                    "step": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "step",
+                    "detail"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
               "sha": {
                 "type": [
                   "string",
@@ -1524,6 +1590,7 @@
               "state_cleared",
               "attempts",
               "declined_checks",
+              "residue",
               "dry_run"
             ],
             "type": "object"
@@ -1716,6 +1783,25 @@
           "ref": {
             "type": "string"
           },
+          "residue": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "detail": {
+                  "type": "string"
+                },
+                "step": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "step",
+                "detail"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
           "sha": {
             "type": [
               "string",
@@ -1744,6 +1830,7 @@
           "state_cleared",
           "attempts",
           "declined_checks",
+          "residue",
           "dry_run"
         ],
         "type": "object"
@@ -1827,6 +1914,25 @@
           "ref": {
             "type": "string"
           },
+          "residue": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "detail": {
+                  "type": "string"
+                },
+                "step": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "step",
+                "detail"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
           "sha": {
             "type": [
               "string",
@@ -1855,6 +1961,7 @@
           "state_cleared",
           "attempts",
           "declined_checks",
+          "residue",
           "dry_run"
         ],
         "type": "object"
