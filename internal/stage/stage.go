@@ -178,32 +178,29 @@ func BuildPatch(header []string, hunks []Hunk, selected []int) ([]byte, error) {
 }
 
 // ApplyPatch applies a patch to a tmp index using git apply --cached.
-// Falls back to --3way on first failure.
+//
+// A patch that does not apply is a hard error. It used to be answered by
+// silently running the same patch again with --3way, which is not the same
+// staging action: the direct apply stages exactly the hunks the caller
+// selected, while the three-way retry MERGES the patch into whatever the index
+// holds. A caller who asked for one hunk could be given a merge result nobody
+// named, and nothing in the output said a retry had happened.
+//
+// The error carries git's own reason and no path: the caller attaches the
+// repo-relative spelling (internal/commit's stagingHunksError), which is the
+// only spelling safegit says back to a caller -- this package is handed the
+// absolute path.
 func ApplyPatch(ctx context.Context, indexPath string, patch []byte) error {
 	env := []string{"GIT_INDEX_FILE=" + indexPath}
-
-	// First attempt: standard apply
-	err := gitApply(ctx, env, patch, false)
-	if err == nil {
-		return nil
+	if err := gitApply(ctx, env, patch); err != nil {
+		return fmt.Errorf("patch apply failed: %w", err)
 	}
-
-	// Retry with --3way
-	err = gitApply(ctx, env, patch, true)
-	if err == nil {
-		return nil
-	}
-
-	return fmt.Errorf("patch apply failed (including --3way fallback): %w", err)
+	return nil
 }
 
-// gitApply runs git apply --cached with optional --3way.
-func gitApply(ctx context.Context, env []string, patch []byte, threeWay bool) error {
-	args := []string{"apply", "--cached", "--recount", "--whitespace=nowarn"}
-	if threeWay {
-		args = append(args, "--3way")
-	}
-	args = append(args, "-")
+// gitApply runs git apply --cached.
+func gitApply(ctx context.Context, env []string, patch []byte) error {
+	args := []string{"apply", "--cached", "--recount", "--whitespace=nowarn", "-"}
 
 	_, _, err := git.RunWithEnvStdin(ctx, env, patch, args...)
 	return err
