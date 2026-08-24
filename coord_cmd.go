@@ -132,6 +132,127 @@ func announceWayOut(flags globalFlags, gitDir string) {
 	}
 }
 
+// The oplog baseline every operation records.
+//
+// A commit entry has carried the three facts that make an audit trail readable
+// since the pipeline was written -- the full ref name, the tip it moved from and
+// the tip it moved to (internal/commit's Step 8, spelled `ref`/`parent`/`sha`).
+// The guarded commands recorded none of them: a merge logged the branch NAME the
+// operator typed and the result, a rebase logged the upstream, and reset, bisect
+// and every guarded passthrough logged a verbatim copy of the argv. Nothing said
+// where a branch stood before the operation, so undo arithmetic and bypass
+// detection had nothing to work from, and a passthrough git REFUSED logged an
+// entry indistinguishable from one git performed.
+//
+// Two shapes, and the difference between them is which thing moved:
+//
+//   - a REF-MOVING operation (merge, pull, rebase, reset, cherry-pick, revert)
+//     records the baseline in the commit-entry spelling, so the fail-closed
+//     readers -- oplog.LastRefUpdate, doctor's bypass check, undo's per-ref
+//     filter -- see the position safegit left the branch at;
+//   - a HEAD-MOVING operation (checkout, bisect) records the same facts under
+//     `observed_*` names those readers do not consume. See navigationExtra.
+const (
+	oplogOutcomeOK     = "ok"
+	oplogOutcomeFailed = "failed"
+)
+
+// zeroSHA is git's own name for "this ref did not exist", and what a branch
+// CREATION records as the position it came from.
+const zeroSHA = "0000000000000000000000000000000000000000"
+
+// oplogPosition is where a branch stood before an operation started. It is read
+// BEFORE any git runs, because that is the only moment the answer exists.
+type oplogPosition struct {
+	// ref is the full ref name HEAD pointed at, empty when HEAD is detached.
+	ref string
+	// oldTip is the commit HEAD resolved to, empty on an unborn branch.
+	oldTip string
+}
+
+// readOplogPosition resolves the ref and tip an operation is about to move.
+//
+// Neither answer is guessed at: a detached HEAD has no ref name and an unborn
+// branch has no tip, and both are recorded as the empty string they are. An
+// entry naming no ref matches no ref, which is the correct behavior for every
+// reader.
+func readOplogPosition(flags globalFlags) oplogPosition {
+	ctx := flags.ctx()
+	ref, _ := git.HeadRef(ctx)
+	oldTip, _ := git.RevParse(ctx, "HEAD")
+	return oplogPosition{ref: ref, oldTip: oldTip}
+}
+
+// appendOperationEntry records what a REF-MOVING operation did to the branch.
+//
+// A failed operation records an EMPTY new tip, and that is the mechanism rather
+// than a formality: oplog.LastRefUpdate takes the newest entry for a ref that
+// carries a new tip, so an entry with none is passed over and the position
+// safegit really last left the branch at is still the one bypass detection
+// compares against. The outcome field says the same thing in words, so an
+// operator reading the log does not have to infer a refusal from an absence.
+func appendOperationEntry(flags globalFlags, sgDir, op string, pos oplogPosition, ok bool, more map[string]interface{}) {
+	extra := map[string]interface{}{
+		"ref":     pos.ref,
+		"parent":  pos.oldTip,
+		"sha":     "",
+		"outcome": oplogOutcomeFailed,
+	}
+	if ok {
+		newTip, _ := git.RevParse(flags.ctx(), "HEAD")
+		extra["sha"] = newTip
+		extra["outcome"] = oplogOutcomeOK
+	}
+	for k, v := range more {
+		extra[k] = v
+	}
+	_ = oplog.Append(sgDir, oplog.Entry{Op: op, Extra: extra})
+}
+
+// navigationExtra builds the entry for an operation that moves HEAD and no
+// branch ref: a branch switch, a bisect step.
+//
+// The positions ride under `observed_*` rather than the commit-entry names, and
+// the reason is the fail-closed readers. oplog.LastRefUpdate reads a new tip
+// from `sha`/`to`/`result` and treats the newest such entry for a ref as the
+// position safegit last LEFT that ref at. A branch switch left no position: it
+// moved HEAD, and the branch is exactly where whatever moved it last put it. An
+// entry claiming otherwise would RESET the bypass-detection baseline and mask an
+// out-of-band commit made before the switch. A bisect step is worse still -- it
+// parks HEAD on some unrelated commit -- and would make the check report a
+// divergence that is nothing of the kind.
+//
+// `observed_` is the honest word for what these are: an observation of where
+// HEAD was and where it ended up, not a record of safegit writing a ref.
+func navigationExtra(ref, oldTip, newTip string, ok bool, more map[string]interface{}) map[string]interface{} {
+	extra := map[string]interface{}{
+		"ref":             ref,
+		"observed_parent": oldTip,
+		"observed_tip":    newTip,
+		"outcome":         oplogOutcomeFailed,
+	}
+	if ok {
+		extra["outcome"] = oplogOutcomeOK
+	}
+	for k, v := range more {
+		extra[k] = v
+	}
+	return extra
+}
+
+// createsBranch reports whether a checkout argv creates the ref it moves onto,
+// in which case the position it came from is the zero SHA rather than a commit:
+// the ref did not exist.
+func createsBranch(args []string) bool {
+	for _, a := range args {
+		switch a {
+		case "-b", "-B", "--orphan":
+			return true
+		}
+	}
+	return false
+}
+
 func runCheckout(flags globalFlags, args []string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
@@ -155,25 +276,38 @@ func runCheckout(flags globalFlags, args []string) int {
 		return exitcode.Usage
 	}
 
-	// Capture old HEAD for oplog
+	// Where HEAD stands before the navigation. A branch CREATION comes from
+	// nowhere: the ref did not exist, and the zero SHA is git's own name for
+	// that.
 	ctx := flags.ctx()
 	oldHead, _ := git.RevParse(ctx, "HEAD")
+	if createsBranch(args) {
+		oldHead = zeroSHA
+	}
 
 	if code := runGitMutation(flags, append([]string{"checkout"}, args...)...); code != 0 {
+		// The ref name is the one HEAD still points at: the navigation did not
+		// happen, so the operator's argument names nowhere this repository went.
+		failedRef, _ := git.HeadRef(ctx)
+		_ = oplog.Append(sgDir, oplog.Entry{
+			Op:    "checkout",
+			Extra: navigationExtra(failedRef, oldHead, "", false, nil),
+		})
 		return code
 	}
 	if flags.dryRun {
 		return 0
 	}
 
+	// The RESOLVED full ref name, not the operator's argument. That argument was
+	// whatever they typed -- for a `-b` form, the literal flag string -- and an
+	// audit trail naming a flag as the ref it moved onto is worse than one naming
+	// nothing.
+	newRef, _ := git.HeadRef(ctx)
 	newHead, _ := git.RevParse(ctx, "HEAD")
 	_ = oplog.Append(sgDir, oplog.Entry{
-		Op: "checkout",
-		Extra: map[string]interface{}{
-			"ref":  args[0],
-			"from": oldHead,
-			"to":   newHead,
-		},
+		Op:    "checkout",
+		Extra: navigationExtra(newRef, oldHead, newHead, true, nil),
 	})
 	return 0
 }
@@ -205,12 +339,16 @@ func runPull(flags globalFlags, mode pullMode, remote string, branch string) int
 		return code
 	}
 
+	pos := readOplogPosition(flags)
+	where := map[string]interface{}{"remote": remote, "branch": branch}
+
 	// Step 1: fetch
 	fetchArgs := []string{"fetch", remote}
 	if branch != "" {
 		fetchArgs = append(fetchArgs, branch)
 	}
 	if code := runGitMutation(flags, fetchArgs...); code != 0 {
+		appendOperationEntry(flags, sgDir, "pull", pos, false, where)
 		return code
 	}
 
@@ -227,19 +365,14 @@ func runPull(flags globalFlags, mode pullMode, remote string, branch string) int
 	mergeTarget := "FETCH_HEAD"
 	mergeArgs = append(mergeArgs, mergeTarget)
 	if code := runGitMutation(flags, mergeArgs...); code != 0 {
+		appendOperationEntry(flags, sgDir, "pull", pos, false, where)
 		return code
 	}
 	if flags.dryRun {
 		return 0
 	}
 
-	_ = oplog.Append(sgDir, oplog.Entry{
-		Op: "pull",
-		Extra: map[string]interface{}{
-			"remote": remote,
-			"branch": branch,
-		},
-	})
+	appendOperationEntry(flags, sgDir, "pull", pos, true, where)
 	return 0
 }
 
@@ -270,25 +403,21 @@ func runMerge(flags globalFlags, args []string) int {
 		return exitcode.Usage
 	}
 
-	ctx := flags.ctx()
 	if flags.dryRun {
 		// No git merge runs: the invocation is recorded, and the outcome it
 		// would have is COMPUTED with git's own merge engine instead of guessed.
 		return previewSequencerOperation(flags, "merge", args)
 	}
+
+	pos := readOplogPosition(flags)
+	where := map[string]interface{}{"branch": args[0]}
 	if code := runGitMutation(flags, append([]string{"merge"}, args...)...); code != 0 {
+		appendOperationEntry(flags, sgDir, "merge", pos, false, where)
 		announceWayOut(flags, gitDir)
 		return code
 	}
 
-	resultSHA, _ := git.RevParse(ctx, "HEAD")
-	_ = oplog.Append(sgDir, oplog.Entry{
-		Op: "merge",
-		Extra: map[string]interface{}{
-			"branch": args[0],
-			"result": resultSHA,
-		},
-	})
+	appendOperationEntry(flags, sgDir, "merge", pos, true, where)
 	return 0
 }
 
@@ -315,19 +444,17 @@ func runRebase(flags globalFlags, args []string) int {
 		return exitcode.Usage
 	}
 
+	pos := readOplogPosition(flags)
+	where := map[string]interface{}{"upstream": args[0]}
 	if code := runGitMutation(flags, append([]string{"rebase"}, args...)...); code != 0 {
+		appendOperationEntry(flags, sgDir, "rebase", pos, false, where)
 		return code
 	}
 	if flags.dryRun {
 		return 0
 	}
 
-	_ = oplog.Append(sgDir, oplog.Entry{
-		Op: "rebase",
-		Extra: map[string]interface{}{
-			"upstream": args[0],
-		},
-	})
+	appendOperationEntry(flags, sgDir, "rebase", pos, true, where)
 	return 0
 }
 
@@ -360,19 +487,17 @@ func runReset(flags globalFlags, args []string) int {
 		}
 	}
 
+	pos := readOplogPosition(flags)
+	where := map[string]interface{}{"args": strings.Join(args, " ")}
 	if code := runGitMutation(flags, append([]string{"reset"}, args...)...); code != 0 {
+		appendOperationEntry(flags, sgDir, "reset", pos, false, where)
 		return code
 	}
 	if flags.dryRun {
 		return 0
 	}
 
-	_ = oplog.Append(sgDir, oplog.Entry{
-		Op: "reset",
-		Extra: map[string]interface{}{
-			"args": strings.Join(args, " "),
-		},
-	})
+	appendOperationEntry(flags, sgDir, "reset", pos, true, where)
 	return 0
 }
 
@@ -402,18 +527,26 @@ func runBisect(flags globalFlags, args []string) int {
 		}
 	}
 
+	// A bisect step moves HEAD and no branch ref -- `bisect start` detaches it
+	// outright -- so its positions are OBSERVED ones. The ref is read before the
+	// step, because after `bisect start` there is no branch name to read.
+	pos := readOplogPosition(flags)
+	where := map[string]interface{}{"args": strings.Join(args, " ")}
 	if code := runGitMutation(flags, append([]string{"bisect"}, args...)...); code != 0 {
+		_ = oplog.Append(sgDir, oplog.Entry{
+			Op:    "bisect",
+			Extra: navigationExtra(pos.ref, pos.oldTip, "", false, where),
+		})
 		return code
 	}
 	if flags.dryRun {
 		return 0
 	}
 
+	newHead, _ := git.RevParse(flags.ctx(), "HEAD")
 	_ = oplog.Append(sgDir, oplog.Entry{
-		Op: "bisect",
-		Extra: map[string]interface{}{
-			"args": strings.Join(args, " "),
-		},
+		Op:    "bisect",
+		Extra: navigationExtra(pos.ref, pos.oldTip, newHead, true, where),
 	})
 	return 0
 }
@@ -454,17 +587,18 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 		return previewSequencerOperation(flags, gitCmd, args)
 	}
 
+	pos := readOplogPosition(flags)
 	code = runPassthrough(flags, gitCmd, args)
+
+	// Behind the exit code, and carrying it: the append used to run
+	// unconditionally with the same shape either way, so a cherry-pick git
+	// refused was recorded exactly like one git applied.
+	appendOperationEntry(flags, sgDir, gitCmd, pos, code == 0,
+		map[string]interface{}{"args": strings.Join(args, " ")})
+
 	if code != 0 {
 		announceWayOut(flags, gitDir)
 	}
-
-	_ = oplog.Append(sgDir, oplog.Entry{
-		Op: gitCmd,
-		Extra: map[string]interface{}{
-			"args": strings.Join(args, " "),
-		},
-	})
 	return code
 }
 
