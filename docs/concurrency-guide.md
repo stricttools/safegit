@@ -142,7 +142,7 @@ The log is never rotated or truncated, and there is no size setting: an audit tr
 
 The oplog enables:
 
-- **Session-scoped undo.** `safegit undo` rolls back the last recorded operation -- a commit, amend, reword, `mv`, or one of the three conclusion commands -- by reading the oplog and restoring the previous ref value. Undo is scoped to the current session (identified by `CLAUDE_CODE_SESSION_ID`), so one session's undo never affects another's commits, and it refuses outright rather than rolling a branch back over a commit safegit did not create.
+- **Session-scoped undo.** `safegit undo` rolls back the last operation the commit pipeline AUTHORED -- a commit, amend, reword, `mv`, a `merge`, `pull`, `cherry-pick` or `revert` that ended in a commit, or one of the three conclusion commands -- by reading the oplog and restoring the previous ref value. What it will not roll back is decided by the entry rather than by the op name: an entry carrying an `outcome` records what GIT did to the branch (a fast-forward, a parked or up-to-date operation, a refusal), the pipeline never writes that key, and undo reverses only the entries without one. Undo is scoped to the current session (identified by `CLAUDE_CODE_SESSION_ID`), so one session's undo never affects another's commits, and it refuses outright rather than rolling a branch back over a commit safegit did not create.
 
 - **Bypass detection.** `safegit doctor` compares the oplog's last known ref state against the actual branch tip. If they diverge, someone committed via raw `git commit`, bypassing safegit's isolation guarantees.
 
