@@ -185,10 +185,6 @@ const (
 	oplogOutcomeFailed = "failed"
 )
 
-// zeroSHA is git's own name for "this ref did not exist", and what a branch
-// CREATION records as the position it came from.
-const zeroSHA = "0000000000000000000000000000000000000000"
-
 // oplogPosition is where a branch stood before an operation started. It is read
 // BEFORE any git runs, because that is the only moment the answer exists.
 type oplogPosition struct {
@@ -220,6 +216,13 @@ func readOplogPosition(flags globalFlags) oplogPosition {
 // compares against. The outcome field says the same thing in words, so an
 // operator reading the log does not have to infer a refusal from an absence.
 func appendOperationEntry(flags globalFlags, sgDir, op string, pos oplogPosition, ok bool, more map[string]interface{}) {
+	if flags.dryRun {
+		// A preview writes nothing, the oplog included. The failure sites reach
+		// this before their handler's own dry-run return, because a refusal that
+		// happens BEFORE git runs (argv construction, an effects-handle refusal)
+		// carries a nonzero code even in a dry run.
+		return
+	}
 	extra := map[string]interface{}{
 		"ref":     pos.ref,
 		"parent":  pos.oldTip,
@@ -252,6 +255,13 @@ func appendOperationEntry(flags globalFlags, sgDir, op string, pos oplogPosition
 //
 // `observed_` is the honest word for what these are: an observation of where
 // HEAD was and where it ended up, not a record of safegit writing a ref.
+func appendNavigationEntry(flags globalFlags, sgDir, op, ref, oldTip, newTip string, ok bool, more map[string]interface{}) {
+	if flags.dryRun {
+		return
+	}
+	_ = oplog.Append(sgDir, oplog.Entry{Op: op, Extra: navigationExtra(ref, oldTip, newTip, ok, more)})
+}
+
 func navigationExtra(ref, oldTip, newTip string, ok bool, more map[string]interface{}) map[string]interface{} {
 	extra := map[string]interface{}{
 		"ref":             ref,
@@ -310,17 +320,16 @@ func runCheckout(flags globalFlags, args []string) int {
 	ctx := flags.ctx()
 	oldHead, _ := git.RevParse(ctx, "HEAD")
 	if createsBranch(args) {
-		oldHead = zeroSHA
+		// git.ZeroSHA is the one spelling of the all-zero object name, and it says
+		// exactly the right thing here: the ref did not exist.
+		oldHead = git.ZeroSHA
 	}
 
 	if code := runGitMutation(flags, append([]string{"checkout"}, args...)...); code != 0 {
 		// The ref name is the one HEAD still points at: the navigation did not
 		// happen, so the operator's argument names nowhere this repository went.
 		failedRef, _ := git.HeadRef(ctx)
-		_ = oplog.Append(sgDir, oplog.Entry{
-			Op:    "checkout",
-			Extra: navigationExtra(failedRef, oldHead, "", false, nil),
-		})
+		appendNavigationEntry(flags, sgDir, "checkout", failedRef, oldHead, "", false, nil)
 		return code
 	}
 	if flags.dryRun {
@@ -333,10 +342,7 @@ func runCheckout(flags globalFlags, args []string) int {
 	// nothing.
 	newRef, _ := git.HeadRef(ctx)
 	newHead, _ := git.RevParse(ctx, "HEAD")
-	_ = oplog.Append(sgDir, oplog.Entry{
-		Op:    "checkout",
-		Extra: navigationExtra(newRef, oldHead, newHead, true, nil),
-	})
+	appendNavigationEntry(flags, sgDir, "checkout", newRef, oldHead, newHead, true, nil)
 	return 0
 }
 
@@ -561,10 +567,7 @@ func runBisect(flags globalFlags, args []string) int {
 	pos := readOplogPosition(flags)
 	where := map[string]interface{}{"args": strings.Join(args, " ")}
 	if code := runGitMutation(flags, append([]string{"bisect"}, args...)...); code != 0 {
-		_ = oplog.Append(sgDir, oplog.Entry{
-			Op:    "bisect",
-			Extra: navigationExtra(pos.ref, pos.oldTip, "", false, where),
-		})
+		appendNavigationEntry(flags, sgDir, "bisect", pos.ref, pos.oldTip, "", false, where)
 		return code
 	}
 	if flags.dryRun {
@@ -572,10 +575,7 @@ func runBisect(flags globalFlags, args []string) int {
 	}
 
 	newHead, _ := git.RevParse(flags.ctx(), "HEAD")
-	_ = oplog.Append(sgDir, oplog.Entry{
-		Op:    "bisect",
-		Extra: navigationExtra(pos.ref, pos.oldTip, newHead, true, where),
-	})
+	appendNavigationEntry(flags, sgDir, "bisect", pos.ref, pos.oldTip, newHead, true, where)
 	return 0
 }
 

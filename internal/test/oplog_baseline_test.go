@@ -137,3 +137,33 @@ func TestBypassDetectStillFlagsAnOutOfBandCommitMadeBeforeASwitch(t *testing.T) 
 			line, stdout)
 	}
 }
+
+// TestDryRunGuardedOperationsAppendNoOplogEntry: a preview writes nothing, the
+// operation log included.
+//
+// The failure sites are where this could go wrong. They append BEFORE the
+// handler's own dry-run return, because a refusal that happens before git runs
+// -- argv construction, an effects-handle refusal -- carries a nonzero code even
+// in a dry run, so the guard belongs on the append itself.
+func TestDryRunGuardedOperationsAppendNoOplogEntry(t *testing.T) {
+	dir := newDivergedBranchRepo(t)
+
+	for _, tc := range []struct {
+		op   string
+		args []string
+	}{
+		{"merge", []string{"--dry-run", "merge", "feature"}},
+		{"rebase", []string{"--dry-run", "rebase", "feature"}},
+		{"reset", []string{"--dry-run", "reset", "--hard", "HEAD~1"}},
+		{"checkout", []string{"--dry-run", "checkout", "feature"}},
+		{"bisect", []string{"--dry-run", "bisect", "start"}},
+		{"cherry-pick", []string{"--dry-run", "cherry-pick", "feature"}},
+	} {
+		t.Run(tc.op, func(t *testing.T) {
+			runSafegit(t, dir, tc.args...)
+			if entries := oplogEntries(t, dir, tc.op); len(entries) != 0 {
+				t.Errorf("a --dry-run %s appended %d oplog entry(ies): %v", tc.op, len(entries), entries)
+			}
+		})
+	}
+}
