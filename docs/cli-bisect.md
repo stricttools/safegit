@@ -9,6 +9,6 @@ nav_order: 3
 
 # safegit bisect
 
-binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the tree-moving subcommands (good, bad, old, new, reset, start)
+binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the STEPPING subcommands (start, good, bad, old, new, skip, run, replay, reset), each of which checks another commit out, and not to the reporting ones (terms, log, view). Which is which is derived from safegit's git classification table, never kept as a list here -- and so is which subcommands may be typed at all: a word outside that vocabulary is refused before git runs, as is every option
 
 **Effect:** mutating

@@ -99,8 +99,8 @@
         },
         {
           "level": 2,
-          "text": "Declared moves and their records",
-          "anchor": "declared-moves-and-their-records"
+          "text": "Move records: declared and observed",
+          "anchor": "move-records-declared-and-observed"
         },
         {
           "level": 2,
@@ -326,18 +326,6 @@
       ]
     },
     {
-      "path": "cli-checkout.md",
-      "title": "safegit checkout",
-      "type": "doc",
-      "headings": [
-        {
-          "level": 1,
-          "text": "safegit checkout",
-          "anchor": "safegit-checkout"
-        }
-      ]
-    },
-    {
       "path": "cli-cherry-pick-continue.md",
       "title": "safegit cherry-pick-continue",
       "type": "doc",
@@ -368,6 +356,11 @@
           "level": 1,
           "text": "safegit cherry-pick",
           "anchor": "safegit-cherry-pick"
+        },
+        {
+          "level": 2,
+          "text": "Grants",
+          "anchor": "grants"
         }
       ]
     },
@@ -582,6 +575,11 @@
           "level": 1,
           "text": "safegit merge",
           "anchor": "safegit-merge"
+        },
+        {
+          "level": 2,
+          "text": "Grants",
+          "anchor": "grants"
         }
       ]
     },
@@ -631,6 +629,11 @@
           "level": 2,
           "text": "Arguments",
           "anchor": "arguments"
+        },
+        {
+          "level": 2,
+          "text": "Grants",
+          "anchor": "grants"
         }
       ]
     },
@@ -716,6 +719,11 @@
           "level": 1,
           "text": "safegit revert",
           "anchor": "safegit-revert"
+        },
+        {
+          "level": 2,
+          "text": "Grants",
+          "anchor": "grants"
         }
       ]
     },
@@ -805,6 +813,18 @@
           "level": 3,
           "text": "Constraints",
           "anchor": "constraints"
+        }
+      ]
+    },
+    {
+      "path": "cli-switch.md",
+      "title": "safegit switch",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "safegit switch",
+          "anchor": "safegit-switch"
         }
       ]
     },
@@ -901,6 +921,11 @@
         },
         {
           "level": 3,
+          "text": "Symlinks, and the targets that leave the repository",
+          "anchor": "symlinks-and-the-targets-that-leave-the-repository"
+        },
+        {
+          "level": 3,
           "text": "Safety Guarantees",
           "anchor": "safety-guarantees"
         },
@@ -926,13 +951,23 @@
         },
         {
           "level": 3,
-          "text": "The three steps: validate, rename, commit",
-          "anchor": "the-three-steps-validate-rename-commit"
+          "text": "The three steps: validate, move, commit",
+          "anchor": "the-three-steps-validate-move-commit"
         },
         {
           "level": 3,
-          "text": "The commit is the rename and nothing else",
-          "anchor": "the-commit-is-the-rename-and-nothing-else"
+          "text": "The commit is the move and nothing else",
+          "anchor": "the-commit-is-the-move-and-nothing-else"
+        },
+        {
+          "level": 3,
+          "text": "A path with uncommitted edits is refused",
+          "anchor": "a-path-with-uncommitted-edits-is-refused"
+        },
+        {
+          "level": 3,
+          "text": "A missing destination directory is refused",
+          "anchor": "a-missing-destination-directory-is-refused"
         },
         {
           "level": 3,
@@ -966,6 +1001,11 @@
         },
         {
           "level": 3,
+          "text": "Overwrite protection: exit 27",
+          "anchor": "overwrite-protection-exit-27"
+        },
+        {
+          "level": 3,
           "text": "The message",
           "anchor": "the-message"
         },
@@ -983,6 +1023,16 @@
           "level": 3,
           "text": "What a conclusion leaves behind",
           "anchor": "what-a-conclusion-leaves-behind"
+        },
+        {
+          "level": 3,
+          "text": "When the commit stands and the aftercare does not",
+          "anchor": "when-the-commit-stands-and-the-aftercare-does-not"
+        },
+        {
+          "level": 3,
+          "text": "A conclusion whose commit already stands",
+          "anchor": "a-conclusion-whose-commit-already-stands"
         },
         {
           "level": 3,
@@ -1021,8 +1071,8 @@
         },
         {
           "level": 3,
-          "text": "A QUEUED sequence is delegated to git",
-          "anchor": "a-queued-sequence-is-delegated-to-git"
+          "text": "A QUEUED sequence is refused",
+          "anchor": "a-queued-sequence-is-refused"
         },
         {
           "level": 3,
@@ -1041,8 +1091,8 @@
         },
         {
           "level": 3,
-          "text": "A QUEUED sequence is delegated to git",
-          "anchor": "a-queued-sequence-is-delegated-to-git-1"
+          "text": "A QUEUED sequence is refused",
+          "anchor": "a-queued-sequence-is-refused-1"
         },
         {
           "level": 3,
@@ -1143,6 +1193,11 @@
           "level": 3,
           "text": "Examples",
           "anchor": "examples-7"
+        },
+        {
+          "level": 3,
+          "text": "The merge step is `safegit merge`'s",
+          "anchor": "the-merge-step-is-safegit-merges"
         },
         {
           "level": 3,
@@ -1481,23 +1536,43 @@
         },
         {
           "level": 2,
-          "text": "The guarded passthroughs and their two coordination layers",
-          "anchor": "the-guarded-passthroughs-and-their-two-coordination-layers"
+          "text": "The guarded commands and their two coordination layers",
+          "anchor": "the-guarded-commands-and-their-two-coordination-layers"
+        },
+        {
+          "level": 3,
+          "text": "Which of them forward to git, and which author their own commit",
+          "anchor": "which-of-them-forward-to-git-and-which-author-their-own-commit"
+        },
+        {
+          "level": 3,
+          "text": "The allowlist",
+          "anchor": "the-allowlist"
+        },
+        {
+          "level": 3,
+          "text": "git's own output, and where it goes",
+          "anchor": "gits-own-output-and-where-it-goes"
+        },
+        {
+          "level": 3,
+          "text": "The oplog baseline",
+          "anchor": "the-oplog-baseline"
         },
         {
           "level": 2,
-          "text": "checkout",
-          "anchor": "checkout"
+          "text": "switch",
+          "anchor": "switch"
         },
         {
           "level": 3,
-          "text": "When to Use",
-          "anchor": "when-to-use-17"
+          "text": "There is no `safegit checkout`",
+          "anchor": "there-is-no-safegit-checkout"
         },
         {
           "level": 3,
-          "text": "Arguments",
-          "anchor": "arguments-8"
+          "text": "Arguments and flags",
+          "anchor": "arguments-and-flags"
         },
         {
           "level": 3,
@@ -1516,13 +1591,23 @@
         },
         {
           "level": 3,
-          "text": "When to Use",
-          "anchor": "when-to-use-18"
+          "text": "The commit is safegit's",
+          "anchor": "the-commit-is-safegits"
         },
         {
           "level": 3,
-          "text": "Arguments",
-          "anchor": "arguments-9"
+          "text": "Exactly one side",
+          "anchor": "exactly-one-side"
+        },
+        {
+          "level": 3,
+          "text": "Fast-forward, and who decides",
+          "anchor": "fast-forward-and-who-decides"
+        },
+        {
+          "level": 3,
+          "text": "What the command line may say",
+          "anchor": "what-the-command-line-may-say"
         },
         {
           "level": 3,
@@ -1542,12 +1627,17 @@
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-19"
+          "anchor": "when-to-use-17"
         },
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-10"
+          "anchor": "arguments-8"
+        },
+        {
+          "level": 3,
+          "text": "rebase is the one place git authors commits",
+          "anchor": "rebase-is-the-one-place-git-authors-commits"
         },
         {
           "level": 3,
@@ -1567,12 +1657,12 @@
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-20"
+          "anchor": "when-to-use-18"
         },
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-11"
+          "anchor": "arguments-9"
         },
         {
           "level": 3,
@@ -1592,12 +1682,12 @@
         {
           "level": 3,
           "text": "When to Use",
-          "anchor": "when-to-use-21"
+          "anchor": "when-to-use-19"
         },
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-12"
+          "anchor": "arguments-10"
         },
         {
           "level": 3,
@@ -1616,13 +1706,18 @@
         },
         {
           "level": 3,
-          "text": "When to Use",
-          "anchor": "when-to-use-22"
+          "text": "One commit, and the sequential form",
+          "anchor": "one-commit-and-the-sequential-form"
         },
         {
           "level": 3,
-          "text": "Arguments",
-          "anchor": "arguments-13"
+          "text": "The commit is safegit's",
+          "anchor": "the-commit-is-safegits-1"
+        },
+        {
+          "level": 3,
+          "text": "What the command line may say",
+          "anchor": "what-the-command-line-may-say-1"
         },
         {
           "level": 3,
@@ -1641,23 +1736,23 @@
         },
         {
           "level": 3,
-          "text": "When to Use",
-          "anchor": "when-to-use-23"
+          "text": "One commit, and the sequential form",
+          "anchor": "one-commit-and-the-sequential-form-1"
         },
         {
           "level": 3,
-          "text": "Arguments",
-          "anchor": "arguments-14"
+          "text": "The commit is safegit's",
+          "anchor": "the-commit-is-safegits-2"
+        },
+        {
+          "level": 3,
+          "text": "What the command line may say",
+          "anchor": "what-the-command-line-may-say-2"
         },
         {
           "level": 3,
           "text": "Examples",
           "anchor": "examples-25"
-        },
-        {
-          "level": 3,
-          "text": "One commit is safegit's; more than one is git's",
-          "anchor": "one-commit-is-safegits-more-than-one-is-gits"
         },
         {
           "level": 3,
@@ -1682,7 +1777,7 @@
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-15"
+          "anchor": "arguments-11"
         },
         {
           "level": 3,
@@ -1697,7 +1792,7 @@
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-16"
+          "anchor": "arguments-12"
         },
         {
           "level": 3,
@@ -1727,12 +1822,17 @@
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-17"
+          "anchor": "arguments-13"
         },
         {
           "level": 3,
           "text": "Examples",
           "anchor": "examples-30"
+        },
+        {
+          "level": 3,
+          "text": "Discovery's refusals reach here too",
+          "anchor": "discoverys-refusals-reach-here-too"
         },
         {
           "level": 3,
@@ -1747,7 +1847,7 @@
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-18"
+          "anchor": "arguments-14"
         },
         {
           "level": 3,
@@ -1762,7 +1862,7 @@
         {
           "level": 3,
           "text": "Arguments",
-          "anchor": "arguments-19"
+          "anchor": "arguments-15"
         },
         {
           "level": 3,
@@ -1833,6 +1933,11 @@
         },
         {
           "level": 3,
+          "text": "`StepIndexReconcile`",
+          "anchor": "stepindexreconcile"
+        },
+        {
+          "level": 3,
           "text": "`IndexBaseParentTree`",
           "anchor": "indexbaseparenttree"
         },
@@ -1888,6 +1993,11 @@
         },
         {
           "level": 3,
+          "text": "`PartialError`",
+          "anchor": "partialerror"
+        },
+        {
+          "level": 3,
           "text": "`Pipeline`",
           "anchor": "pipeline"
         },
@@ -1920,6 +2030,11 @@
           "level": 3,
           "text": "`IndexEdit`",
           "anchor": "indexedit"
+        },
+        {
+          "level": 3,
+          "text": "`RefusedMove`",
+          "anchor": "refusedmove"
         },
         {
           "level": 3,
@@ -1968,6 +2083,16 @@
         },
         {
           "level": 3,
+          "text": "`PartialError.Error`",
+          "anchor": "partialerrorerror"
+        },
+        {
+          "level": 3,
+          "text": "`PartialError.Unwrap`",
+          "anchor": "partialerrorunwrap"
+        },
+        {
+          "level": 3,
           "text": "`Pipeline.Execute`",
           "anchor": "pipelineexecute"
         },
@@ -2003,13 +2128,8 @@
         },
         {
           "level": 3,
-          "text": "`GarbageCollect`",
-          "anchor": "garbagecollect"
-        },
-        {
-          "level": 3,
-          "text": "`GarbageCollectDryRun`",
-          "anchor": "garbagecollectdryrun"
+          "text": "`GarbageCollectPlan`",
+          "anchor": "garbagecollectplan"
         },
         {
           "level": 3,
@@ -2190,6 +2310,11 @@
           "level": 3,
           "text": "`ZeroSHA`",
           "anchor": "zerosha"
+        },
+        {
+          "level": 3,
+          "text": "`ZeroMode`",
+          "anchor": "zeromode"
         },
         {
           "level": 3,
@@ -2503,6 +2628,11 @@
         },
         {
           "level": 3,
+          "text": "`LsTreePathsRecursive`",
+          "anchor": "lstreepathsrecursive"
+        },
+        {
+          "level": 3,
           "text": "`DiffTree`",
           "anchor": "difftree"
         },
@@ -2520,6 +2650,11 @@
           "level": 3,
           "text": "`HashObjectBytes`",
           "anchor": "hashobjectbytes"
+        },
+        {
+          "level": 3,
+          "text": "`HashObjectBytesAsPath`",
+          "anchor": "hashobjectbytesaspath"
         },
         {
           "level": 3,
@@ -2585,11 +2720,6 @@
           "level": 3,
           "text": "`LsRemoteBulk`",
           "anchor": "lsremotebulk"
-        },
-        {
-          "level": 3,
-          "text": "`AdoptIndexFrom`",
-          "anchor": "adoptindexfrom"
         },
         {
           "level": 3,
@@ -2758,6 +2888,16 @@
         },
         {
           "level": 3,
+          "text": "`OriginDeclared`",
+          "anchor": "origindeclared"
+        },
+        {
+          "level": 3,
+          "text": "`OriginObserved`",
+          "anchor": "originobserved"
+        },
+        {
+          "level": 3,
           "text": "`NoOverlap`",
           "anchor": "nooverlap"
         },
@@ -2780,6 +2920,11 @@
           "level": 3,
           "text": "`SessionKey`",
           "anchor": "sessionkey"
+        },
+        {
+          "level": 3,
+          "text": "`Origin`",
+          "anchor": "origin"
         },
         {
           "level": 3,
@@ -2960,6 +3105,11 @@
           "level": 3,
           "text": "`ValidID`",
           "anchor": "validid"
+        },
+        {
+          "level": 3,
+          "text": "`Origin.Name`",
+          "anchor": "originname"
         },
         {
           "level": 3,
@@ -3213,13 +3363,8 @@
         },
         {
           "level": 3,
-          "text": "`GarbageCollect`",
-          "anchor": "garbagecollect-1"
-        },
-        {
-          "level": 3,
-          "text": "`GarbageCollectDryRun`",
-          "anchor": "garbagecollectdryrun-1"
+          "text": "`GarbageCollectPlan`",
+          "anchor": "garbagecollectplan-1"
         },
         {
           "level": 3,
@@ -3237,6 +3382,11 @@
           "level": 1,
           "text": "Where safegit follows git, and where it deliberately does not",
           "anchor": "divergences"
+        },
+        {
+          "level": 2,
+          "text": "The subset law",
+          "anchor": "the-subset-law"
         },
         {
           "level": 2,
@@ -3270,8 +3420,8 @@
         },
         {
           "level": 3,
-          "text": "A symlink whose target leaves the repository is committed, with a notice",
-          "anchor": "a-symlink-whose-target-leaves-the-repository-is-committed-with-a-notice"
+          "text": "A symlink whose target leaves the repository is refused",
+          "anchor": "a-symlink-whose-target-leaves-the-repository-is-refused"
         },
         {
           "level": 3,
@@ -3335,23 +3485,28 @@
         },
         {
           "level": 3,
-          "text": "A rebase's and a mailbox application's `--continue` stay git's",
-          "anchor": "a-rebases-and-a-mailbox-applications-continue-stay-gits"
+          "text": "`safegit rebase` is the one door where git authors the commits",
+          "anchor": "safegit-rebase-is-the-one-door-where-git-authors-the-commits"
         },
         {
           "level": 3,
-          "text": "Conclusion commits are pipeline-authored; a queued sequence stays git-authored",
-          "anchor": "conclusion-commits-are-pipeline-authored-a-queued-sequence-stays-git-authored"
+          "text": "Every commit made through safegit is safegit's; the ones it cannot write, it refuses",
+          "anchor": "every-commit-made-through-safegit-is-safegits-the-ones-it-cannot-write-it-refuses"
         },
         {
           "level": 3,
-          "text": "A single `safegit revert` is split at git's own seam",
-          "anchor": "a-single-safegit-revert-is-split-at-gits-own-seam"
+          "text": "`safegit revert` and `safegit cherry-pick` are split at git's own seam",
+          "anchor": "safegit-revert-and-safegit-cherry-pick-are-split-at-gits-own-seam"
         },
         {
           "level": 3,
           "text": "Resolution keywords write the working tree",
           "anchor": "resolution-keywords-write-the-working-tree"
+        },
+        {
+          "level": 3,
+          "text": "A working-tree write that would destroy a hand edit is refused",
+          "anchor": "a-working-tree-write-that-would-destroy-a-hand-edit-is-refused"
         },
         {
           "level": 3,
@@ -3380,8 +3535,18 @@
         },
         {
           "level": 3,
-          "text": "An autostash that cannot be applied exits nonzero",
-          "anchor": "an-autostash-that-cannot-be-applied-exits-nonzero"
+          "text": "The commit stands and the aftercare did not: one exit code says so",
+          "anchor": "the-commit-stands-and-the-aftercare-did-not-one-exit-code-says-so"
+        },
+        {
+          "level": 3,
+          "text": "A conclusion whose commit already stands finishes the cleanup, and commits nothing",
+          "anchor": "a-conclusion-whose-commit-already-stands-finishes-the-cleanup-and-commits-nothing"
+        },
+        {
+          "level": 3,
+          "text": "An autostash is applied only when it belongs to the merge being concluded",
+          "anchor": "an-autostash-is-applied-only-when-it-belongs-to-the-merge-being-concluded"
         },
         {
           "level": 3,
@@ -3390,23 +3555,138 @@
         },
         {
           "level": 2,
-          "text": "Moves and renames",
-          "anchor": "moves-and-renames"
+          "text": "The subset boundary",
+          "anchor": "the-subset-boundary"
         },
         {
           "level": 3,
-          "text": "Moves are declared; blob equality never decides anything",
-          "anchor": "moves-are-declared-blob-equality-never-decides-anything"
+          "text": "The forwarded command line is an allowlist, not a refusal list",
+          "anchor": "the-forwarded-command-line-is-an-allowlist-not-a-refusal-list"
         },
         {
           "level": 3,
-          "text": "`safegit mv` commits the rename and nothing else",
-          "anchor": "safegit-mv-commits-the-rename-and-nothing-else"
+          "text": "Navigation is `safegit switch`, and there is no `safegit checkout`",
+          "anchor": "navigation-is-safegit-switch-and-there-is-no-safegit-checkout"
         },
         {
           "level": 3,
-          "text": "`safegit mv` creates a missing destination directory",
-          "anchor": "safegit-mv-creates-a-missing-destination-directory"
+          "text": "File restoration is absent, not refused",
+          "anchor": "file-restoration-is-absent-not-refused"
+        },
+        {
+          "level": 3,
+          "text": "`switch` takes a branch name, and only a branch name",
+          "anchor": "switch-takes-a-branch-name-and-only-a-branch-name"
+        },
+        {
+          "level": 3,
+          "text": "A flag whose whole job is to carry a dirty tree is dead here",
+          "anchor": "a-flag-whose-whole-job-is-to-carry-a-dirty-tree-is-dead-here"
+        },
+        {
+          "level": 3,
+          "text": "A merge has exactly one other side",
+          "anchor": "a-merge-has-exactly-one-other-side"
+        },
+        {
+          "level": 3,
+          "text": "A fetch that marked several branches is not a merge safegit will make",
+          "anchor": "a-fetch-that-marked-several-branches-is-not-a-merge-safegit-will-make"
+        },
+        {
+          "level": 3,
+          "text": "One commit per cherry-pick, one per revert; ranges are refused",
+          "anchor": "one-commit-per-cherry-pick-one-per-revert-ranges-are-refused"
+        },
+        {
+          "level": 3,
+          "text": "Merge strategies and strategy options are refused",
+          "anchor": "merge-strategies-and-strategy-options-are-refused"
+        },
+        {
+          "level": 3,
+          "text": "`--squash` is refused",
+          "anchor": "squash-is-refused"
+        },
+        {
+          "level": 3,
+          "text": "Options that would hand the commit or the ref back to git are refused",
+          "anchor": "options-that-would-hand-the-commit-or-the-ref-back-to-git-are-refused"
+        },
+        {
+          "level": 3,
+          "text": "Options that govern git's own commit step are refused, not ignored",
+          "anchor": "options-that-govern-gits-own-commit-step-are-refused-not-ignored"
+        },
+        {
+          "level": 3,
+          "text": "`--skip` is refused",
+          "anchor": "skip-is-refused"
+        },
+        {
+          "level": 3,
+          "text": "The fast-forward-only refusal is safegit's, not git's",
+          "anchor": "the-fast-forward-only-refusal-is-safegits-not-gits"
+        },
+        {
+          "level": 3,
+          "text": "A parked merge stays parked, even when it could have fast-forwarded",
+          "anchor": "a-parked-merge-stays-parked-even-when-it-could-have-fast-forwarded"
+        },
+        {
+          "level": 3,
+          "text": "A fast-forward is safegit's own ref move, and undo refuses it",
+          "anchor": "a-fast-forward-is-safegits-own-ref-move-and-undo-refuses-it"
+        },
+        {
+          "level": 3,
+          "text": "`reset` takes a commit; the pathspec form is refused",
+          "anchor": "reset-takes-a-commit-the-pathspec-form-is-refused"
+        },
+        {
+          "level": 3,
+          "text": "`rebase` is one upstream and a replay, and nothing else",
+          "anchor": "rebase-is-one-upstream-and-a-replay-and-nothing-else"
+        },
+        {
+          "level": 3,
+          "text": "`pull --rebase` is refused, naming the two commands",
+          "anchor": "pull-rebase-is-refused-naming-the-two-commands"
+        },
+        {
+          "level": 3,
+          "text": "`bisect`'s subcommand vocabulary is its allowlist, and it takes no options",
+          "anchor": "bisects-subcommand-vocabulary-is-its-allowlist-and-it-takes-no-options"
+        },
+        {
+          "level": 3,
+          "text": "What each guarded command allows",
+          "anchor": "what-each-guarded-command-allows"
+        },
+        {
+          "level": 2,
+          "text": "Moves",
+          "anchor": "moves"
+        },
+        {
+          "level": 3,
+          "text": "Moves are recorded, never detected by similarity",
+          "anchor": "moves-are-recorded-never-detected-by-similarity"
+        },
+        {
+          "level": 3,
+          "text": "`safegit mv` commits the move and nothing else",
+          "anchor": "safegit-mv-commits-the-move-and-nothing-else"
+        },
+        {
+          "level": 3,
+          "text": "`safegit mv` refuses to move a file with uncommitted edits",
+          "anchor": "safegit-mv-refuses-to-move-a-file-with-uncommitted-edits"
+        },
+        {
+          "level": 3,
+          "text": "A path the commit stops tracking never pairs into an observed move",
+          "anchor": "a-path-the-commit-stops-tracking-never-pairs-into-an-observed-move"
         },
         {
           "level": 3,
@@ -3450,18 +3730,13 @@
         },
         {
           "level": 3,
-          "text": "A non-executable hook: skipped when it is local, refused when the checkout provides it",
-          "anchor": "a-non-executable-hook-skipped-when-it-is-local-refused-when-the-checkout-provides-it"
+          "text": "A non-executable hook is a refusal, in either store",
+          "anchor": "a-non-executable-hook-is-a-refusal-in-either-store"
         },
         {
           "level": 3,
           "text": "Hooks left in the pre-migration location are a refusal, not a fallback",
           "anchor": "hooks-left-in-the-pre-migration-location-are-a-refusal-not-a-fallback"
-        },
-        {
-          "level": 3,
-          "text": "A pre-pre-push hook can raise its own timeout, without a cap",
-          "anchor": "a-pre-pre-push-hook-can-raise-its-own-timeout-without-a-cap"
         },
         {
           "level": 2,
@@ -3500,8 +3775,8 @@
         },
         {
           "level": 3,
-          "text": "`reset --hard` is refused when the tree is dirty, and only then",
-          "anchor": "reset-hard-is-refused-when-the-tree-is-dirty-and-only-then"
+          "text": "`reset` is refused when the tree is dirty, in exactly the modes that write to it",
+          "anchor": "reset-is-refused-when-the-tree-is-dirty-in-exactly-the-modes-that-write-to-it"
         },
         {
           "level": 3,
@@ -3998,6 +4273,11 @@
           "level": 2,
           "text": "Machine mode (`--json`)",
           "anchor": "machine-mode-json"
+        },
+        {
+          "level": 3,
+          "text": "Where the machine contract ends",
+          "anchor": "where-the-machine-contract-ends"
         }
       ]
     },
@@ -4015,6 +4295,11 @@
           "level": 2,
           "text": "`internal/commit`",
           "anchor": "internalcommit"
+        },
+        {
+          "level": 3,
+          "text": "`StepIndexReconcile`",
+          "anchor": "stepindexreconcile"
         },
         {
           "level": 3,
@@ -4073,6 +4358,11 @@
         },
         {
           "level": 3,
+          "text": "`PartialError`",
+          "anchor": "partialerror"
+        },
+        {
+          "level": 3,
           "text": "`Pipeline`",
           "anchor": "pipeline"
         },
@@ -4105,6 +4395,11 @@
           "level": 3,
           "text": "`IndexEdit`",
           "anchor": "indexedit"
+        },
+        {
+          "level": 3,
+          "text": "`RefusedMove`",
+          "anchor": "refusedmove"
         },
         {
           "level": 3,
@@ -4150,6 +4445,16 @@
           "level": 3,
           "text": "`CommitError.Unwrap`",
           "anchor": "commiterrorunwrap"
+        },
+        {
+          "level": 3,
+          "text": "`PartialError.Error`",
+          "anchor": "partialerrorerror"
+        },
+        {
+          "level": 3,
+          "text": "`PartialError.Unwrap`",
+          "anchor": "partialerrorunwrap"
         },
         {
           "level": 3,
@@ -4499,8 +4804,28 @@
         },
         {
           "level": 3,
-          "text": "`TrackedHookNotExecutable`",
-          "anchor": "trackedhooknotexecutable"
+          "text": "`HookNotExecutable`",
+          "anchor": "hooknotexecutable"
+        },
+        {
+          "level": 3,
+          "text": "`CommitStands`",
+          "anchor": "commitstands"
+        },
+        {
+          "level": 3,
+          "text": "`ConclusionWouldOverwrite`",
+          "anchor": "conclusionwouldoverwrite"
+        },
+        {
+          "level": 3,
+          "text": "`UnmergedIndex`",
+          "anchor": "unmergedindex"
+        },
+        {
+          "level": 3,
+          "text": "`EscapingSymlinkTarget`",
+          "anchor": "escapingsymlinktarget"
         },
         {
           "level": 3,
@@ -4511,6 +4836,11 @@
           "level": 3,
           "text": "`RewriteIncomplete`",
           "anchor": "rewriteincomplete"
+        },
+        {
+          "level": 3,
+          "text": "`MoveWitnessChanged`",
+          "anchor": "movewitnesschanged"
         },
         {
           "level": 3,
@@ -4620,6 +4950,11 @@
           "level": 3,
           "text": "`ZeroSHA`",
           "anchor": "zerosha"
+        },
+        {
+          "level": 3,
+          "text": "`ZeroMode`",
+          "anchor": "zeromode"
         },
         {
           "level": 3,
@@ -4933,6 +5268,11 @@
         },
         {
           "level": 3,
+          "text": "`LsTreePathsRecursive`",
+          "anchor": "lstreepathsrecursive"
+        },
+        {
+          "level": 3,
           "text": "`DiffTree`",
           "anchor": "difftree"
         },
@@ -4950,6 +5290,11 @@
           "level": 3,
           "text": "`HashObjectBytes`",
           "anchor": "hashobjectbytes"
+        },
+        {
+          "level": 3,
+          "text": "`HashObjectBytesAsPath`",
+          "anchor": "hashobjectbytesaspath"
         },
         {
           "level": 3,
@@ -5018,11 +5363,6 @@
         },
         {
           "level": 3,
-          "text": "`AdoptIndexFrom`",
-          "anchor": "adoptindexfrom"
-        },
-        {
-          "level": 3,
           "text": "`ReconcileMainIndex`",
           "anchor": "reconcilemainindex"
         },
@@ -5077,6 +5417,16 @@
           "level": 2,
           "text": "`internal/gitexec`",
           "anchor": "internalgitexec"
+        },
+        {
+          "level": 3,
+          "text": "`NoDoor`",
+          "anchor": "nodoor"
+        },
+        {
+          "level": 3,
+          "text": "`DoorRebasePassthrough`",
+          "anchor": "doorrebasepassthrough"
         },
         {
           "level": 3,
@@ -5180,8 +5530,33 @@
         },
         {
           "level": 3,
+          "text": "`ExemptUndoRefUpdate`",
+          "anchor": "exemptundorefupdate"
+        },
+        {
+          "level": 3,
+          "text": "`ExemptBackupRestoreGit`",
+          "anchor": "exemptbackuprestoregit"
+        },
+        {
+          "level": 3,
+          "text": "`ExemptDoctorRepair`",
+          "anchor": "exemptdoctorrepair"
+        },
+        {
+          "level": 3,
           "text": "`Binary`",
           "anchor": "binary"
+        },
+        {
+          "level": 3,
+          "text": "`DoorID`",
+          "anchor": "doorid"
+        },
+        {
+          "level": 3,
+          "text": "`AuthoringDoor`",
+          "anchor": "authoringdoor"
         },
         {
           "level": 3,
@@ -5225,6 +5600,16 @@
         },
         {
           "level": 3,
+          "text": "`AuthoringDoors`",
+          "anchor": "authoringdoors"
+        },
+        {
+          "level": 3,
+          "text": "`Authoring`",
+          "anchor": "authoring"
+        },
+        {
+          "level": 3,
           "text": "`Verbs`",
           "anchor": "verbs"
         },
@@ -5252,6 +5637,11 @@
           "level": 3,
           "text": "`WritesObjects`",
           "anchor": "writesobjects"
+        },
+        {
+          "level": 3,
+          "text": "`WritesWorktree`",
+          "anchor": "writesworktree"
         },
         {
           "level": 3,
@@ -5474,6 +5864,11 @@
         },
         {
           "level": 3,
+          "text": "`LocalNotExecutableError`",
+          "anchor": "localnotexecutableerror"
+        },
+        {
+          "level": 3,
           "text": "`Origin`",
           "anchor": "origin"
         },
@@ -5574,6 +5969,11 @@
         },
         {
           "level": 3,
+          "text": "`LocalNotExecutableError.Error`",
+          "anchor": "localnotexecutableerrorerror"
+        },
+        {
+          "level": 3,
           "text": "`Location.IsHookName`",
           "anchor": "locationishookname"
         }
@@ -5616,13 +6016,8 @@
         },
         {
           "level": 3,
-          "text": "`GarbageCollect`",
-          "anchor": "garbagecollect"
-        },
-        {
-          "level": 3,
-          "text": "`GarbageCollectDryRun`",
-          "anchor": "garbagecollectdryrun"
+          "text": "`GarbageCollectPlan`",
+          "anchor": "garbagecollectplan"
         },
         {
           "level": 3,
@@ -6153,6 +6548,11 @@
         },
         {
           "level": 3,
+          "text": "`MarkCherryPick`",
+          "anchor": "markcherrypick"
+        },
+        {
+          "level": 3,
           "text": "`Read`",
           "anchor": "read"
         },
@@ -6414,6 +6814,11 @@
         },
         {
           "level": 3,
+          "text": "`GitDir`",
+          "anchor": "gitdir"
+        },
+        {
+          "level": 3,
           "text": "`MergeStateGone`",
           "anchor": "mergestategone"
         },
@@ -6496,6 +6901,16 @@
         },
         {
           "level": 3,
+          "text": "`OriginDeclared`",
+          "anchor": "origindeclared"
+        },
+        {
+          "level": 3,
+          "text": "`OriginObserved`",
+          "anchor": "originobserved"
+        },
+        {
+          "level": 3,
           "text": "`NoOverlap`",
           "anchor": "nooverlap"
         },
@@ -6518,6 +6933,11 @@
           "level": 3,
           "text": "`SessionKey`",
           "anchor": "sessionkey"
+        },
+        {
+          "level": 3,
+          "text": "`Origin`",
+          "anchor": "origin"
         },
         {
           "level": 3,
@@ -6698,6 +7118,11 @@
           "level": 3,
           "text": "`ValidID`",
           "anchor": "validid"
+        },
+        {
+          "level": 3,
+          "text": "`Origin.Name`",
+          "anchor": "originname"
         },
         {
           "level": 3,
@@ -7326,6 +7751,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-23T21:01:22.006611+00:00",
+  "last_gen": "2026-08-24T23:12:17.653826+00:00",
   "theme": "minimal"
 }
