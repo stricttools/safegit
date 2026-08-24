@@ -286,6 +286,26 @@ const (
 	// run either. Produced by push and `hook run`.
 	HookNotExecutable = 25
 
+	// EscapingSymlinkTarget means a commit named a symlink whose target leaves
+	// the repository, and the caller did not elect to record it.
+	//
+	// git records a symlink as the link TEXT and nothing else, so a link
+	// pointing outside the repository is an object that resolves to nothing in
+	// anyone else's checkout -- and, where it resolves at all, resolves to a
+	// file the repository never carried. safegit refuses it rather than
+	// recording a reference to a place only this machine has, and the refusal
+	// names the literal target so the operator can see what the link says.
+	// `--allow-escaping-targets` is the election that commits it anyway, and
+	// restores the one-line notice the refusal replaced.
+	//
+	// The scope is ADDING or STAGING escaping link content: the refusal is made
+	// at intake, before anything is staged, so commit and its --amend form both
+	// inherit it and nothing is written when it fires. `safegit mv` moving an
+	// existing tracked escaping link is not covered -- a move-only commit
+	// carries the blob its parent held across and restages no link content at
+	// all. Produced by commit, including its --amend form.
+	EscapingSymlinkTarget = 29
+
 	// RewriteRefused means a history rewrite was refused by the verification
 	// that runs BEFORE any ref moves: the rewritten commits existed only as
 	// unreachable objects, and the check found the rewrite did not do what the
@@ -398,6 +418,7 @@ func All() []Entry {
 		{BackupNoSlot, "BackupNoSlot", "The branch has no backup slot on the remote"},
 		{HooksNotMigrated, "HooksNotMigrated", "Hooks are still in the pre-migration .git/hooks location (run `safegit hook migrate`)"},
 		{HookNotExecutable, "HookNotExecutable", "A discovered hook is not executable, in either store"},
+		{EscapingSymlinkTarget, "EscapingSymlinkTarget", "A named symlink's target leaves the repository (`--allow-escaping-targets` records it anyway)"},
 		{RewriteRefused, "RewriteRefused", "A history rewrite was refused before any ref moved (nothing changed)"},
 		{RewriteIncomplete, "RewriteIncomplete", "A history rewrite stands, but post-rewrite verification found residue or skipped the working-tree sync"},
 		{PushFailed, "PushFailed", "The push did not get through: git push failed, or the refs could not be safely re-read around it"},

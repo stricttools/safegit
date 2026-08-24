@@ -327,10 +327,12 @@ func resolveParentSymlinks(absPath string) string {
 // the repository, and the empty string for anything else -- a regular file, a
 // symlink that stays inside, or a path that is not there at all.
 //
-// Such a link is committable: git records the link text and nothing more, and
-// refusing it would make safegit stricter than git for no safety it can
-// actually provide. What safegit does instead is say so once, because the
-// object it just wrote resolves to nothing in anyone else's checkout.
+// git records such a link as its TEXT and nothing more, so the object it would
+// write resolves to nothing in anyone else's checkout -- and where it resolves
+// at all, resolves to a file the repository never carried. safegit refuses it
+// (refuseEscapingLinks) rather than recording a reference to a place only this
+// machine has; --allow-escaping-targets is the election that records it anyway
+// and restores the notice the refusal replaced.
 func escapingLinkTarget(repoRoot, rel string) string {
 	abs := git.Anchor(repoRoot, rel)
 	info, err := os.Lstat(abs)
@@ -356,11 +358,53 @@ func escapingLinkTarget(repoRoot, rel string) string {
 // noticeEscapingLinks writes one stderr line per staged symlink whose target
 // leaves the repository. It runs once per operation, after intake has settled,
 // so a CAS retry cannot repeat it.
+//
+// It is what the ELECTION produces: reaching it at all means the caller passed
+// --allow-escaping-targets, so the link is being recorded deliberately and the
+// line says what the recorded object will and will not resolve to.
 func noticeEscapingLinks(repoRoot string, paths []string) {
 	for _, path := range paths {
 		if target := escapingLinkTarget(repoRoot, path); target != "" {
 			fmt.Fprintf(os.Stderr, "notice: %s is a symlink to %s, which is outside the repository; the commit records the link text, which will not resolve in another checkout\n", path, target)
 		}
+	}
+}
+
+// refuseEscapingLinks is the verdict on every symlink intake resolved: a target
+// that leaves the repository is refused, unless the caller elected to record it.
+//
+// The refusal names the literal target -- the text the link holds, not a
+// resolved absolute path -- because that text is what would be committed and
+// what the operator has to recognize to decide the link is what they meant.
+// Every offender is named in one refusal rather than one at a time: a commit
+// naming several such links is one statement, and fixing them one command at a
+// time is the discovery loop the collected refusal exists to remove.
+//
+// It runs at the END of intake, before anything is staged and before the CAS
+// loop, so nothing is written when it fires and commit and --amend inherit it
+// from the one place both of them resolve their files.
+func refuseEscapingLinks(repoRoot string, paths []string, allow bool) error {
+	if allow {
+		noticeEscapingLinks(repoRoot, paths)
+		return nil
+	}
+	var offenders []string
+	for _, path := range paths {
+		if target := escapingLinkTarget(repoRoot, path); target != "" {
+			offenders = append(offenders, fmt.Sprintf("  %s -> %s", path, target))
+		}
+	}
+	if len(offenders) == 0 {
+		return nil
+	}
+	return &CommitError{
+		Code: exitcode.EscapingSymlinkTarget,
+		Message: fmt.Sprintf("symlink target(s) outside the repository:\n%s\n"+
+			"  a symlink is committed as its target TEXT, so this records a reference to a place\n"+
+			"  only this machine has: in another checkout it resolves to nothing, or to a file the\n"+
+			"  repository never carried. Point the link inside the repository, or pass\n"+
+			"  --allow-escaping-targets to record it as it is.",
+			strings.Join(offenders, "\n")),
 	}
 }
 
@@ -371,7 +415,11 @@ func noticeEscapingLinks(repoRoot string, paths []string) {
 // tip being replaced for an amend, and the empty string for an unborn ref. Every
 // tracked-path judgement is made against it, because a path's presence in HEAD
 // says nothing about a commit built on another branch.
-func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, specs []FileSpec, untrack []string) (*intake, error) {
+//
+// allowEscapingTargets is the caller's election to record a symlink whose
+// target leaves the repository. Without it such a link is refused here, at the
+// end of intake -- see refuseEscapingLinks.
+func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, specs []FileSpec, untrack []string, allowEscapingTargets bool) (*intake, error) {
 	in := &intake{}
 	tree := newTreeIndex(ctx, baseRev)
 	seen := make(map[string]bool)
@@ -503,7 +551,9 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 	}
 
 	sort.Strings(in.skipped)
-	noticeEscapingLinks(repoRoot, links)
+	if err := refuseEscapingLinks(repoRoot, links, allowEscapingTargets); err != nil {
+		return nil, err
+	}
 	return in, nil
 }
 

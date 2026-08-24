@@ -26,6 +26,11 @@ type AmendRequest struct {
 	Trailers  []string   // user-provided trailers ("Key: Value" format)
 	DryRun    bool
 
+	// AllowEscapingTargets is the same input CommitRequest carries: the
+	// election to record a symlink whose target leaves the repository, which
+	// intake refuses without it.
+	AllowEscapingTargets bool
+
 	// Untrack is the same input CommitRequest carries: paths to remove from the
 	// index while leaving them on disk, each of which must be tracked in the
 	// tip being replaced.
@@ -119,7 +124,7 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	// An amend's temporary index is seeded from the tip it REPLACES, so that
 	// tip -- not HEAD -- is the tree its arguments are judged and expanded
 	// against. The two differ on every cross-branch amend.
-	files, err := p.resolveFiles(ctx, repoRoot, baseRev(ctx, ref), req.FileSpecs, req.Untrack)
+	files, err := p.resolveFiles(ctx, repoRoot, baseRev(ctx, ref), req.FileSpecs, req.Untrack, req.AllowEscapingTargets)
 	if err != nil {
 		return nil, err
 	}

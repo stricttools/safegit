@@ -97,21 +97,23 @@ func TestCommitSymlink_LinkToCommittedFile(t *testing.T) {
 	}
 }
 
-// TestCommitSymlinkEscapingTargetIsCommittedWithANotice: a symlink whose
-// target leaves the repository is committable -- git records the link text and
-// nothing else, so there is no content to leak and nothing to refuse -- but the
-// object that gets written resolves to nothing in anyone else's checkout, so
-// safegit says so once on stderr.
-func TestCommitSymlinkEscapingTargetIsCommittedWithANotice(t *testing.T) {
+// TestCommitSymlinkEscapingTargetIsCommittedWhenElected: a symlink whose
+// target leaves the repository is REFUSED (see
+// TestWave2CommitEscapingSymlinkIsRefused) -- the object it would write is a
+// reference to a place only this machine has. --allow-escaping-targets is the
+// election, and it restores the one-line notice the refusal replaced: the link
+// text is what gets recorded, and it resolves to nothing in another checkout.
+func TestCommitSymlinkEscapingTargetIsCommittedWhenElected(t *testing.T) {
 	dir := newRepo(t)
 
 	if err := os.Symlink("../elsewhere/secret.txt", filepath.Join(dir, "escapes")); err != nil {
 		t.Fatalf("creating symlink: %v", err)
 	}
 
-	stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "add escaping link", "--", "escapes")
+	stdout, stderr, code := runSafegit(t, dir, "commit", "--allow-escaping-targets",
+		"-m", "add escaping link", "--", "escapes")
 	if code != 0 {
-		t.Fatalf("committing an escaping symlink was refused (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		t.Fatalf("an elected escaping symlink was refused (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 	if mode := treeEntryMode(t, dir, "escapes"); mode != "120000" {
 		t.Errorf("expected HEAD entry %q with mode 120000, got mode %q; tree:\n%s", "escapes", mode, lsTreeHEAD(t, dir))
@@ -119,8 +121,104 @@ func TestCommitSymlinkEscapingTargetIsCommittedWithANotice(t *testing.T) {
 	if target := catFileBlob(t, dir, "escapes"); target != "../elsewhere/secret.txt" {
 		t.Errorf("symlink blob = %q, want the link text %q", target, "../elsewhere/secret.txt")
 	}
-	if !strings.Contains(stderr, "escapes") || !strings.Contains(stderr, "outside the repository") {
+	if !strings.Contains(stderr, "notice:") || !strings.Contains(stderr, "escapes") ||
+		!strings.Contains(stderr, "outside the repository") {
 		t.Errorf("expected a one-line stderr notice naming the link and saying its target is outside the repository, got:\n%s", stderr)
+	}
+}
+
+// TestCommitEscapingSymlinkRefusalNamesTheLiteralTarget: the refusal has to say
+// the link's own TEXT, not a resolved absolute path, because the text is what
+// would be committed and what the operator has to recognize. A relative target
+// that never resolves anywhere is the sharpest case: there is nothing to
+// resolve, and only the literal answer exists.
+func TestCommitEscapingSymlinkRefusalNamesTheLiteralTarget(t *testing.T) {
+	dir := newRepo(t)
+
+	const target = "../../nowhere/at/all.txt"
+	if err := os.Symlink(target, filepath.Join(dir, "escapes")); err != nil {
+		t.Fatalf("creating symlink: %v", err)
+	}
+	before := testutil.Rev(t, dir, "HEAD")
+
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add escaping link", "--", "escapes")
+	if code != exitcode.EscapingSymlinkTarget {
+		t.Errorf("an escaping symlink exited %d, want %d (EscapingSymlinkTarget); stderr: %s",
+			code, exitcode.EscapingSymlinkTarget, stderr)
+	}
+	if !strings.Contains(stderr, target) {
+		t.Errorf("the refusal must name the literal target %q; stderr:\n%s", target, stderr)
+	}
+	if !strings.Contains(stderr, "--allow-escaping-targets") {
+		t.Errorf("the refusal must name the flag that elects recording it; stderr:\n%s", stderr)
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("HEAD moved despite the refusal: %s -> %s", before, after)
+	}
+}
+
+// TestCommitEscapingSymlinkRefusalNamesEveryOffender: intake resolves the whole
+// argument list before it judges, so one invocation naming several escaping
+// links is one refusal naming all of them -- not the first one, discovered
+// again on the next attempt.
+func TestCommitEscapingSymlinkRefusalNamesEveryOffender(t *testing.T) {
+	dir := newRepo(t)
+
+	for _, link := range []struct{ name, target string }{
+		{"one", "../elsewhere/first.txt"},
+		{"two", "../elsewhere/second.txt"},
+	} {
+		if err := os.Symlink(link.target, filepath.Join(dir, link.name)); err != nil {
+			t.Fatalf("creating symlink %s: %v", link.name, err)
+		}
+	}
+
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add two escaping links", "--", "one", "two")
+	if code != exitcode.EscapingSymlinkTarget {
+		t.Fatalf("two escaping symlinks exited %d, want %d (EscapingSymlinkTarget); stderr: %s",
+			code, exitcode.EscapingSymlinkTarget, stderr)
+	}
+	for _, want := range []string{"../elsewhere/first.txt", "../elsewhere/second.txt"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("the refusal does not name %q; stderr:\n%s", want, stderr)
+		}
+	}
+}
+
+// TestAmendEscapingSymlinkIsRefusedAndElects: the refusal is made in intake,
+// which the amend path shares, so --amend inherits both halves of the ruling
+// from the one place both forms resolve their files.
+func TestAmendEscapingSymlinkIsRefusedAndElects(t *testing.T) {
+	dir := newRepo(t)
+
+	const target = "../elsewhere/secret.txt"
+	if err := os.Symlink(target, filepath.Join(dir, "escapes")); err != nil {
+		t.Fatalf("creating symlink: %v", err)
+	}
+	before := testutil.Rev(t, dir, "HEAD")
+
+	_, stderr, code := runSafegit(t, dir, "commit", "--amend", "-m", "amend in the link", "--", "escapes")
+	if code != exitcode.EscapingSymlinkTarget {
+		t.Errorf("an --amend of an escaping symlink exited %d, want %d (EscapingSymlinkTarget); stderr: %s",
+			code, exitcode.EscapingSymlinkTarget, stderr)
+	}
+	if !strings.Contains(stderr, target) {
+		t.Errorf("the refusal must name the escaping target %q; stderr:\n%s", target, stderr)
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("HEAD moved despite the refusal: %s -> %s", before, after)
+	}
+
+	_, stderr, code = runSafegit(t, dir, "commit", "--amend", "--allow-escaping-targets",
+		"-m", "amend in the link", "--", "escapes")
+	if code != 0 {
+		t.Fatalf("an elected --amend was refused (code %d): %s", code, stderr)
+	}
+	if mode := treeEntryMode(t, dir, "escapes"); mode != "120000" {
+		t.Errorf("expected HEAD entry %q with mode 120000, got mode %q; tree:\n%s", "escapes", mode, lsTreeHEAD(t, dir))
+	}
+	if !strings.Contains(stderr, "outside the repository") {
+		t.Errorf("the elected amend must restore the notice; stderr:\n%s", stderr)
 	}
 }
 
