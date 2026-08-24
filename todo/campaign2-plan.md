@@ -436,9 +436,28 @@ asserted in the payload tests (null and non-null forms).
   INVERSE of the incoming diff staged (probed) — the sync is not
   optional. The oplog entry carries Op `merge` with a fast-forward
   outcome; `safegit undo` REFUSES it (the tip is a commit safegit did
-  not create — undo's existing not-safegit-authored refusal covers it;
-  pinned). `--no-ff` elects a merge commit; `--ff-only` refuses
-  non-fast-forward.
+  not create). MECHANISM CORRECTED during execution `[plan]`: the
+  existing not-safegit-authored range check did NOT cover a
+  single-commit fast-forward (the entry's recorded tip populated
+  `reversing`, so a one-commit ff would have been undone); as built,
+  undo treats any oplog entry carrying an `outcome` key as a record of
+  what git did to the branch, never a commit safegit authored
+  (`authoredByPipeline` — exact: the pipeline never writes `outcome`),
+  and the no-undoable-operations refusal names the skipped
+  fast-forward. Pinned. `--no-ff` elects a merge commit; `--ff-only`
+  refuses non-fast-forward (safegit's OWN refusal at exit General, not
+  git's 128 — letting git decide would move the ref outside CAS in the
+  race; DIVERGENCE-flagged in code). The merge payload additionally
+  carries an `outcome` member (fast-forward/parked/up-to-date carry no
+  commit; the other members are unreadable without it) `[plan]`.
+  EXECUTION-DISCOVERED, PRE-EXISTING, AWAITING THE USER (as-built
+  stands): `internal/coord`'s dirty-tree check runs `git diff HEAD`,
+  which is fatal on an UNBORN branch — every guarded command already
+  refused in a no-commits repository before this campaign, and still
+  does; merge's unborn fast-forward path is implemented but unreachable
+  until coord learns unborn HEADs (empty-tree diff). Fixing it is a
+  small capability addition outside the ruled scope — the user decides
+  whether it rides this campaign's remediation or waits.
 - Non-fast-forward path: run `git merge --no-ff --no-commit` — BOTH
   flags always, regardless of what the operator passed: `--no-commit`
   alone cannot stop a fast-forward (probed: it fast-forwards the ref
@@ -1341,6 +1360,12 @@ plan defect)
   switch to raw git so the surviving conclusion tests keep their
   subjects) — and the octopus-conclusion green itself
   (`sequencer_conclusion_test.go:146-195`) becomes 2.7's refusal pin.
+  Added during execution: `TestPreviewRefusesWhatItCannotCompute`'s
+  three MERGE rows (`-s`, `-X`, `--squash`) — 2.2 refuses those
+  options outright, so the preview-specific refusal message is no
+  longer producible for merge; the rows moved to
+  `TestMergeSubsetRefusalsApplyToAPreviewToo` (refused, nothing
+  recorded), the cherry-pick row stays exercising the criterion.
 - 2.3 (cherry-pick restructure): pins asserting the clean pick is
   git-authored or not undoable; the multi-commit pick suites (become
   refusal pins); classification/registry rows.
