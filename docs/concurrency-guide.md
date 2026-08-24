@@ -156,7 +156,7 @@ Not all git operations can be safely parallelized. Commands that mutate the work
 
 If any tracked file is modified or any untracked file exists, the guarded command is refused with exit code 5 and a suggestion to commit the outstanding changes first. This prevents one session from running `safegit checkout other-branch` while another session has uncommitted edits in the working tree.
 
-Two commands narrow the check to the forms that actually move the tree: `reset` runs it for `--hard` only, and `bisect` for its tree-moving subcommands (`good`, `bad`, `old`, `new`, `reset`, `start`). Neither narrowing touches the operation lock, which every invocation of both takes unconditionally -- the lock must not depend on safegit's list of git's argument vocabulary being complete.
+Two commands narrow the check to the forms that actually write to the working tree: `reset` runs it for `--hard`, `--merge` and `--keep`, and `bisect` for its stepping subcommands. Neither narrowing is re-derived at the call site -- both read `internal/gitexec`'s classification table, the single authority over what a git invocation does, and an argv the table does not declare is refused rather than assumed harmless. Neither narrowing touches the operation lock, which every invocation of both takes unconditionally.
 
 The guard uses `git diff HEAD` (not `git status`, which depends on the potentially stale main index) to detect modifications, ensuring accuracy even when the shared index is out of sync with the actual committed state.
 
