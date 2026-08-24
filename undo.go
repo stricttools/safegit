@@ -311,17 +311,21 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 	}
 
-	// Log the undo to the oplog
-	_ = oplog.Append(sgDir, oplog.Entry{
-		Op: "undo",
-		Extra: map[string]interface{}{
-			"ref":      ref,
-			"undoneOp": targetEntry.Op,
-			"sha":      targetSHA,
-			"oldSha":   currentSHA,
-			"count":    count,
-		},
-	})
+	// Log the undo to the oplog. A ROOT undo deletes the ref rather than moving
+	// it, and says so: without that, the readers of this log walk past an undo
+	// whose new tip is empty, find the commit it reversed, and report safegit's
+	// own deletion as a ref that moved behind safegit's back.
+	undoExtra := map[string]interface{}{
+		"ref":      ref,
+		"undoneOp": targetEntry.Op,
+		"sha":      targetSHA,
+		"oldSha":   currentSHA,
+		"count":    count,
+	}
+	if isRootUndo {
+		undoExtra["deleted"] = true
+	}
+	_ = oplog.Append(sgDir, oplog.Entry{Op: "undo", Extra: undoExtra})
 
 	if !flags.silent() {
 		if count == 1 {

@@ -290,6 +290,59 @@ func TestLastRefUpdate(t *testing.T) {
 	}
 }
 
+// TestLastRefUpdateSkipsAnEntryWithNoNewTip: a guarded operation git refused
+// records the ref it did NOT move and an empty new tip. The position safegit
+// really last left the branch at is the older entry, and that is what bypass
+// detection has to compare against.
+func TestLastRefUpdateSkipsAnEntryWithNoNewTip(t *testing.T) {
+	sgDir := setupSafegitDir(t)
+
+	for _, e := range []Entry{
+		{Op: "commit", Extra: map[string]interface{}{"ref": "refs/heads/main", "parent": "aaa", "sha": "bbb"}},
+		{Op: "merge", Extra: map[string]interface{}{"ref": "refs/heads/main", "parent": "bbb", "sha": "", "outcome": "failed"}},
+	} {
+		if err := Append(sgDir, e); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := LastRefUpdate(sgDir, "refs/heads/main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("the refused merge hid the commit beneath it")
+	}
+	if got.Op != "commit" {
+		t.Errorf("Op = %q, want commit: a refused operation is not where safegit left the branch", got.Op)
+	}
+}
+
+// TestLastRefUpdateStopsAtARefDeletion: safegit's own root undo deletes the
+// ref. Walking past that entry to the commit it reversed hands back a tip the
+// ref cannot resolve to, which doctor reported as a bypass -- over safegit's own
+// deliberate deletion.
+func TestLastRefUpdateStopsAtARefDeletion(t *testing.T) {
+	sgDir := setupSafegitDir(t)
+
+	for _, e := range []Entry{
+		{Op: "commit", Extra: map[string]interface{}{"ref": "refs/heads/main", "parent": "", "sha": "bbb"}},
+		{Op: "undo", Extra: map[string]interface{}{"ref": "refs/heads/main", "sha": "", "oldSha": "bbb", "deleted": true}},
+	} {
+		if err := Append(sgDir, e); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := LastRefUpdate(sgDir, "refs/heads/main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != nil {
+		t.Errorf("a deleted ref has no last update; got the %q entry %v", got.Op, got.Extra)
+	}
+}
+
 func TestAppendAutoFillsSessionID(t *testing.T) {
 	sgDir := setupSafegitDir(t)
 
