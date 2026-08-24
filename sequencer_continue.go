@@ -409,7 +409,7 @@ func (op continueOp) conclusionMovedRecords(ctx context.Context, state sequencer
 // It returns the process exit code and never panics on a repository state it
 // does not recognize: every state it cannot conclude is a refusal naming the
 // state and the command that CAN conclude it.
-func runContinue(flags globalFlags, op continueOp, messages []string, trailers []string, resolveFlags []string, resolveFilePath string) int {
+func runContinue(flags globalFlags, op continueOp, messages []string, trailers []string, resolveFlags []string, resolveFilePath string, discardUnmatched bool) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -484,7 +484,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	// BEFORE the completeness check, because in this state the answer to "is
 	// this conclusion still to be made" is already no: the commit exists, and
 	// what is left is the cleanup a crash interrupted. See alreadyConcluded.
-	stood, err := op.alreadyConcluded(ctx, sgDir, state)
+	stood, err := op.alreadyConcluded(ctx, sgDir, state, messages)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
@@ -500,6 +500,11 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	// has to be free of the conflict itself. See sequencer_markers.go.
 	declines, code := op.verifyMarkers(ctx, state, sides, declared)
 	if code != 0 {
+		return code
+	}
+	// And what those resolutions would DESTROY on disk. See
+	// sequencer_overwrite.go.
+	if code := op.refuseWorktreeOverwrite(ctx, sides, declared, discardUnmatched); code != 0 {
 		return code
 	}
 
@@ -679,7 +684,7 @@ func conclusionOplogOps(kind sequencer.Kind) []string {
 // It FAILS CLOSED on an unreadable op log: a log that is missing lines cannot
 // answer the question, and answering "no" from one would be the double commit
 // this exists to prevent.
-func (op continueOp) alreadyConcluded(ctx context.Context, sgDir string, state sequencer.State) (*commit.CommitResult, error) {
+func (op continueOp) alreadyConcluded(ctx context.Context, sgDir string, state sequencer.State, messages []string) (*commit.CommitResult, error) {
 	ref, err := git.HeadRef(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("reading which branch HEAD is on: %w", err)
@@ -711,7 +716,7 @@ func (op continueOp) alreadyConcluded(ctx context.Context, sgDir string, state s
 	if err != nil {
 		return nil, fmt.Errorf("reading the commit %s the operation log names: %w", shortSHA(head), err)
 	}
-	if op.kind == sequencer.KindMerge && !parentsMatchMergeHeads(info.Parents, state.MergeHeads) {
+	if !op.concludesThisState(ctx, state, info, messages) {
 		return nil, nil
 	}
 
@@ -737,6 +742,39 @@ func (op continueOp) alreadyConcluded(ctx context.Context, sgDir string, state s
 		Attempts: 0,
 		Files:    files,
 	}, nil
+}
+
+// concludesThisState is the corroboration: is the commit the op log names the
+// conclusion of THE OPERATION IN FLIGHT, rather than an earlier one the log
+// happens to name?
+//
+// It exists because the log entry alone is not enough, and the way it is not
+// enough loses work. Conclude one cherry-pick, then start another that
+// conflicts, and the branch tip is still the commit the log names -- so a check
+// made of the log alone would call the SECOND pick already concluded, remove
+// its state and never commit it. The evidence differs per operation:
+//
+//   - a MERGE carries it structurally: the commit's parents are the branch tip
+//     followed by every MERGE_HEAD line, so a commit concluding a different
+//     merge has different parents.
+//   - a CHERRY-PICK or REVERT produces an ordinary single-parent commit, whose
+//     parent list says nothing at all. What is checked instead is the MESSAGE:
+//     the commit must carry the message this conclusion would write -- git's
+//     own draft for the operation in flight, or the caller's own -m -- as its
+//     opening text, since the pipeline appends its trailers after it.
+//
+// Both err towards NOT recognizing: an unrecognized crash window commits again,
+// which is the old behavior, while a misrecognized one throws away an operation
+// the operator asked for.
+func (op continueOp) concludesThisState(ctx context.Context, state sequencer.State, info git.CommitInfo, messages []string) bool {
+	if op.kind == sequencer.KindMerge {
+		return parentsMatchMergeHeads(info.Parents, state.MergeHeads)
+	}
+	want, err := op.conclusionMessage(ctx, state, messages)
+	if err != nil {
+		return false
+	}
+	return strings.HasPrefix(strings.TrimSpace(info.Message), strings.TrimSpace(want))
 }
 
 // parentsMatchMergeHeads reports whether a commit's parents are exactly what

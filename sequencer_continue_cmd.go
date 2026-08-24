@@ -422,6 +422,10 @@ func continueFlags(op continueOp, theirsHelp string) []strictcli.Flag {
 		strictcli.StringFlag("trailer",
 			"add a key-value trailer line to the commit message (repeatable)",
 			strictcli.Repeatable(), strictcli.Unique(false), strictcli.Optional()),
+		strictcli.BoolFlag("discard-unmatched-worktree",
+			"destroy working-tree content that matches no side of the conflict. A resolution that writes a stage over the file on disk, or deletes it, is refused when what is there is neither an index stage nor the content git itself wrote -- that is a hand edit, held in no commit, no stage and no stash. Passing this elects the destruction and names each file it takes. "+
+				"Omitted, and with --no-discard-unmatched-worktree, such a path is refused and nothing is committed; resolve it to 'worktree' to commit the edit instead",
+			strictcli.Optional()),
 	}
 }
 
@@ -454,6 +458,7 @@ func continueHandler(op continueOp) func(*strictcli.Context, map[string]interfac
 			kwargsStrSlice(kwargs["trailer"]),
 			kwargsStrSlice(kwargs["resolve"]),
 			optStr(kwargs["resolve_file"], ""),
+			optBool(kwargs["discard_unmatched_worktree"], false),
 		))
 	}
 }
