@@ -549,3 +549,83 @@ func TestMvNegatedCreateMissingDirectoriesStillRefuses(t *testing.T) {
 		t.Error("the directory was created despite the refusal")
 	}
 }
+
+// TestMvRefusesADestinationParentThatIsAFile: a destination whose parent
+// directory is an existing FILE is the same family of wrong world as a parent
+// that is not there at all -- the move has nowhere to land -- so it gets the
+// same collected refusal at exit 19, before the first filesystem mutation.
+//
+// The defect this pins: the parent check asked only whether the parent could be
+// stat'ed, so an existing file passed for a directory. Validation let the pair
+// through and the rename failed several steps later with a general error and a
+// rollback, which is the discovery loop the collected refusal exists to remove.
+func TestMvRefusesADestinationParentThatIsAFile(t *testing.T) {
+	dir := mvSeed(t)
+	before := testutil.Rev(t, dir, "HEAD")
+
+	// b.txt is a tracked regular FILE, so b.txt/a.txt names a place that
+	// cannot exist.
+	_, stderr, code := runSafegit(t, dir, "mv", "-m", "move a", "a.txt -> b.txt/a.txt")
+	if code != exitcode.MoveNotBorneOut {
+		t.Errorf("a destination parent that is a file exited %d, want %d (MoveNotBorneOut); stderr: %s",
+			code, exitcode.MoveNotBorneOut, stderr)
+	}
+	if !strings.Contains(stderr, "b.txt") {
+		t.Errorf("the refusal does not name the path that is not a directory: %s", stderr)
+	}
+	if !strings.Contains(stderr, "not a directory") {
+		t.Errorf("the refusal must say the parent is not a directory: %s", stderr)
+	}
+
+	// Nothing moved: the source is where it was and b.txt is still the file it
+	// was, not a directory and not the moved content.
+	if !mvExists(t, dir, "a.txt") {
+		t.Error("the source left its original path during a refused invocation")
+	}
+	if got, err := os.ReadFile(filepath.Join(dir, "b.txt")); err != nil || string(got) != "b\n" {
+		t.Errorf("b.txt = %q (err %v), want the untouched %q", got, err, "b\n")
+	}
+	if mvExists(t, dir, "b.txt/a.txt") {
+		t.Error("a refused invocation moved the file anyway")
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("a commit was made despite the refusal: %s -> %s", before, after)
+	}
+	assertNoCommitHappened(t, dir, "seed")
+}
+
+// TestMvElectedCreationCannotCureAParentThatIsAFile: --create-missing-
+// directories elects the minting of directories that are ABSENT. It is not an
+// answer to a path that is occupied by a file, because no mkdir can make that
+// path a directory -- so the refusal stands with the election passed, in both
+// the direct shape (the parent itself is the file) and the deep shape (a file
+// sits part-way up the chain the election would otherwise create).
+func TestMvElectedCreationCannotCureAParentThatIsAFile(t *testing.T) {
+	for _, tc := range []struct{ name, pair string }{
+		{"parent is the file", "a.txt -> b.txt/a.txt"},
+		{"a file sits above the chain", "a.txt -> b.txt/deeper/a.txt"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := mvSeed(t)
+			before := testutil.Rev(t, dir, "HEAD")
+
+			_, stderr, code := runSafegit(t, dir, "mv", "--create-missing-directories", "-m", "move a", tc.pair)
+			if code != exitcode.MoveNotBorneOut {
+				t.Errorf("%s with the election exited %d, want %d (MoveNotBorneOut); stderr: %s",
+					tc.pair, code, exitcode.MoveNotBorneOut, stderr)
+			}
+			if !strings.Contains(stderr, "not a directory") {
+				t.Errorf("the refusal must say the path is not a directory: %s", stderr)
+			}
+			if !mvExists(t, dir, "a.txt") {
+				t.Error("the source left its original path during a refused invocation")
+			}
+			if got, err := os.ReadFile(filepath.Join(dir, "b.txt")); err != nil || string(got) != "b\n" {
+				t.Errorf("b.txt = %q (err %v), want the untouched %q", got, err, "b\n")
+			}
+			if after := testutil.Rev(t, dir, "HEAD"); after != before {
+				t.Errorf("a commit was made despite the refusal: %s -> %s", before, after)
+			}
+		})
+	}
+}

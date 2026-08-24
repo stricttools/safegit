@@ -389,17 +389,18 @@ func checkMvPair(ctx context.Context, repoRoot string, ignoreCase, createMissing
 		return fmt.Sprintf("%s is already tracked in HEAD", p.new)
 	}
 
-	// The destination's parent has to BE there. safegit invents no place for
-	// content to land in: a destination naming a directory that does not exist
-	// is far more often a typo than an intention, and the move that "worked"
-	// left the operator with a directory they never asked for and no way to tell
-	// it apart from one they already had.
+	// The destination's parent has to BE there, and has to be a DIRECTORY.
+	// safegit invents no place for content to land in: a destination naming a
+	// directory that does not exist is far more often a typo than an intention,
+	// and the move that "worked" left the operator with a directory they never
+	// asked for and no way to tell it apart from one they already had.
 	// --create-missing-directories is how the other intention is said out loud.
-	if !createMissingDirs {
-		if missing := missingDestinationDir(repoRoot, absNew); missing != "" {
-			return fmt.Sprintf("%s does not exist, so %s has nowhere to land; make the directory first, "+
-				"or pass --create-missing-directories to have this command make it", missing, p.newPrefix())
-		}
+	//
+	// docs/divergences.md carried an entry for the old creates-it-anyway
+	// behavior; the refusal converges safegit with git (git mv refuses too), so
+	// that entry is deleted rather than rewritten.
+	if why := destinationParentReason(repoRoot, absNew, p.newPrefix(), createMissingDirs); why != "" {
+		return why
 	}
 
 	// Last, because it is the one question about the SOURCE's content rather
@@ -504,19 +505,68 @@ func mvEntryIsDirty(ctx context.Context, repoRoot string, e mvEntry) (bool, erro
 	return sha != e.sha, nil
 }
 
-// missingDestinationDir returns the repo-relative parent directory a move's
-// destination needs and does not have, or the empty string when the parent is
-// there (the repository root always is).
-func missingDestinationDir(repoRoot, absNew string) string {
+// destinationParentReason is the refusal a move's destination earns from the
+// place it would land in, or the empty string when that place is a directory
+// that is there (the repository root always is).
+//
+// There are two distinct wrong worlds, and only one of them is an election's to
+// cure. A parent that is ABSENT is what --create-missing-directories elects to
+// mint, so with the election it is no reason at all. A path on the way that is
+// on disk and is NOT a directory is a reason either way: no mkdir can turn an
+// existing file into a directory, so electing creation over it would only move
+// the failure from validation to the rename, where it arrives as a general
+// error with a rollback instead of as this collected refusal.
+func destinationParentReason(repoRoot, absNew, newPrefix string, createMissingDirs bool) string {
 	parent := filepath.Dir(absNew)
 	rel, err := filepath.Rel(repoRoot, parent)
 	if err != nil || rel == "." || rel == "" {
 		return ""
 	}
+	if blocker := nonDirectoryAncestor(repoRoot, parent); blocker != "" {
+		return fmt.Sprintf("%s is not a directory, so %s has nowhere to land; "+
+			"a move never turns a file into a directory", blocker, newPrefix)
+	}
+	if createMissingDirs {
+		return ""
+	}
 	if _, err := os.Stat(parent); err == nil {
 		return ""
 	}
-	return filepath.ToSlash(rel)
+	return fmt.Sprintf("%s does not exist, so %s has nowhere to land; make the directory first, "+
+		"or pass --create-missing-directories to have this command make it",
+		filepath.ToSlash(rel), newPrefix)
+}
+
+// nonDirectoryAncestor returns the repo-relative path of the nearest ancestor of
+// dir -- dir itself included -- that is on disk and is not a directory, or the
+// empty string when the chain up to the repository root holds no such thing.
+//
+// The walk is what the DEEP shape needs: `a.txt -> b.txt/deeper/a.txt` asks
+// about b.txt/deeper, which cannot be stat'ed at all because b.txt is a file, so
+// the answer is only found one level up.
+//
+// Existence is asked with Lstat and directoryness with Stat, on purpose: a
+// symlink pointing at a directory IS a directory to land in, while a dangling
+// one is a name that is taken by something that is not.
+func nonDirectoryAncestor(repoRoot, dir string) string {
+	sep := string(filepath.Separator)
+	for cur := dir; ; {
+		rel, err := filepath.Rel(repoRoot, cur)
+		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+sep) {
+			return ""
+		}
+		if _, err := os.Lstat(cur); err == nil {
+			if info, serr := os.Stat(cur); serr != nil || !info.IsDir() {
+				return filepath.ToSlash(rel)
+			}
+			return ""
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return ""
+		}
+		cur = parent
+	}
 }
 
 // pathsUnder returns every sorted tree path inside a directory prefix.
