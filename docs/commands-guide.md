@@ -1781,6 +1781,7 @@ would commit still holds a complete conflict region) after git has already run.
 | 29 | A named symlink's target leaves the repository (`--allow-escaping-targets` records it anyway) |
 | 30 | A history rewrite was refused before any ref moved (nothing changed) |
 | 31 | A history rewrite stands, but post-rewrite verification found residue or skipped the working-tree sync |
+| 32 | A concurrent change altered the moves this commit's delta witnesses; nothing was committed, so run the command again |
 | 40 | The push did not get through: git push failed, or the refs could not be safely re-read around it |
 | 41 | The remote ref moved after safegit observed it, so the --force-with-lease expectation no longer matched |
 | 50 | doctor found at least one error-severity problem (warnings alone exit 0) |

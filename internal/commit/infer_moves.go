@@ -257,13 +257,60 @@ func (m *moveInference) records(ctx context.Context, changed []git.ChangedPath, 
 
 	if !samePairs(m.pairs, pairs) {
 		return nil, &CommitError{
-			Code: exitcode.General,
+			Code: exitcode.MoveWitnessChanged,
 			Message: "another session moved the branch while this commit was being built, and the moves this " +
-				"commit's own delta witnesses changed with it; the message was already composed against the " +
-				"earlier answer, so nothing was committed -- run the command again",
+				"commit's own delta witnesses changed with it (" + describePairChange(m.pairs, pairs) + "); " +
+				"the message was already composed against the earlier answer, so nothing was committed " +
+				"-- run the command again",
 		}
 	}
 	return m.lines, nil
+}
+
+// describePairChange names what the recompute disagreed about, so the abort is
+// something a caller can check against their own working tree rather than an
+// assertion that "something" changed.
+//
+// Both sides are sorted, so the difference is stated as two lists: the pairs
+// the first attempt witnessed and this one does not, and the pairs this one
+// witnesses and the first did not. Either can be empty -- a race that only
+// takes a move away, or only adds one -- and only the non-empty halves are
+// named.
+func describePairChange(before, after []trailer.Pair) string {
+	in := func(pairs []trailer.Pair, want trailer.Pair) bool {
+		for _, p := range pairs {
+			if p == want {
+				return true
+			}
+		}
+		return false
+	}
+	names := func(pairs []trailer.Pair) string {
+		var out []string
+		for _, p := range pairs {
+			out = append(out, trailer.EncodePair(p.Old, p.New))
+		}
+		return strings.Join(out, ", ")
+	}
+	var gone, fresh []trailer.Pair
+	for _, p := range before {
+		if !in(after, p) {
+			gone = append(gone, p)
+		}
+	}
+	for _, p := range after {
+		if !in(before, p) {
+			fresh = append(fresh, p)
+		}
+	}
+	switch {
+	case len(gone) > 0 && len(fresh) > 0:
+		return "it no longer witnesses " + names(gone) + ", and now witnesses " + names(fresh)
+	case len(fresh) > 0:
+		return "it now witnesses " + names(fresh)
+	default:
+		return "it no longer witnesses " + names(gone)
+	}
 }
 
 // notice writes the one aggregate stderr line an operation gets, if it has

@@ -2,6 +2,7 @@ package commit
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/testutil"
 )
@@ -128,6 +130,23 @@ func TestInferenceAbortsWhenARetryChangesWhatTheDeltaWitnesses(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "run the command again") {
 		t.Errorf("the abort does not advise a re-run: %v", err)
+	}
+	// The abort has its own registered code. It is the one purely TRANSIENT
+	// refusal in the commit family -- nothing is wrong with the command, and
+	// running it again is the whole remedy -- and General would leave a caller
+	// unable to tell it from a failure that will happen again.
+	var cerr *CommitError
+	if !errors.As(err, &cerr) {
+		t.Fatalf("the abort is not a CommitError, so it carries no exit code: %v", err)
+	}
+	if cerr.Code != exitcode.MoveWitnessChanged {
+		t.Errorf("the abort exits %d, want MoveWitnessChanged (%d): %v",
+			cerr.Code, exitcode.MoveWitnessChanged, err)
+	}
+	// And it NAMES the pair whose witness changed, because "something changed"
+	// is not something a caller can check against their own working tree.
+	if !strings.Contains(err.Error(), "a.txt -> b.txt") {
+		t.Errorf("the abort does not name the pair that changed: %v", err)
 	}
 
 	// Nothing was committed by THIS operation: the tip is the racing commit,
