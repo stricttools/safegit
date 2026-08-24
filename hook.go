@@ -130,9 +130,6 @@ func hookRun(flags globalFlags, name string) int {
 	}
 
 	timeoutSec := cfg.Hooks.PrePrePush.TimeoutSeconds
-	if timeoutSec <= 0 {
-		timeoutSec = 1800
-	}
 
 	hookEnv := []string{
 		"SAFEGIT_REMOTE_NAME=origin",
