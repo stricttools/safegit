@@ -79,7 +79,7 @@ func movedRefusal(format string, args ...interface{}) error {
 //
 // replacedMessage is the message of the commit an amend or a reword is
 // replacing, and is empty for a plain commit, which replaces nothing. It is
-// what the re-declaration refusal is asked of -- see refuseRedeclaredPairs.
+// what the re-declaration question is asked of -- see supersedeRedeclaredPairs.
 func resolveMoved(ctx context.Context, repoRoot, parentRev, replacedMessage string, moved []string) ([]string, error) {
 	if len(moved) == 0 {
 		return nil, nil
@@ -487,8 +487,9 @@ func movedParentRev(parents []string) string {
 // operation was also declaring, which could never fire: a declared line is a
 // FRESHLY MINTED record, so its id -- and therefore the whole line -- differs
 // from every preserved one even when the two speak about the same pair. The
-// collision that branch was reaching for is a collision of PAIRS, and it is
-// refused outright by refuseRedeclaredPairs before any line is minted.
+// collision that branch was reaching for is a collision of PAIRS, and
+// supersedeRedeclaredPairs settles it before any line is minted -- refusing a
+// re-declared DECLARED record, and superseding an observed one.
 func commitTrailers(userTrailers, preserved, declared []string) []string {
 	out := make([]string, 0, len(userTrailers)+len(preserved)+len(declared))
 	out = append(out, userTrailers...)
