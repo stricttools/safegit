@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/smm-h/safegit/internal/exitcode"
@@ -75,11 +77,13 @@ const (
 // safegit answers both questions itself, so they are removed from the argv the
 // compute step forwards -- which carries `--no-ff --no-commit` of its own and
 // would otherwise be handed a contradiction.
+//
+// `--commit` is not among them: it is refused by name (mergeSubset), so it
+// never reaches an argv there is anything to remove it from.
 var mergeSelectorOptions = map[string]bool{
 	"--ff":        true,
 	"--no-ff":     true,
 	"--ff-only":   true,
-	"--commit":    true,
 	"--no-commit": true,
 }
 
@@ -148,6 +152,81 @@ func refuseUnsupportedMerge(parsed gitArgs) int {
 // one. Needs its row in docs/divergences.md.
 const octopusReason = "a conclusion has one staged result to check and one message to write, however many sides went into it, and every check safegit makes over a merge is written against two"
 
+// fetchHeadName is the one merge argument that does not name one side.
+//
+// Every other revision resolves to a single commit, so COUNTING the revisions
+// on the command line answers "how many sides is this merge" -- which is what
+// refuseUnsupportedMerge does. FETCH_HEAD is git's one exception: when it is
+// the sole argument, and spelled exactly this way, git expands it into every
+// branch the fetch marked for merging (builtin/merge.c's collect_parents), so
+// one token can be an octopus.
+const fetchHeadName = "FETCH_HEAD"
+
+// forMergeHeads counts the sides FETCH_HEAD names.
+//
+// The file holds one record per fetched ref -- `<sha>\t<flag>\t<description>`
+// -- and the flag is `not-for-merge` on every ref the fetch brought in for a
+// remote-tracking branch alone. Counting LINES would be wrong and would refuse
+// the commonest pull there is: a stock refspec fetch writes a line per remote
+// branch and marks all but the current branch's upstream not-for-merge.
+func forMergeHeads(gitDir string) (int, error) {
+	data, err := os.ReadFile(filepath.Join(gitDir, "FETCH_HEAD"))
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if fields := strings.Split(line, "\t"); len(fields) > 1 && fields[1] == "not-for-merge" {
+			continue
+		}
+		n++
+	}
+	return n, nil
+}
+
+// refuseFetchHeadOctopus refuses a merge of a FETCH_HEAD that names more than
+// one side.
+//
+// It is asked BEFORE the fast-forward decision, and that ordering is the whole
+// point: safegit answers the ancestry question by resolving FETCH_HEAD to a
+// commit, and `git rev-parse FETCH_HEAD` reads the FIRST line of the file. A
+// check made after it would let the fast-forward arm move the branch onto one
+// fetched head and drop the rest without a word, while the merge arm authored a
+// commit with a parent per side -- both from a command line whose other
+// spelling (`safegit merge br1 br2`) is a refusal.
+//
+// `safegit pull` inherits it: its merge step is this one with FETCH_HEAD as the
+// incoming side, and it runs after the fetch that wrote the file.
+//
+// An unreadable or absent FETCH_HEAD is left to git, which is the same
+// convention the ancestry questions follow for an unresolvable revision: the
+// compute step below produces git's own verdict on the argument rather than one
+// safegit invented.
+//
+// DIVERGENCE: git merges every head FETCH_HEAD names, in one octopus commit;
+// safegit refuses. Needs its row in docs/divergences.md.
+func refuseFetchHeadOctopus(gitDir, other, command string) int {
+	if other != fetchHeadName {
+		return 0
+	}
+	heads, err := forMergeHeads(gitDir)
+	if err != nil || heads < 2 {
+		return 0
+	}
+
+	fmt.Fprintf(os.Stderr, "error: safegit %s cannot merge FETCH_HEAD: the fetch marked %d branches for merging\n", command, heads)
+	fmt.Fprintf(os.Stderr, "  FETCH_HEAD is the one name git expands into several sides -- every branch the fetch\n")
+	fmt.Fprintf(os.Stderr, "  marked for merging becomes a parent -- so one argument here asks for an octopus merge,\n")
+	fmt.Fprintf(os.Stderr, "  and merging several branches in one commit is not part of safegit's subset:\n")
+	fmt.Fprintf(os.Stderr, "  %s.\n", octopusReason)
+	fmt.Fprintf(os.Stderr, "  Bring them in one at a time: 'safegit merge <branch>' per side, or 'safegit pull <remote> <branch>'\n")
+	fmt.Fprintf(os.Stderr, "  per branch. See docs/divergences.md.\n")
+	return exitcode.Usage
+}
+
 // runRestructuredMerge is the whole flow.
 func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int {
 	// FIRST, and before the repository is touched at all: a command line
@@ -179,6 +258,14 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 	defer release()
 
 	if code := coordGuard(flags, gitDir, "merge"); code != 0 {
+		return code
+	}
+
+	// A merge safegit refuses is refused whether or not the run was going to
+	// happen: a preview of a command that cannot run is not a preview of
+	// anything. The command-line refusals above already work that way; this one
+	// is asked here as well because the dry run never reaches performMerge.
+	if code := refuseFetchHeadOctopus(gitDir, parsed.Revisions[0], "merge"); code != 0 {
 		return code
 	}
 
@@ -273,6 +360,13 @@ func (req mergeRequest) oplogExtra(outcome string) map[string]interface{} {
 func performMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition, req mergeRequest) (mergePayload, bool, int) {
 	ctx := flags.ctx()
 	other := req.other
+
+	// FIRST, because the ancestry question below cannot ask it: FETCH_HEAD may
+	// name several sides, and resolving it to a commit answers about the first
+	// one alone. See refuseFetchHeadOctopus.
+	if code := refuseFetchHeadOctopus(gitDir, req.other, req.op); code != 0 {
+		return mergePayload{}, false, code
+	}
 
 	// What safegit decides for itself, and it decides it BEFORE git runs.
 	//
