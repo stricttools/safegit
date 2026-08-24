@@ -32,7 +32,7 @@ review** for one that has not yet been confirmed and may be overturned. A
 behavior newly cataloged here is provisional until it has been reviewed as an
 entry, whatever its direction says.
 
-> **The provisional entries.** Two are rulings that were made and are still
+> **The provisional entries.** These are rulings that were made and are still
 > open:
 >
 > - [Resolution keywords write the working
@@ -43,7 +43,7 @@ entry, whatever its direction says.
 >   declared-only stance has been overturned: undeclared moves are to be recorded
 >   automatically, and the entry will be rewritten when that ships.
 >
-> Four are behaviors newly cataloged and not yet reviewed as entries:
+> And these are behaviors newly cataloged and not yet reviewed as entries:
 >
 > - [A dirty working tree refuses the guarded commands, untracked files
 >   included](#a-dirty-working-tree-refuses-the-guarded-commands-untracked-files-included)
@@ -53,6 +53,8 @@ entry, whatever its direction says.
 >   to it](#reset-is-refused-when-the-tree-is-dirty-in-exactly-the-modes-that-write-to-it)
 > - [A pre-pre-push hook can raise its own timeout, without a
 >   cap](#a-pre-pre-push-hook-can-raise-its-own-timeout-without-a-cap)
+> - [An autostash is applied only when it belongs to the merge being
+>   concluded](#an-autostash-is-applied-only-when-it-belongs-to-the-merge-being-concluded)
 
 Every future change that introduces a decision of this kind adds its entry here.
 
@@ -444,6 +446,26 @@ Every future change that introduces a decision of this kind adds its entry here.
   is a partial outcome, and a script that reads `0` will not look at the
   message. The exit code is the only channel a caller cannot ignore.
 - **Ruling:** ours — deliberate
+
+### An autostash is applied only when it belongs to the merge being concluded
+
+- **git's idiom:** `.git/MERGE_AUTOSTASH` is a plain file holding an object
+  name, and git checks nothing about that object. `git merge --continue` applies
+  whatever it names to the working tree and then deletes the file — a stale one
+  left by a merge that was abandoned or a conclusion that was killed, or one
+  written by hand, is applied just the same.
+- **safegit:** the conclusion asks whose stash it is first, and two facts have
+  to agree: the stash commit's **first parent** is the tip this conclusion
+  committed onto, and its **message** carries git's own autostash shape (`On
+  <branch>: autostash`, which is what tells it from the `WIP on <branch>: ...`
+  an ordinary `git stash` writes). A stash that fails either is neither applied
+  nor deleted: the file stays exactly where it is, the commit it names is
+  printed with the commands that reach it, and the conclusion exits the
+  commit-stands code with the leftover named in its payload. Applying it would
+  put somebody else's uncommitted work into files the merge never touched and
+  then remove the only name that work has left. `safegit doctor` reports the
+  same file as an orphan when no merge is in flight at all.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
 
 ### A detached HEAD is refused, with the exact way back
 
