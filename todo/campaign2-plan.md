@@ -925,6 +925,46 @@ uses; the two stale comments (autobump.go:210-212, :131-136) update.
 
 ---
 
+PHASE-3 AUDIT FINDINGS (remediated post-audit) `[plan]`:
+- D1: the already-concluded (crash re-run) path bypassed
+  refuseWorktreeOverwrite — routed through it (3.5's totality holds on
+  every materializing path).
+- D2: pick/revert crash recognition by message prefix false-positived
+  on duplicate subjects (a second `wip` pick swallowed, work dropped)
+  — fixed source-anchored: the pipeline's pick/revert conclusion oplog
+  entries record the SOURCE sha, and recognition requires the logged
+  source to equal the parked state's Source; message-prefix
+  corroboration retired.
+- D4: the crash re-run skipped completeness and declared "index and
+  working tree in step" while leaving unmerged stages. As redesigned:
+  the commit embodies the original resolutions, so the re-run derives
+  its index/worktree edits FROM THE COMMIT's own tree for the
+  conflicted paths (stage-0 the committed blobs, drop
+  committed-deletions), runs the overwrite check (D1), then aftercare
+  — the success claim becomes true and no stages survive. A re-run
+  declaration whose side's blob differs from the committed content is
+  refused naming the standing commit (silently ignoring it is the
+  killed shape); matching declarations are accepted and moot.
+- The fast-forward sync-failure arm (2.2's, shared by pull): the ref
+  moved but the run exited General with a null payload — exit 26's
+  meaning WIDENS to "the operation's ref move is real; aftercare did
+  not finish" (registry text updated) and the arm carries the merge
+  payload (outcome fast-forward, residue naming the sync step).
+- The autostashPending arm no longer claims "your uncommitted work"
+  without ownership (checks the key or drops the claim).
+- The residue member extends to commitPayload and mvPayload too (the
+  same ruled payload-carries-aftercare principle; the earlier rider's
+  list was not exhaustive).
+- D3 = REVIEW ITEM FOR THE USER (as-built stands): the ruled autostash
+  ownership key (first parent == tip AND message shape) cannot
+  distinguish a GENUINE abandoned autostash from the current merge's
+  own when the tip has not moved (requires hand-mutilated state:
+  normal aborts re-apply the stash; only manual state-file deletion
+  leaves the file behind at the same tip). The false code comment
+  claiming that coverage is corrected and the limit documented in code
+  and in the provisional catalog entry; whether to strengthen the key
+  is the user's call at the review.
+
 ## Phase 4 — Effects honesty `[user]`
 
 Depends on 1.5 and 3.1 (the payload conventions the effects records
