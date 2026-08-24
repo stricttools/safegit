@@ -82,7 +82,7 @@ func TestConclusionEmitsAnEnvelopeWhenThePostCommitStepFails(t *testing.T) {
 // identityMembers are the payload members that describe WHICH commit was made
 // rather than WHAT HAPPENED. Two conclusions of two different fixtures always
 // differ in these, so they are set aside before the documents are compared.
-var identityMembers = []string{"sha", "head", "tree", "files", "parents", "ref", "attempts"}
+var identityMembers = []string{"sha", "tree", "files", "parents", "ref", "attempts"}
 
 // outcomeResidue is a conclusion payload with the commit's identity removed:
 // what is left is the document's account of the outcome.

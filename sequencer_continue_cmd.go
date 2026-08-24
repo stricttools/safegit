@@ -65,17 +65,18 @@ type continueAuthor struct {
 	Email string `json:"email"`
 }
 
-// pickRevertPayload is continuePayload plus the members only a cherry-pick or
-// revert conclusion has: the identity the commit records, the tip the branch
-// ends at, and how many commits were made.
+// pickRevertPayload is continuePayload plus the one member only a cherry-pick
+// or revert conclusion has: the identity the commit records.
+//
+// It carried two more, `head` and `commits_created`, and both are gone. They
+// were QUEUE members: they existed to describe a delegated sequence, where the
+// conclusion could make several commits and the branch tip was therefore not
+// the commit this document named. A queued sequence is no longer safegit's to
+// conclude, so one shape remains -- one conclusion, one commit -- and in that
+// shape `head` was a duplicate of `sha` and `commits_created` was a constant.
 type pickRevertPayload struct {
 	continuePayload
 	Author continueAuthor `json:"author"`
-	// Head is the branch tip after the conclusion, null under --dry-run. It
-	// equals SHA: one conclusion makes one commit and the branch ends there.
-	Head *string `json:"head"`
-	// CommitsCreated is 1, and 0 under --dry-run.
-	CommitsCreated int `json:"commits_created"`
 }
 
 // continuePayloadSchema builds a conclusion's payload schema. The three
@@ -127,10 +128,7 @@ func continuePayloadSchema(withAuthor bool) map[string]interface{} {
 			[]string{"name", "email"},
 			false,
 		)
-		members["head"] = strictcli.SchemaType("string", "null")
-		members["commits_created"] = strictcli.SchemaType("integer")
-
-		required = append(required, "author", "head", "commits_created")
+		required = append(required, "author")
 	}
 	return strictcli.SchemaObject(members, required, false)
 }
@@ -178,10 +176,6 @@ func (op continueOp) reportPayload(flags globalFlags, out conclusionResult) {
 		flags.payload(base)
 		return
 	}
-	created := 1
-	if flags.dryRun {
-		created = 0
-	}
 	var author continueAuthor
 	if out.author != nil {
 		author = continueAuthor{Name: out.author.Name, Email: out.author.Email}
@@ -189,8 +183,6 @@ func (op continueOp) reportPayload(flags globalFlags, out conclusionResult) {
 	flags.payload(pickRevertPayload{
 		continuePayload: base,
 		Author:          author,
-		Head:            base.SHA,
-		CommitsCreated:  created,
 	})
 }
 
