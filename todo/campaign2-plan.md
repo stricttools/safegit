@@ -1,13 +1,15 @@
-# Campaign 2: implementation plan (revision 3)
+# Campaign 2: implementation plan (revision 4)
 
 Self-contained: every decision this campaign executes is stated in full in
 THIS file. A session with zero conversation context implements any subphase
 from this file plus the cited code, and releases at the end. There is no
 companion record: the execution-log convention is abandoned and the log
 deleted; where older artifacts (git history, superseded revisions) disagree
-with this file, this file wins. Code anchors were last verified against the
-tree at `c3c05c3`; treat each claim's TEXT as the anchor and re-locate by
-searching for it — expect drift in line numbers, never in the claim.
+with this file, this file wins. Code anchors were verified against the tree
+at `c3c05c3` and re-verified in sample by an adversarial critique at
+`ed355dd` (whose probe results are inlined where they bind); treat each
+claim's TEXT as the anchor and re-locate by searching for it — expect drift
+in line numbers, never in the claim.
 
 **EXECUTION IS ON HOLD.** The user's standing order: implementation starts
 only on a further explicit go. This file existing is not that go.
@@ -40,10 +42,18 @@ Consequences, all ruled:
 - Clean merges, clean cherry-picks, and pulls become pipeline-authored
   (Phase 2).
 - Multi-commit cherry-pick argv is refused naming sequential single
-  invocations — the same ruling revert already carries.
+  invocations — the same ruling revert already carries. Range/rev-set
+  spellings (`A..B`, `A...B`, `^rev` and kin) are refused too: probed,
+  `git cherry-pick A..B` creates queue state even when the range holds
+  one commit, and it is one argv token — argument validation must refuse
+  rev-set OPERATORS, not count tokens.
 - Sequencer queues created by RAW git are refused by the continue commands
-  ("safegit did not start this; finish or abort with git"); the delegation
-  machinery is deleted wholesale.
+  ("safegit did not start this; finish or abort with git"), as are raw-git
+  MERGE SHAPES safegit can no longer start (octopus; no-AUTO_MERGE content
+  conflicts) `[user]`; the delegation machinery is deleted wholesale.
+- Branch navigation is `safegit switch` (branch names only); `checkout` is
+  not a safegit command and file restoration is deliberately absent
+  (2.6) `[user]`.
 - Enforcement is structural: a boundary guard refuses commit-creating git
   argv outside the pipeline's compute doors and the declared rebase door
   (Phase 2.1). No mode table, no announcement generator, no generated mode
@@ -80,11 +90,13 @@ Consequences, all ruled:
   -M`). Phase 7 sweeps existing docs and help text accordingly.
 - **The dry-run doctrine, stated generally** (the narrow "mint last" form
   caused a real omission and is retired): on a dry-run path, perform all
-  state READS first, then record the would-do mutations; no state read may
-  follow the first recorded mutation (recorded-not-performed mutations make
-  later reads stale). Values only a real run can know are placeholders —
-  the established `previewCommitPlaceholder` / placeholder-lease
-  convention. Nobody runs a dry run to obtain real hashes.
+  state READS first, then record the would-do mutations IN THE ORDER THE
+  EXECUTE PATH PERFORMS THEM (the recorder convention scrub_preview.go's
+  comment states); no state read may follow the first recorded mutation
+  (recorded-not-performed mutations make later reads stale). Values only a
+  real run can know are placeholders — the established
+  `previewCommitPlaceholder` / placeholder-lease convention. Nobody runs a
+  dry run to obtain real hashes.
 - **No drift-prone details:** this plan and every document it touches
   follow the global rule — no prose counts or hand-typed totals; lists and
   tables ARE the enumeration; needed numbers are generated and
@@ -102,8 +114,8 @@ stance, and the release postponement are deliberate.
 ascending order enforced by tests): 26 = the commit-stands family code;
 27 = the conclusion overwrite refusal; 28 = the unmerged-index refusal;
 29 = the escaping-symlink refusal. Exit 25's constant is RENAMED to match
-its widened meaning (`HookNotExecutable` family spelling; the old name
-would lie at every call site).
+its widened meaning (`HookNotExecutable` family spelling; the old
+`TrackedHookNotExecutable` name would lie at every call site).
 
 **Non-goals:** reset/rebase recovery (todo stays active; 1.2 ships its
 data half) `[user]`; per-command bypass surfacing (deferred) `[user]`;
@@ -115,10 +127,11 @@ feature and, with it, the ruled projection-visible-before-consent
 requirement `[user]` — that ruling binds the feature whenever it is
 built, and it is not in this campaign; native pipeline-authored rebase
 (`todo/pipeline-authored-rebase.md`, after this campaign) `[user]`;
-minting backup's execute-path fetch (awaits the framework's
-network-effects ruling; the await todo tracks it) `[user]`; the
-ruling-await todos and the contingent todos (enumerated in Phase 10's
-triage list).
+minting backup's execute-path fetch, and the network read inside
+`backup restore`'s preview (its slot lookup is an `ls-remote`) — both
+await the framework's network-effects ruling; the await todo tracks
+them `[user]`; the ruling-await todos and the contingent todos
+(enumerated in Phase 10's triage list).
 
 ---
 
@@ -130,8 +143,11 @@ Independent subphases; sequential or one implementor.
 `scripts/test-baseline testdata/campaign2-baseline.txt`, commit it. The
 frozen campaign-1 artifact stays untouched. (The script passes `-short`
 and `-count=1` and refuses baselines containing build failures; the
-artifact is Phase 9's reconciliation anchor.)
-**Verify:** committed; `--check` clean; header records HEAD and argv.
+artifact is Phase 9's reconciliation anchor.) The script gains an
+explicit `jq` presence check with a named error (today a jq-less machine
+fails with a confusing pipeline error) `[plan]`.
+**Verify:** committed; `--check` clean; header records HEAD and argv;
+the jq check refuses cleanly when jq is absent from PATH.
 
 ### 0.2 Grammar reservation
 Turn green `internal/trailer/grammar_reserved_keywords_test.go` (both
@@ -146,24 +162,28 @@ keyword-before-a-pair subtests then.
 
 ### 0.3 Implicit-fallback family deletion
 Delete the dead `<=0` config fallbacks — all verified existing, no
-others: push.go:293-296, push.go:328-330, hook.go:132-135,
-internal/commit/commit.go:327-330 and :573-576,
+others in the config family: push.go:293-296, push.go:328-330,
+hook.go:132-135, internal/commit/commit.go:327-330 and :573-576,
 internal/commit/amend.go:143-146, :297-300, :474-477, :559-562. They are
 dead because every `*repo.Config` in production passes `Validate`
 (repo.go:409-422, covering all four integer keys), which hard-errors on a
 non-positive value, and `SetConfigValue` refuses writing one — so the
 fallbacks can never fire and only obscure the real authority. Call sites
 read the value directly; no substitution survives `[plan]`. Add one
-loader-refuses-non-positive pin per key (none exists).
+loader-refuses-non-positive pin per key (none exists). An
+attribute-derived sibling of the same dead shape exists at
+internal/conflict/conflict.go:332-334 (its only writer already
+guarantees a positive value) — outside this family's config scope; MAY
+be cleaned in the same pass, not required.
 **Verify:** pins green; the pattern greps to zero outside Validate.
 
 ### 0.4 Recorded-fact probe: autostash message shape
 The existing probes (internal/git/autostash_probe_test.go) never inspect
 the stash commit's MESSAGE. Add the probe pinning: a genuine
 `merge --autostash` stash's message is `On <branch>: autostash`; a bare
-`git stash create` yields `WIP on <branch>: ...`. (Reproduced live on git
-2.54 — the expectation is confirmed; the probe records it permanently.)
-3.2 keys on this `[probe]`.
+`git stash create` yields `WIP on <branch>: ...`. (Reproduced live on
+git 2.54 and re-reproduced on 2.55 — the expectation is confirmed; the
+probe records it permanently.) 3.2 keys on this `[probe]`.
 **Verify:** probe committed and green.
 
 ---
@@ -175,9 +195,9 @@ Depends on Phase 0. FILE-SHARING: 1.1, 1.2 AND 1.3 all edit coord_cmd.go
 passthroughStdout; 1.2's seams sit inside handler bodies 1.1 edits) — run
 1.1-1.3 under ONE implementor. 1.4 and 1.5 share doctor.go — one
 implementor or sequential. Phase 2 later REPLACES the merge and pull
-handlers this phase touches; the double-touch on those two is accepted
-(1.2/1.3's changes there are one small shared branch each) and the
-restructure inherits their conventions as stay-green constraints.
+handlers this phase touches (and renames checkout's); the double-touch is
+accepted (1.2/1.3's changes there are one small shared branch each) and
+the restructure inherits their conventions as stay-green constraints.
 
 ### 1.1 Derived worktree guards `[user]`
 - New derived view in internal/gitexec/classify.go over `EffectsOf`'s
@@ -186,11 +206,12 @@ restructure inherits their conventions as stay-green constraints.
 - reset: delete the literal scan (coord_cmd.go:349-356; its comment's
   only-`--hard`-mutates claim is false). The reset row EXTENDS its
   conditionals to `--merge` and `--keep` (worktree-writing) while
-  `--soft`/`--mixed` stay refs|index — the green pin
+  `--soft`/`--mixed` stay refs|index — `--mixed` needs no conditional
+  entry (it is reset's base classification); the green pin
   `TestFlagConditionalEffects` (internal/gitexec/classify_test.go:62)
-  pins exactly that and MUST STAY GREEN; do not make the row
-  unconditional. `TestTableIsWellFormed` (classify_test.go:190) refuses
-  empty conditional stubs — no leftovers.
+  pins `--soft` (refs|index) and `--hard` and MUST STAY GREEN; do not
+  make the row unconditional. `TestTableIsWellFormed`
+  (classify_test.go:190) refuses empty conditional stubs — no leftovers.
 - bisect: delete the hand-kept name list (coord_cmd.go:398-404). The
   bisect row (classify.go:114-118, currently unconditional-worktree with
   no conditionals — it already disagrees with the deleted list) gains
@@ -202,11 +223,15 @@ restructure inherits their conventions as stay-green constraints.
   guide; ignored files never count.
 - The marker-exemption silent skip (sequencer_markers.go:136) becomes a
   carried declined-check. STATED MECHANISM: `verifyMarkers` returns a
-  declined list alongside its int (signature change; sole caller
-  sequencer_continue.go:450-452), the list rides `conclusionResult`, the
+  declined list alongside its int (signature change; TWO production
+  callers — sequencer_continue.go:450 AND revert_cmd.go:235, the
+  restructured single revert). The list rides `conclusionResult`, the
   human report renders it, and the conclusion payload schemas gain a
   `declined_checks` member (schema builder edit + required list) —
-  coordinate with 3.1's payload work (same builder, one pass).
+  coordinate with 3.1's payload work (same builder, one pass). The
+  revert caller renders the declined list in TEXT ONLY at this subphase
+  (revert has no payload schema until 2.4 adds one; the payload member
+  joins there).
 - Red-first in this subphase (no wave pins): reset `--merge` and
   `--keep` on a dirty tree refuse (exit 5; today unguarded, exit 0);
   a bisect stepping subcommand outside the old list (skip) refuses on
@@ -222,8 +247,21 @@ pre-operation tip, and the post-operation tip in commit-entry spelling
 - Pre-op tip exists only in checkout today (coord_cmd.go:158); merge
   records the post-op tip under `result`; rebase/reset/bisect/pull
   record neither; resolve HEAD before each operation.
-- checkout's `ref` key currently holds the OPERATOR'S ARGUMENT
-  (coord_cmd.go:168-175) — fix to the resolved ref name.
+- The navigation entry (checkout today; `switch` after 2.6's rename):
+  its `ref` key currently holds the OPERATOR'S ARGUMENT
+  (coord_cmd.go:168-175 — for `-b` forms that is the literal flag
+  string) — fix to the resolved full ref name. For branch creation
+  (`-c` after the rename), the pre-op tip is the zero SHA (the ref did
+  not exist) `[plan]`.
+- NAVIGATION-ENTRY VISIBILITY `[plan]`: a successful branch switch
+  moves HEAD, not the branch ref — but an entry carrying ref + tips in
+  commit-entry spelling becomes visible to the fail-closed TipSHA
+  readers (`oplog.TipSHA`, oplog.go:184-191, feeding `LastRefUpdate`,
+  doctor's bypass_detect, undo's per-ref filter), where it would RESET
+  the bypass-detection baseline and mask earlier out-of-band commits.
+  Navigation entries therefore record their tips under a spelling the
+  TipSHA readers do not consume (e.g. `observed_tip`), and this
+  subphase AUDITS the three consumers against the new entry shapes.
 - Failure entries: the return-before-append sites (checkout :160-162,
   pull :211-213 and :227-229, merge :277-280, rebase :316-318, reset
   :364-366, bisect :412-414) now append entries with ref + old tip +
@@ -245,11 +283,14 @@ pre-operation tip, and the post-operation tip in commit-entry spelling
   together with the backup pin rewrite; both `LastRefUpdate` tests are
   sha-only and unaffected.
 - Phase 2's restructured merge/pull implement the SAME entry spelling
-  natively; the wave2 oplog pins must stay green across the restructure.
+  natively, under the SAME op names (see 2.2/2.5 — the wave2 pins
+  additionally require exactly-one entry with the COMMAND's op name);
+  the wave2 oplog pins must stay green across the restructure.
 **Verify (red to green):** the two wave2 oplog tests. NEW red-first: a
 failed merge writes a failed-outcome entry; doctor's bypass check does
 not misfire after a clean safegit merge; the root-undo false doctor
-error is gone.
+error is gone; bypass detection still flags an out-of-band commit made
+BEFORE a branch switch (the visibility rule above).
 
 ### 1.3 One JSON document on the guarded commands `[user; mechanism plan]`
 Under `--json`, runGitMutation captures (drop `Stream(true)` when
@@ -259,11 +300,12 @@ and live output. `Check(false)`+`ExitCode()` verified identical in
 capture mode. Known limit, documented in Phase 7: non-UTF-8 child
 output under --json fails the capture decode and degrades the exit to
 General. (Phase 2 later replaces the merge and pull handlers with
-structured commands; the capture branch is one shared spot in
-runGitMutation, so the fix costs nothing extra on the rows the
-restructure retires.)
+structured commands and renames checkout's; the capture branch is one
+shared spot in runGitMutation, so the fix costs nothing extra on the
+rows the restructure retires or renames.)
 **Verify (red to green):** both machine_contract_json_document tests
-(the leaking rows; the checkout row is a green forward-guard).
+(the leaking rows; the checkout row is a green forward-guard, renamed
+with 2.6's switch rename per Appendix B).
 
 ### 1.4 Hook rulings `[user]`
 - Timeout-override deletion: the interception goroutine
@@ -312,137 +354,232 @@ Depends on 1.1 (guard column), 1.2 (entry spelling), 1.3.
 
 ### 2.1 The boundary guard
 Enforcement of single authorship lives at the git-execution boundary,
-which every git subprocess already passes through:
-- `internal/gitexec`'s classification table gains an AUTHORS-COMMIT view:
-  the argv shapes under which git itself would create or move a commit ref
-  (`git commit`; `merge` without `--no-commit`; `cherry-pick`/`revert`
-  without `--no-commit`; `am`; `rebase`). safegit's own compute
-  invocations always carry `--no-commit` (and merge's carries `--no-ff`,
-  per 2.2), so no production door for a bare form exists.
-- A guard (registration/AST level, the campaign-1 exec-boundary guard
-  pattern) refuses construction of authors-commit argv anywhere outside
-  the DECLARED DOORS: the pipeline's compute invocations (the
-  `--no-commit` forms) and the rebase passthrough registration. Scope
-  rule as in campaign 1: `_test.go` files and `internal/testutil` are
-  exempt wholesale; production packages are not.
+which every git subprocess already passes through. The mechanism is a
+PAIR `[plan — the campaign-1 AST guard alone cannot see runtime argv]`:
+- STATIC HALF: the campaign-1 exec-boundary AST guard pattern
+  (internal/gitexec/boundary_guard_test.go's shape) extended with a rule
+  refusing LITERAL authoring verbs (`"commit"`, and
+  `"merge"`/`"cherry-pick"`/`"revert"` literals not accompanied by a
+  literal `--no-commit` in the same argv construction) outside the
+  declared doors. Scope rule as in campaign 1: `_test.go` files and
+  `internal/testutil` are exempt wholesale; production packages are not.
+- RUNTIME HALF: an authors-commit check at the existing `Validate`
+  choke point (every constructed argv passes it): argv whose verb+flags
+  shape would let git create a commit (`commit`;
+  `merge`/`cherry-pick`/`revert` lacking `--no-commit`) is refused
+  unless the call site carries a DECLARED DOOR (an ExemptionID-style
+  parameter; the only door is the rebase passthrough — `am` needs no
+  row, the table already default-denies it). Table mechanics: the
+  classification table's `ConditionalEffect` vocabulary is additive and
+  presence-only, and its `Base` is deliberately the wider
+  classification — the wrong shape for an authoring view — so the
+  authors-commit fact is a SEPARATE field (an `Authors` marker with
+  `SuppressedBy` tokens, e.g. `--no-commit`), leaving
+  `ObservePrefixes`' reasoning about conditionals intact `[plan]`.
 - The invariant this makes structural: "git never authors a commit
   through safegit, except `safegit rebase`" — enforced at the choke
   point, not maintained in a table. `[user — boundary guard chosen over
   a mode table]`
-- The amend/reword payload member: `commit`'s payload gains an
-  `execution_mode` string (amend|reword) on the amend path, payload
-  only, no stderr line `[user]`.
-**Verify:** guard test red-first against a planted violation; the
-declared doors enumerated in the test; amend/reword payload member
-asserted in the payload tests.
+- The amend/reword payload member: the commit payload gains an
+  `execution_mode` member. The schema is closed
+  (`additionalProperties:false`, all members required, shared by
+  commit/amend/reword — internal/commit/commit.go:83-97), so the member
+  follows the existing nullable convention: present on every form, the
+  string `amend`/`reword` on the amend path, null on plain commit
+  `[plan]`. Payload only, no stderr line `[user]`.
+**Verify:** static-guard test red-first against a planted literal
+violation; runtime refusal red-first against a planted no-door argv;
+the declared door enumerated in the test; the execution_mode member
+asserted in the payload tests (null and non-null forms).
 
 ### 2.2 Merge restructure
 `safegit merge <branch>` becomes pipeline-authored:
 - Exactly ONE branch argument (an octopus merge — merging several
   branches in one commit — is refused under the subset law; divergences
   entry). Strategy selection (`-s`) and strategy options (`-X`) are
-  refused (the conclusion and overwrite machinery cannot reconstruct
-  what non-default strategies write; refusing keeps the protection
-  total). `--squash` and `--edit` are refused (allowlist, 2.6).
-- Fast-forward handling `[plan]`: when the merge is a fast-forward and
-  `--no-ff` was not given, safegit performs a CAS ref move (no commit
-  exists to author), records the oplog entry with a fast-forward
-  outcome, and reports it; `--no-ff` elects a merge commit; `--ff-only`
-  refuses non-fast-forward.
+  refused (the conclusion and overwrite machinery cannot see what
+  non-default strategies write; refusing keeps the protection total).
+  `--squash` and `--edit` are refused (allowlist, 2.6). `--autostash`
+  is REFUSED `[user]`: it is a dead flag through safegit — the
+  coordination check refuses any dirty tree BEFORE git runs (a clean
+  tree has nothing to stash; a dirty tree never reaches git), and in a
+  multi-agent repo the uncommitted changes may be another session's
+  work; the refusal says "commit your changes first". Divergences
+  entry. (The campaign-1 machinery that handles autostash state RAW git
+  created stays — 3.2 covers it.) Operator-level `--no-commit` is
+  ALLOWED `[plan]`: it computes and PARKS (even when clean — the
+  operator inspects, then concludes with merge-continue); it never
+  auto-concludes.
+- Fast-forward handling `[plan]`: safegit decides ff-ness itself
+  (merge-base ancestry check). When the merge is a fast-forward and
+  `--no-ff` was not given: CAS ref move to the incoming tip, THEN
+  `git.SyncMainIndexWithWorktree` (internal/git/git.go:442-453 —
+  `read-tree --reset -u` with the gitignore protection; the same
+  primitive scrub's post-rewrite sync uses, including its
+  foreign-staged-state handling). A bare ref move alone leaves the
+  INVERSE of the incoming diff staged (probed) — the sync is not
+  optional. The oplog entry carries Op `merge` with a fast-forward
+  outcome; `safegit undo` REFUSES it (the tip is a commit safegit did
+  not create — undo's existing not-safegit-authored refusal covers it;
+  pinned). `--no-ff` elects a merge commit; `--ff-only` refuses
+  non-fast-forward.
 - Non-fast-forward path: run `git merge --no-ff --no-commit` — BOTH
   flags always, regardless of what the operator passed: `--no-commit`
-  alone cannot stop a fast-forward (git documents this), so if the
-  ff-ness check races a concurrent tip move, a bare `--no-commit`
-  invocation would fast-forward the ref directly, outside CAS;
-  `--no-ff` makes that impossible (git always parks a merge state,
-  and the conclusion's CAS ref update then catches any tip movement).
-  Clean result: the parked state (MERGE_HEAD, staged index)
-  is concluded IMMEDIATELY through the merge-continue engine with an
-  empty resolution set — message from `-m` or the stripped MERGE_MSG,
+  alone cannot stop a fast-forward (probed: it fast-forwards the ref
+  immediately), so if the ff-ness check races a concurrent tip move, a
+  bare `--no-commit` invocation would move the ref outside CAS;
+  `--no-ff` makes that impossible (git always parks a merge state, and
+  the conclusion's CAS ref update then catches any tip movement).
+  Clean result (probed: exit 0, MERGE_HEAD + MERGE_MSG + AUTO_MERGE
+  present, result fully staged, ref unmoved): the parked state is
+  concluded IMMEDIATELY through the merge-continue engine with an
+  empty resolution set — message from `-m` (probed: MERGE_MSG carries
+  exactly the custom message) or the stripped MERGE_MSG default,
   commit-msg hook, trailers, CAS ref update, state cleanup — a
   pipeline-authored merge commit. Conflicted result: state parks
   exactly as today and the operator concludes with `merge-continue`.
-- `--autostash` stays allowed (the stale-autostash machinery of 3.2 and
-  the campaign-1 autostash application cover it).
-- Oplog entries carry the 1.2 baseline spelling; the wave2 merge pins
-  stay green. `merge` gains a payload schema (members follow the
-  conclusion payload minus the resolution members) `[plan]`.
+- OUTPUT CONTRACT `[plan — two committed pins bind it]`: the compute
+  step's git narration (CONFLICT lines etc.) is captured and relayed
+  through the 1.3 channel convention — human mode re-emits on the
+  original channels; `--json` re-routes child stdout to stderr
+  (machine_contract_json_document_test.go:185-193 requires CONFLICT on
+  stderr and absent from stdout under --json; merge_fixture_test.go:86
+  requires CONFLICT visible on a conflicted `safegit merge`, and that
+  fixture underpins many conclusion suites).
+- OPLOG `[plan — a committed pin binds it]`: the pipeline entry for a
+  merge concluded by `safegit merge` itself carries Op `merge`
+  (wave2_passthrough_oplog_positions_test.go:114-116 requires exactly
+  ONE entry with Op=="merge" — the pipeline's `req.OplogOp` is set per
+  entry command, not hardcoded to the conclusion command's name); a
+  conflicted merge concluded later by `merge-continue` records
+  `merge-continue` as today. Entries carry the 1.2 baseline spelling.
+  `merge` gains a payload schema (members follow the conclusion
+  payload minus the resolution members) `[plan]`.
 **Verify:** red-first — a clean non-ff `safegit merge` produces a
-pipeline-authored commit (trailers present, undoable) with both parents;
-ff moves the ref with the ff outcome recorded; octopus argv and `-s`/
-`-X` refuse naming the divergence; conflicted merges still park and
-conclude; existing merge-continue suite stays green.
+pipeline-authored commit (trailers present, undoable) with both parents
+and exactly one Op=="merge" oplog entry; ff moves the ref AND syncs
+index+worktree (git status clean after), with the ff outcome recorded
+and undo refusing it; octopus argv, `-s`/`-X`, and `--autostash` refuse
+naming the divergence; `--no-commit` parks without concluding;
+conflicted merges still park and conclude with CONFLICT narration on
+the pinned channels; existing merge-continue suite stays green.
 
 ### 2.3 Cherry-pick restructure
-`safegit cherry-pick` becomes single-form and pipeline-authored,
-mirroring the revert restructure that already exists (revert_cmd.go is
-the template):
-- ONE commit argument; multi-commit argv is refused naming sequential
-  single invocations `[user — the revert precedent applied]`.
-- Clean pick: compute via `git cherry-pick --no-commit`, conclude
-  through the cherry-pick-continue machinery — author preserved from
-  the source commit, committer the operator (the campaign-1 authorship
-  rule), state files cleaned, undoable.
-- Conflicted pick: parks as today; `cherry-pick-continue` concludes.
+`safegit cherry-pick` becomes single-form and pipeline-authored:
+- ONE commit argument; multi-commit argv AND range/rev-set spellings
+  (`..`, `...`, `^` operators — probed: `git cherry-pick A..B` creates
+  queue state even for a one-commit range) are refused naming
+  sequential single invocations `[user — the revert precedent
+  applied]`. The argument must resolve to exactly one commit
+  (`rev-parse --verify <arg>^{commit}` after the operator refusal).
+- THE PARK FILE `[user]`: `git cherry-pick --no-commit` records
+  NOTHING about the picked commit — no CHERRY_PICK_HEAD on either the
+  clean or the conflicted path (probed twice, independently; git only
+  writes CHERRY_PICK_HEAD on a conflicted pick WITHOUT `-n`). The
+  conclusion machinery, author preservation (`sequencer.SourceAuthor`
+  reads state.Source), marker labels, `git status`, and
+  `git cherry-pick --abort` all key on that file. So: after the
+  `--no-commit` compute, SAFEGIT WRITES `.git/CHERRY_PICK_HEAD` itself
+  (git's own trivial one-line-SHA format), uniformly on clean and
+  conflicted paths — the parked state then matches what a conflicted
+  pick looks like today, and the existing machinery works unchanged
+  (the conclusion's state-file cleanup already owns the file's
+  removal). Clean pick: conclude IMMEDIATELY through the
+  cherry-pick-continue machinery — author preserved from the source
+  commit, committer the operator (the campaign-1 authorship rule),
+  state files cleaned, undoable. Conflicted pick: parks; the operator
+  concludes with `cherry-pick-continue`. (Contrast recorded for the
+  implementor: `git revert --no-commit` DOES write REVERT_HEAD on both
+  paths — probed — which is why revert_cmd.go never needed this; the
+  park-file write is the pick-specific addition.)
 - `--abort`/`--quit` remain guarded passthrough state-control forms
   (they author nothing); `--skip` is refused naming `--abort` and the
   sequential form `[user]`. Operator-level `--no-commit` stays a
   guarded passthrough (it authors nothing); `--edit` is refused.
-- Oplog: ONE entry per pick (the pipeline's); any compute-step append
-  is not written `[plan — the revert double-entry rule applied]`.
-  Payload: a dedicated single-pick schema (continuePayload members
-  minus the queue members) `[plan]`.
+- OUTPUT CONTRACT: the compute step's narration relays through the 1.3
+  channel convention (same pins-driven rule as 2.2).
+- OPLOG: ONE entry per pick, Op `cherry-pick` (the wave2 pick pin
+  counts entries under that op name); any compute-step append is not
+  written `[plan — the revert double-entry rule applied]`. Payload: a
+  dedicated single-pick schema (continuePayload members minus the
+  queue members) `[plan]`.
 **Verify:** red-first — a clean pick's commit carries trailers and the
-source author, and `safegit undo` reverses it; multi-commit argv
-refuses; `--skip` refuses; conflicted pick parks and concludes;
+source author, exactly one Op=="cherry-pick" oplog entry, and `safegit
+undo` reverses it; multi-commit and range argv refuse; `--skip`
+refuses; conflicted pick parks with CHERRY_PICK_HEAD present,
+`git status` shows the pick, and `cherry-pick-continue` concludes;
 Appendix B covers the retired passthrough pins.
 
 ### 2.4 Revert single-form
 As ruled: the git-authored passthrough arm is DELETED. `safegit revert
 <commit>` = the restructured single-commit form. Refusals: multi-commit
-argv (naming the sequential form), `-S`, `--edit`, and any other option
-the pipeline cannot honor. `--abort` and `--quit` remain guarded
-passthrough state-control; `--skip` is refused naming revert-continue
-and `--abort`; operator `--no-commit` stays a guarded passthrough
-`[plan]`. OPLOG `[plan]`: one entry per revert — the pipeline's
-revert-continue entry; the compute-step's own `Op:"revert"` append
-(revert_cmd.go:182-187) is DELETED (today a single revert writes two
-entries; the not-undoable one goes). PAYLOAD `[plan]`: a dedicated
-single-revert schema (the continuePayload members minus the queue
-members — reusing revertContinuePayloadSchema would require members
-that lie); the in-code no-schema statements
-(sequencer_continue_cmd.go:182-184, revert_cmd.go:296-298) are
-rewritten. The preview fix is scoped to the REVERT caller of
+argv AND range/rev-set spellings (same rule and mechanism as 2.3),
+`-S`, `--edit`, and any other option the pipeline cannot honor.
+`--abort` and `--quit` remain guarded passthrough state-control;
+`--skip` is refused naming revert-continue and `--abort`; operator
+`--no-commit` stays a guarded passthrough `[plan]`. OPLOG `[plan]`: one
+entry per revert — the pipeline's entry, Op `revert`; the
+compute-step's own `Op:"revert"` append (revert_cmd.go:182-187) is
+DELETED (today a single revert writes two entries; the not-undoable one
+goes). PAYLOAD `[plan]`: a dedicated single-revert schema (the
+continuePayload members minus the queue members — reusing
+revertContinuePayloadSchema would require members that lie); the
+in-code no-schema statements (sequencer_continue_cmd.go:182-184,
+revert_cmd.go:296-298) are rewritten; the declined-checks member from
+1.1 joins here. The preview fix is scoped to the REVERT caller of
 previewSequencerOperation only (revert_cmd.go:167) — merge's and
 cherry-pick's recorded argv are correct and their previews are
 untouched.
 **Verify:** the revert restructure suite; the retired passthrough-arm
-pins per Appendix B; single revert writes exactly one oplog entry.
+pins per Appendix B; NEW red-first: single revert writes exactly one
+oplog entry; range argv refuses.
 
 ### 2.5 Pull
-`safegit pull` = fetch, then the 2.2 merge path (ff or pipeline-authored
-merge commit) under the existing required `--merge-strategy` selector.
-It stops being a bare passthrough and emits a structured payload
-(fetch summary + the merge payload) `[plan]`. `--rebase` is refused
-naming the two-step (`fetch` via pull is fine; rebase is its own
-command and its own door).
+`safegit pull` is ALREADY a declared command composed as
+fetch-then-merge (main.go:429-460 registers it with the required
+`--merge-strategy` selector, Choices ff/ff-only/no-ff;
+coord_cmd.go:211-229 builds its own merge argv) — the work is
+REPLACING ITS MERGE STEP with the 2.2 path and ADDING a structured
+payload (fetch summary + the merge payload) `[plan]`. The strategy
+values map onto 2.2 directly: `ff` = fast-forward when possible, else
+a pipeline-authored merge commit; `ff-only` = 2.2's `--ff-only`;
+`no-ff` = always a merge commit. `--rebase` is refused naming the
+two-step (rebase is its own command and its own door). Oplog: the 1.2
+baseline spelling under Op `pull`, exactly one entry per run (today's
+entries carry remote/branch and no tips — reshaped; the wave2 pull
+expectations get the same op-name care as 2.2's).
 **Verify:** red-first — a pull that merges produces a pipeline-authored
-commit; `--rebase` refuses; oplog baseline entries present.
+commit; `--rebase` refuses; oplog baseline entry present under Op
+"pull".
 
-### 2.6 The allowlist `[user — full allowlist now]`
+### 2.6 The allowlist and the switch rename `[user — full allowlist now]`
 Every guarded git-forwarding command validates its forwarded argv
 against an explicit allowlist BEFORE anything runs; unlisted tokens are
 refused (default-deny) with a message naming the subset law and the
 divergences doc. Refusals are parser-shaped (exit 2). Each refused
 capability gets a divergences entry in Phase 7; the user's pre-release
 divergences review is the checkpoint where any verdict here is
-overturned. Initial verdicts `[plan — each reversible at that review]`:
-- `checkout`: ALLOW a branch/ref argument and `-b <new>`. REFUSE the
-  pathspec form (`checkout [--] <path>` discards working-tree changes —
-  the destructive restore shape banned fleet-wide), `-f`/`--force`,
-  `-B`, `--ours`/`--theirs`, `--orphan`, `--detach` (the detached-HEAD
-  remedy safegit itself teaches uses `git branch` + `git symbolic-ref`;
-  agents have no detach workflow).
+overturned. Verdicts:
+- NAVIGATION IS `safegit switch` `[user — deliberate rename]`:
+  `checkout` stops existing as a safegit command. `switch` accepts an
+  EXISTING BRANCH NAME or `-c <new>` (branch creation; switch's own
+  spelling replaces checkout's `-b`) — and nothing else. Tags, SHAs,
+  and other commit-ish arguments are refused naming the reason (any
+  non-branch argument detaches HEAD — the flag `--detach` alone guards
+  nothing — and safegit treats detached HEAD as a refusal state whose
+  remedy its own guide teaches) with the raw-git escape named for the
+  rare deliberate case `[user — branch names only]`. Refused flags:
+  `--detach`, `-C` (force-recreate), `--force`/`--discard-changes`,
+  `--orphan`, `--merge` (dead through safegit — it exists to carry a
+  dirty tree across, and the dirty-tree check refuses first; same
+  shape as merge's `--autostash`). File restoration is deliberately
+  ABSENT (switch has no file mode — the destructive
+  `checkout -- <path>` shape, banned fleet-wide, becomes structurally
+  inexpressible rather than refused). Divergences: two entries
+  (safegit implements switch, not checkout; file restoration
+  deliberately absent) replacing checkout's refusal list. Breaking
+  changelog entry; the rename sweeps the handler, registries,
+  machine-contract row, oplog op (`switch`), docs (Appendix B).
 - `reset`: ALLOW `--hard`, `--soft`, `--mixed`, `--merge`, `--keep`
   with a commit argument (guards derived per 1.1). REFUSE the pathspec
   form (`reset <commit> -- <path>` manipulates the shared index safegit
@@ -461,22 +598,40 @@ validated in the handler before the operation lock; the table is code
 (no generated doc table — the divergences entries are the documentation
 of what is refused and why).
 **Verify:** red-first per command — one allowed form passes, one
-refused form names the law; the fleet-banned `checkout -- <path>` shape
-refuses; every refusal has a divergences entry by the end of Phase 7.
+refused form names the law; `switch` to a branch works and to a SHA
+refuses; the destructive restore shape does not parse as any safegit
+command; every refusal has a divergences entry by the end of Phase 7.
 
-### 2.7 Raw-git queues refused; delegation deleted
-`cherry-pick-continue` and `revert-continue` with the sequencer queue
-directory present (a multi-commit sequence, which only RAW git can now
-create) refuse, naming git's own `--continue`/`--abort` as the way to
-finish what git started. The delegation machinery is deleted: the
-delegate path (sequencer_delegate.go), `git.AdoptIndexFrom`, the
-delegated payload shape and its members, the delegation notice, and the
-delegated oplog op. The queued-state red test
-(`sequencer_delegation_delete`) and the delegation suites are retired
-or converted to refusal pins as sanctioned rewrites (Appendix B).
+### 2.7 Raw-git shapes refused; delegation deleted
+- `cherry-pick-continue` and `revert-continue` with the sequencer queue
+  directory present (a multi-commit sequence, which only RAW git can
+  now create — the reader's discriminator is `.git/sequencer`
+  existing) refuse, naming git's own `--continue`/`--abort` as the way
+  to finish what git started.
+- `merge-continue` refuses raw-git merge SHAPES safegit can no longer
+  start `[user]`: MERGE_HEAD carrying more than one line (octopus), or
+  a content-conflicted path with NO AUTO_MERGE file (the non-default-
+  strategy signature; on the supported git floor a normal ort merge
+  always writes AUTO_MERGE). The refusal names git's own conclusion as
+  the way out. The campaign-1 octopus-conclusion capability is DELETED
+  — its green pin becomes a refusal pin and its fixtures switch to raw
+  git (Appendix B); the sequencer reader KEEPS multi-line MERGE_HEAD
+  support (the refusal needs it to detect the shape).
+- The delegation machinery is deleted: sequencer_delegate.go,
+  `git.AdoptIndexFrom`, the delegated payload shape and its members
+  (`queue_delegated`, `stopped_again`, delegatedPayload,
+  `continuePayloadSchema(true)`), `reportDelegated`, the delegation
+  branch at sequencer_continue.go:466-468, the delegation notice, and
+  the delegated oplog op. RELOCATE FIRST: the `unmergedCount` helper
+  (sequencer_delegation_test.go:109) is imported by the 3.6 spec red
+  (commit_unmerged_index_test.go:48) — it moves to a surviving file
+  before the suite deletion, or the whole test package stops
+  compiling.
 **Verify:** red-first — a raw-git queued pick meets the refusal naming
-git; the delegation symbols gone (build asserts no callers); refusal
-pins replace the delegation suite per Appendix B.
+git; a raw-git octopus merge meets merge-continue's refusal; the
+delegation symbols gone (build asserts no callers); refusal pins
+replace the delegation suite per Appendix B; the 3.6 red still
+compiles.
 
 ### 2.8 Fallback deletions
 - commit `--hunks`: the silent `--3way` retry
@@ -486,17 +641,21 @@ pins replace the delegation suite per Appendix B.
   caller wraps the error with it) `[plan]`; red-first (no wave pin; the
   real test neighbors are the commit_hunks_conflict tests — no "stage
   retry tests" exist).
-- scrub file's submodule redirect: the swallowed enumeration error
-  (scrub.go:154-158) becomes a HARD error; scrub_match.go:242-244 and
-  :535-538 have the same defect class (`subs=nil` silently drops
-  submodules from the rewrite's SCOPE) — both become hard errors too;
-  doctor.go:686's warn genuinely does not change a target and stays.
-  The submodule redirect's infof line stays (the payload already
-  carries the submodule member); `--remap-shas-in` is honored on the
-  parent during a submodule-target scrub exactly as its help declares
-  (verified; `scrub_remap_test.go:403` stays green — no change there).
+- scrub's submodule-enumeration failures become HARD errors at all
+  three seams: scrub.go:154-158 (fully silent today) and
+  scrub_match.go:242-244 and :535-538 (which warn today but still
+  silently drop submodules from the rewrite's SCOPE — the warn does
+  not cure the scope narrowing). doctor.go:686's enumeration-failure
+  warn ESCALATES to an error-severity finding `[plan — the failure
+  silently empties doctor fix's submodule cleanup scope, the same
+  class]`. The submodule redirect's infof line stays (the payload
+  already carries the submodule member); `--remap-shas-in` is honored
+  on the parent during a submodule-target scrub exactly as its help
+  declares (verified; `scrub_remap_test.go:403` stays green — no
+  change there).
 **Verify:** each deletion red-first; the hunks failure names the file;
-the enumeration errors are hard on all three seams.
+the enumeration errors are hard on all three scrub seams; doctor's
+finding escalation pinned.
 
 ---
 
@@ -507,7 +666,8 @@ passthrough with no schema panics in `Context.Payload`; the spine
 records 2 -> 3).
 
 ### 3.1 The family code (exit 26) and envelope-always `[user]`
-Scope: every pipeline author. The site map:
+Scope: every pipeline author. The site map (two files share a base
+name; paths are spelled in full):
 - Genuinely post-ref die() sites converted to report-then-return:
   sequencer_continue.go:524 (finishConclusion) and :529 (auto-bump);
   revert_cmd.go:288 and :293. (The delegation site is deleted by 2.7,
@@ -519,14 +679,16 @@ Scope: every pipeline author. The site map:
   post-ref-update pipeline error.
 - The typed error: internal/commit returns a typed
   commit-stands-partial result (carrying the created SHA and the failed
-  step) from the post-updateRef failures — commit.go:665-667
-  (reconcile), amend.go:356-358 and :607 — through BOTH result types
-  (CommitResult and AmendResult).
-- Additional aftercare family members: the post-ref auto-bump die sites
-  in every author — commit.go:234-236, :433-435 (amend), :503-505
-  (reword), mv.go:576-585, undo.go:310-312 (whose runCommit-family
-  handlers return ints; the widening threads the family code through
-  those returns).
+  step) from the post-updateRef failures —
+  internal/commit/commit.go:665-667 (reconcile),
+  internal/commit/amend.go:356-358 and :607 — through BOTH result
+  types (CommitResult and AmendResult).
+- Additional aftercare family members: the post-ref auto-bump failure
+  sites in every author — root commit.go:234-236, :433-435 (amend),
+  :503-505 (reword); mv.go:576-585 (whose auto-bump arm RETURNS
+  exitcode.General rather than dying); undo.go:310-312. The
+  runCommit-family handlers return ints; the widening threads the
+  family code through those returns.
 - consumeAutostash's outcomes map into the payload: an `autostash`
   member (state enum + stash SHA where one exists) plus a `residue`
   list on continuePayload. Context.Payload is one-shot —
@@ -545,12 +707,13 @@ enforces).
 ### 3.2 Stale-autostash guard (0.4-keyed) + doctor orphan check `[user]`
 Key: consume MERGE_AUTOSTASH only when the stash commit's first parent
 == HEAD AND its message carries git's autostash shape (`On <branch>:
-autostash`) — the 0.4 probe records the fact. A failing stash is not
-consumed, not deleted: named in the residue list; doctor's new check
-(registration-table row, WARN severity `[plan]`) reports
-MERGE_AUTOSTASH-without-MERGE_HEAD. The `--action fix` store-as-stash
-action ships in 4.2 with the doctor-mint work `[plan — 3.2 delivers
-the CHECK, 4.2 the FIX action]`.
+autostash`) — the 0.4 probe records the fact. (This machinery serves
+autostash state RAW git created — `safegit merge --autostash` itself is
+refused per 2.2.) A failing stash is not consumed, not deleted: named
+in the residue list; doctor's new check (registration-table row, WARN
+severity `[plan]`) reports MERGE_AUTOSTASH-without-MERGE_HEAD. The
+`--action fix` store-as-stash action ships in 4.2 with the doctor-mint
+work `[plan — 3.2 delivers the CHECK, 4.2 the FIX action]`.
 **Verify (red to green):** both stale_autostash tests (the diagnose
 half here; the fix half's mint pin in 4.2). Green stays: the
 genuine-autostash tests.
@@ -564,45 +727,50 @@ since a crash-restored index reads as resolved-but-not-conflicted
 there. Key: the pipeline's own oplog entry for the ref (op matches, sha
 == HEAD; the append precedes the reconcile so it exists in the window),
 corroborated for merges by HEAD's parent set equaling 1+MERGE_HEADS.
-ACKNOWLEDGED WINDOW: a crash between updateRef (:615) and the append
-(:649, error discarded) leaves no entry — merges are still caught by
-parentage; a pick/revert in that sliver is not detected (stated scope
-limit, alongside the crash-after-Cleanup half that is 3.6-doctor
-territory).
+ACKNOWLEDGED WINDOW: a crash between the pipeline's ref update
+(internal/commit/commit.go:615) and its oplog append
+(internal/commit/commit.go:649, error discarded) leaves no entry —
+merges are still caught by parentage; a pick/revert in that sliver is
+not detected (stated scope limit, alongside the crash-after-Cleanup
+half that is 3.6-doctor territory).
 **Verify (red to green):** the crash_window test. Green stays: the
 conclusion suite.
 
 ### 3.4 Deletion-honest reporting `[user]`
-worktreeEffects learns the absent-stage fact via sides carried on
-conclusionResult (the delegated shape is deleted by 2.7); the affected
-path moves between the written/removed groups in the report at
-sequencer_continue_cmd.go:380-390 — the fix rides the existing pinned
-wording, not an extra sentence. The half of the red pair that exercised
-the delegated path is rewritten against the 2.7 refusal (sanctioned,
-Appendix B).
-**Verify (red to green):** the deletion_report tests (as adjusted).
+worktreeEffects (the computation, sequencer_continue_cmd.go:380-390)
+learns the absent-stage fact via sides carried on conclusionResult; the
+affected path moves between the written/removed groups in the renderers
+(sequencer_continue_cmd.go:250-282 and :342-348) — the fix rides the
+existing pinned wording, not an extra sentence.
+**Verify (red to green):** the deletion_report tests.
 
 ### 3.5 The overwrite refusal (exit 27) `[user]`
 A SEPARATE per-path verdict loop over the full declared set — NOT
 inside the verifyMarkers pass, whose verifiablePaths EXCLUDES
 delete-resolved paths and whose exemption skip must not apply here. For
-each declared path whose materialization would destroy disk content:
-accepted set = the three stage blobs UNION git's emitted content,
-computed per path on demand via markerCheck.emittedContent (currently
-invoked only when unattributed blocks were found — this loop calls it
-directly). The emitted content is ALWAYS computable here: the merge
-shapes that defeat reconstruction (octopus, non-default strategies) are
-refused at the front door by 2.2/2.6, so the check is TOTAL — no skip
-arm, no declined-check fallback `[user — front-door refusal chosen
-over a degraded check]`. Covers ours/theirs overwrites, declared
-delete, and absent-stage deletes; byte-compare via CatFileBlob (no
-clean-filter hashing); the flag `--discard-unmatched-worktree` (name
-weakly held) elects destruction — justified as a consent flag because
-no other route expresses "yes, destroy my hand edits"; registry row
-for 27.
+each declared path whose materialization would destroy disk content,
+the ACCEPTED SET is: the three stage blobs, UNION the `AUTO_MERGE`
+blob for the path where one exists (`AUTO_MERGE:<path>` — git's
+verbatim saved emission; used DIRECTLY, no reconstruction, which also
+covers rename-mediated conflicts whose path-suffixed marker labels
+reconstruction cannot reproduce — probed). Kinds with no emission
+(delete-resolved, absent-stage deletes, delete/modify, binary,
+merge-driver paths) are stages-only BY NATURE and the check is still
+complete there — what git left on disk for those kinds IS a stage
+blob. The shapes with content conflicts but no AUTO_MERGE never reach
+this loop: safegit cannot start them (2.2) and merge-continue refuses
+them from raw git (2.7) — so the check is TOTAL over everything
+safegit concludes, with no skip arm and no declined-check fallback
+`[user — front-door refusal chosen over a degraded check]`. Covers
+ours/theirs overwrites, declared delete, and absent-stage deletes;
+byte-compare via CatFileBlob (no clean-filter hashing); the flag
+`--discard-unmatched-worktree` (name weakly held) elects destruction —
+justified as a consent flag because no other route expresses "yes,
+destroy my hand edits"; registry row for 27.
 **Verify (red to green):** the overwrite test. NEW: flag elects;
-delete and absent-stage variants refuse; the worktree-writing greens
-stay green.
+delete and absent-stage variants refuse; a rename-mediated conflict's
+untouched emission passes (the AUTO_MERGE-blob arm); the
+worktree-writing greens stay green.
 
 ### 3.6 The unmerged-index guard (exit 28) + doctor repair `[user]`
 Git parity: ANY unmerged entry in the shared index refuses every
@@ -615,17 +783,21 @@ repair: ONLY when sequencer.Read reports nothing in flight; takes the
 worktree operation lock (a second shared-index writer — the
 single-writer comment at internal/git/index_resolve.go:33-35 updates);
 re-stages disk content to stage 0 via HashObjectWriteBytes +
-SetIndexStage0; minted per the 4.2 doctor-mint convention (fix action
-ships with 4.2's wave — same resolution as 3.2's).
-**Verify (red to green):** the unmerged_index test. NEW: the repair
-resolves a planted orphan state and a subsequent commit succeeds;
-conclusions still commit during unmerged state.
+SetIndexStage0; minted per the 4.2 doctor-mint convention (the fix
+action SHIPS in 4.2 — same resolution as 3.2's).
+**Verify (red to green):** the unmerged_index test (the guard half:
+refusal fires, names doctor). The REPAIR half's verification lives in
+4.2 with the fix action (the repair resolves a planted orphan state
+and a subsequent commit succeeds); conclusions still commit during
+unmerged state (pinned here).
 
 ### 3.7 Undo's auto-bump ordering `[user]`
-requireAutoBumpDecision moves between loadConfig and the operation lock
-(undo.go:75-80), so the refusal fires BEFORE any ref moves — the same
-refusal shape every other commit-family route uses; the two stale
-comments (autobump.go:210-212, :131-136) update.
+`requireAutoBumpDecision` is ADDED to undo (it is not called anywhere
+in undo.go today; existing call sites live in commit.go, mv.go,
+revert_cmd.go and sequencer_continue.go) between loadConfig and the
+operation lock (the undo.go:75-80 gap), so the refusal fires BEFORE
+any ref moves — the same refusal shape every other commit-family route
+uses; the two stale comments (autobump.go:210-212, :131-136) update.
 **Verify (red to green):** the undo_autobump test.
 
 ---
@@ -645,16 +817,20 @@ no-lock table row stays green). THE PREVIEW CARRIES THE PARENT BUMP
 `[user — the earlier exclusion is overturned]`: per the dry-run
 doctrine, the dry path performs ALL reads first (the oplog rollback
 target, then the parent-bump decision reads: parent config,
-CheckNested, the gitlink), then records the parent-bump would-do (real
-rollback target from the oplog; placeholder for the parent's own
-commit SHA — the previewCommitPlaceholder convention), then records
-the ref move last and returns. Undo gains its payload schema and
+CheckNested, the gitlink), then records the would-do mutations IN
+EXECUTION ORDER — the ref move first, then the parent-bump record
+(the real path moves the ref before maybeAutoBumpParent; the recorder
+convention lists effects in the order the execute path performs them)
+`[plan — order corrected to execution order]` — with the real rollback
+target from the oplog and previewCommitPlaceholder for the parent's
+own commit SHA; then returns. Undo gains its payload schema and
 `WithTags("json")` alongside it `[plan]`. The exemption enumeration
 test (internal/gitexec/exemptions_test.go:13, exact-set) updates here
 and in 4.3.
 **Verify (red to green):** the undo_effects tests, adjusted so the
-preview asserts BOTH records in a submodule fixture and exactly the
-ref record outside one; the no-lock row pin stays green.
+preview asserts BOTH records in execution order in a submodule fixture
+and exactly the ref record outside one; the no-lock row pin stays
+green.
 
 ### 4.2 Unlock and doctor fix
 - unlock: Effects-based removal of the computed lock path; refusals
@@ -667,14 +843,17 @@ ref record outside one; the no-lock row pin stays green.
   GarbageCollect takes the remover or doctor iterates the planned
   paths itself) `[plan]`; legacy queue dir, policy file, publication
   temps — Effects.Remove over scanner-computed paths in both modes;
-  stale locks — the remover is INJECTED into the reclaim path doctor
-  uses (ReclaimIfStale -> reclaimLocked's single unlink,
-  reclaim.go:130), while the Acquire-path's second reclaimLocked
-  caller (lock.go:226) keeps its direct remove `[plan]`; lockScan
-  gains paths. Dry mode never uses the reclaim path (scan-based).
-  doctorFix's two-branch shape collapses onto plan-then-mint; diagnose
-  stays effect-free. The 3.2 store-as-stash and 3.6 orphaned-unmerged
-  fix actions ship here, minted.
+  stale locks — `reclaimLocked` (whose SINGLE unlink at reclaim.go:130
+  both its callers share) gains a REMOVER PARAMETER: doctor's path
+  (ReclaimIfStale) passes the minted remover, the Acquire-path caller
+  (lock.go:226) passes os.Remove `[plan — corrected: there is no
+  second direct remove today; the parameterization creates the
+  split]`; lockScan gains paths. Dry mode never uses the reclaim path
+  (scan-based). doctorFix's two-branch shape collapses onto
+  plan-then-mint; diagnose stays effect-free. The 3.2 store-as-stash
+  and 3.6 orphaned-unmerged fix actions ship here, minted; the 3.6
+  repair verification (planted orphan resolved; subsequent commit
+  succeeds) lands with them.
 - STAY-GREEN constraints listed (Appendix B): the reclaim/naming/index
   unit tests; the stdout pins ("stale lock", "Would back up", "Would
   fast-forward", submodule fix lines) survive beside the new records.
@@ -692,20 +871,25 @@ fix-half pin; the 3.6 repair pin.
 - backup restore: `fetchSlotObjects` (backup.go:52-61, shared with
   backup backup) is SPLIT — the fetch invocation mints via Effects.Run
   (new effects-handle exemption row); the FETCH_HEAD RevParse runs
-  only on the execute path; the dry path (which already knows slotSHA
-  from the :373 read) records the fetch and the ff-only merge from
-  known data and performs neither; the shared caller keeps its old
-  direct behavior `[plan]`.
+  only on the execute path; the dry path records the fetch and the
+  ff-only merge from the slot SHA it already read and performs neither
+  — NOTE, stated honestly: that slot read (`remoteSlotSHA`,
+  backup.go:373) is itself an `ls-remote` NETWORK READ, so `backup
+  restore --dry-run` contacts the remote today and continues to under
+  this subphase; that behavior rides the same framework
+  network-effects await as the fetch mint (non-goals) and Phase 7's
+  docs state it. The shared caller keeps its old direct behavior
+  `[plan]`.
 **Verify (red to green):** both backup mint tests; the would-do stdout
 pins stay green.
 
 ### 4.4 The parent-bump preview record
 The record is minted in maybeAutoBumpParent so its callers inherit —
-the call sites: commit, amend (commit.go:433), reword (:503), mv, the
-restructured revert, cherry-pick, merge and pull (their pipeline
+the call sites: commit, amend (root commit.go:433), reword (:503), mv,
+the restructured revert, cherry-pick, merge and pull (their pipeline
 conclusions), the conclusions themselves, and undo (per 4.1's
-reads-first ordering). PREVIEW DECISION PROCEDURE `[plan]`: the dry
-path performs exactly the reads the dry branch of
+reads-first, execution-ordered records). PREVIEW DECISION PROCEDURE
+`[plan]`: the dry path performs exactly the reads the dry branch of
 requireAutoBumpDecision already performs (parent config) plus
 CheckNested and the gitlink read (both reads; the comments at
 autobump.go:138-141 and :189-191 update to permit them for the
@@ -750,7 +934,8 @@ link content). Registry row 29; the freshness and completeness tests
 regenerate. Phase 7 ADDS the guide's symlink policy text (none exists
 today) and rewrites the divergences entry.
 **Verify (red to green):** the wave2 symlink test; its non-escaping
-control stays green.
+control stays green. NEW red-first: the flag elects with the notice
+line restored.
 
 ### 5.3 mv refuses dirty moves `[user — replaces the notice design]`
 `safegit mv` REFUSES when any moved file carries uncommitted content
@@ -762,9 +947,8 @@ along with the move -> move on disk yourself, then `safegit commit
 content + move together. The refusal joins mv's collected refusal at
 exit 19 (the world contradicts the move's preconditions — the same
 family as a missing destination) `[plan]`. Mechanics: dirtiness is
-filter-aware —
-compare `git hash-object --path <newpath>` of the disk bytes against
-the parent blob (attributes decided by the NEW path), so
+filter-aware — compare `git hash-object --path <newpath>` of the disk
+bytes against the parent blob (attributes decided by the NEW path), so
 CRLF-conversion checkouts never false-refuse (control test); the
 refusal names EVERY dirty path (aggregated human output for subtree
 moves; the machine payload lists all of them, never truncated
@@ -795,10 +979,10 @@ Status/Path only (verified: intake.go:134/148/858) — unaffected.
 
 ### 6.2 The mint engine
 STRUCTURAL FACT: inference RUNS INSIDE tryCommit per attempt (declared
-records stay resolved once pre-loop at commit.go:302); the fences need
-TWO per-attempt tree listings — a paths-by-blob view over the
-attempt's parent tree and one over the new tree — built as fresh
-treeIndex-style instantiations inside tryCommit (the intake-time
+records stay resolved once pre-loop at internal/commit/commit.go:302);
+the fences need TWO per-attempt tree listings — a paths-by-blob view
+over the attempt's parent tree and one over the new tree — built as
+fresh treeIndex-style instantiations inside tryCommit (the intake-time
 instances are pre-loop against the old tip and are not reachable
 there).
 Pairing and fences, in evaluation order `[plan-stated order]`:
@@ -861,8 +1045,8 @@ moves fall through to per-file.
   INTERNAL SYNTHESIS — it does NOT route through resolveMovedRetract
   (whose reachable-history base cannot see the replaced tip's own
   records and whose same-breath doctrine forbids it); that doctrine
-  comment (moved.go:131-135) is updated to name the supersede
-  exception.
+  comment (internal/commit/moved.go:132-135) is updated to name the
+  supersede exception.
 - Amend: preservation verbatim for all records; inference ADDITIVE
   against the authoring event's own delta (new tree vs the replaced
   tip's first parent — a second per-attempt diff on the amend path);
@@ -890,16 +1074,18 @@ internal/trailer/project.go:29-32 ("nothing is stored about
 confidence" — falsified by Origin); internal/git/git.go:901-904
 (qualified, not deleted); docs/architecture.md:234;
 docs/commands-guide.md:141; docs/_CLAUDE.md:84 (template);
-moves_test.go:12-21 header; moves_cross_session_test.go:20-29 header;
+moves_test.go:12-21 header; moves_cross_session_test.go:14-29 header;
 commit_staged_deletion_dir_test.go:109/:130;
 moves_declared_test.go:14-15. `assertNoRenameNotice` (moves_test.go:25
-— verified a no-op; its strings match nothing) is DELETED and the two
-consuming tests assert the real properties directly (no content
-adoption; no auto-staging; the mint notice's actual wording asserted
-where relevant) `[plan]`. The divergences moves-entry rewrite happens
-in Phase 7 with the rest of the catalog (single-writer rule); this
-subphase marks the entry stale in a code comment only. The
-consumer-repo commit-msg-hook consequence documented in the guide.
+— verified a no-op; its strings match nothing in production) is
+DELETED and its consuming tests — call sites spread across
+moves_test.go and moves_cross_session_test.go — assert the real
+properties directly (no content adoption; no auto-staging; the mint
+notice's actual wording asserted where relevant) `[plan]`. The
+divergences moves-entry rewrite happens in Phase 7 with the rest of
+the catalog (single-writer rule); this subphase marks the entry stale
+in a code comment only. The consumer-repo commit-msg-hook consequence
+documented in the guide.
 **Verify:** grep shows no declared-only doctrine claim survives
 outside the catalog; the re-pointed tests pass.
 
@@ -928,12 +1114,16 @@ Catalog work:
   entry — one entry, divergences.md:424) generalizes to the family
   code; the rebase entry states the uniform git-authorship door and
   points at the deferred native reimplementation todo.
-- New entries: mv refuses dirty moves (5.3, ours); every 2.6 allowlist
-  refusal (octopus, strategies, checkout pathspec/detach/-B, reset
-  pathspec/patch, rebase exec/apply-backend, pull --rebase, --skip,
-  --edit, --squash — one entry per refused capability class, each
-  naming what git would do and why safegit refuses); raw-git queues
-  refused (2.7).
+- New entries: safegit implements `switch`, not `checkout`, and file
+  restoration is deliberately absent (2.6 — two entries replacing
+  checkout's refusal list); mv refuses dirty moves (5.3, ours);
+  `merge --autostash` refused as a dead flag (2.2); raw-git queues
+  and exotic raw merge shapes refused at the continue commands (2.7);
+  every remaining 2.6 allowlist refusal (octopus, strategies, switch's
+  refused flags, reset pathspec/patch, rebase exec/apply-backend, pull
+  --rebase, --skip, --edit, --squash, the rev-set spellings — one
+  entry per refused capability class, each naming what git would do
+  and why safegit refuses).
 - Deletions: the timeout-override entry (mechanism deleted, 1.4); the
   mv-missing-directory entry (behavior now MATCHES git, 5.1 — the
   matches-git-means-no-entry rule `[user]`).
@@ -952,10 +1142,11 @@ Other docs:
   a JSON error object ...") is REWRITTEN — 3.1's payload-carrying
   error envelopes falsify it as absolute.
 - Every hand-written doc updated for phases 0-6 (the per-phase lists
-  above); the guide GAINS symlink-policy text (none exists); the
-  hook-row updates per 1.4's list; the app_version example becomes a
-  placeholder; the VOCABULARY SWEEP: "rename" -> "move" everywhere
-  except quotations of git's own terms.
+  above), including the switch rename everywhere checkout appears; the
+  guide GAINS symlink-policy text (none exists); the hook-row updates
+  per 1.4's list; the app_version example becomes a placeholder; the
+  restore preview's ls-remote stated (4.3); the VOCABULARY SWEEP:
+  "rename" -> "move" everywhere except quotations of git's own terms.
 - `--dump-schema` (commit via rlsbl commit) and bare `selfdoc gen`.
 **Verify:** every named row resolved; regeneration clean; fresh
 spot-checks against code; the catalog handed to the user for the
@@ -981,10 +1172,11 @@ plan's own commits) — feature-area user-facing entries for the new
 behaviors and no-user-facing clusters; `--allow-batch` with reasons
 where a legitimate area exceeds the limit; breaking-type entries for
 the authorship restructure (merge/cherry-pick/pull now
-pipeline-authored; multi-commit forms refused), the allowlist
-refusals, the mv dirty-move refusal, the non-executable-hook refusal,
-and the timeout-override removal. Phase 9's own commits are covered by
-a FINAL top-up pass at the end of Phase 9 `[plan]`.
+pipeline-authored; multi-commit forms refused), the checkout-to-switch
+rename, the allowlist refusals, the mv dirty-move refusal, the
+non-executable-hook refusal, and the timeout-override removal. Phase
+9's own commits are covered by a FINAL top-up pass at the end of
+Phase 9 `[plan]`.
 **Verify:** `rlsbl check --tag changelog` fully green (re-verified
 after Phase 9's top-up).
 
@@ -1037,7 +1229,7 @@ after Phase 9's top-up).
 |---|---|---|
 | 0 | — | 0.2 -> 6; 0.4 -> 3.2 |
 | 1 | 0 | 1.1+1.2+1.3 ONE implementor (coord_cmd.go); 1.4+1.5 share doctor.go |
-| 2 | 1.1, 1.2, 1.3 | replaces the merge/pull handlers Phase 1 touched; 2.4 -> 3 (revert schema) |
+| 2 | 1.1, 1.2, 1.3 | replaces the merge/pull handlers and renames checkout's; 2.4 -> 3 (revert schema) |
 | 3 | 0.4, 1.2, 2 | 3.2/3.6 fix ACTIONS ship in 4.2 |
 | 4 | 1.5, 3.1 (payload), 3.2/3.6 (fix actions) | |
 | 5 | 0 | before 6 |
@@ -1059,34 +1251,35 @@ retires or rewrites the delegation-dependent entries as noted
 | Red tests (file) | Subphase |
 |---|---|
 | grammar_reserved_keywords | 0.2 (subtests rewritten 6.4) |
-| wave2_passthrough_oplog_positions | 1.2 (stay green through 2.2/2.5) |
-| machine_contract_json_document | 1.3 (merge/pull rows also healed structurally by 2.2/2.5; checkout row is a green forward-guard) |
+| wave2_passthrough_oplog_positions | 1.2 (stay green through 2.2/2.5, incl. the op-name rule) |
+| machine_contract_json_document | 1.3 (merge/pull rows also healed structurally by 2.2/2.5; the checkout row is a green forward-guard, renamed to switch with 2.6) |
 | wave2_hook_timeout_override_dead | 1.4 |
 | wave2_hook_nonexec_local_refusal | 1.4 |
 | sequencer_conclusion_envelope | 3.1 |
 | sequencer_stale_autostash | 3.2 (fix-half pin 4.2) |
 | sequencer_conclusion_crash_window | 3.3 |
-| sequencer_delegation_delete | RETIRED by 2.7 (delegation deleted); replaced by the raw-git-queue refusal pin |
-| sequencer_conclusion_deletion_report | 3.4 (delegated half rewritten against 2.7) |
+| sequencer_delegation_delete | RETIRED by 2.7 (delegation deleted); replaced by the raw-git-queue refusal pin; its `unmergedCount` helper relocates first |
+| sequencer_conclusion_deletion_report | 3.4 |
 | sequencer_conclusion_overwrite | 3.5 |
-| commit_unmerged_index | 3.6 |
+| commit_unmerged_index | 3.6 (guard half; repair pin 4.2) |
 | undo_autobump_precheck | 3.7 |
-| machine_contract_undo_effects | 4.1 (adjusted: preview carries the parent-bump record) |
+| machine_contract_undo_effects | 4.1 (adjusted: preview carries the parent-bump record, execution order) |
 | machine_contract_invisible_mutations | 4.2-4.4 |
 | wave2_mv_missing_destdir | 5.1 |
 | wave2_symlink_escape_refusal | 5.2 (plus its green control) |
 
 Reds written inside their subphases: 0.3, 0.4, 1.1, 1.2 (the new
-failure-entry pins), 1.5, 2.1 (the boundary-guard violation), 2.2, 2.3,
-2.5, 2.6 (per command), 2.7 (the refusal), 2.8 (each deletion), 3.1
-(per aftercare shape), 3.5 (variants), 3.6 (repair), 5.1 (flag), 5.3,
-all of Phase 6.
+failure-entry pins and the switch-visibility pin), 1.5, 2.1 (both guard
+halves), 2.2, 2.3, 2.4 (one-entry and range-refusal), 2.5, 2.6 (per
+command, incl. switch), 2.7 (both refusals), 2.8 (each deletion), 3.1
+(per aftercare shape), 3.5 (variants incl. the AUTO_MERGE-blob arm),
+5.1 (flag), 5.2 (flag), 5.3, all of Phase 6.
 
 ## Appendix B — sanctioned rewrites (a break not listed here is a
 plan defect)
 
 - 1.1: none beyond stub hygiene (TestFlagConditionalEffects must STAY
-  green — the reset row keeps `--soft`/`--mixed` narrow).
+  green — the reset row keeps `--soft` narrow; `--mixed` is the base).
 - 1.2: TestBackupWritesOplogEntries (only if the tip-spelling
   consolidation proceeds); the TipSHA search tests.
 - 1.4: TestSkipNonExecutable; TestSetOutputCapturesDiscoverWarning;
@@ -1095,7 +1288,12 @@ plan defect)
   TestParseTimeoutOverride (deleted).
 - 2.2 (merge restructure): pins asserting git authors the clean merge
   commit or asserting merge's passthrough shape; merge rows in the
-  guarded-passthrough registries and classification pins.
+  guarded-passthrough registries and classification pins; the octopus
+  conclusion fixtures (`sequencer_conclusion_test.go:171` and `:245`
+  invoke `safegit merge` with two branches / `--no-commit` — they
+  switch to raw git so the surviving conclusion tests keep their
+  subjects) — and the octopus-conclusion green itself
+  (`sequencer_conclusion_test.go:146-195`) becomes 2.7's refusal pin.
 - 2.3 (cherry-pick restructure): pins asserting the clean pick is
   git-authored or not undoable; the multi-commit pick suites (become
   refusal pins); classification/registry rows.
@@ -1109,17 +1307,24 @@ plan defect)
   TestPickAndRevertContinuePassthroughsNameSafegitsCommand/revert;
   the multi-commit-no-records test (becomes a refusal pin).
   scrub_remap_test.go:403 STAYS GREEN (no remap change exists).
-- 2.5 (pull restructure): pins asserting pull's passthrough shape or
-  git-authored merge results; pull's rows in the guarded-passthrough
-  registries and classification pins.
-- 2.6 (allowlist): any existing test exercising a now-refused
-  forwarded form through safegit is rewritten to an allowed form or
-  becomes a refusal pin (raw-git fixture setup is unaffected — tests
-  drive fixtures with git directly).
+- 2.5 (pull restructure): pins asserting pull's passthrough-shaped
+  output or git-authored merge results; pull's rows in the registries
+  and classification pins; pull's oplog-key expectations (remote/
+  branch keys reshape onto the baseline spelling).
+- 2.6 (allowlist + switch rename): any existing test exercising a
+  now-refused forwarded form through safegit is rewritten to an
+  allowed form or becomes a refusal pin (raw-git fixture setup is
+  unaffected — tests drive fixtures with git directly); every test,
+  registry row, and doc invoking `safegit checkout` renames to
+  `switch` (incl. the machine_contract checkout forward-guard row and
+  the coord/classification registries).
 - 2.7 (delegation deletion): the sequencer_delegation suites and the
   delegation-notice literal-sentence pins (the sentence's producer is
   deleted); sequencer_delegation_delete rewritten as the raw-git-queue
-  refusal pin; delegated-payload schema tests deleted with the shape.
+  refusal pin; delegated-payload schema tests deleted with the shape;
+  `unmergedCount` (sequencer_delegation_test.go:109) RELOCATED to a
+  surviving file before the deletion (commit_unmerged_index_test.go:48
+  imports it).
 - 2.8 (--hunks): pins of the 3way retry if any exist at the
   commit_hunks seams (verify; the stage package has none).
 - 3.2: no rewrites (the fallback was never built; the probe confirmed
@@ -1127,7 +1332,7 @@ plan defect)
 - 3.x/4.x: exit_table_test regenerations;
   TestDirPinExemptionTableIsEnumerated (rows added in 4.1 and 4.3).
 - 4.1: the undo_effects preview assertions extend to the parent-bump
-  record (submodule fixture).
+  record in execution order (submodule fixture).
 - 4.2: internal/lock/reclaim_test.go:58/85/109,
   internal/lock/naming_test.go:95/107,
   internal/index/index_test.go:77/112 (API reshapes); the stdout pins
