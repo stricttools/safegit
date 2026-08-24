@@ -82,7 +82,7 @@
   },
   "project_id": "github.com/smm-h/safegit",
   "name": "safegit",
-  "version": "0.28.1-0.20260822220859-cfeb278d0b51+dirty",
+  "version": "0.28.1-0.20260824184939-6c9370d02f98+dirty",
   "help": "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "proc_observe_allowlist": [
     [
@@ -195,6 +195,12 @@
           "dry_run": {
             "type": "boolean"
           },
+          "execution_mode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "files": {
             "items": {
               "type": "string"
@@ -241,6 +247,7 @@
           "files",
           "skipped_ignored",
           "attempts",
+          "execution_mode",
           "dry_run"
         ],
         "type": "object"
@@ -287,6 +294,15 @@
         {
           "name": "allow-empty",
           "help": "allow creating a commit even when no files have been changed; omitted means an empty commit is refused",
+          "value_schema": {
+            "type": "boolean"
+          },
+          "presence": "optional",
+          "negatable": true
+        },
+        {
+          "name": "allow-escaping-targets",
+          "help": "record a symlink whose target resolves outside the repository, which the commit stores as the link text; omitted, and with --no-allow-escaping-targets, such a link is refused with its target named, because in another checkout it resolves to nothing or to a file the repository never carried",
           "value_schema": {
             "type": "boolean"
           },
@@ -463,12 +479,21 @@
           },
           "short": "m",
           "presence": "required"
+        },
+        {
+          "name": "create-missing-directories",
+          "help": "make the destination's parent directories when they are not there, removing again what this invocation made if the move is rolled back; omitted, and with --no-create-missing-directories, a destination whose directory does not exist is refused and nothing is moved",
+          "value_schema": {
+            "type": "boolean"
+          },
+          "presence": "optional",
+          "negatable": true
         }
       ],
       "args": [
         {
           "name": "pairs",
-          "help": "one move each, written 'old -> new'. End BOTH paths with a slash to move a whole directory, which is recorded as ONE subtree record however many files it holds. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. Every pair is checked before the first file is touched -- the source must be tracked and on disk, the destination must be free, and no two pairs may speak for the same path or chain into one another -- and a failure part-way through puts back everything already moved. The commit is the rename and nothing else: each path is carried across as the blob its parent commit held, so uncommitted content changes stay uncommitted",
+          "help": "one move each, written 'old -> new'. End BOTH paths with a slash to move a whole directory, which is recorded as ONE subtree record however many files it holds. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. Every pair is checked before the first file is touched -- the source must be tracked and on disk, the destination must be free and its directory must already exist unless --create-missing-directories says otherwise, the source must carry no uncommitted content changes, and no two pairs may speak for the same path or chain into one another -- and a failure part-way through puts back everything already moved. The commit is the rename and nothing else: each path is carried across as the blob its parent commit held, which is why a path with uncommitted content changes is refused rather than moved -- commit the content first and then move it, or move it on disk yourself and commit both at once with 'safegit commit --moved'",
           "value_schema": {
             "type": "array",
             "items": {
@@ -492,13 +517,55 @@
     },
     "merge-continue": {
       "name": "merge-continue",
-      "help": "conclude a merge git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file), and safegit writes the merge commit itself: HEAD plus EVERY MERGE_HEAD line as parents, an octopus merge included; the merge's whole staged result as its tree, so a path the merge staged cleanly is never dropped; git's own message draft with its comment block stripped, or -m; the repository's commit-msg hook run and safegit's trailers injected; and the merge's whole state-file set removed afterwards, so a later commit is not refused. An empty merge needs no flag -- a merge commit records its parents whether or not the tree changed",
+      "help": "conclude a merge git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file), and safegit writes the merge commit itself: HEAD plus the MERGE_HEAD line as parents; the merge's whole staged result as its tree, so a path the merge staged cleanly is never dropped; git's own message draft with its comment block stripped, or -m; the repository's commit-msg hook run and safegit's trailers injected; and the merge's whole state-file set removed afterwards, so a later commit is not refused. An empty merge needs no flag -- a merge commit records its parents whether or not the tree changed. Two merge shapes only raw git can start are REFUSED, each naming git's own 'merge --continue' and '--abort': an OCTOPUS, because every check safegit makes over a merge is written against two sides, and a content conflict git recorded with no AUTO_MERGE, which is a non-default strategy's signature and leaves the marker verification nothing to read",
       "effect": "mutating",
       "payload_schema": {
         "additionalProperties": false,
         "properties": {
           "attempts": {
             "type": "integer"
+          },
+          "autostash": {
+            "additionalProperties": false,
+            "properties": {
+              "stash": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "state": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "state",
+              "stash"
+            ],
+            "type": "object"
+          },
+          "declined_checks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "check": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "check",
+                "path",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           },
           "dry_run": {
             "type": "boolean"
@@ -520,6 +587,25 @@
           },
           "ref": {
             "type": "string"
+          },
+          "residue": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "detail": {
+                  "type": "string"
+                },
+                "step": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "step",
+                "detail"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           },
           "resolutions": {
             "items": {
@@ -567,6 +653,9 @@
           "resolutions",
           "state_cleared",
           "attempts",
+          "declined_checks",
+          "autostash",
+          "residue",
           "dry_run"
         ],
         "type": "object"
@@ -628,7 +717,7 @@
     },
     "cherry-pick-continue": {
       "name": "cherry-pick-continue",
-      "help": "conclude a cherry-pick git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file). For a SINGLE cherry-pick safegit writes the commit itself: one parent, the AUTHOR preserved from the commit being applied while the committer is you, git's own message draft with its comment block stripped or -m, the repository's commit-msg hook run, and the cherry-pick's state files removed afterwards. A QUEUED sequence -- git cherry-pick with more than one commit -- is DELEGATED instead: safegit stages the same declared resolutions into a copy of the index, runs the same completeness and conflict-marker checks, and then hands the rest of the queue to git's own 'cherry-pick --continue' with that copy as its index, because concluding one step natively would strand the rest of the queue. git authors those commits, so they carry no safegit trailers and 'safegit undo' does not reverse them; -m, --trailer and --dry-run are refused for a queued sequence rather than silently ignored",
+      "help": "conclude a cherry-pick git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file), and safegit writes the commit itself: one parent, the AUTHOR preserved from the commit being applied while the committer is you, git's own message draft with its comment block stripped or -m, the repository's commit-msg hook run, and the cherry-pick's state files removed afterwards. A QUEUED sequence -- `git cherry-pick <a> <b>`, which only raw git can start, since safegit's cherry-pick applies one commit -- is REFUSED, naming git's own 'cherry-pick --continue' and '--abort': the queue is part of the state a conclusion removes, so finishing one step of it would throw the rest away",
       "effect": "mutating",
       "payload_schema": {
         "additionalProperties": false,
@@ -652,8 +741,47 @@
             ],
             "type": "object"
           },
-          "commits_created": {
-            "type": "integer"
+          "autostash": {
+            "additionalProperties": false,
+            "properties": {
+              "stash": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "state": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "state",
+              "stash"
+            ],
+            "type": "object"
+          },
+          "declined_checks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "check": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "check",
+                "path",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           },
           "dry_run": {
             "type": "boolean"
@@ -664,12 +792,6 @@
             },
             "type": "array"
           },
-          "head": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "operation": {
             "type": "string"
           },
@@ -679,11 +801,27 @@
             },
             "type": "array"
           },
-          "queue_delegated": {
-            "type": "boolean"
-          },
           "ref": {
             "type": "string"
+          },
+          "residue": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "detail": {
+                  "type": "string"
+                },
+                "step": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "step",
+                "detail"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           },
           "resolutions": {
             "items": {
@@ -717,9 +855,6 @@
           "state_cleared": {
             "type": "boolean"
           },
-          "stopped_again": {
-            "type": "boolean"
-          },
           "tree": {
             "type": "string"
           }
@@ -727,13 +862,18 @@
         "required": [
           "operation",
           "ref",
+          "sha",
+          "parents",
+          "tree",
+          "files",
           "resolutions",
           "state_cleared",
+          "attempts",
+          "declined_checks",
+          "autostash",
+          "residue",
           "dry_run",
-          "queue_delegated",
-          "head",
-          "commits_created",
-          "stopped_again"
+          "author"
         ],
         "type": "object"
       },
@@ -794,7 +934,7 @@
     },
     "revert-continue": {
       "name": "revert-continue",
-      "help": "conclude a revert git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file). For a SINGLE revert safegit writes the commit itself: one parent, YOU as both author and committer -- a revert is your own new change, not the reverted commit author's, which is git's own division and the opposite of what a cherry-pick does -- git's own message draft with its comment block stripped or -m, the repository's commit-msg hook run, and the revert's state files removed afterwards. Note the stage keywords: a revert applies an INVERSE patch, so theirs is what the reverted commit's parent held -- resolving to theirs keeps the revert, resolving to ours keeps the commit being reverted. A QUEUED sequence -- git revert with more than one commit -- is DELEGATED to git's own 'revert --continue' with safegit's index copy as its index, after the same completeness and conflict-marker checks; git authors those commits, so they carry no safegit trailers and 'safegit undo' does not reverse them, and -m, --trailer and --dry-run are refused for a queued sequence rather than silently ignored",
+      "help": "conclude a revert git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file). For a SINGLE revert safegit writes the commit itself: one parent, YOU as both author and committer -- a revert is your own new change, not the reverted commit author's, which is git's own division and the opposite of what a cherry-pick does -- git's own message draft with its comment block stripped or -m, the repository's commit-msg hook run, and the revert's state files removed afterwards. Note the stage keywords: a revert applies an INVERSE patch, so theirs is what the reverted commit's parent held -- resolving to theirs keeps the revert, resolving to ours keeps the commit being reverted. A QUEUED sequence -- `git revert <a> <b>`, which only raw git can start, since safegit's revert undoes one commit -- is REFUSED, naming git's own 'revert --continue' and '--abort': the queue is part of the state a conclusion removes, so finishing one step of it would throw the rest away",
       "effect": "mutating",
       "payload_schema": {
         "additionalProperties": false,
@@ -818,8 +958,47 @@
             ],
             "type": "object"
           },
-          "commits_created": {
-            "type": "integer"
+          "autostash": {
+            "additionalProperties": false,
+            "properties": {
+              "stash": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "state": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "state",
+              "stash"
+            ],
+            "type": "object"
+          },
+          "declined_checks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "check": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "check",
+                "path",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           },
           "dry_run": {
             "type": "boolean"
@@ -830,12 +1009,6 @@
             },
             "type": "array"
           },
-          "head": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
           "operation": {
             "type": "string"
           },
@@ -845,11 +1018,27 @@
             },
             "type": "array"
           },
-          "queue_delegated": {
-            "type": "boolean"
-          },
           "ref": {
             "type": "string"
+          },
+          "residue": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "detail": {
+                  "type": "string"
+                },
+                "step": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "step",
+                "detail"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           },
           "resolutions": {
             "items": {
@@ -883,9 +1072,6 @@
           "state_cleared": {
             "type": "boolean"
           },
-          "stopped_again": {
-            "type": "boolean"
-          },
           "tree": {
             "type": "string"
           }
@@ -893,13 +1079,18 @@
         "required": [
           "operation",
           "ref",
+          "sha",
+          "parents",
+          "tree",
+          "files",
           "resolutions",
           "state_cleared",
+          "attempts",
+          "declined_checks",
+          "autostash",
+          "residue",
           "dry_run",
-          "queue_delegated",
-          "head",
-          "commits_created",
-          "stopped_again"
+          "author"
         ],
         "type": "object"
       },
@@ -958,33 +1149,124 @@
         }
       ]
     },
-    "checkout": {
-      "name": "checkout",
-      "help": "checkout a branch or ref, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work",
+    "switch": {
+      "name": "switch",
+      "help": "switch to another BRANCH, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work. The command line is a deliberate subset of git's: an existing branch name, or -c to create one, and nothing else. A tag, an object name or any other commit-ish is refused, because switching onto one detaches HEAD -- the state safegit's commit, conclusion and undo paths all refuse -- and the refusal names the raw-git command for the rare deliberate case. --detach, -C, --force/--discard-changes, --orphan and --merge are refused, each naming why. There is NO file mode and no 'safegit checkout': git's checkout of files over the working tree destroys uncommitted work with no record anywhere, so safegit does not implement it at all",
       "effect": "mutating",
       "passthrough": true
     },
     "merge": {
       "name": "merge",
-      "help": "merge a branch into HEAD, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work. A merge git stops on a conflict is concluded by safegit, not by git: 'safegit merge --continue' is refused and names 'safegit merge-continue', which commits the merge's whole staged result with safegit's trailers on it",
+      "help": "merge one branch into the current one, and author the result: safegit decides the fast-forward itself and moves the ref under compare-and-swap, or runs git's merge machinery with --no-ff --no-commit and commits the staged result through its own pipeline -- so a merge safegit performed carries safegit's trailers, ran the repository's commit-msg hook and is reversible with 'safegit undo'. A merge git stops on a conflict parks, and 'safegit merge-continue' concludes it; 'safegit merge --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one branch (no octopus), no strategy selection, no --squash, no --edit and no --autostash. --no-commit computes the merge and leaves it parked even when it is clean",
       "effect": "mutating",
-      "passthrough": true
+      "payload_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "declined_checks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "check": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "check",
+                "path",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "parents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state_cleared": {
+            "type": "boolean"
+          },
+          "tree": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "operation",
+          "outcome",
+          "ref",
+          "sha",
+          "parents",
+          "tree",
+          "files",
+          "state_cleared",
+          "attempts",
+          "declined_checks",
+          "dry_run"
+        ],
+        "type": "object"
+      },
+      "passthrough": true,
+      "grants": [
+        {
+          "name": "parent-bump",
+          "reason": "merging in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
+          "kind": "proc_mutate"
+        }
+      ]
     },
     "rebase": {
       "name": "rebase",
-      "help": "rebase the current branch onto upstream, guarded twice before git runs: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- and then a check for uncommitted work. A rebase's own --continue and --abort stay git's: safegit has no verb that finishes one",
+      "help": "rebase the current branch onto upstream, guarded twice before git runs: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- and then a check for uncommitted work. A rebase's own --continue, --abort and --skip stay git's: safegit has no verb that finishes one. The command line is a deliberate subset of git's: exactly one upstream, --onto, -i and --autostash. The apply backend and its patch options, --exec, --rebase-merges and --root are refused, each naming why",
       "effect": "mutating",
       "passthrough": true
     },
     "reset": {
       "name": "reset",
-      "help": "reset HEAD with guards that prevent accidental --hard data loss. The worktree operation lock is taken for EVERY reset, because every reset moves HEAD; the uncommitted-work check applies to --hard alone, since only --hard mutates the working tree",
+      "help": "reset HEAD with guards that prevent accidental data loss. The worktree operation lock is taken for EVERY reset, because every reset moves HEAD; the uncommitted-work check applies to the modes that WRITE working-tree files -- --hard, --merge and --keep -- while --soft and --mixed move only the ref and the index. Which is which is derived from safegit's git classification table, never re-read from the argument list here. The command line is a deliberate subset of git's: one of the five modes with a commit. The PATHSPEC form is refused -- it writes the shared index entry by entry, which is the one file safegit's design keeps out of -- and so is --patch",
       "effect": "mutating",
       "passthrough": true
     },
     "bisect": {
       "name": "bisect",
-      "help": "binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the tree-moving subcommands (good, bad, old, new, reset, start)",
+      "help": "binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the STEPPING subcommands (start, good, bad, old, new, skip, run, replay, reset), each of which checks another commit out, and not to the reporting ones (terms, log, view). Which is which is derived from safegit's git classification table, never kept as a list here -- and so is which subcommands may be typed at all: a word outside that vocabulary is refused before git runs, as is every option",
       "effect": "mutating",
       "passthrough": true
     },
@@ -1142,8 +1424,127 @@
     },
     "pull": {
       "name": "pull",
-      "help": "fetch from a remote and merge, with the merge strategy stated explicitly: --merge-strategy is required and has no default, so a pull never depends on git's own configuration to decide whether it may create a merge commit",
+      "help": "fetch from a remote and merge what was fetched, with the merge strategy stated explicitly: --merge-strategy is required and has no default, so a pull never depends on git's own configuration to decide whether it may create a merge commit. The merge step is safegit's own -- the same one 'safegit merge' performs -- so a pull that cannot fast-forward produces a commit carrying safegit's trailers, run through the repository's commit-msg hook and reversible with 'safegit undo'; a pull that can fast-forward moves the ref under compare-and-swap and puts the index and the working tree in step with it. A merge git stops on a conflict parks, and 'safegit merge-continue' concludes it. --rebase is refused and names the two commands that do it",
       "effect": "mutating",
+      "payload_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "branch": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "fetch_head": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "merge": {
+            "additionalProperties": false,
+            "properties": {
+              "attempts": {
+                "type": "integer"
+              },
+              "declined_checks": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "check": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "string"
+                    },
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "check",
+                    "path",
+                    "reason"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "dry_run": {
+                "type": "boolean"
+              },
+              "files": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "operation": {
+                "type": "string"
+              },
+              "outcome": {
+                "type": "string"
+              },
+              "parents": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "ref": {
+                "type": "string"
+              },
+              "sha": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "state_cleared": {
+                "type": "boolean"
+              },
+              "tree": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "operation",
+              "outcome",
+              "ref",
+              "sha",
+              "parents",
+              "tree",
+              "files",
+              "state_cleared",
+              "attempts",
+              "declined_checks",
+              "dry_run"
+            ],
+            "type": "object"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "remote": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "remote",
+          "branch",
+          "fetch_head",
+          "merge",
+          "dry_run"
+        ],
+        "type": "object"
+      },
       "flags": [
         {
           "name": "merge-strategy",
@@ -1171,6 +1572,15 @@
               "help": "always create a merge commit, even when a fast-forward is possible"
             }
           ]
+        },
+        {
+          "name": "rebase",
+          "help": "REFUSED, and declared so the refusal can say what to do instead: rebasing after a fetch is 'git fetch' followed by 'safegit rebase <remote>/<branch>', because a rebase is git's replay from end to end while a pull's merge step is safegit's own",
+          "value_schema": {
+            "type": "boolean"
+          },
+          "presence": "optional",
+          "negatable": false
         }
       ],
       "args": [
@@ -1189,6 +1599,16 @@
             "type": "string"
           },
           "presence": "optional"
+        }
+      ],
+      "tags": [
+        "json"
+      ],
+      "grants": [
+        {
+          "name": "parent-bump",
+          "reason": "pulling in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
+          "kind": "proc_mutate"
         }
       ]
     },
@@ -1228,15 +1648,225 @@
     },
     "cherry-pick": {
       "name": "cherry-pick",
-      "help": "cherry-pick one or more commits onto HEAD, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work. A pick git stops on a conflict is concluded by safegit, not by git: 'safegit cherry-pick --continue' is refused and names 'safegit cherry-pick-continue', which declares each conflicted path with --resolve and then commits -- natively for a single pick, and by delegating the rest of the queue to git for a sequence of them",
+      "help": "apply ONE commit onto the current branch, and author the result: git computes the pick with --no-commit and safegit commits the staged result through its own pipeline -- so a pick safegit performed carries safegit's trailers, ran the repository's commit-msg hook and is reversible with 'safegit undo'. The AUTHOR is preserved from the commit being applied and the committer is you, which is git's own division. A pick git stops on a conflict parks -- safegit writes CHERRY_PICK_HEAD itself, because 'git cherry-pick --no-commit' does not -- and 'safegit cherry-pick-continue' concludes it; 'safegit cherry-pick --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one commit named as a commit (a range or any other revision set is refused, because a range hands the operation to git's sequencer even when it holds one commit), no --edit, no --ff, no --commit, no --cleanup, no signing and no empty-commit flags. --abort, --quit and --no-commit stay plain passthroughs, because they author nothing",
       "effect": "mutating",
-      "passthrough": true
+      "payload_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "author": {
+            "additionalProperties": false,
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "email"
+            ],
+            "type": "object"
+          },
+          "declined_checks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "check": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "check",
+                "path",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "parents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "state_cleared": {
+            "type": "boolean"
+          },
+          "tree": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "source",
+          "ref",
+          "sha",
+          "parents",
+          "tree",
+          "files",
+          "author",
+          "state_cleared",
+          "attempts",
+          "declined_checks",
+          "dry_run"
+        ],
+        "type": "object"
+      },
+      "passthrough": true,
+      "grants": [
+        {
+          "name": "parent-bump",
+          "reason": "cherry-picking in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
+          "kind": "proc_mutate"
+        }
+      ]
     },
     "revert": {
       "name": "revert",
-      "help": "revert one or more commits creating inverse patches, with safety guards. Reverting a SINGLE commit produces a safegit commit: git computes the inverse patch and safegit writes the commit, so it carries safegit's trailers and, when the reverted commit declared moves, the INVERSE of each of those move records. Reverting MORE THAN ONE commit is git's own sequencer and git authors those commits, so they carry no trailers and no records at all -- the asymmetry is deliberate, and it is the same one that governs whether 'safegit undo' can reverse the result",
+      "help": "revert ONE commit by applying its inverse patch, and author the result: git computes the inverse with --no-commit and safegit commits the staged result through its own pipeline -- so a revert safegit performed carries safegit's trailers, ran the repository's commit-msg hook, is reversible with 'safegit undo', and declares the INVERSE of every move record the reverted commit declared. YOU are recorded as both author and committer, because a revert is your own new change rather than the reverted author's; that is git's own division and the opposite of what a cherry-pick does. A revert git stops on a conflict parks, and 'safegit revert-continue' concludes it; 'safegit revert --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one commit named as a commit (a range or any other revision set is refused, because a range hands the operation to git's sequencer even when it holds one commit), no --edit, no --commit, no --cleanup and no signing. --abort, --quit and --no-commit stay plain passthroughs, because they author nothing",
       "effect": "mutating",
-      "passthrough": true
+      "payload_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "attempts": {
+            "type": "integer"
+          },
+          "author": {
+            "additionalProperties": false,
+            "properties": {
+              "email": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "email"
+            ],
+            "type": "object"
+          },
+          "declined_checks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "check": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "check",
+                "path",
+                "reason"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "parents": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "state_cleared": {
+            "type": "boolean"
+          },
+          "tree": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation",
+          "source",
+          "ref",
+          "sha",
+          "parents",
+          "tree",
+          "files",
+          "author",
+          "state_cleared",
+          "attempts",
+          "declined_checks",
+          "dry_run"
+        ],
+        "type": "object"
+      },
+      "passthrough": true,
+      "grants": [
+        {
+          "name": "parent-bump",
+          "reason": "reverting in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
+          "kind": "proc_mutate"
+        }
+      ]
     },
     "undo": {
       "name": "undo",
