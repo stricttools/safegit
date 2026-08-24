@@ -43,10 +43,15 @@ import (
 //     (and says what it cannot restore), and every one of them refuses unless
 //     the state it names is the state actually on disk -- so there is nothing
 //     here to interrupt someone for that commit does not also have.
-//   - checkout, merge, rebase, reset, bisect, cherry-pick, revert -- guarded
-//     passthroughs. Each moves HEAD, refs or the working tree and then hands
-//     off to git; git itself does not interrupt for any of them, and safegit's
-//     coordination guard runs first.
+//   - checkout, rebase, reset, bisect -- guarded passthroughs. Each moves HEAD,
+//     refs or the working tree and then hands off to git; git itself does not
+//     interrupt for any of them, and safegit's coordination guard runs first.
+//   - merge, cherry-pick, revert -- passthrough REGISTRATIONS (the operator's
+//     argv is git's own vocabulary and reaches the handler verbatim) whose
+//     commit safegit authors itself: git computes with --no-commit and the
+//     pipeline commits the staged result. That makes them the same kind of act
+//     as commit, which is not consequential either, and each one's own subset
+//     refusals run before anything is locked or written.
 //   - push -- publishes local refs. Publishing is what the command is for, and
 //     --force-with-lease refuses rather than clobbers. A FORCED push is another
 //     matter, but it is consequential conditionally -- on one flag, not on the
