@@ -2,14 +2,12 @@
 package hooks
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -190,7 +188,11 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 	// Set process group so we can signal the entire group (Unix only)
 	setProcGroup(cmd)
 
-	// Pipe stdout to check the first line for timeout override
+	// Hook stdout is forwarded verbatim, every line of it. Nothing a hook
+	// writes is inspected, and nothing a hook writes can change the budget it
+	// runs under: the configured timeout is the only timeout, and a hook that
+	// needs a different one reads SAFEGIT_HOOK_TIMEOUT_S from its environment
+	// and is configured, never self-declared on stdout.
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		return HookResult{Name: name, ExitCode: 1, Duration: time.Since(start)}
@@ -200,42 +202,13 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		return HookResult{Name: name, ExitCode: 1, Duration: time.Since(start)}
 	}
 
-	// Stream stdout in a goroutine. Check the first line for timeout override
-	// and signal the effective timeout via channel.
-	timeoutCh := make(chan int, 1)
+	// Stream stdout in a goroutine, so a hook that writes a lot is never
+	// blocked on a full pipe while this function waits on the clock.
 	ioDone := make(chan struct{})
 	go func() {
 		defer close(ioDone)
-		reader := bufio.NewReader(stdoutPipe)
-		firstLine, err := reader.ReadString('\n')
-		if err == nil {
-			override := parseTimeoutOverride(firstLine)
-			if override > 0 {
-				timeoutCh <- override
-			} else {
-				timeoutCh <- 0
-				fmt.Fprint(stdout, firstLine)
-			}
-		} else {
-			timeoutCh <- 0
-			if firstLine != "" {
-				fmt.Fprint(stdout, firstLine)
-			}
-		}
-		// Stream remaining stdout
-		io.Copy(stdout, reader)
+		io.Copy(stdout, stdoutPipe)
 	}()
-
-	// Determine effective timeout: use override if received quickly, else default
-	effectiveTimeout := timeoutSec
-	select {
-	case override := <-timeoutCh:
-		if override > 0 {
-			effectiveTimeout = override
-		}
-	case <-time.After(2 * time.Second):
-		// Hook hasn't printed anything in 2s -- use default timeout
-	}
 
 	// Wait for process completion with timeout
 	procDone := make(chan error, 1)
@@ -243,7 +216,7 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		procDone <- cmd.Wait()
 	}()
 
-	timeout := time.Duration(effectiveTimeout) * time.Second
+	timeout := time.Duration(timeoutSec) * time.Second
 	select {
 	case err := <-procDone:
 		<-ioDone // wait for IO streaming to finish
@@ -292,22 +265,6 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		<-ioDone
 		return HookResult{Name: name, ExitCode: 1, Duration: time.Since(start)}
 	}
-}
-
-// parseTimeoutOverride checks if a line is "# safegit: timeout=NNN" and returns the value.
-// Returns 0 if not a valid override.
-func parseTimeoutOverride(line string) int {
-	line = strings.TrimSpace(line)
-	const prefix = "# safegit: timeout="
-	if !strings.HasPrefix(line, prefix) {
-		return 0
-	}
-	valStr := strings.TrimPrefix(line, prefix)
-	val, err := strconv.Atoi(valStr)
-	if err != nil || val <= 0 {
-		return 0
-	}
-	return val
 }
 
 // isExecutable checks if a file has any execute permission bit set.
