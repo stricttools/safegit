@@ -52,6 +52,7 @@ func delegateQueuedSequence(
 	state sequencer.State,
 	sides map[string]conflict.Sides,
 	declared []resolution,
+	declines []declinedCheck,
 	edits []commit.IndexEdit,
 	messages, trailers []string,
 ) int {
@@ -199,6 +200,7 @@ func delegateQueuedSequence(
 			head:         after,
 			created:      created,
 			declared:     declared,
+			declines:     declines,
 			stateCleared: !remaining.InProgress(),
 			stoppedAgain: true,
 		})
@@ -228,6 +230,7 @@ func delegateQueuedSequence(
 		head:         after,
 		created:      created,
 		declared:     declared,
+		declines:     declines,
 		stateCleared: !remaining.InProgress(),
 	})
 	return exitcode.OK
@@ -242,6 +245,9 @@ type delegatedOutcome struct {
 	created int
 	// declared is the resolution set safegit staged into the index copy.
 	declared []resolution
+	// declines are the checks safegit did NOT make before handing the queue to
+	// git -- today, the marker verification over an exempted path.
+	declines []declinedCheck
 	// stateCleared is READ from the git directory afterwards, never assumed:
 	// git removes its own state when the queue finishes and leaves it when the
 	// queue stops again.

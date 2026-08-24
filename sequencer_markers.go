@@ -94,9 +94,27 @@ type markerViolation struct {
 	conflicted bool
 }
 
+// declinedCheck is one check safegit did NOT make, carried out to the report.
+//
+// A skipped check that nobody hears about is a clean verdict over content
+// nothing looked at. The marker exemption is a deliberate declaration and it
+// stays honored -- what changes is that honoring it is now SAID, in the human
+// report and in the machine payload, naming the path and the declaration that
+// caused it.
+type declinedCheck struct {
+	// Check is the check that was not made, in a stable machine-readable
+	// spelling.
+	Check string `json:"check"`
+	Path  string `json:"path"`
+	// Reason is what declined it, in words an operator can act on.
+	Reason string `json:"reason"`
+}
+
 // verifyMarkers is the whole check, run after completeness and before the
-// commit pipeline. It returns 0 when the conclusion may proceed.
-func (op continueOp) verifyMarkers(ctx context.Context, state sequencer.State, sides map[string]conflict.Sides, declared []resolution) int {
+// commit pipeline. It returns 0 when the conclusion may proceed, alongside every
+// check it DECLINED to make: an exempted path is not a checked path, and the
+// report says so rather than reading as though the whole set was verified.
+func (op continueOp) verifyMarkers(ctx context.Context, state sequencer.State, sides map[string]conflict.Sides, declared []resolution) ([]declinedCheck, int) {
 	choices := make(map[string]resolutionChoice, len(declared))
 	for _, r := range declared {
 		choices[r.Path] = r.Choice
@@ -105,10 +123,10 @@ func (op continueOp) verifyMarkers(ctx context.Context, state sequencer.State, s
 	paths, err := verifiablePaths(ctx, sides, choices)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return exitcode.General
+		return nil, exitcode.General
 	}
 	if len(paths) == 0 {
-		return 0
+		return nil, 0
 	}
 
 	// The first parent is the branch tip this conclusion commits onto, and it is
@@ -117,38 +135,47 @@ func (op continueOp) verifyMarkers(ctx context.Context, state sequencer.State, s
 	attrs, err := conflict.Resolve(ctx, firstParent, paths)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: reading the conflict attributes from the first parent's tree: %v\n", err)
-		return exitcode.General
+		return nil, exitcode.General
 	}
 	exempt, err := exemptPaths(ctx, firstParent, paths)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return exitcode.General
+		return nil, exitcode.General
 	}
 
 	v := &markerCheck{op: op, state: state, sides: sides, choices: choices, attrs: attrs, baseCommits: baseCommitsFor(op.kind, firstParent, state)}
 	if err := v.readAutoMerge(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "error: reading what git recorded for this conflict: %v\n", err)
-		return exitcode.General
+		return nil, exitcode.General
 	}
 
 	var violations []markerViolation
+	var declines []declinedCheck
 	for _, path := range paths {
 		if exempt[path] {
+			declines = append(declines, declinedCheck{
+				Check:  markerCheckName,
+				Path:   path,
+				Reason: fmt.Sprintf("the first parent's tree declares -%s for this path, so its content was committed unverified", markerExemptionAttr),
+			})
 			continue
 		}
 		found, err := v.check(ctx, path)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: checking %s for conflict markers: %v\n", path, err)
-			return exitcode.General
+			return nil, exitcode.General
 		}
 		violations = append(violations, found...)
 	}
 
 	if len(violations) > 0 {
-		return op.refuseSurvivingMarkers(violations)
+		return declines, op.refuseSurvivingMarkers(violations)
 	}
-	return 0
+	return declines, 0
 }
+
+// markerCheckName is the declined-check identifier for the marker verification.
+const markerCheckName = "conflict-markers"
 
 // verifiablePaths is every path this conclusion will RECORD: the conflicted
 // ones, plus everything else whose index entry differs from the first parent.
