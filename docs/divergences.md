@@ -786,6 +786,29 @@ next to what is admitted.
   branches.
 - **Ruling:** ours — **provisional, newly cataloged, awaiting review**
 
+### `switch -c` starts the new branch where you are standing
+
+- **git's idiom:** `git switch -c <new> <start-point>` creates the branch at any
+  commit-ish and moves onto it in one step, and `git checkout -b` does the same.
+  The start-point is ordinary daily usage: branch off `origin/main` without
+  going there first.
+- **safegit:** `safegit switch -c` takes the new branch's name and NOTHING else.
+  A start-point alongside it is refused at exit 2, and the refusal names the two
+  commands that do the same work — `git branch <name> <start>`, then `safegit
+  switch <name>`. The reason is what `switch` is here: the navigation half of
+  git's `checkout`, one step from where you are standing to a branch, with `-c`
+  minting that branch at HEAD. A start-point makes it a branch CREATION at a
+  commit nobody navigated to, which is a ref write wearing navigation's spelling
+  — and safegit's every ref write is a compare-and-swap it performs itself,
+  never a side effect of moving HEAD. The oplog entry is the same argument from
+  the other end: a switch records the positions HEAD moved BETWEEN, and the
+  start-point form would record a jump that never happened.
+
+  This is a capability safegit deliberately lacks rather than one it guards.
+  Nothing about the start-point is unsafe in itself; it is simply not part of
+  the one form this command implements, and git creates branches perfectly well.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
 ### A flag whose whole job is to carry a dirty tree is dead here
 
 - **git's idiom:** `git merge --autostash` stashes uncommitted changes, merges,

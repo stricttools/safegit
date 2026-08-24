@@ -1411,6 +1411,8 @@ What is left is the navigation half, under git's own modern name for it.
 
 `safegit switch <branch>` moves onto a branch that already exists. `safegit switch -c <new-branch>` creates one where you are standing and moves onto it (`-c` is switch's own spelling; it replaces checkout's `-b`). That is the whole surface.
 
+**`-c` takes the branch name and nothing else.** git's `switch -c <new> <start-point>` starts the new branch at any commit-ish; here a start-point alongside `-c` is refused at exit **2**, and the refusal names the two commands that do the same work: `git branch <name> <start>`, then `safegit switch <name>`. Creating a branch at a commit nobody navigated to is a ref write wearing navigation's spelling, and it is a git capability safegit deliberately lacks rather than one it guards.
+
 An argument that resolves to a commit but is NOT a branch -- a tag, an object name, `HEAD~3` -- is refused, because switching onto one detaches HEAD, and a detached HEAD is the state safegit's commit, conclusion and undo paths all refuse. The refusal prints the two ways forward: make a branch there and switch to it, or use `git switch --detach` when a detached HEAD is deliberately what you want. Note that `--detach` guards nothing here: the ARGUMENT is what detaches, so refusing the flag while accepting the argument would be a check that never fires.
 
 An argument that resolves to NOTHING is deliberately left to git, so `safegit switch no-such-thing` exits with git's own verdict on that argument rather than a message safegit invented about branches. git's DWIM reading survives with it: a name that exists only on a remote still creates and lands on a local branch tracking it, exactly as `git switch` would.
