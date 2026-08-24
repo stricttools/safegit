@@ -82,7 +82,7 @@
   },
   "project_id": "github.com/smm-h/safegit",
   "name": "safegit",
-  "version": "0.28.1-0.20260824205109-45efe0d3bf5a+dirty",
+  "version": "0.28.1-0.20260824213009-553cd4bfb3eb+dirty",
   "help": "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "proc_observe_allowlist": [
     [
@@ -2019,6 +2019,65 @@
       "name": "undo",
       "help": "reverse the last safegit-authored operation using the oplog -- a commit, an mv, an amend, a reword, or a conclusion (merge-continue, cherry-pick-continue, revert-continue). It moves a REF and never the working tree",
       "effect": "mutating",
+      "payload_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "deleted": {
+            "type": "boolean"
+          },
+          "dry_run": {
+            "type": "boolean"
+          },
+          "old_sha": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "residue": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "detail": {
+                  "type": "string"
+                },
+                "step": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "step",
+                "detail"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "sha": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "undone_op": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "undone_op",
+          "sha",
+          "old_sha",
+          "count",
+          "deleted",
+          "residue",
+          "dry_run"
+        ],
+        "type": "object"
+      },
       "flags": [
         {
           "name": "bypass-session",
@@ -2037,6 +2096,9 @@
           },
           "presence": "optional"
         }
+      ],
+      "tags": [
+        "json"
       ],
       "grants": [
         {
