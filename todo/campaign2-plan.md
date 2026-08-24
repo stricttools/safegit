@@ -1171,6 +1171,14 @@ Other docs:
   per 1.4's list; the app_version example becomes a placeholder; the
   restore preview's ls-remote stated (4.3); the VOCABULARY SWEEP:
   "rename" -> "move" everywhere except quotations of git's own terms.
+- Execution-discovered rows: the commands guide's health-check table
+  gains a `submodules` row (error severity, added by 2.8) and its
+  `hook_perms` row corrects warn -> error (1.4's escalation;
+  pre-existing drift). Also assess whether 2.8's fallback deletions
+  warrant a divergences entry — the implementor judged NO under the
+  no-git-facing-analogue clause (git has no scrub; the --3way retry
+  was internal mechanics, not surface); confirm that judgment or add
+  one entry covering the deletions.
 - `--dump-schema` (commit via rlsbl commit) and bare `selfdoc gen`.
 **Verify:** every named row resolved; regeneration clean; fresh
 spot-checks against code; the catalog handed to the user for the
