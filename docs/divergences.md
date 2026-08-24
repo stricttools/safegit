@@ -49,8 +49,8 @@ entry, whatever its direction says.
 >   included](#a-dirty-working-tree-refuses-the-guarded-commands-untracked-files-included)
 > - [`safegit commit` refuses while an operation is in
 >   flight](#safegit-commit-refuses-while-an-operation-is-in-flight)
-> - [`reset --hard` is refused when the tree is dirty, and only
->   then](#reset---hard-is-refused-when-the-tree-is-dirty-and-only-then)
+> - [`reset` is refused when the tree is dirty, in exactly the modes that write
+>   to it](#reset-is-refused-when-the-tree-is-dirty-in-exactly-the-modes-that-write-to-it)
 > - [A pre-pre-push hook can raise its own timeout, without a
 >   cap](#a-pre-pre-push-hook-can-raise-its-own-timeout-without-a-cap)
 
@@ -715,10 +715,13 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   them, and untracked files are none of their business at all — `git reset
   --hard` does not even look at an untracked file, let alone stop for one.
 - **safegit:** `checkout`, `pull`, `merge`, `rebase`, `cherry-pick`, `revert`,
-  `reset --hard` and the tree-moving `bisect` subcommands (`good`, `bad`, `old`,
-  `new`, `start`, `reset`) all run one coordination check before git is started,
-  and **any** dirt refuses the command at exit 5 (`CoordinationBusy`), with the
-  offending paths listed. Dirt is a diff of the working tree against `HEAD` — so
+  the working-tree-writing `reset` modes and the stepping `bisect` subcommands
+  all run one coordination check before git is started, and **any** dirt refuses
+  the command at exit 5 (`CoordinationBusy`), with the offending paths listed.
+  Which forms are in that set is not restated per handler: it is DERIVED from
+  internal/gitexec's classification table, the single authority over what a git
+  invocation does, and an argv the table does not declare is refused rather than
+  assumed harmless. Dirt is a diff of the working tree against `HEAD` — so
   a staged change counts too, and the shared `.git/index`, which a safegit commit
   deliberately leaves stale, is never consulted — **plus every untracked file
   that is not ignored**. Untracked files are in scope because of the premise the
@@ -731,24 +734,25 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   conclude or abandon it instead.
 - **Ruling:** ours — **provisional, newly cataloged, awaiting review**
 
-### `reset --hard` is refused when the tree is dirty, and only then
+### `reset` is refused when the tree is dirty, in exactly the modes that write to it
 
 - **git's idiom:** `git reset --hard` is the command that throws uncommitted work
   away. That is its whole purpose, and it does it without asking and without
-  keeping a copy.
+  keeping a copy. `--merge` and `--keep` overwrite working-tree files too, and
+  stop only where the specific file they would overwrite has local changes.
 - **safegit:** `safegit reset` forwards the operator's arguments to git
-  unchanged, with one check in front: when `--hard` appears in them, the
-  dirty-tree guard above runs first. So a `--hard` that would discard uncommitted
-  work is refused at exit 5, and a `--hard` against a clean tree passes straight
-  through. Every other form — `--soft`, `--mixed`, a pathspec reset, a bare
-  `reset` — is unguarded, because none of them touches the working tree. The
-  recognition is a literal scan of the argument list for `--hard`, which is the
-  one place safegit reads git's vocabulary here; the **operation lock**, by
-  contrast, is taken unconditionally for every reset, precisely so that safety
-  property does not depend on that scan being complete. What is deliberately not
-  covered: a clean-tree `reset --hard <older>` still moves the branch back over
-  whatever was in the way, with no ancestry check of the kind `undo` performs.
-  The guard blunts the destroy-uncommitted-work edge, not the move-the-ref one.
+  unchanged, with one check in front: when the argv names a mode that writes
+  working-tree files — `--hard`, `--merge` or `--keep` — the dirty-tree guard
+  above runs first, and any dirt refuses the command at exit 5. `--soft`,
+  `--mixed`, a pathspec reset and a bare `reset` are unguarded, because none of
+  them touches the working tree. Which modes are which is not read here at all:
+  the classification table declares reset's effects and the guard reads that one
+  view, so the vocabulary is stated in one place rather than approximated at the
+  call site. The **operation lock**, by contrast, is taken unconditionally for
+  every reset, because every reset moves HEAD. What is deliberately not covered:
+  a clean-tree `reset --hard <older>` still moves the branch back over whatever
+  was in the way, with no ancestry check of the kind `undo` performs. The guard
+  blunts the destroy-uncommitted-work edge, not the move-the-ref one.
 - **Ruling:** ours — **provisional, newly cataloged, awaiting review**
 
 ### No bare `--force`, anywhere

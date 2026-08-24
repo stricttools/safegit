@@ -92,9 +92,10 @@ type Verb struct {
 // subcommand absent from it, so adding a git call to safegit means declaring it
 // here first.
 //
-// Three views read this one table: Validate (the execution boundary's own
-// vocabulary check), WritesObjects (which invocations touch the object store)
-// and IsObserveOnly (which invocations change nothing).
+// Four views read this one table: Validate (the execution boundary's own
+// vocabulary check), WritesObjects (which invocations touch the object store),
+// WritesWorktree (which invocations the uncommitted-work guard must refuse) and
+// IsObserveOnly (which invocations change nothing).
 var verbs = []Verb{
 	{
 		Name: "--version",
@@ -113,7 +114,14 @@ var verbs = []Verb{
 	},
 	{
 		Name: "bisect",
-		Base: MutatesRefs | MutatesIndex | MutatesWorktree,
+		Base: ObserveOnly,
+		Conditional: []ConditionalEffect{
+			{
+				Tokens:  []string{"start", "good", "bad", "old", "new", "skip", "run", "replay", "reset"},
+				Effects: MutatesRefs | MutatesIndex | MutatesWorktree,
+				Why:     "the STEPPING vocabulary moves HEAD and checks another commit out (and writes refs/bisect/*); `bisect terms`, `bisect log` and `bisect view` only report on a bisect already in progress",
+			},
+		},
 		Note: "guarded passthrough; the operator's own argv",
 	},
 	{Name: "cat-file", Base: ObserveOnly},
@@ -232,7 +240,7 @@ var verbs = []Verb{
 		Name: "reset",
 		Base: MutatesRefs | MutatesIndex,
 		Conditional: []ConditionalEffect{
-			{Tokens: []string{"--hard"}, Effects: MutatesWorktree, Why: "--hard is the one reset mode that overwrites working-tree files"},
+			{Tokens: []string{"--hard", "--merge", "--keep"}, Effects: MutatesWorktree, Why: "these three reset modes overwrite working-tree files; --soft and --mixed move the ref and the index and never touch the tree (--mixed is reset's base classification, so it needs no entry of its own)"},
 		},
 		Note: "guarded passthrough; the operator's own argv",
 	},
@@ -429,6 +437,28 @@ func WritesObjects(args []string) bool {
 		return true
 	}
 	return eff.Has(MutatesObjects)
+}
+
+// WritesWorktree reports whether an argv can create, change or delete a file in
+// the working tree. This is the view the guarded passthroughs' uncommitted-work
+// check reads: a command that cannot touch the working tree has no reason to be
+// refused over uncommitted work, and one that can must be refused whichever way
+// it is spelled.
+//
+// Deriving it is the point. Two hand-written approximations of git's vocabulary
+// lived in the handlers and both were wrong -- reset guarded only `--hard`, and
+// bisect kept a subcommand list missing `skip`, `run` and `replay`. The table is
+// the single authority over what a git invocation does, so the guard reads it
+// rather than restating it.
+//
+// An argv the table does not declare reports TRUE, the same default-deny
+// WritesObjects takes: an unknown invocation is never assumed harmless.
+func WritesWorktree(args []string) bool {
+	eff, err := EffectsOf(args)
+	if err != nil {
+		return true
+	}
+	return eff.Has(MutatesWorktree)
 }
 
 // IsObserveOnly reports whether an argv changes nothing at all. An argv the

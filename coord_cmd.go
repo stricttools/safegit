@@ -62,9 +62,11 @@ func runGitMutation(flags globalFlags, args ...string) int {
 		// reach Run's OBSERVE branch, which executes the child even in dry mode
 		// and returns a settled Completed. safegit's proc-observe allowlist is
 		// generated from the classification table's read view and admits only
-		// verbs the table declares observe-only unconditionally; every argv
-		// this function builds names a verb the same table declares mutating
-		// (checkout, fetch, merge, rebase, reset, bisect, cherry-pick, revert).
+		// verbs the table declares observe-only UNCONDITIONALLY; every verb this
+		// function builds an argv for (checkout, fetch, merge, rebase, reset,
+		// bisect, cherry-pick, revert) either declares mutating effects in its
+		// base or carries conditional ones, and a verb with any conditional
+		// effect is excluded from the allowlist however read-only its base is.
 		// The two sets are disjoint by construction, and
 		// TestObserveAllowlistCannotAdmitAMutation checks the prefixes against
 		// the argv this function actually builds rather than trusting the
@@ -338,25 +340,22 @@ func runReset(flags globalFlags, args []string) int {
 	sgDir := repo.SafegitDir(gitDir)
 
 	// Unconditionally, unlike the dirty-tree guard below: every reset moves
-	// HEAD, and safegit cannot tell which forms are harmless without
-	// re-deriving git's own argument vocabulary.
+	// HEAD, so every reset has to be serialized against the other operations in
+	// this worktree. The guard below is the narrower question -- which forms
+	// write to the working tree -- and the classification table answers it.
 	release, code := acquireOperationLock(flags, gitDir, "reset")
 	if code != 0 {
 		return code
 	}
 	defer release()
 
-	// Only guard --hard resets (those are the tree-mutating ones)
-	isHard := false
-	for _, a := range args {
-		if a == "--hard" {
-			isHard = true
-			break
-		}
-	}
-
-	if isHard {
-		if code := coordGuard(flags, gitDir, "reset --hard"); code != 0 {
+	// Which reset forms may be refused over uncommitted work is DERIVED from the
+	// classification table rather than re-scanned here. The scan this replaced
+	// looked for --hard alone, on a comment claiming it is the only mode that
+	// mutates the working tree; --merge and --keep write working-tree files too
+	// and ran unguarded.
+	if gitexec.WritesWorktree(append([]string{"reset"}, args...)) {
+		if code := coordGuard(flags, gitDir, "reset"); code != 0 {
 			return code
 		}
 	}
@@ -385,25 +384,19 @@ func runBisect(flags globalFlags, args []string) int {
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
-	// Unconditionally, for the same reason as reset: the subcommand list below
-	// is an approximation of git's vocabulary and the lock must not depend on
-	// it being complete.
+	// Unconditionally, for the same reason as reset: a bisect invocation
+	// participates in the operation's state whatever it is spelled, so the lock
+	// is not conditioned on the subcommand. The dirty-tree guard below is.
 	release, code := acquireOperationLock(flags, gitDir, "bisect")
 	if code != 0 {
 		return code
 	}
 	defer release()
 
-	// Guard tree-moving subcommands (good, bad, reset, start with a rev)
-	needsGuard := false
-	if len(args) > 0 {
-		switch args[0] {
-		case "good", "bad", "old", "new", "reset", "start":
-			needsGuard = true
-		}
-	}
-
-	if needsGuard {
+	// Which bisect subcommands may be refused over uncommitted work is DERIVED
+	// from the classification table. The hand-kept list this replaced omitted
+	// `skip`, `run` and `replay`, every one of which checks another commit out.
+	if gitexec.WritesWorktree(append([]string{"bisect"}, args...)) {
 		if code := coordGuard(flags, gitDir, "bisect"); code != 0 {
 			return code
 		}
