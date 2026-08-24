@@ -451,9 +451,8 @@ func newApp() *strictcli.App {
 		),
 		strictcli.PayloadSchema(pushPayloadSchema),
 	)
-	app.Command("pull", "fetch from a remote and merge, with the merge strategy stated explicitly: --merge-strategy is required and has no default, so a pull never depends on git's own configuration to decide whether it may create a merge commit", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+	app.Command("pull", pullHelp, func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		gf := globalsToFlags(ctx, kwargs)
-		// Determine merge mode from --merge-strategy
 		var mode pullMode
 		switch kwargs["merge_strategy"].(string) {
 		case "ff-only":
@@ -462,6 +461,12 @@ func newApp() *strictcli.App {
 			mode = pullFF
 		case "no-ff":
 			mode = pullNoFF
+		default:
+			// --merge-strategy is required and closed over its three declared
+			// choices, so the framework refuses a fourth before dispatch.
+			// Refusing loudly keeps the zero value (pullFFOnly) from silently
+			// becoming the answer for any future non-CLI caller.
+			die(exitcode.Internal, "unreachable: --merge-strategy is required and closed over ff, ff-only, no-ff")
 		}
 		remote := "origin"
 		if v := kwargs["remote"]; v != nil {
@@ -471,15 +476,26 @@ func newApp() *strictcli.App {
 		if v := kwargs["branch"]; v != nil {
 			branch = v.(string)
 		}
-		return strictcli.Exit(runPull(gf, mode, remote, branch))
+		return strictcli.Exit(runPull(gf, mode, remote, branch, optBool(kwargs["rebase"], false)))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
+		strictcli.WithTags("json"),
+		strictcli.PayloadSchema(pullPayloadSchema),
+		strictcli.WithGrants(strictcli.Grant{
+			Name:   "parent-bump",
+			Reason: "pulling in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
+			Kind:   strictcli.ProcMutate,
+		}),
 		strictcli.WithFlags(
 			strictcli.StringFlag("merge-strategy", "how the fetched commits are merged into the current branch", strictcli.Required(), strictcli.Choices(
 				strictcli.Ch("ff", "fast-forward when possible, otherwise create a merge commit"),
 				strictcli.Ch("ff-only", "fast-forward only, refusing the pull when the branches have diverged"),
 				strictcli.Ch("no-ff", "always create a merge commit, even when a fast-forward is possible"),
 			)),
+			// Declared in order to be REFUSED with the two commands that do the
+			// job named. Leaving it undeclared would refuse it too, as an
+			// unknown flag, and say nothing about where rebasing lives.
+			strictcli.BoolFlag("rebase", "REFUSED, and declared so the refusal can say what to do instead: rebasing after a fetch is 'git fetch' followed by 'safegit rebase <remote>/<branch>', because a rebase is git's replay from end to end while a pull's merge step is safegit's own", strictcli.Optional(), strictcli.NegatableOpt(false)),
 		),
 		strictcli.WithArgs(
 			strictcli.NewArg("remote", "name of the remote repository to pull from (defaults to origin)", strictcli.ArgOptional()),
