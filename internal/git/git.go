@@ -1011,6 +1011,26 @@ func HashObjectBytes(ctx context.Context, data []byte) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// HashObjectBytesAsPath returns the blob SHA git would record for in-memory
+// bytes if they lived at rel: the same answer as HashObjectBytes, except that
+// git's clean filter and text attributes for rel are applied to the bytes
+// first. It writes nothing.
+//
+// This is NOT one of the path-taking helpers the comment above rules out. The
+// content still comes from the caller, on stdin; rel is a repo-relative NAME
+// git looks attributes up under and never opens, so nothing here depends on
+// where a file happens to be or on which directory the child runs in. It is
+// what makes a content comparison filter-aware: on a checkout where git
+// converts line endings, the bytes on disk differ from the blob and the file
+// is still clean, and a comparison that hashed them raw would call it changed.
+func HashObjectBytesAsPath(ctx context.Context, rel string, data []byte) (string, error) {
+	out, _, err := RunWithEnvStdin(ctx, nil, data, "hash-object", "--path", rel, "--stdin")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
 // HashObjectWriteBytes writes in-memory bytes as a blob to the object store
 // via git hash-object -w --stdin, returning the blob SHA.
 func HashObjectWriteBytes(ctx context.Context, data []byte) (string, error) {

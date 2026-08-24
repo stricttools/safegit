@@ -42,8 +42,12 @@ import (
 // as the exact blob the parent tree held, through index edits rather than
 // through staging from disk, which is what `git mv` followed by `git commit`
 // produces and what makes a preview and an execution compute the same tree.
-// Uncommitted content changes at a moved path stay uncommitted, and are a
-// separate commit -- a move is a move.
+//
+// Which is why a path carrying UNCOMMITTED CONTENT CHANGES is refused rather
+// than moved: carrying the parent's blob across would leave the edit behind,
+// uncommitted, at a path the operator never named. git mv moves it anyway; this
+// is one of the deliberate divergences, and the refusal names the two routes
+// that exist instead (see dirtyMoveReason).
 
 // mvEntry is one path the move carries across: where it was, where it lands,
 // and the tree entry that travels with it unchanged.
@@ -397,7 +401,107 @@ func checkMvPair(ctx context.Context, repoRoot string, ignoreCase, createMissing
 				"or pass --create-missing-directories to have this command make it", missing, p.newPrefix())
 		}
 	}
-	return ""
+
+	// Last, because it is the one question about the SOURCE's content rather
+	// than about where the move lands: a file carrying uncommitted edits cannot
+	// be moved, because this command commits the rename and nothing else.
+	return dirtyMoveReason(ctx, repoRoot, p)
+}
+
+// dirtyMoveReason is the refusal for a pair whose content has been edited and
+// not committed. An empty answer means every path it carries is clean.
+//
+// `mv` commits the RENAME AND NOTHING ELSE: each path is carried across as the
+// exact blob its parent held. For an edited file that is the wrong commit --
+// the move succeeds, the edit is silently left behind as an uncommitted change
+// at a path the operator never named, and the commit records content that is
+// not what is on disk. There is no flag for it, because both things the
+// operator might have meant already have a route and the refusal names them.
+//
+// EVERY dirty path is named, not the first: a subtree move is one pair over
+// many files, and a refusal naming one of them is a discovery loop.
+func dirtyMoveReason(ctx context.Context, repoRoot string, p *mvPair) string {
+	var dirty []string
+	for _, e := range p.entries {
+		changed, err := mvEntryIsDirty(ctx, repoRoot, e)
+		if err != nil {
+			return fmt.Sprintf("%s cannot be read, so whether it carries uncommitted changes is unanswerable: %v",
+				e.old, err)
+		}
+		if changed {
+			dirty = append(dirty, e.old)
+		}
+	}
+	if len(dirty) == 0 {
+		return ""
+	}
+
+	what := dirty[0] + " carries uncommitted content changes."
+	if len(dirty) > 1 {
+		what = "these paths carry uncommitted content changes:\n         " +
+			strings.Join(dirty, "\n         ")
+	}
+	// The two routes, in the order the intents divide: the edit is its own
+	// change, or the edit belongs with the move.
+	return fmt.Sprintf("%s\n"+
+		"       A move is a move: this command commits the rename and nothing else, so the edit\n"+
+		"       would be left behind uncommitted at a path you did not name. Either commit the\n"+
+		"       content first and then move it, or move it on disk yourself and commit both at\n"+
+		"       once with: safegit commit --moved '%s' -- %s",
+		what, trailer.EncodePair(p.old, p.new), p.newPrefix())
+}
+
+// mvEntryIsDirty reports whether the working tree's copy of one moved path
+// differs in CONTENT from the blob the parent commit holds.
+//
+// The comparison is filter-aware, and the attributes are resolved under the NEW
+// path: that is where the content is about to live, so that is the name git
+// itself would decide the conversion by. Without it, a checkout on which git
+// converts line endings would have every file look changed and no move would
+// ever be allowed.
+//
+// Three things are deliberately not dirtiness here. A path tracked in the
+// parent but absent from disk is a DELETION, which the move leaves uncommitted
+// exactly as it found it (and for the file form, an absent source was already
+// refused above). A gitlink is a submodule's own recorded commit, not content
+// this tree holds. And a mode change is not content -- `mv` carries the
+// parent's mode across, and the changed bit stays uncommitted where it was.
+func mvEntryIsDirty(ctx context.Context, repoRoot string, e mvEntry) (bool, error) {
+	if e.mode == "160000" {
+		return false, nil
+	}
+	abs := git.Anchor(repoRoot, e.old)
+	info, err := os.Lstat(abs)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	// A symlink's blob IS its target text, and git applies no filter to it, so
+	// it is hashed raw rather than as the path it will live at.
+	if info.Mode()&os.ModeSymlink != 0 {
+		target, err := os.Readlink(abs)
+		if err != nil {
+			return false, err
+		}
+		sha, err := git.HashObjectBytes(ctx, []byte(target))
+		if err != nil {
+			return false, err
+		}
+		return sha != e.sha, nil
+	}
+
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return false, err
+	}
+	sha, err := git.HashObjectBytesAsPath(ctx, e.new, data)
+	if err != nil {
+		return false, err
+	}
+	return sha != e.sha, nil
 }
 
 // missingDestinationDir returns the repo-relative parent directory a move's
