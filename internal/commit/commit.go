@@ -168,8 +168,12 @@ type CommitRequest struct {
 	// Moved carries the caller's declared moves, one "old -> new" pair each, in
 	// the grammar internal/trailer defines. Each becomes a record in the commit
 	// message after being checked against the repository; a declaration the
-	// repository contradicts is a refusal, never a record. Nothing here is
-	// inferred -- safegit detects no moves at all.
+	// repository contradicts is a refusal, never a record.
+	//
+	// A declaration is also the human ANSWERING the question inference asks: the
+	// paths it names are out of the candidate sets and out of the fences' tree
+	// listings before any pairing happens (infer_moves.go), so a pair is never
+	// stated twice in two records.
 	Moved []string
 
 	// MovedRetract carries the ids of move records this commit retracts, one

@@ -9,23 +9,45 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// safegit used to guess. When a commit added a file whose blob already existed
-// in the parent tree at a path that was gone from disk, it read the pair as a
-// rename and staged that other path's DELETION into the commit -- a path the
-// caller never named. The guess is deleted, and these tests are what keeps it
-// deleted: same fixtures as before, opposite expectations.
+// safegit used to guess with the INDEX. When a commit added a file whose blob
+// already existed in the parent tree at a path that was gone from disk, it read
+// the pair as a rename and staged that other path's DELETION into the commit --
+// a path the caller never named. That is deleted, and these tests are what keeps
+// it deleted: same fixtures as before, opposite expectations.
 //
-// The rule now is the whole of it: a commit contains the paths the caller
-// named, and nothing else. Committing the new half of a move records an
-// addition; the old half stays a pending deletion in the working tree until
-// someone commits it, which is what naming both paths in one command does.
+// The rule is the whole of it: A COMMIT CONTAINS THE PATHS THE CALLER NAMED,
+// and nothing else. Committing the new half of a move records an addition; the
+// old half stays a pending deletion in the working tree until someone commits
+// it, which is what naming both paths in one command does.
+//
+// safegit does read a commit's own delta now and MINT A RECORD for a move that
+// delta witnesses (moves_inferred_test.go). Nothing here is weakened by it: a
+// record is a line in a message, it stages nothing and adopts nothing, and it
+// can only speak about paths the commit already holds on both sides. Every test
+// below asserts that directly -- what the commit's tree contains, and what is
+// still the caller's to commit.
 
-// assertNoRenameNotice fails when a run announced a rename it should no longer
-// be detecting.
-func assertNoRenameNotice(t *testing.T, stderr string) {
+// assertCommitContains fails unless HEAD's raw delta against its parent is
+// exactly these status-and-path lines, in any order. It is the direct form of
+// "the commit contains what the caller named and nothing else".
+func assertCommitContains(t *testing.T, dir string, want ...string) {
 	t.Helper()
-	if strings.Contains(stderr, "rename detected") || strings.Contains(stderr, "auto-staged deletion") {
-		t.Errorf("a commit announced a rename; move detection is deleted: %s", stderr)
+	raw := testutil.GitRaw(t, dir, "diff-tree", "--no-commit-id", "--no-renames", "-r", "--name-status", "HEAD")
+	got := strings.Split(strings.TrimSpace(raw), "\n")
+	if len(got) != len(want) {
+		t.Fatalf("the commit holds %d path(s) %q, want %d %q", len(got), got, len(want), want)
+	}
+	for _, w := range want {
+		found := false
+		for _, g := range got {
+			if strings.TrimSpace(g) == w {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("the commit does not hold %q; it holds %q", w, got)
+		}
 	}
 }
 
@@ -62,7 +84,9 @@ func TestNoMoveDetection_BasicRename(t *testing.T) {
 		t.Fatalf("rename commit failed (code %d): %s", code, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	// The commit holds one path, so there is no deletion for anything to pair
+	// with and no record is minted.
+	assertInferredPairs(t, dir)
 
 	// The commit adds bar.txt and nothing else.
 	diffTree := testutil.GitRaw(t, dir, "diff-tree", "--no-commit-id", "--no-renames", "-r", "--name-status", "HEAD")
@@ -96,7 +120,11 @@ func TestNoMoveDetection_MoveAndEdit(t *testing.T) {
 		t.Fatalf("move-and-edit commit failed (code %d): %s", code, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	// The commit contains the one path that was named, the old path is still
+	// the caller's to commit, and nothing was recorded about a move: the content
+	// changed on the way, so no blob is on both sides of the delta either.
+	assertCommitContains(t, dir, "A\tbar.txt")
+	assertInferredPairs(t, dir)
 	assertUnstagedDeletion(t, dir, "foo.txt")
 }
 
@@ -121,7 +149,11 @@ func TestNoMoveDetection_ExplicitBothPaths(t *testing.T) {
 		t.Fatalf("explicit-both-paths commit failed (code %d): %s", code, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	// Both halves were named, so the commit holds both -- and THAT is what the
+	// record engine reads: one blob leaving foo.txt and arriving at bar.txt,
+	// which is a move the delta witnesses and safegit records as observed.
+	assertInferredPairs(t, dir, "foo.txt -> bar.txt")
+	assertOrigins(t, commitMessageOf(t, dir, "HEAD"), "observed")
 
 	// Working tree should be clean: both halves of the move were named.
 	status := testutil.Git(t, dir, "status", "--porcelain")
@@ -158,7 +190,10 @@ func TestNoMoveDetection_UnrelatedDeletion(t *testing.T) {
 		t.Fatalf("rename commit failed (code %d): %s", code, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	// The commit holds the added path alone -- no deletion was swept in, so
+	// there is nothing to pair and no record.
+	assertCommitContains(t, dir, "A\tc.txt")
+	assertInferredPairs(t, dir)
 
 	// Neither deletion was swept into the commit: not the blob-matching one,
 	// and not the unrelated one.
@@ -187,7 +222,12 @@ func TestNoMoveDetection_Amend(t *testing.T) {
 		t.Fatalf("amend commit failed (code %d): %s", code, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	// The amended commit is the ROOT commit, so its delta is its whole tree:
+	// foo.txt, which the amend did not name and therefore did not remove, and
+	// the added bar.txt. Nothing was deleted, so nothing is paired and nothing
+	// is recorded -- and foo.txt's deletion stays the caller's to commit.
+	assertCommitContains(t, dir, "A\tfoo.txt", "A\tbar.txt")
+	assertInferredPairs(t, dir)
 	assertUnstagedDeletion(t, dir, "foo.txt")
 }
 
@@ -206,16 +246,43 @@ func TestNoMoveDetection_QuietIsNotASilentGuess(t *testing.T) {
 		t.Fatalf("rename failed: %v", err)
 	}
 
-	// Commit with --quiet. There is nothing to suppress any more: the notice
-	// existed to disclose a guess, and with the guess gone the quiet run and
-	// the loud one produce the same commit.
+	// Commit with --quiet, naming only the new path. The old notice existed to
+	// disclose a GUESS; the guess is gone, so a quiet run and a loud one produce
+	// the same commit: the named path, no record, and the deletion still
+	// pending.
 	_, stderr, code = runSafegit(t, dir, "--quiet", "commit", "-m", "rename", "--", "bar.txt")
 	if code != 0 {
 		t.Fatalf("quiet commit failed (code %d): %s", code, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	assertCommitContains(t, dir, "A\tbar.txt")
+	assertInferredPairs(t, dir)
 	assertUnstagedDeletion(t, dir, "foo.txt")
+
+	// The other half of "quiet is not silent": the notice safegit DOES have --
+	// the one saying a possible move went unrecorded -- is never suppressed. A
+	// caller whose move was declined learns it here or not at all, so --quiet
+	// must not be able to hide it.
+	other := newRepo(t)
+	testutil.WriteFile(t, other, "x1.txt", "identical\n")
+	testutil.WriteFile(t, other, "x2.txt", "identical\n")
+	if _, stderr, code := runSafegit(t, other, "commit", "-m", "seed", "--", "x1.txt", "x2.txt"); code != 0 {
+		t.Fatalf("seed commit failed (code %d): %s", code, stderr)
+	}
+	for _, pair := range [][2]string{{"x1.txt", "y1.txt"}, {"x2.txt", "y2.txt"}} {
+		if err := os.Rename(filepath.Join(other, pair[0]), filepath.Join(other, pair[1])); err != nil {
+			t.Fatalf("rename %s: %v", pair[0], err)
+		}
+	}
+	_, quietStderr, code := runSafegit(t, other, "--quiet", "commit", "-m", "move both",
+		"--", "x1.txt", "x2.txt", "y1.txt", "y2.txt")
+	if code != 0 {
+		t.Fatalf("quiet commit failed (code %d): %s", code, quietStderr)
+	}
+	assertInferredPairs(t, other)
+	if !strings.Contains(quietStderr, "not recorded") || !strings.Contains(quietStderr, "--moved") {
+		t.Errorf("--quiet suppressed the notice that a possible move went unrecorded:\n%s", quietStderr)
+	}
 }
 
 func TestNoMoveDetection_MoveToSubdirectory(t *testing.T) {
@@ -242,7 +309,7 @@ func TestNoMoveDetection_MoveToSubdirectory(t *testing.T) {
 		t.Fatalf("move commit failed (code %d): %s", code, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	assertInferredPairs(t, dir)
 	assertUnstagedDeletion(t, dir, "foo.txt")
 
 	diffTree := testutil.GitRaw(t, dir, "diff-tree", "--no-commit-id", "--no-renames", "-r", "--name-status", "HEAD")
@@ -276,7 +343,10 @@ func TestNoMoveDetection_MultipleMoves(t *testing.T) {
 		t.Fatalf("multi-move commit failed (code %d): %s", code, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	// Two added paths, no deletions in the commit: nothing to pair, nothing
+	// recorded, and both old paths still pending in the working tree.
+	assertCommitContains(t, dir, "A\tx.txt", "A\ty.txt")
+	assertInferredPairs(t, dir)
 	assertUnstagedDeletion(t, dir, "a.txt")
 	assertUnstagedDeletion(t, dir, "b.txt")
 }
@@ -314,7 +384,12 @@ func TestNoMoveDetection_PathSimilarityIsNotConsulted(t *testing.T) {
 		t.Fatalf("commit failed (code %d): %s", code, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	// Neither deletion is in the commit, so neither is a candidate for anything
+	// -- there is no tie to break and nothing is recorded. Path similarity is
+	// not consulted anywhere, and neither is the fact that the surviving file
+	// sits in the same directory as one of the deleted ones.
+	assertCommitContains(t, dir, "A\tsrc/util/renamed.txt")
+	assertInferredPairs(t, dir)
 	assertUnstagedDeletion(t, dir, "src/util/helper.txt")
 	assertUnstagedDeletion(t, dir, "lib/helper.txt")
 }
@@ -341,7 +416,9 @@ func TestNoMoveDetection_OriginalPathRecreated(t *testing.T) {
 		t.Fatalf("commit failed (code %d): %s", code, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	// config.txt was MODIFIED rather than deleted, so no blob left it: the
+	// commit is an addition and a modification, and it records no move.
+	assertInferredPairs(t, dir)
 
 	// Working tree should be clean (both files explicitly listed)
 	status := testutil.Git(t, dir, "status", "--porcelain")
@@ -372,6 +449,6 @@ func TestNoMoveDetection_EmptyFile(t *testing.T) {
 		t.Fatalf("empty file rename commit failed (code %d): %s", code, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	assertInferredPairs(t, dir)
 	assertUnstagedDeletion(t, dir, "empty.txt")
 }

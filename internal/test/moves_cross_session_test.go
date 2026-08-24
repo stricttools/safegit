@@ -12,7 +12,7 @@ import (
 )
 
 // These tests are the cannot-happen guards for the cross-session failure mode
-// that automatic move detection used to produce, and that its deletion closed
+// that automatic move DETECTION used to produce, and that its deletion closed
 // structurally.
 //
 // The shape: session A deletes a tracked file from its working tree, intending
@@ -20,13 +20,20 @@ import (
 // an unrelated NEW file whose content happens to hash to the same blob as A's
 // deleted file -- trivially so for empty files, and easily so for any copied
 // boilerplate. Move detection classified A's deleted path as the "source" of
-// B's "move" and staged that deletion into B's commit, which never named it.
+// B's "move" and STAGED THAT DELETION into B's commit, which never named it.
 //
-// There is no blob lookup any more, so none of it can happen: B's commit
-// contains B's file, A's deletion stays A's to commit, and no rename is
-// announced. The tests keep the fixtures that used to trigger it -- a colliding
-// blob is not rare, and a future shortcut that reintroduces the guess would
-// have to make one of these fail.
+// What closed it is that a commit contains the paths its caller named and
+// nothing else. That is unchanged and is what these tests pin: B's commit
+// contains B's file, and A's deletion stays A's to commit.
+//
+// safegit does now MINT A RECORD for a move a commit's own delta witnesses --
+// but the two are different acts, and the difference is exactly what makes the
+// failure above unreachable. A record is a line in a message; it stages
+// nothing, adopts nothing, and can only speak about paths the commit ALREADY
+// contains on both sides. A's deleted path is not in B's commit at all, so
+// nothing about it can be paired, recorded, or swept in. The fixtures stay,
+// because a colliding blob is not rare and a future shortcut that reached back
+// into another session's pending deletion would have to make one of these fail.
 
 // crossSessCommitPaths returns the sorted set of paths touched by the given
 // commit, each prefixed with its status letter (e.g. "A todo/b.txt",
@@ -97,7 +104,10 @@ func TestCrossSessionNoAdoption_EmptyFileCollision(t *testing.T) {
 		t.Fatalf("session B commit failed (code %d): %s", code, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	// B's commit holds one path, so nothing in it can be paired with anything:
+	// the record engine reads B's OWN delta, and A's pending deletion is not in
+	// it. No record, and above all no staged deletion.
+	assertInferredPairs(t, dir)
 
 	got := crossSessCommitPaths(t, dir, "HEAD")
 	t.Logf("session B commit contents:\n%s", testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD"))
@@ -140,7 +150,10 @@ func TestCrossSessionNoAdoption_IdenticalContentCollision(t *testing.T) {
 		t.Fatalf("session B commit failed (code %d): %s", code, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	// B's commit holds one path, so nothing in it can be paired with anything:
+	// the record engine reads B's OWN delta, and A's pending deletion is not in
+	// it. No record, and above all no staged deletion.
+	assertInferredPairs(t, dir)
 
 	got := crossSessCommitPaths(t, dir, "HEAD")
 	t.Logf("session B commit contents:\n%s", testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD"))
@@ -182,7 +195,10 @@ func TestCrossSessionNoAdoption_UnderQuiet(t *testing.T) {
 		t.Fatalf("session B quiet commit failed (code %d): %s", code, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	// B's commit holds one path, so nothing in it can be paired with anything:
+	// the record engine reads B's OWN delta, and A's pending deletion is not in
+	// it. No record, and above all no staged deletion.
+	assertInferredPairs(t, dir)
 
 	got := crossSessCommitPaths(t, dir, "HEAD")
 	t.Logf("session B commit contents:\n%s", testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD"))
@@ -219,7 +235,10 @@ func TestCrossSessionNoAdoption_UnderMachineMode(t *testing.T) {
 		t.Fatalf("session B json commit failed (code %d): stdout=%q stderr=%q", code, stdout, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	// B's commit holds one path, so nothing in it can be paired with anything:
+	// the record engine reads B's OWN delta, and A's pending deletion is not in
+	// it. No record, and above all no staged deletion.
+	assertInferredPairs(t, dir)
 
 	got := crossSessCommitPaths(t, dir, "HEAD")
 	t.Logf("session B commit contents:\n%s", testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD"))
@@ -268,7 +287,10 @@ func TestCrossSessionNoAdoption_MultipleDeletedShareBlob(t *testing.T) {
 		t.Fatalf("session B commit failed (code %d): %s", code, stderr)
 	}
 
-	assertNoRenameNotice(t, stderr)
+	// B's commit holds one path, so nothing in it can be paired with anything:
+	// the record engine reads B's OWN delta, and A's pending deletion is not in
+	// it. No record, and above all no staged deletion.
+	assertInferredPairs(t, dir)
 
 	got := crossSessCommitPaths(t, dir, "HEAD")
 	t.Logf("session B commit contents:\n%s", testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD"))
@@ -305,7 +327,9 @@ func TestCrossSessionNoAdoption_VictimCommitsItsOwnDeletion(t *testing.T) {
 		t.Fatalf("session B commit failed (code %d): %s", code, stderr)
 	}
 	bHead := testutil.Git(t, dir, "show", "--name-status", "--format=commit %H%n%s", "HEAD")
-	assertNoRenameNotice(t, bStderr)
+	// Same property from B's side: B's commit holds B's path alone, so it
+	// carries no record and adopted nothing.
+	assertInferredPairs(t, dir)
 
 	// Now session A commits the deletion it has been holding.
 	aStdout, aStderr, aCode := runSafegit(t, dir, "commit", "-m", "session A removes notes/a.txt", "--", "notes/a.txt")

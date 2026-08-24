@@ -26,10 +26,13 @@ import "sort"
 // a descendant: `a -> b` says nothing about `a/x`, and only the subtree form
 // (`a/ -> b/`) speaks for what is underneath.
 //
-// Nothing is stored about confidence. Whether a record was minted from an
-// explicit `safegit mv` or declared with `--moved` changes nothing about what
-// it claims, and how well the claim is borne out is recomputed here from the
-// trees every time it is asked.
+// A record's ORIGIN changes nothing here. A record says who established it --
+// a person declaring it, or safegit observing it in a commit's own delta (see
+// Origin) -- and projection asks none of that: how well a claim is borne out is
+// recomputed from the trees every time it is asked, and a record nobody vouched
+// for is checked exactly as hard as one somebody did. The origin is for a
+// READER deciding what to review, never for this resolver deciding what to
+// believe.
 
 // Tree is the arbiter: the set of paths one commit holds.
 type Tree interface {

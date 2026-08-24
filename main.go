@@ -309,11 +309,14 @@ func newApp() *strictcli.App {
 			// ignored one, and a target the commit's parent does not track is a
 			// hard error rather than a no-op.
 			strictcli.StringFlag("untrack", "stop tracking a path, leaving the file itself on disk: the commit records its removal from the index (repeatable, one path each); the path must be tracked in the commit's parent; omitted means nothing is untracked", strictcli.Repeatable(), strictcli.Unique(true), strictcli.Optional()),
-			// Moves are DECLARED, never detected: safegit reads no blob
-			// equality and guesses no renames. This flag is how a caller says
-			// one happened, and the record it writes into the commit message is
-			// what every later reader resolves against the trees.
-			strictcli.StringFlag("moved", "declare that content moved, as 'old -> new' (repeatable, one pair each). End BOTH paths with a slash to declare a whole subtree. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. The old path must be tracked in the commit's parent and gone from disk, and the new one must exist; nothing is inferred from file contents. Omitted means the commit declares no moves", strictcli.Repeatable(), strictcli.Unique(true), strictcli.Optional(), strictcli.ValidateFn(validateMovedPair)),
+			// A move is DECLARED here and INFERRED nowhere else: safegit runs no
+			// rename detection and no similarity scoring, and what it does mint
+			// on its own comes from what a commit's raw delta WITNESSES -- the
+			// same blob leaving one path and arriving at another, where nothing
+			// else in either tree could be meant. This flag is how a caller
+			// states one themselves, which also takes the paths it names out of
+			// that reading entirely.
+			strictcli.StringFlag("moved", "declare that content moved, as 'old -> new' (repeatable, one pair each). End BOTH paths with a slash to declare a whole subtree. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. The old path must be tracked in the commit's parent and gone from disk, and the new one must exist. A declaration also SUPPRESSES safegit's own reading of the delta for the paths it names, and supersedes a record safegit already minted for the same pair on the commit an --amend replaces. Omitted means the commit declares no moves of its own, and safegit still records the ones its delta witnesses on its own", strictcli.Repeatable(), strictcli.Unique(true), strictcli.Optional(), strictcli.ValidateFn(validateMovedPair)),
 			// Retraction is the only correction a record has: a record already
 			// written is never edited, because editing the commit that carries
 			// it rewrites history. A replacement is this flag plus --moved in
