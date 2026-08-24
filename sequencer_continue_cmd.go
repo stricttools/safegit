@@ -49,7 +49,10 @@ type continuePayload struct {
 	// under --dry-run, which removes nothing.
 	StateCleared bool `json:"state_cleared"`
 	Attempts     int  `json:"attempts"`
-	DryRun       bool `json:"dry_run"`
+	// DeclinedChecks are the checks this conclusion did NOT make, never nil. A
+	// silent skip reads as a clean verdict over content nothing looked at.
+	DeclinedChecks []declinedCheck `json:"declined_checks"`
+	DryRun         bool            `json:"dry_run"`
 }
 
 // continueAuthor is the identity the concluding commit RECORDS as its author.
@@ -110,7 +113,10 @@ type delegatedPayload struct {
 	// alongside a nonzero exit readable -- head and commits_created then
 	// describe the commits git DID make before stopping.
 	StoppedAgain bool `json:"stopped_again"`
-	DryRun       bool `json:"dry_run"`
+	// DeclinedChecks are the checks safegit did not make before handing the
+	// queue to git, never nil.
+	DeclinedChecks []declinedCheck `json:"declined_checks"`
+	DryRun         bool            `json:"dry_run"`
 }
 
 // continuePayloadSchema builds a conclusion's payload schema. The three
@@ -140,9 +146,18 @@ func continuePayloadSchema(withAuthor bool) map[string]interface{} {
 		)),
 		"state_cleared": strictcli.SchemaType("boolean"),
 		"attempts":      strictcli.SchemaType("integer"),
-		"dry_run":       strictcli.SchemaType("boolean"),
+		"declined_checks": strictcli.SchemaArray(strictcli.SchemaObject(
+			map[string]interface{}{
+				"check":  strictcli.SchemaType("string"),
+				"path":   strictcli.SchemaType("string"),
+				"reason": strictcli.SchemaType("string"),
+			},
+			[]string{"check", "path", "reason"},
+			false,
+		)),
+		"dry_run": strictcli.SchemaType("boolean"),
 	}
-	required := []string{"operation", "ref", "sha", "parents", "tree", "files", "resolutions", "state_cleared", "attempts", "dry_run"}
+	required := []string{"operation", "ref", "sha", "parents", "tree", "files", "resolutions", "state_cleared", "attempts", "declined_checks", "dry_run"}
 
 	if withAuthor {
 		members["author"] = strictcli.SchemaObject(
@@ -163,7 +178,7 @@ func continuePayloadSchema(withAuthor bool) map[string]interface{} {
 		// delegation members plus the ones both shapes carry are what a
 		// consumer may always read. `queue_delegated` is the discriminator
 		// that says which of the two shapes arrived.
-		required = []string{"operation", "ref", "resolutions", "state_cleared", "dry_run",
+		required = []string{"operation", "ref", "resolutions", "state_cleared", "declined_checks", "dry_run",
 			"queue_delegated", "head", "commits_created", "stopped_again"}
 	}
 	return strictcli.SchemaObject(members, required, false)
@@ -190,16 +205,17 @@ func (op continueOp) report(flags globalFlags, out conclusionResult) {
 // reportPayload builds and supplies the machine document.
 func (op continueOp) reportPayload(flags globalFlags, out conclusionResult) {
 	base := continuePayload{
-		Operation:    op.kind.String(),
-		Ref:          out.commit.Ref,
-		SHA:          realSHA(flags, out.commit.SHA),
-		Parents:      orEmpty(out.commit.Parents),
-		Tree:         out.commit.Tree,
-		Files:        orEmpty(out.commit.Files),
-		Resolutions:  reportedResolutions(out.declared),
-		StateCleared: out.cleared,
-		Attempts:     out.commit.Attempts,
-		DryRun:       flags.dryRun,
+		Operation:      op.kind.String(),
+		Ref:            out.commit.Ref,
+		SHA:            realSHA(flags, out.commit.SHA),
+		Parents:        orEmpty(out.commit.Parents),
+		Tree:           out.commit.Tree,
+		Files:          orEmpty(out.commit.Files),
+		Resolutions:    reportedResolutions(out.declared),
+		StateCleared:   out.cleared,
+		Attempts:       out.commit.Attempts,
+		DeclinedChecks: orEmptyDeclines(out.declines),
+		DryRun:         flags.dryRun,
 	}
 	// The shape is chosen by the COMMAND, not by whether an author was
 	// resolved: the two queueable commands declare the wider schema, and a
@@ -255,6 +271,7 @@ func (op continueOp) renderHuman(flags globalFlags, out conclusionResult, headli
 				fmt.Printf(" %d working-tree file(s) would be deleted: %s\n", len(removed), joinPaths(removed))
 			}
 		}
+		renderDeclinedChecks(out.declines)
 		return
 	}
 
@@ -280,6 +297,7 @@ func (op continueOp) renderHuman(flags globalFlags, out conclusionResult, headli
 	if len(removed) > 0 {
 		fmt.Printf(" %d working-tree file(s) deleted: %s\n", len(removed), joinPaths(removed))
 	}
+	renderDeclinedChecks(out.declines)
 }
 
 // reportDelegated emits the payload and the human rendering of a conclusion
@@ -301,6 +319,7 @@ func reportDelegated(flags globalFlags, op continueOp, out delegatedOutcome) {
 		Resolutions:    reportedResolutions(out.declared),
 		StateCleared:   out.stateCleared,
 		StoppedAgain:   out.stoppedAgain,
+		DeclinedChecks: orEmptyDeclines(out.declines),
 		DryRun:         false,
 	})
 
@@ -346,6 +365,7 @@ func reportDelegated(flags globalFlags, op continueOp, out delegatedOutcome) {
 	if len(removed) > 0 {
 		fmt.Printf(" %d working-tree file(s) deleted before the delegation: %s\n", len(removed), joinPaths(removed))
 	}
+	renderDeclinedChecks(out.declines)
 }
 
 // commitCountText renders the commit count, including the one case where it
@@ -396,6 +416,28 @@ func messageSubject(out conclusionResult) string {
 		return ""
 	}
 	return "concluding " + out.state.String()
+}
+
+// orEmptyDeclines renders the declined-check list for a payload, never nil: a
+// declared member that arrives as null invites a consumer to treat the absence
+// of declined checks as a missing answer rather than as an empty one.
+func orEmptyDeclines(declines []declinedCheck) []declinedCheck {
+	if declines == nil {
+		return []declinedCheck{}
+	}
+	return declines
+}
+
+// renderDeclinedChecks prints the checks a conclusion did NOT make.
+//
+// It is printed on every path that reports a conclusion -- the preview and the
+// executed run alike, because the preview ran the same verification and declined
+// the same checks. Each line names the check, the path and what declined it, so
+// an operator who did not know the exemption was there can find the declaration.
+func renderDeclinedChecks(declines []declinedCheck) {
+	for _, d := range declines {
+		fmt.Printf(" check declined: %s on %s -- %s\n", d.Check, d.Path, d.Reason)
+	}
 }
 
 // reportedResolutions renders the declared set for the payload, never nil.

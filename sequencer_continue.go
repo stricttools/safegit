@@ -289,6 +289,10 @@ type conclusionResult struct {
 	state    sequencer.State
 	commit   *commit.CommitResult
 	declared []resolution
+	// declines are the checks this conclusion did NOT make -- today, the marker
+	// verification over a path carrying the committed exemption. An unreported
+	// skip is a clean verdict over unchecked content.
+	declines []declinedCheck
 	// author is the identity the concluding commit RECORDS as its author, nil
 	// for a merge. Whether it was preserved from the source commit or is the
 	// operator's own is op.preservesSourceAuthor's answer, not a property of
@@ -447,7 +451,8 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	}
 	// The resolutions name the right paths; now the content those paths carry
 	// has to be free of the conflict itself. See sequencer_markers.go.
-	if code := op.verifyMarkers(ctx, state, sides, declared); code != 0 {
+	declines, code := op.verifyMarkers(ctx, state, sides, declared)
+	if code != 0 {
 		return code
 	}
 
@@ -464,7 +469,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	// the same resolutions, and they are checked for completeness and for
 	// surviving markers the same way, whoever ends up writing the commit.
 	if state.Queued {
-		return delegateQueuedSequence(flags, op, gitDir, sgDir, state, sides, declared, edits, messages, trailers)
+		return delegateQueuedSequence(flags, op, gitDir, sgDir, state, sides, declared, declines, edits, messages, trailers)
 	}
 
 	message, err := op.conclusionMessage(ctx, state, messages)
@@ -516,7 +521,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		die(pipelineExitCode(err), err.Error())
 	}
 
-	out := conclusionResult{state: state, commit: result, declared: declared, author: recorded}
+	out := conclusionResult{state: state, commit: result, declared: declared, declines: declines, author: recorded}
 
 	exit := exitcode.OK
 	if !flags.dryRun {

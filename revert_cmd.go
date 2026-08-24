@@ -232,7 +232,8 @@ func concludeComputedRevert(flags globalFlags, gitDir, sgDir string) int {
 	if code := op.checkCompleteness(ctx, state, sides, declared); code != 0 {
 		return code
 	}
-	if code := op.verifyMarkers(ctx, state, sides, declared); code != 0 {
+	declines, code := op.verifyMarkers(ctx, state, sides, declared)
+	if code != 0 {
 		return code
 	}
 
@@ -283,7 +284,7 @@ func concludeComputedRevert(flags globalFlags, gitDir, sgDir string) int {
 		die(pipelineExitCode(err), err.Error())
 	}
 
-	out := conclusionResult{state: state, commit: result, declared: declared, author: recorded}
+	out := conclusionResult{state: state, commit: result, declared: declared, declines: declines, author: recorded}
 	if err := finishConclusion(ctx, gitDir, state, result, nil, sides, declared); err != nil {
 		die(exitcode.General, err.Error())
 	}
