@@ -9,7 +9,7 @@ nav_order: 22
 
 # safegit undo
 
-reverse the last safegit-authored operation using the oplog -- a commit, an mv, an amend, a reword, or a conclusion (merge-continue, cherry-pick-continue, revert-continue). It moves a REF and never the working tree
+reverse the last safegit-authored operation using the oplog -- a commit, an mv, an amend, a reword, a merge, pull, cherry-pick or revert safegit's own commit pipeline authored, or a conclusion (merge-continue, cherry-pick-continue, revert-continue). A fast-forward is REFUSED rather than reversed: the tip it moved onto is a commit git created and safegit never rolls a branch back over one. It moves a REF and never the working tree
 
 **Effect:** mutating
 
