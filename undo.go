@@ -11,9 +11,11 @@ import (
 	"github.com/smm-h/safegit/internal/coord"
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/oplog"
 	"github.com/smm-h/safegit/internal/repo"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
 // undoableOps maps op types to the extra key that holds the rollback target SHA.
@@ -76,6 +78,105 @@ var conclusionOps = map[string]string{
 	"merge-continue":       "merge",
 	"cherry-pick-continue": "cherry-pick",
 	"revert-continue":      "revert",
+}
+
+// undoPayload is what `undo` puts in the envelope's payload: which ref moved,
+// what operation was reversed, and the two object names the move is between.
+//
+// Unlike a commit's, every value here is REAL in both modes -- undo does not
+// create an object, it moves a ref between two that already exist, and both
+// come out of the operation log. A root undo has no rollback target at all, so
+// sha is null and deleted says why.
+type undoPayload struct {
+	Ref      string  `json:"ref"`
+	UndoneOp string  `json:"undone_op"`
+	SHA      *string `json:"sha"`
+	OldSHA   string  `json:"old_sha"`
+	Count    int     `json:"count"`
+	Deleted  bool    `json:"deleted"`
+	// Residue carries the aftercare steps that failed after the ref moved --
+	// the same commit-stands reporting every other ref-moving command does.
+	Residue []residueEntry `json:"residue"`
+	DryRun  bool           `json:"dry_run"`
+}
+
+var undoPayloadSchema = strictcli.SchemaObject(
+	map[string]interface{}{
+		"ref":       strictcli.SchemaType("string"),
+		"undone_op": strictcli.SchemaType("string"),
+		"sha":       strictcli.SchemaType("string", "null"),
+		"old_sha":   strictcli.SchemaType("string"),
+		"count":     strictcli.SchemaType("integer"),
+		"deleted":   strictcli.SchemaType("boolean"),
+		"residue": strictcli.SchemaArray(strictcli.SchemaObject(
+			map[string]interface{}{
+				"step":   strictcli.SchemaType("string"),
+				"detail": strictcli.SchemaType("string"),
+			},
+			[]string{"step", "detail"},
+			false,
+		)),
+		"dry_run": strictcli.SchemaType("boolean"),
+	},
+	[]string{"ref", "undone_op", "sha", "old_sha", "count", "deleted", "residue", "dry_run"},
+	false,
+)
+
+// undoPayloadFor builds the payload both modes emit.
+func undoPayloadFor(flags globalFlags, ref, op, targetSHA, currentSHA string, count int, isRootUndo bool, residue []residueEntry) undoPayload {
+	var sha *string
+	if !isRootUndo {
+		sha = &targetSHA
+	}
+	return undoPayload{
+		Ref:      ref,
+		UndoneOp: op,
+		SHA:      sha,
+		OldSHA:   currentSHA,
+		Count:    count,
+		Deleted:  isRootUndo,
+		Residue:  orEmptyResidue(residue),
+		DryRun:   flags.dryRun,
+	}
+}
+
+// recordUndoRefUpdate mints undo's ref move through the effects handle: the
+// compare-and-swap update for an ordinary undo, git's deletion form for a root
+// undo whose branch had nothing before it.
+//
+// It is one site for both modes, like the commit pipeline's own ref update, and
+// for the same reason -- a preview must record the argv the execute path really
+// runs. Both SHAs are REAL in a preview too: the rollback target and the
+// compare-and-swap pin come out of the operation log, so there is nothing here a
+// preview would have to guess at (currentSHA can fall back to a RevParse of HEAD
+// on a thin log, which is still a real object name).
+//
+// Check(false) keeps git's own stderr readable to the caller, exactly as the
+// commit pipeline's ref update does.
+func recordUndoRefUpdate(flags globalFlags, ref, targetSHA, currentSHA string, isRootUndo bool) error {
+	args := []string{"update-ref", ref, targetSHA, currentSHA}
+	verb := "update-ref"
+	if isRootUndo {
+		args = []string{"update-ref", "-d", ref, currentSHA}
+		verb = "delete-ref"
+	}
+	argv, err := gitexec.ArgvAny(gitexec.ExemptUndoRefUpdate, gitexec.NoDoor, args...)
+	if err != nil {
+		return err
+	}
+	done, err := flags.effects().Run(argv, strictcli.Resource("ref:"+ref), strictcli.Check(false))
+	if err != nil {
+		return err
+	}
+	if flags.dryRun {
+		// Recorded instead of performed: the carrier is unsettled and asking it
+		// anything would panic, and there is nothing to ask.
+		return nil
+	}
+	if code := done.ExitCode(); code != 0 {
+		return fmt.Errorf("%s failed: exit %d: %s", verb, code, strings.TrimSpace(done.Stderr()))
+	}
+	return nil
 }
 
 // sessionIDEnvVar is the Claude Code session handshake variable. It is declared
@@ -302,6 +403,31 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	refuseUnaccountedRange(ctx, ref, targetSHA, currentSHA, reversing, allEntries, sessionID, bypassSession)
 
 	if flags.dryRun {
+		// The dry-run doctrine, in the order it names: every state READ first,
+		// then the would-do mutations in the order the execute path performs
+		// them. The reads are the rollback arithmetic above plus the
+		// parent-bump decision's own (parent config, the nested check, the
+		// gitlink) -- made HERE, before the first record, because a recorded
+		// mutation is one that did not happen and every read after it would be
+		// reading a world the preview has already described as changed.
+		bump, bumpErr := planParentBump(ctx, flags, targetSHA)
+		if bumpErr != nil {
+			die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", bumpErr))
+		}
+
+		// Execution order: the real run moves the ref and then bumps the
+		// parent, so the records come out that way round.
+		if err := recordUndoRefUpdate(flags, ref, targetSHA, currentSHA, isRootUndo); err != nil {
+			die(exitcode.General, fmt.Sprintf("recording the ref update: %v", err))
+		}
+		if bump != nil {
+			if err := recordParentBumpPreview(flags, bump, "undo", ""); err != nil {
+				die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+			}
+		}
+
+		flags.payload(undoPayloadFor(flags, ref, targetEntry.Op, targetSHA, currentSHA, count, isRootUndo, nil))
+
 		outf(flags, "would undo %d operation(s) on %s\n", count, refShortName(ref))
 		if isRootUndo {
 			outf(flags, "  %s -> (empty, delete ref)\n", currentSHA[:8])
@@ -323,15 +449,10 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	}
 	defer lk.Release()
 
-	// Perform the ref update
-	if isRootUndo {
-		if err := git.DeleteRef(ctx, ref, currentSHA); err != nil {
-			die(exitcode.General, fmt.Sprintf("delete-ref failed (ref may have moved): %v", err))
-		}
-	} else {
-		if err := git.UpdateRef(ctx, ref, targetSHA, currentSHA); err != nil {
-			die(exitcode.General, fmt.Sprintf("update-ref failed (ref may have moved): %v", err))
-		}
+	// Perform the ref update -- through the effects handle, which is what makes
+	// the move visible in machine mode: recorded in a preview, performed here.
+	if err := recordUndoRefUpdate(flags, ref, targetSHA, currentSHA, isRootUndo); err != nil {
+		die(exitcode.General, fmt.Sprintf("%s (ref may have moved)", err))
 	}
 
 	// Reconcile the shared index so git status/diff reflect the rollback while
@@ -405,6 +526,8 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		undoExtra["deleted"] = true
 	}
 	_ = oplog.Append(sgDir, oplog.Entry{Op: "undo", Extra: undoExtra})
+
+	flags.payload(undoPayloadFor(flags, ref, targetEntry.Op, targetSHA, currentSHA, count, isRootUndo, residue))
 
 	if !flags.silent() {
 		if count == 1 {

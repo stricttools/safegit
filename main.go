@@ -797,6 +797,8 @@ func newApp() *strictcli.App {
 		return strictcli.Exit(runUndo(globalsToFlags(ctx, kwargs), bypassSession, count, sessionID))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
+		strictcli.WithTags("json"),
+		strictcli.PayloadSchema(undoPayloadSchema),
 		strictcli.WithGrants(strictcli.Grant{
 			Name:   "parent-bump",
 			Reason: "undoing a submodule commit moves the parent's gitlink back, so safegit commits the parent too when commit.autoBumpParent is on",

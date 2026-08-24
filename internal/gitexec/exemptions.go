@@ -59,6 +59,13 @@ const (
 	ExemptCommitRefUpdate ExemptionID = "main.effectsRefUpdate"
 	// ExemptHistoryRewriteRecord covers main.recordHistoryRewrite.
 	ExemptHistoryRewriteRecord ExemptionID = "main.recordHistoryRewrite"
+	// ExemptUndoRefUpdate covers main.effectsUndoRefUpdate, undo's own ref
+	// move. It is a row of its own rather than the commit pipeline's: the two
+	// argv shapes differ (undo also deletes a ref), and reusing the commit row
+	// would make its identifier name a site it does not cover.
+	ExemptUndoRefUpdate ExemptionID = "main.effectsUndoRefUpdate"
+	// ExemptBackupFetch covers main.fetchSlotObjects' fetch invocation.
+	ExemptBackupFetch ExemptionID = "main.fetchSlotObjects"
 )
 
 // DirPinExemption is one row of the table.
@@ -113,6 +120,16 @@ var dirPinExemptions = []DirPinExemption{
 		ID:     ExemptCommitRefUpdate,
 		Kind:   KindEffectsHandle,
 		Reason: "the commit pipeline's compare-and-swap ref update, minted through the effects handle in both modes -- performed by it in an executing run, recorded instead of performed in a preview; the argv names a ref and two SHAs and resolves against no directory",
+	},
+	{
+		ID:     ExemptUndoRefUpdate,
+		Kind:   KindEffectsHandle,
+		Reason: "undo's compare-and-swap ref move -- and, for a root undo, the ref DELETION -- minted through the effects handle in both modes; the argv names a ref and object names out of the operation log and resolves against no directory",
+	},
+	{
+		ID:     ExemptBackupFetch,
+		Kind:   KindEffectsHandle,
+		Reason: "the fetch that downloads a backup slot's objects before a restore fast-forwards onto it; the argv names a remote and a ref, never a path, and the effects handle starts the process so --dry-run can record it instead",
 	},
 	{
 		ID:     ExemptHistoryRewriteRecord,
