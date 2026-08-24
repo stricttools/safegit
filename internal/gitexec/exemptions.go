@@ -140,7 +140,7 @@ var dirPinExemptions = []DirPinExemption{
 	{
 		ID:     ExemptDoctorRepair,
 		Kind:   KindEffectsHandle,
-		Reason: "the doctor repairs' own git invocations -- storing an orphaned autostash as a stash entry, writing a working-tree blob, re-staging or dropping an index entry -- minted through the effects handle so a preview records them; the argv names working-tree paths, so the site hands the effects handle the repository root as the child's working directory, which is the pin's own value",
+		Reason: "the doctor repairs' own git invocations -- storing an orphaned autostash as a stash entry, and re-staging or dropping the entries of an orphaned unmerged index -- minted through the effects handle so a preview records them; the argv names working-tree paths, so the site hands the effects handle the repository root as the child's working directory, which is the pin's own value",
 	},
 	{
 		ID:     ExemptHistoryRewriteRecord,
