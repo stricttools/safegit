@@ -27,10 +27,11 @@ import (
 // than minting a guess:
 //
 //  1. SUPPRESSION FIRST. A path a declared record names is out of both
-//     candidate sets before pairing begins -- the human already resolved that
-//     question, and their answer un-blocks the rest (a blob at two deleted
-//     paths, one of them declared, leaves the other free to be judged on its
-//     own).
+//     candidate sets before pairing begins, and out of the tree listings fence 4
+//     reads -- the human already resolved that question, and their answer
+//     un-blocks the rest (a blob at two deleted paths, one of them declared,
+//     leaves the other free to be judged on its own, which it cannot be while
+//     the declared path still counts as a rival occurrence of the blob).
 //  2. REGULAR FILES ONLY. Symlinks, gitlinks and type changes never pair; a
 //     mode change between 100644 and 100755 across a pair is fine, because
 //     making a moved file executable is still moving it.
@@ -335,11 +336,18 @@ func inferMoves(ctx context.Context, changed []git.ChangedPath, declared []trail
 	// parent tree is the one this attempt resolved, and the new tree is the one
 	// this attempt just wrote, so neither can be the instance intake built
 	// before the loop against a tip that has since moved.
-	parentTree, err := newBlobIndex(ctx, parentTreeSHA)
+	//
+	// They are built with the SAME suppression the candidate sets were built
+	// with, because suppression is one rule and not two: a path the caller
+	// declared away is answered for, so it is not a rival occurrence of a blob
+	// either. Without that, a declaration could never un-block anything -- the
+	// blob it names still sat at two parent paths, and the fence turned the
+	// other half down for a reason the human had already settled.
+	parentTree, err := newBlobIndex(ctx, parentTreeSHA, suppressed)
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	newTree, err := newBlobIndex(ctx, newTreeSHA)
+	newTree, err := newBlobIndex(ctx, newTreeSHA, suppressed)
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -462,6 +470,9 @@ func dropOverlapping(pairs, declared []trailer.Pair) ([]trailer.Pair, []RefusedM
 // blobIndex is one tree seen whole: which blob sits at a path, and which paths
 // hold a blob. Both questions are asked once per attempt, against the trees
 // that attempt actually resolved.
+//
+// The blob halves are the UNIQUENESS FENCES' view of the tree, and a path the
+// caller declared away is not in it -- see newBlobIndex.
 type blobIndex struct {
 	at     map[string]string   // path -> blob
 	byBlob map[string][]string // blob -> paths
@@ -476,7 +487,14 @@ type blobIndex struct {
 
 // newBlobIndex lists one tree. An empty treeish is a root commit's absent
 // parent: no paths, no blobs, and no git invocation.
-func newBlobIndex(ctx context.Context, treeish string) (*blobIndex, error) {
+//
+// suppressed is the declared-paths predicate. It keeps a declared path out of
+// the BLOB halves -- the fences' view -- and never out of the whole-path
+// listing, which is the subtree witness's (infer_subtrees.go): a declaration
+// settles what happened to the path it names, but a path is still a path the
+// old prefix held, and pretending otherwise would let a subtree record claim a
+// directory moved whole when part of it went somewhere the caller declared.
+func newBlobIndex(ctx context.Context, treeish string, suppressed func(string) bool) (*blobIndex, error) {
 	b := &blobIndex{at: map[string]string{}, byBlob: map[string][]string{}}
 	if treeish == "" {
 		return b, nil
@@ -489,7 +507,7 @@ func newBlobIndex(ctx context.Context, treeish string) (*blobIndex, error) {
 		b.sorted = append(b.sorted, e.Path)
 		// Only regular files can be one side of an inferred move, so only they
 		// are counted when asking whether a blob is unique.
-		if !regularFileModes[e.Mode] {
+		if !regularFileModes[e.Mode] || suppressed(e.Path) {
 			continue
 		}
 		b.at[e.Path] = e.SHA
