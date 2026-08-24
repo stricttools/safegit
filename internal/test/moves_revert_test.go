@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/testutil"
 	"github.com/smm-h/safegit/internal/trailer"
 )
@@ -15,9 +16,10 @@ import (
 // FRESH id, because it is a different claim about a different step and not a
 // second copy of the first one.
 //
-// The asymmetry with a queued revert is deliberate and pinned here. A revert of
-// more than one commit is git's own sequencer, git authors those commits, and
-// safegit adds nothing to them -- no trailers of any kind, records included.
+// A revert of more than one commit used to be git's own sequencer, and the
+// asymmetry -- git's commits carrying no records at all -- was pinned here.
+// `safegit revert` now reverts one commit and authors the result itself, so
+// that command line is refused instead, and the refusal is what is pinned.
 
 // projectionChain reads the repository's first-parent history, oldest first,
 // into the shape internal/trailer's projection takes: what each commit
@@ -276,7 +278,16 @@ func TestConflictedRevertConcludedThroughRevertContinueDeclaresTheMoveBack(t *te
 	assertNoSequencerResidue(t, dir, "conflicted revert of a move")
 }
 
-func TestQueuedRevertDeclaresNoMoves(t *testing.T) {
+// TestMultiCommitRevertOfMovesIsRefused: a revert of several commits used to be
+// git's own sequencer, and the property pinned here was that the commits git
+// authored carried no move records -- safegit adds nothing to a commit it did
+// not make.
+//
+// `safegit revert` now reverts ONE commit and authors the result itself, so
+// there is no second authorship class left to distinguish: the multi-commit
+// command line is refused, and the only revert commits that exist are safegit's
+// own, which do carry the inverse records.
+func TestMultiCommitRevertOfMovesIsRefused(t *testing.T) {
 	dir := mvSeed(t)
 
 	if _, stderr, code := runSafegit(t, dir, "mv", "-m", "first move", "a.txt -> one.txt"); code != 0 {
@@ -288,16 +299,23 @@ func TestQueuedRevertDeclaresNoMoves(t *testing.T) {
 	}
 	second := testutil.Rev(t, dir, "HEAD")
 
-	// Two commits in one invocation is git's own sequencer: git authors the
-	// commits, and safegit adds nothing to them.
-	if _, stderr, code := runSafegit(t, dir, "revert", "--no-edit", second, first); code != 0 {
-		t.Fatalf("queued revert failed (code %d): %s", code, stderr)
+	_, stderr, code := runSafegit(t, dir, "revert", "--no-edit", second, first)
+	if code != exitcode.Usage {
+		t.Fatalf("a two-commit revert exited %d, want %d (Usage): %s", code, exitcode.Usage, stderr)
+	}
+	if !strings.Contains(stderr, "one commit") {
+		t.Errorf("the refusal does not say a revert takes one commit:\n%s", stderr)
+	}
+	if head := testutil.Rev(t, dir, "HEAD"); head != second {
+		t.Errorf("the refused revert moved HEAD to %s (was %s)", head, second)
 	}
 
-	for _, rev := range []string{"HEAD", "HEAD~1"} {
-		msg := commitMessageOf(t, dir, rev)
-		if records := movedRecordsIn(t, msg); len(records) != 0 {
-			t.Errorf("a git-authored revert commit (%s) carries records:\n%s", rev, msg)
-		}
+	// The sequential form is the way through, and each of its commits carries
+	// the inverse record -- which is what the refusal buys.
+	if _, stderr, code := runSafegit(t, dir, "revert", "--no-edit", second); code != 0 {
+		t.Fatalf("reverting the second move on its own failed (code %d): %s", code, stderr)
+	}
+	if records := movedRecordsIn(t, commitMessageOf(t, dir, "HEAD")); len(records) != 1 {
+		t.Errorf("the sequential revert declares %d record(s), want the one inverse move", len(records))
 	}
 }

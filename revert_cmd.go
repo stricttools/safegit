@@ -3,18 +3,16 @@ package main
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/smm-h/safegit/internal/coord"
 	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/oplog"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/sequencer"
+	"github.com/smm-h/strictcli/go/strictcli"
 )
 
-// `safegit revert` of a SINGLE commit, restructured.
+// `safegit revert <commit>`, restructured -- and there is no second form.
 //
 // As a plain passthrough, git authored the commit: it carried none of safegit's
 // trailers, none of safegit's commit-time machinery ran, and git left its
@@ -27,6 +25,13 @@ import (
 // commit-msg hook run. The IDENTITY is deliberately unchanged from the
 // passthrough: a revert is a new change of the reverter's own, so it records
 // the operator, exactly as git's own revert does.
+//
+// What DID go away is the fallback arm. The restructure used to apply only
+// where every flag was one it could honor and the revisions named exactly one
+// commit, and everything else fell through to a passthrough where git authored
+// the commits. That arm is deleted: a command line safegit cannot author is now
+// refused, by name, rather than quietly handed to git -- see
+// revertRefusedOptions and refuseUnsupportedRevert.
 //
 // The state cleanup is not a nicety of that split but a requirement of it. A
 // plumbing conclusion of `revert --no-commit` leaves REVERT_HEAD, MERGE_MSG and
@@ -44,100 +49,124 @@ import (
 // `safegit revert-continue` concludes it -- the same engine reached by the
 // other door.
 
-// revertConclusionFlags are the options a restructured revert can honor, i.e.
-// the ones whose whole effect happens in the COMPUTE step or in the message
-// draft git writes there.
+// revertRefusedOptions are the `git revert` options safegit's revert does not
+// implement, each with the reason it is absent.
 //
-// It is an allowlist rather than a list of exclusions, and that direction is
-// the point: an option safegit has not considered -- one git grows next year --
-// leaves the command line as an ordinary passthrough, which is exactly what it
-// was before this restructure existed. Nothing is ever silently dropped.
+// It is a refusal list rather than an allowlist for the reason merge's and
+// cherry-pick's are: an option safegit has not considered still reaches the
+// compute step, where it can change how the inverse patch is COMPUTED but never
+// who authors the commit -- the compute step is pinned to `--no-commit`, so git
+// cannot commit whatever else is on the command line. `--commit`, the one
+// option that would break that promise, is refused here for exactly that
+// reason.
 //
-// Why each is here:
+// The options that stay ALLOWED are the ones whose whole effect happens in the
+// compute step or in the message draft git writes there: `--no-edit`,
+// `-s/--signoff` (git writes the trailer into MERGE_MSG, probe-verified),
+// `-m/--mainline`, `--strategy` and `-X`, `--rerere-autoupdate`, `--reference`.
 //
-//	--no-edit                   the restructured form never opens an editor anyway
-//	-s/--signoff                git writes the trailer into MERGE_MSG (probe-verified)
-//	-m/--mainline               selects the parent to revert against, in the compute step
-//	--strategy, -X              the merge machinery's own options, in the compute step
-//	--rerere-autoupdate         rerere runs during the compute step
-//	--reference                 changes how git words MERGE_MSG
-//
-// Deliberately ABSENT, each because the conclusion cannot reproduce it:
-// -e/--edit (there is no editor in safegit's commit surface), -n/--no-commit
-// (the operator asked for exactly the staged result the restructure would
-// commit), -S/--gpg-sign (the pipeline does not sign), --cleanup (message
-// cleanup happens at git's commit time, which does not happen here), and every
-// sequencer verb (--continue/--skip/--abort/--quit), which creates no commit.
-var revertConclusionFlags = map[string]bool{
-	"--no-edit":              true,
-	"-s":                     true,
-	"--signoff":              true,
-	"--no-signoff":           true,
-	"-m":                     true,
-	"--mainline":             true,
-	"--strategy":             true,
-	"-X":                     true,
-	"--strategy-option":      true,
-	"--rerere-autoupdate":    true,
-	"--no-rerere-autoupdate": true,
-	"--reference":            true,
-	"--no-reference":         true,
+// DIVERGENCE: every entry here is one git capability safegit deliberately does
+// not have, and each needs its row in docs/divergences.md.
+var revertRefusedOptions = []struct {
+	names []string
+	why   string
+}{
+	{
+		[]string{"--skip"},
+		"--skip moves past one commit of a SEQUENCE and keeps the rest going, and safegit's revert has no sequence to keep going: it reverts one commit. Conclude the revert you are in with 'safegit revert-continue', or drop it with 'git revert --abort', and then revert the commits you do want, one invocation each",
+	},
+	{
+		[]string{"-e", "--edit"},
+		"--edit opens an editor, and safegit's commit surface has none; conclude with 'safegit revert-continue -m' to give the commit a message of your own",
+	},
+	{
+		[]string{"-S", "--gpg-sign"},
+		"safegit's commit pipeline does not sign commits, so a signature asked for here would simply not be on the result; nothing is silently dropped, so the request is refused instead",
+	},
+	{
+		[]string{"--commit"},
+		"--commit is the opposite of the --no-commit the compute step is pinned to, and passing it would hand the commit back to git -- authored by git, with none of safegit's trailers, and moving the ref outside safegit's compare-and-swap",
+	},
+	{
+		[]string{"--cleanup"},
+		"--cleanup governs how git strips a message at ITS commit time, and safegit's pipeline is what commits here; the message it takes is git's draft with its comment block stripped, or the text you pass to 'safegit revert-continue -m'",
+	},
 }
 
-// runRevert dispatches `safegit revert`: the restructured single-commit form
-// where safegit can author the commit, and the unchanged guarded passthrough
-// everywhere else.
+// runRevert dispatches `safegit revert`.
+//
+// Two routes stay guarded passthroughs, and both for the same reason: they
+// author nothing. The state-control verbs act on an operation git already has
+// in flight, and `--no-commit` asks git to stage the inverse patch and stop.
+// `--continue` is refused inside, by name, because concluding a revert is
+// safegit's own job.
 func runRevert(flags globalFlags, args []string) int {
-	if !revertIsRestructurable(flags, args) {
+	parsed := parseGitArgs("revert", args)
+	if parsed.Has("--continue", "--abort", "--quit") {
 		return runGuardedPassthrough(flags, "revert", args)
 	}
-	return runRestructuredRevert(flags, args)
+	if parsed.Has("-n", "--no-commit") {
+		return runGuardedPassthrough(flags, "revert", args)
+	}
+	return runRestructuredRevert(flags, args, parsed)
 }
 
-// revertIsRestructurable decides which of the two forms an invocation gets.
+// refuseUnsupportedRevert refuses the command lines safegit's revert does not
+// implement, before any lock is taken and before any git runs.
 //
-// The question is answered from the command line plus one read-only git call
-// (how many commits the revisions name), and every uncertain answer is "no":
-// an unresolvable revision, an option outside the allowlist, a pathspec, or
-// anything other than exactly one commit leaves the invocation exactly as it
-// was before the restructure.
-func revertIsRestructurable(flags globalFlags, args []string) bool {
-	if len(args) == 0 {
-		return false
-	}
-	parsed := parseGitArgs("revert", args)
-	if len(parsed.AfterDoubleDash) > 0 || len(parsed.Revisions) == 0 {
-		return false
-	}
-	for _, o := range parsed.Options {
-		if !revertConclusionFlags[o.Name] {
-			return false
+// Every refusal is parser-shaped (exit 2) and names the capability that is
+// absent, because "safegit does not do this" is a different answer from "this
+// failed" and an operator has to be able to tell them apart. Each needs its
+// entry in the divergences catalog.
+func refuseUnsupportedRevert(parsed gitArgs) int {
+	for _, refused := range revertRefusedOptions {
+		if o, ok := parsed.Find(refused.names...); ok {
+			fmt.Fprintf(os.Stderr, "error: safegit revert does not support %s\n", o.Name)
+			fmt.Fprintf(os.Stderr, "  %s.\n", refused.why)
+			fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+			return exitcode.Usage
 		}
 	}
-	n, ok := countRevisions(flags, parsed.Revisions)
-	return ok && n == 1
-}
 
-// countRevisions asks git how many commits a revision list names, which is the
-// same question `git revert` itself answers when it decides between one commit
-// and a queue: `--no-walk` shows the named commits, and has no effect on a
-// range, which is walked. An unreadable revision is reported as not-counted
-// rather than as zero -- git will produce its own error for it.
-func countRevisions(flags globalFlags, revisions []string) (int, bool) {
-	out, _, err := git.Run(flags.ctx(), append([]string{"rev-list", "--no-walk", "--count"}, revisions...)...)
-	if err != nil {
-		return 0, false
+	if len(parsed.AfterDoubleDash) > 0 {
+		fmt.Fprintf(os.Stderr, "error: safegit revert takes no pathspec\n")
+		fmt.Fprintf(os.Stderr, "  a pathspec undoes part of a commit and records a message claiming the whole of it.\n")
+		fmt.Fprintf(os.Stderr, "  Revert the commit, or make the partial change yourself and commit it.\n")
+		return exitcode.Usage
 	}
-	n, err := strconv.Atoi(strings.TrimSpace(out))
-	if err != nil {
-		return 0, false
+
+	// BEFORE the count, because a rev-set is one argv token and counting tokens
+	// would call `A..B` a single commit.
+	for _, rev := range parsed.Revisions {
+		if code := refuseRevisionSet("revert", rev); code != 0 {
+			return code
+		}
 	}
-	return n, true
+
+	switch len(parsed.Revisions) {
+	case 1:
+	case 0:
+		fmt.Fprintf(os.Stderr, "error: safegit revert names no commit to revert\n")
+		fmt.Fprintf(os.Stderr, "  usage: safegit revert <commit>\n")
+		return exitcode.Usage
+	default:
+		fmt.Fprintf(os.Stderr, "error: safegit revert takes exactly one commit, and this names %d\n", len(parsed.Revisions))
+		fmt.Fprintf(os.Stderr, "  %s\n", sequentialFormReason("revert"))
+		return exitcode.Usage
+	}
+	return 0
 }
 
 // runRestructuredRevert computes the revert with git and commits it with
 // safegit.
-func runRestructuredRevert(flags globalFlags, args []string) int {
+func runRestructuredRevert(flags globalFlags, args []string, parsed gitArgs) int {
+	// FIRST, and before the repository is touched at all: a command line
+	// safegit itself refuses is refused without a lock, without an
+	// auto-initialization and without a git call.
+	if code := refuseUnsupportedRevert(parsed); code != 0 {
+		return code
+	}
+
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -160,30 +189,45 @@ func runRestructuredRevert(flags globalFlags, args []string) int {
 		return code
 	}
 
+	computeArgs := append([]string{"revert", "--no-commit"}, args...)
+
 	if flags.dryRun {
-		return previewSequencerOperation(flags, "revert", args)
+		// The would-do record is the argv the EXECUTE path runs, which is the
+		// compute step's and not the operator's: a preview that recorded a bare
+		// `git revert` would describe the operation safegit stopped performing.
+		return previewSequencerOperation(flags, "revert", args, computeArgs)
 	}
+
+	ctx := flags.ctx()
+	pos := readOplogPosition(flags)
+	reverted := parsed.Revisions[0]
 
 	// The compute step. --no-commit is what makes the two halves separable: git
 	// works out the inverse patch and stages it, and stops before the commit
 	// that would otherwise be git's.
-	if code := runPassthrough(flags, "revert", append([]string{"--no-commit"}, args...)); code != 0 {
+	if code := runGitMutation(flags, computeArgs...); code != 0 {
 		// A conflict lands here, and it is not an error path in any sense that
 		// needs handling: the repository holds the ordinary conflicted-revert
 		// state and `safegit revert-continue` concludes it. announceWayOut says
 		// exactly that, from the single way-out authority.
+		//
+		// A git refusal that staged nothing lands here too, and the difference
+		// is the same one the cherry-pick draws: only a stopped operation is
+		// worth recording as one.
+		if pickLeftAConflict(ctx) {
+			appendOperationEntry(flags, sgDir, "revert", pos, false, revertExtra(reverted))
+		}
 		announceWayOut(flags, gitDir)
 		return code
 	}
 
-	_ = oplog.Append(sgDir, oplog.Entry{
-		Op: "revert",
-		Extra: map[string]interface{}{
-			"args": strings.Join(args, " "),
-		},
-	})
+	return concludeComputedRevert(flags, gitDir, sgDir, reverted)
+}
 
-	return concludeComputedRevert(flags, gitDir, sgDir)
+// revertExtra is the per-revert half of an oplog entry: which commit was named.
+// The outcome field is appendOperationEntry's own.
+func revertExtra(reverted string) map[string]interface{} {
+	return map[string]interface{}{"commit": reverted}
 }
 
 // concludeComputedRevert turns the staged result of `git revert --no-commit`
@@ -194,7 +238,7 @@ func runRestructuredRevert(flags globalFlags, args []string) int {
 // commit) and the message from MERGE_MSG. Nothing here is a second
 // implementation of the conclusion -- the resolution vocabulary, the marker
 // verification and the state cleanup are the ones in sequencer_continue.go.
-func concludeComputedRevert(flags globalFlags, gitDir, sgDir string) int {
+func concludeComputedRevert(flags globalFlags, gitDir, sgDir, reverted string) int {
 	op := revertContinueOp
 
 	state, err := sequencer.Read(gitDir)
@@ -212,12 +256,13 @@ func concludeComputedRevert(flags globalFlags, gitDir, sgDir string) int {
 
 	// The conclusion itself is the shared one. What is revert's own is stated
 	// here and nowhere else: a revert that changes nothing has its own refusal,
-	// the parent bump names the operation `revert`, and the identity recorded
-	// is the OPERATOR's -- git's own revert semantics, resolved inside the
-	// engine from the same one place `revert-continue` resolves it.
+	// the oplog entry and the parent bump both name the operation `revert` --
+	// one operation, one entry, under the COMMAND's own name -- and the identity
+	// recorded is the OPERATOR's, git's own revert semantics, resolved inside
+	// the engine from the same one place `revert-continue` resolves it.
 	out, exit, ok := concludeParkedOperation(flags, gitDir, sgDir, state, parkedConclusion{
 		op:           op,
-		oplogOp:      op.command,
+		oplogOp:      "revert",
 		parentBumpOp: "revert",
 		onEmpty:      refuseEmptyRevert,
 	})
@@ -225,11 +270,94 @@ func concludeComputedRevert(flags globalFlags, gitDir, sgDir string) int {
 		return exit
 	}
 
-	// Human output only: `revert` is a passthrough command and declares no
-	// payload schema, so there is no machine document to emit here.
-	op.renderHuman(flags, out, "reverted "+shortSHA(state.Source))
+	flags.payload(revertPayload{
+		Operation:      "revert",
+		Source:         state.Source,
+		Ref:            out.commit.Ref,
+		SHA:            realSHA(flags, out.commit.SHA),
+		Parents:        orEmpty(out.commit.Parents),
+		Tree:           out.commit.Tree,
+		Files:          orEmpty(out.commit.Files),
+		Author:         reportedAuthor(out.author),
+		StateCleared:   out.cleared,
+		Attempts:       out.commit.Attempts,
+		DeclinedChecks: orEmptyDeclines(out.declines),
+		DryRun:         flags.dryRun,
+	})
+	op.renderHuman(flags, out, "reverted "+short(reverted, state.Source))
 	return exit
 }
+
+// revertPayload is what `safegit revert` puts in the envelope's payload.
+//
+// It follows the conclusion payload -- the members revert-continue reports --
+// minus the resolution members, which a revert safegit itself started never has
+// (it concludes a clean result; a conflicted one is not concluded here at all),
+// and minus the queue members, which a single-form command cannot produce.
+// Reusing revert-continue's schema was not an option: it requires the queue
+// members, and a document that filled them in would state something false about
+// every run.
+//
+// What it adds is `source`: the commit that was reverted is the one fact about
+// this operation the other members cannot express, because a revert's parents
+// name the branch it went onto and not the change it undid.
+type revertPayload struct {
+	Operation string `json:"operation"`
+	// Source is the commit that was reverted, as it was resolved rather than as
+	// it was typed.
+	Source string `json:"source"`
+	Ref    string `json:"ref"`
+	// SHA is the commit that was created, and null under --dry-run.
+	SHA     *string  `json:"sha"`
+	Parents []string `json:"parents"`
+	Tree    string   `json:"tree"`
+	Files   []string `json:"files"`
+	// Author is the identity the commit RECORDS, which for a revert is the
+	// OPERATOR on both fields: undoing something is your own new change.
+	Author         continueAuthor  `json:"author"`
+	StateCleared   bool            `json:"state_cleared"`
+	Attempts       int             `json:"attempts"`
+	DeclinedChecks []declinedCheck `json:"declined_checks"`
+	DryRun         bool            `json:"dry_run"`
+}
+
+// revertPayloadSchema is revert's machine payload contract.
+var revertPayloadSchema = strictcli.SchemaObject(
+	map[string]interface{}{
+		"operation": strictcli.SchemaType("string"),
+		"source":    strictcli.SchemaType("string"),
+		"ref":       strictcli.SchemaType("string"),
+		"sha":       strictcli.SchemaType("string", "null"),
+		"parents":   strictcli.SchemaArray(strictcli.SchemaType("string")),
+		"tree":      strictcli.SchemaType("string"),
+		"files":     strictcli.SchemaArray(strictcli.SchemaType("string")),
+		"author": strictcli.SchemaObject(
+			map[string]interface{}{
+				"name":  strictcli.SchemaType("string"),
+				"email": strictcli.SchemaType("string"),
+			},
+			[]string{"name", "email"},
+			false,
+		),
+		"declined_checks": strictcli.SchemaArray(strictcli.SchemaObject(
+			map[string]interface{}{
+				"check":  strictcli.SchemaType("string"),
+				"path":   strictcli.SchemaType("string"),
+				"reason": strictcli.SchemaType("string"),
+			},
+			[]string{"check", "path", "reason"},
+			false,
+		)),
+		"state_cleared": strictcli.SchemaType("boolean"),
+		"attempts":      strictcli.SchemaType("integer"),
+		"dry_run":       strictcli.SchemaType("boolean"),
+	},
+	[]string{"operation", "source", "ref", "sha", "parents", "tree", "files", "author", "state_cleared", "attempts", "declined_checks", "dry_run"},
+	false,
+)
+
+// revertHelp is the command's registered help text.
+const revertHelp = "revert ONE commit by applying its inverse patch, and author the result: git computes the inverse with --no-commit and safegit commits the staged result through its own pipeline -- so a revert safegit performed carries safegit's trailers, ran the repository's commit-msg hook, is reversible with 'safegit undo', and declares the INVERSE of every move record the reverted commit declared. YOU are recorded as both author and committer, because a revert is your own new change rather than the reverted author's; that is git's own division and the opposite of what a cherry-pick does. A revert git stops on a conflict parks, and 'safegit revert-continue' concludes it; 'safegit revert --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one commit named as a commit (a range or any other revision set is refused, because a range hands the operation to git's sequencer even when it holds one commit), no --edit, no --commit, no --cleanup and no signing. --abort, --quit and --no-commit stay plain passthroughs, because they author nothing"
 
 // refuseEmptyRevert covers a revert whose inverse patch changes nothing --
 // the commit was already undone by something else. git refuses the same case,

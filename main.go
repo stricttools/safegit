@@ -761,7 +761,18 @@ func newApp() *strictcli.App {
 			Reason: "cherry-picking in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
 			Kind:   strictcli.ProcMutate,
 		}))
-	app.Passthrough("revert", "revert one or more commits creating inverse patches, with safety guards. Reverting a SINGLE commit produces a safegit commit: git computes the inverse patch and safegit writes the commit, so it carries safegit's trailers and, when the reverted commit declared moves, the INVERSE of each of those move records. Reverting MORE THAN ONE commit is git's own sequencer and git authors those commits, so they carry no trailers and no records at all -- the asymmetry is deliberate, and it is the same one that governs whether 'safegit undo' can reverse the result", pt, strictcli.WithEffect(strictcli.EffectMutating))
+	// revert is a passthrough REGISTRATION for the same reason merge and
+	// cherry-pick are, and the same division applies: the operator's argv is
+	// git's vocabulary, the subset refusals are the handler's, and the commit is
+	// safegit's own (see revert_cmd.go).
+	app.Passthrough("revert", revertHelp, pt,
+		strictcli.WithEffect(strictcli.EffectMutating),
+		strictcli.PayloadSchema(revertPayloadSchema),
+		strictcli.WithGrants(strictcli.Grant{
+			Name:   "parent-bump",
+			Reason: "reverting in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
+			Kind:   strictcli.ProcMutate,
+		}))
 	app.Command("undo", "reverse the last safegit-authored operation using the oplog -- a commit, an mv, an amend, a reword, or a conclusion (merge-continue, cherry-pick-continue, revert-continue). It moves a REF and never the working tree", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		bypassSession := optBool(kwargs["bypass_session"], false)
 		count := optInt(kwargs["count"], 1)

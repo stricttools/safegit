@@ -39,7 +39,13 @@ import (
 
 // previewSequencerOperation is the --dry-run path of merge, cherry-pick and
 // revert. It returns the exit code the command should return.
-func previewSequencerOperation(flags globalFlags, verb string, args []string) int {
+//
+// recordedArgv is the argv the EXECUTE path would hand git, which the framework
+// records in the would-do log. It is a parameter rather than something derived
+// here because it differs per caller: the restructured revert computes with
+// `git revert --no-commit ...`, and a preview whose log said `git revert ...`
+// would record a mutation nothing performs.
+func previewSequencerOperation(flags globalFlags, verb string, args []string, recordedArgv []string) int {
 	// The refusal comes before anything else, including the would-do record: a
 	// preview that cannot be computed is a refusal of the whole invocation, and
 	// a would-do log listing a command safegit just declined to preview would
@@ -63,7 +69,7 @@ func previewSequencerOperation(flags globalFlags, verb string, args []string) in
 	// The invocation is recorded in the framework's would-do log, exactly as it
 	// was before there was anything to compute: the preview below is an
 	// addition to the effects regime's answer, not a replacement for it.
-	if code := runGitMutation(flags, append([]string{verb}, args...)...); code != 0 {
+	if code := runGitMutation(flags, recordedArgv...); code != 0 {
 		return code
 	}
 

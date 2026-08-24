@@ -194,9 +194,11 @@ var (
 // previewed) conclusion.
 //
 // It is the whole answer for the three conclusion commands. The restructured
-// `safegit revert` reaches the same engine through a different door and calls
-// renderHuman alone: `revert` is a passthrough registration with no declared
-// payload schema, so there is no machine document for it to emit.
+// `safegit merge`, `safegit cherry-pick` and `safegit revert` reach the same
+// engine through a different door and call renderHuman alone: each declares a
+// payload schema of ITS OWN and supplies the document itself, because the
+// members differ -- a command that started the operation has no declared
+// resolutions to report, and none of them can ever be a queue.
 func (op continueOp) report(flags globalFlags, out conclusionResult) {
 	op.reportPayload(flags, out)
 	op.renderHuman(flags, out, "concluded the "+op.kind.String())
