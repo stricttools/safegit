@@ -95,7 +95,7 @@ func TestRefuseMessage(t *testing.T) {
 
 	// Check key parts of the message
 	checks := []string{
-		"refusing checkout",
+		"refusing switch",
 		"Modified files:",
 		" M src/foo.go",
 		"?? scratch.txt",
