@@ -73,9 +73,9 @@
     "schema_hash": "6284e508b726d8796e65b91ae391bda4abda7e27109d7425dee59b270981d493"
   },
   "en/cli-mv.md": {
-    "content": "ee8cfe9b9d3d871a348bbbd7d66dd503058248fd3198126d00aab80d657498b6",
+    "content": "98b56e898eb10693782316e72b1551a77079564e2e48dfa9ad18d2cf225c4908",
     "description": "6c03e7767b51d10d5187c41727c67f9e95f61f08260c162cdbe849f04205b70f",
-    "schema_hash": "9c5ff165c4225cb940aadd984c602b837446e1aa119ded8de164689550ac0fdf",
+    "schema_hash": "1af13daf4c4a5a6ff3f67a63b729beb7f65cbe6d85e6773e70665ecbb83f3fd0",
     "seed_hash": "6c03e7767b51d10d5187c41727c67f9e95f61f08260c162cdbe849f04205b70f"
   },
   "en/cli-pull.md": {
