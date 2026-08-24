@@ -202,9 +202,13 @@ func TestDoctorFixPreviewLeavesTheUnmergedIndexAlone(t *testing.T) {
 		t.Fatal("the fixture must carry unmerged entries")
 	}
 
+	// The exit code is the DIAGNOSIS, and a preview repaired nothing: the
+	// orphaned index is still there when the run ends, so the run says so. Only
+	// an executing fix re-runs the checks and reports what it left.
 	stdout, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession, "doctor", "--action", "fix", "--dry-run")
-	if code != 0 {
-		t.Fatalf("doctor --action fix --dry-run exited %d\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	if code != exitcode.DoctorFindings {
+		t.Fatalf("doctor --action fix --dry-run exited %d, want %d: the preview repaired nothing, so the repository is still broken\nstdout=%s\nstderr=%s",
+			code, exitcode.DoctorFindings, stdout, stderr)
 	}
 	if got := unmergedCount(t, fx.dir); got != before {
 		t.Errorf("the preview changed the index: %d unmerged entries, was %d", got, before)
@@ -215,13 +219,95 @@ func TestDoctorFixPreviewLeavesTheUnmergedIndexAlone(t *testing.T) {
 
 	// The repair is MINTED, so machine mode -- which silences the sentence above
 	// -- still carries it.
-	env := decodeEnvelope(t, mustJSON(t, fx.dir, "--json", "--dry-run", "doctor", "--action", "fix"))
+	jsonOut, jsonErr, jsonCode := runSafegitEnv(t, fx.dir, conclusionSession, "--json", "--dry-run", "doctor", "--action", "fix")
+	if jsonCode != exitcode.DoctorFindings {
+		t.Fatalf("the machine-mode preview exited %d, want %d: %s", jsonCode, exitcode.DoctorFindings, jsonErr)
+	}
+	env := decodeEnvelope(t, jsonOut)
 	if !anyDetailContains(env, "update-index") {
 		t.Errorf("no effect record describes the re-staging: %v", effectDetails(env))
 	}
 	if !anyDetailContains(env, "conflicted.txt") {
 		t.Errorf("no effect record names the path that would be re-staged: %v", effectDetails(env))
 	}
+}
+
+// TestDoctorDiagnoseReportsAnOrphanedUnmergedIndex: the repair above shipped
+// with no diagnosis behind it.
+//
+// `doctor --action fix` repairs this state, but `--action diagnose` said nothing
+// about it, so the only way to learn a repository was in it was to run the
+// repair -- or to have a commit refused with exit 28. A repair whose state
+// diagnose cannot see is a check that is silently switched off, and this one is
+// error severity like its siblings: while the index is in this state the
+// repository refuses EVERY commit.
+func TestDoctorDiagnoseReportsAnOrphanedUnmergedIndex(t *testing.T) {
+	fx := newOrphanedUnmergedRepo(t)
+
+	stdout, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession, "doctor", "--action", "diagnose")
+	if code != exitcode.DoctorFindings {
+		t.Fatalf("doctor --action diagnose exited %d over an orphaned unmerged index, want %d (findings)\nstdout=%s\nstderr=%s",
+			code, exitcode.DoctorFindings, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "[FAIL] unmerged_index") {
+		t.Fatalf("no failing unmerged_index finding; the repair has no diagnosis behind it:\n%s", stdout)
+	}
+	line := findingLine(t, stdout, "unmerged_index")
+	if !strings.Contains(line, "conflicted.txt") {
+		t.Errorf("the finding does not name the path the index holds unmerged: %s", line)
+	}
+	if !strings.Contains(line, "safegit doctor --action fix") {
+		t.Errorf("the finding does not name the repair as the way out: %s", line)
+	}
+}
+
+// TestDoctorDiagnoseIsQuietAboutAHealthyIndex is one half of the control: a
+// repository with nothing unmerged has no precondition to report on, so the
+// check says nothing at all rather than adding a line to every doctor run.
+func TestDoctorDiagnoseIsQuietAboutAHealthyIndex(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "one\n")
+	safegitCommit(t, dir, "a commit", "a.txt")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, conclusionSession, "doctor", "--action", "diagnose")
+	if code != 0 {
+		t.Fatalf("doctor --action diagnose exited %d in a healthy repository\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	if strings.Contains(stdout, "unmerged_index") {
+		t.Errorf("the check reports on a repository with nothing unmerged:\n%s", stdout)
+	}
+}
+
+// TestDoctorDiagnoseAcceptsAnUnmergedIndexAMergeOwns is the other half, and the
+// one that keeps the check honest: an unmerged index DURING a merge is that
+// merge's own working state, waiting for the conclusion that resolves it. A
+// check that failed here would call every conflicted repository broken.
+func TestDoctorDiagnoseAcceptsAnUnmergedIndexAMergeOwns(t *testing.T) {
+	fx := newConflictedMergeRepo(t, conflictedMergeOpts{env: conclusionSession})
+	if n := unmergedCount(t, fx.dir); n == 0 {
+		t.Fatal("the fixture must be parked with an unmerged index")
+	}
+
+	stdout, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession, "doctor", "--action", "diagnose")
+	if code != 0 {
+		t.Fatalf("doctor --action diagnose exited %d mid-merge; the conflict is the merge's own state\nstdout=%s\nstderr=%s",
+			code, stdout, stderr)
+	}
+	if strings.Contains(stdout, "[FAIL] unmerged_index") {
+		t.Errorf("the check condemns an unmerged index the merge in flight owns:\n%s", stdout)
+	}
+}
+
+// findingLine returns the doctor report line for one check name.
+func findingLine(t *testing.T, stdout, check string) string {
+	t.Helper()
+	for _, line := range strings.Split(stdout, "\n") {
+		if strings.Contains(line, "] "+check) {
+			return line
+		}
+	}
+	t.Fatalf("no doctor line for the %q check:\n%s", check, stdout)
+	return ""
 }
 
 // assertNoCommittedMarkers fails when any commit reachable from any ref holds a
