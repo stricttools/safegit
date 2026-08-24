@@ -538,7 +538,7 @@ Every future change that introduces a decision of this kind adds its entry here.
 
 ---
 
-## Moves and renames
+## Moves
 
 ### Moves are declared; blob equality never decides anything
 
@@ -559,7 +559,7 @@ Every future change that introduces a decision of this kind adds its entry here.
   and this entry will be rewritten when that ships.
 - **Ruling:** ours — **provisional, awaiting review**
 
-### `safegit mv` commits the rename and nothing else
+### `safegit mv` commits the move and nothing else
 
 - **git's idiom:** `git mv old new && git commit` records the rename carrying
   the blob the parent commit held. Uncommitted content changes at the moved path

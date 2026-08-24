@@ -65,6 +65,7 @@ Use `safegit commit` instead of `git add` + `git commit` whenever multiple sessi
 | `--hunks` | | optional; omitted means every named file is committed whole | Commit only the selected hunks of one file, as `path:1,3` or `path:2-4`; repeatable, once per path |
 | `--untrack` | | optional; omitted means nothing is untracked | Stop tracking a path, leaving the file on disk: the commit records its removal from the index (repeatable) |
 | `--moved` | | optional; omitted means the commit declares no moves | Declare that content moved, as `'old -> new'` (repeatable). End BOTH paths with a slash for a whole subtree. The old path must be tracked in the commit's parent and gone from disk, and the new one must exist |
+| `--allow-escaping-targets` | | optional; omitted means such a link is refused | Record a symlink whose target resolves outside the repository, as the link text. Omitted (and with `--no-allow-escaping-targets`) the commit is refused with the target named |
 | `--moved-retract` | | optional; omitted means the commit retracts nothing | Retract a move record declared earlier in this branch's history, by its id -- the token a `Moved:` trailer begins with (repeatable, one id each). The id must name a record that exists and is not already retracted in the history this commit is built on; one that does not is refused (exit 19) rather than written, and every bad id is named. `--trailer 'Moved-Retract: <id>'` writes an unchecked retraction instead |
 
 ### Arguments
@@ -132,22 +133,34 @@ safegit commit --amend --moved 'src/parse.go -> internal/parse/parse.go'
 safegit commit --allow-empty -m "trigger CI rebuild"
 ```
 
+### Symlinks, and the targets that leave the repository
+
+A symlink is committed as its LINK TEXT -- the string it points at -- exactly as git records one. safegit adds one rule about which link texts it will record.
+
+A link whose target resolves **outside the repository** is REFUSED (exit **29**), naming the literal target, with nothing staged and nothing committed. Such a link is a fact about one machine: in anybody else's checkout it resolves to nothing, or -- worse -- to a different file that happens to sit at that absolute path. Committing it publishes a reference the repository cannot honor.
+
+`--allow-escaping-targets` elects committing it anyway, and restores the one-line notice on stderr saying the link will not resolve elsewhere. The refusal covers ADDING or STAGING escaping link content, which is where a machine-specific link enters history; `safegit mv` moving an already-tracked escaping link is untouched, because a move-only commit carries the blob across and never re-reads the link.
+
+An absolute target that resolves INSIDE the repository is accepted as it stands, and is a review item rather than a settled rule -- it is machine-specific in the same way, since it names a path this checkout happens to sit at.
+
 ### Safety Guarantees
 
 - **Atomic staging**: Each commit uses a per-invocation temporary index. The shared `.git/index` is never written to during the staging phase, so concurrent commits cannot leak files into each other.
 - **CAS ref updates**: Branch refs are updated using `git update-ref` with the expected old value. If another session committed between staging and ref update, the CAS fails and the operation retries (up to `commit.casMaxAttempts`, default 5).
 - **Two locks, in one fixed order**: `commit` takes the worktree operation lock around the whole invocation (a second safegit process in the same worktree waits `lock.acquireTimeoutSeconds` and then exits **8** naming the holder), and the per-ref lock for the target ref inside it, immediately before the CAS update. Nothing takes them the other way round. A lock whose holder is genuinely gone is reclaimed automatically; a lock a live process still holds is never taken from it.
 - **Oplog recording**: Every commit, amend, and reword is logged to an append-only operation log, enabling `safegit undo`.
-- **Moves are declared or observed, and never detected from contents**: safegit runs no similarity scoring, no `diff -M`, and never stages a path the caller did not name. A move is stated with `--moved 'old -> new'`, checked against the repository (the old path tracked in the commit's parent and gone from disk, the new one present), and written into the commit message as a `Moved:` record with its own identifier. A declaration the repository does not bear out is refused with exit **19**, and nothing is committed. Both halves of the move are still ordinary arguments -- committing the deletion of the old path is naming it. Where the move has not happened yet, `safegit mv` does the rename, the record and the commit in one step instead.
+- **Moves are declared or observed, and never detected from contents**: safegit runs no similarity scoring, no `diff -M`, and never stages a path the caller did not name. A move is stated with `--moved 'old -> new'`, checked against the repository (the old path tracked in the commit's parent and gone from disk, the new one present), and written into the commit message as a `Moved:` record with its own identifier. A declaration the repository does not bear out is refused with exit **19**, and nothing is committed. Both halves of the move are still ordinary arguments -- committing the deletion of the old path is naming it. Where the move has not happened yet, `safegit mv` does the move, the record and the commit in one step instead.
 - **What the commit's own delta witnesses is recorded without being asked**: where the same blob leaves one path and arrives at another, both sides are regular files, the pairing is one-to-one and the blob sits at exactly one path in each tree, the commit carries a record for it marked `observed` -- the token after the id that separates a claim safegit derived from one a person made (a declared record carries no token). A whole directory that moved is one subtree record; a commit carrying more scattered inferred moves than safegit records on its own gets none of them and one stderr line pointing at `--moved`; every candidate a fence declined rides the commit payload with its reason. An amend records what ITS authoring event witnesses and preserves everything the message already carried; a reword changes no tree, so it records nothing.
 - **A declaration outranks all of it**: the paths a `--moved` pair names leave the candidate sets and the fences' tree listings before any pairing, so nothing is ever stated twice -- and declaring a pair that an OBSERVED record on the commit being amended already carries supersedes that record, writing its retraction and the new declaration together.
+- **`--untrack`ed paths are fenced off the same way**: a path removed from the index but still sitting on disk could pair with a same-blob addition and mint a record, which would be true about the TREE while the old file is still right there. The declared spelling refuses that same claim (`--moved` with the old path still on disk exits **19**), so inference does not make it either: the named `--untrack` paths join the suppressed set exactly as declared paths do, and each candidate they suppress is reported as a refused pair naming `--untrack`. The fence is scoped to the paths this command line named, not to a general on-disk check.
+- **A retry that would change the answer aborts rather than guessing**: inference runs per compare-and-swap attempt, so a concurrent commit can move the ground under it. The record set of the first attempt is kept as DATA (never re-parsed out of the cached message, which a rewriting `commit-msg` hook may have edited), each retry recomputes, and a set that differs aborts the operation with its own exit code naming the pair whose witness changed, and advice to re-run. It is the one purely transient, auto-retryable abort safegit produces, which is why it does not share the general failure code.
 - **A `commit-msg` hook in a consumer repository now sees records it did not before**: the records go on the message BEFORE the hook runs, exactly like every other piece of caller content, and a repository whose hook rejects unknown trailer keys or rewrites trailer blocks will meet `Moved:` lines on commits nobody declared a move for. A hook that rewrites the block is adopted as written (dropping a record is then that hook's doing); a hook that refuses exits **16** and nothing is committed. Declaring the moves does not avoid the lines -- it changes who claimed them.
 - **Two declarations that speak about each other are refused**: a set of `--moved` pairs is one statement, so two pairs may not NEST (one path inside another pair's path, in either direction) and may not CHAIN (`a -> b` beside `b -> c`, whose result would depend on the order they were performed in). Both are argument-against-argument contradictions and exit **2**, before the repository is consulted. `safegit mv` refuses the same two shapes through the same check.
 - **Retraction, not editing**: a record that turns out to be wrong is corrected by RETRACTING it -- `--moved-retract <id>`, which verifies the id against the history the commit is built on -- never by editing it, because editing the commit that carries it rewrites history. A replacement is a retraction and a new `--moved` in one commit.
 
 ## mv
 
-Move tracked paths and commit the moves with their records in one operation. `--moved` is a DECLARATION about a move somebody already made; `mv` is the other half -- it performs the rename, mints the record for what it renamed, and commits the result, so the move and its record can never be out of step.
+Move tracked paths and commit the moves with their records in one operation. `--moved` is a DECLARATION about a move somebody already made; `mv` is the other half -- it performs the move, mints the record for what it moved, and commits the result, so the move and its record can never be out of step.
 
 ### When to Use
 
@@ -158,6 +171,7 @@ Use `safegit mv` when the move has not happened yet. Use `safegit commit --moved
 | Flag | Presence | Description |
 |------|----------|-------------|
 | `-m` | required; repeatable, no default | Commit message paragraph. Repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body. There is no default message: a message the framework chose would be a message the framework wrote into history |
+| `--create-missing-directories` | optional; omitted means a destination whose directory does not exist is refused | Make the destination's parent directories when they are not there, removing again what this invocation made if the move is rolled back |
 
 ### Arguments
 
@@ -165,17 +179,30 @@ Use `safegit mv` when the move has not happened yet. Use `safegit commit --moved
 |------|----------|-------------|
 | `pairs` | Yes (variadic) | One move each, written `'old -> new'`. End BOTH paths with a slash to move a whole directory. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself |
 
-### The three steps: validate, rename, commit
+### The three steps: validate, move, commit
 
-1. **Validate, before the first file is touched.** Every pair is checked against the repository and against the other pairs: the source must be tracked in HEAD and present on disk, the destination must be free (on disk and in the tree), a directory must be written in subtree form and a file in file form, and no two pairs may nest or chain. A set of moves is one statement, so a set with one bad pair in it never leaves the working tree half-moved -- and every failing pair is reported at once rather than one command at a time.
-2. **Rename.** Each path is moved on disk through the effects handle, so `--dry-run` records the renames instead of performing them. A missing destination directory is created (`git mv` refuses instead); a rollback removes the topmost directory this invocation created and nothing that was already there.
-3. **Commit.** One commit carrying the renames and their `Moved:` records.
+1. **Validate, before the first file is touched.** Every pair is checked against the repository and against the other pairs: the source must be tracked in HEAD and present on disk and carry no uncommitted content edits, the destination must be free (on disk and in the tree) and its parent directory must exist, a directory must be written in subtree form and a file in file form, and no two pairs may nest or chain. A set of moves is one statement, so a set with one bad pair in it never leaves the working tree half-moved -- and every failing pair is reported at once rather than one command at a time.
+2. **Move.** Each path is moved on disk through the effects handle, so `--dry-run` records the moves instead of performing them. A rollback removes the topmost directory this invocation created and nothing that was already there.
+3. **Commit.** One commit carrying the moves and their `Moved:` records.
 
-### The commit is the rename and nothing else
+### The commit is the move and nothing else
 
-Each moved path is carried across as the exact blob its parent commit held, through index edits rather than by staging from disk. That is what `git mv` followed by a commit produces, and it is what makes the preview and the execution compute the same tree. **Uncommitted content changes at a moved path stay uncommitted** and are a separate commit -- a move is a move. Case-only renames fall out of the same mechanism.
+Each moved path is carried across as the exact blob its parent commit held, through index edits rather than by staging from disk. That is what `git mv` followed by a commit produces, and it is what makes the preview and the execution compute the same tree. Case-only moves fall out of the same mechanism.
 
 A directory pair produces ONE subtree record however many files it holds, while the commit itself changes every path under it.
+
+### A path with uncommitted edits is refused
+
+Because the commit carries the parent's blob across, a moved path whose disk content has been edited would have those edits silently left behind, uncommitted, at a path that no longer exists in the tree. `safegit mv` therefore REFUSES rather than moving it (exit **19**, the same collected refusal a missing destination raises -- the world contradicts the move's preconditions). There is no override flag, because both legitimate intents already have a route, and the refusal names them:
+
+1. the edits belong in their own commit -- commit the content first, then `safegit mv`;
+2. the edits should ride along with the move -- move the files on disk yourself, then `safegit commit --moved 'old -> new' -- <new>`, which stages from disk and commits the content and the move together.
+
+The check is filter-aware: the disk bytes are hashed with `--path <newpath>` so the repository's own attributes decide, and a checkout that converted line endings never false-refuses. Every dirty path is named -- the human output aggregates them for a subtree move, and the complete list goes to stderr, never truncated. A dry run refuses identically.
+
+### A missing destination directory is refused
+
+`safegit mv a.txt sub/a.txt` where `sub/` does not exist is refused, naming the missing directory, with nothing moved. That is what `git mv` does too. `--create-missing-directories` elects the creation instead; a rollback then removes exactly the directories this invocation added and nothing that was already there.
 
 ### Examples
 
@@ -189,16 +216,16 @@ safegit mv -m "move src to lib" 'src/ -> lib/'
 # Several moves as one statement -- all of them, or none
 safegit mv -m "regroup the loaders" 'a.go -> load/a.go' 'b.go -> load/b.go'
 
-# Preview: the renames are recorded, not performed
+# Preview: the moves are recorded, not performed
 safegit --dry-run mv -m "move the parser" 'src/parse.go -> internal/parse/parse.go'
 ```
 
 ### Safety Guarantees
 
-- **Nothing moves until everything checks out**: a pair the repository does not bear out exits **19** naming every failing pair, with nothing moved and nothing committed. A contradiction between the arguments themselves -- an unparseable pair, two pairs claiming one path, a nesting or a chain -- exits **2** before the repository is read at all.
-- **Rollback on a filesystem failure**: when a rename the checks could not foresee fails part-way through, every move this invocation had already made is put back, and nothing is committed.
-- **A commit failure leaves the files moved**: the renames stand, the message says so, and `safegit commit --moved` commits them where they are once the cause is fixed.
-- **Serialized like every other tree mutation**: `mv` takes the worktree operation lock around the whole operation -- renames and commit are one step -- and refuses (exit **5**) when git has a merge, cherry-pick, revert, rebase or mailbox application in flight. That check is made inside the lock and BEFORE the first rename.
+- **Nothing moves until everything checks out**: a pair the repository does not bear out -- an untracked source, an occupied destination, a missing destination directory, a source carrying uncommitted content edits -- exits **19** naming every failing pair, with nothing moved and nothing committed. A contradiction between the arguments themselves -- an unparseable pair, two pairs claiming one path, a nesting or a chain -- exits **2** before the repository is read at all.
+- **Rollback on a filesystem failure**: when a move the checks could not foresee fails part-way through, every move this invocation had already made is put back, and nothing is committed.
+- **A commit failure leaves the files moved**: the moves stand, the message says so, and `safegit commit --moved` commits them where they are once the cause is fixed.
+- **Serialized like every other tree mutation**: `mv` takes the worktree operation lock around the whole operation -- the moves and the commit are one step -- and refuses (exit **5**) when git has a merge, cherry-pick, revert, rebase or mailbox application in flight. That check is made inside the lock and BEFORE the first move.
 - **Undo reverses the commit, never the working tree**: `safegit undo` on an `mv` moves the ref back and says so -- the files are still at their new paths. Move them back by hand, or re-commit them where they are with `safegit commit --moved`.
 
 ## The three conclusion commands
@@ -761,7 +788,8 @@ git merge --ff-only FETCH_HEAD
 - **Ancestry check before every backup**: the slot is fetched first, and a slot holding commits that are not reachable from the local HEAD is a hard error (exit code 22) naming both SHAs. Overwriting it requires `--overwrite-remote-backup`.
 - **Leased push**: the push is pinned with `--force-with-lease` to the SHA observed moments earlier -- or, for a first backup, to "this ref must not exist". A backup pushed from another machine in between is rejected, never clobbered.
 - **Public-remote confirmation**: a real backup to a public repository (or to a networked remote whose visibility cannot be determined) asks first, before any network contact. That question is about the target, not the command, and safegit only learns the answer by probing the remote at run time -- so only `--allow-public-remote` answers it. The blanket `--approve-consequential` does not, and under `--json` the backup refuses instead. A declined confirmation exits nonzero -- a refusal never reports success.
-- **A backup dry run never touches the network**: this command's `--dry-run` builds its preview from local state alone -- no `ls-remote`, no `fetch`, no prompt -- so previewing against an unreachable remote succeeds. The slot's current SHA, the ancestry check against it, and the lease pinned to it are all resolved when the backup actually runs.
+- **A `backup backup` dry run never touches the network**: that command's `--dry-run` builds its preview from local state alone -- no `ls-remote`, no `fetch`, no prompt -- so previewing against an unreachable remote succeeds. The slot's current SHA, the ancestry check against it, and the lease pinned to it are all resolved when the backup actually runs.
+- **A `backup restore` dry run DOES read the remote**, and the difference is stated rather than glossed: the preview has to know which SHA the slot holds in order to say what it would fast-forward to, and that lookup is an `ls-remote`. So `backup restore --dry-run` contacts the remote. It performs neither the fetch nor the merge -- both are recorded instead -- but a preview against an unreachable remote fails where `backup backup`'s succeeds. Whether a network READ belongs on a preview path at all awaits a ruling in the CLI framework's effects model; until then this is the honest description of what happens.
 - **Hooks bypassed on purpose**: backup pushes run with `--no-verify`. `refs/backups` is a tool-owned namespace, and pre-push policies exist to police branches and tags.
 - **Restore never discards work**: the restore is `merge --ff-only`, so a branch carrying commits the backup lacks is refused with the range to inspect.
 - **Coordination guard on restore**: a restore checks the working tree first and refuses (exit **5**) when it is dirty, naming what is uncommitted -- or, when git has an operation in flight, naming that operation and the command that ends it. It does not take the worktree operation lock; the `--ff-only` merge is git's own.
@@ -1544,7 +1572,7 @@ Use `safegit bisect` instead of `git bisect` for coordination-guarded bisecting 
 
 ### Arguments
 
-The subcommand vocabulary safegit forwards is the one its git classification table declares -- `start`, `good`, `bad`, `old`, `new`, `skip`, `run`, `replay`, `reset`, `terms`, `log`, `view` -- and a subcommand outside it is refused. The same declaration is what tells safegit which of them write the working tree and therefore need the uncommitted-work check, so what safegit ADMITS and what it KNOWS about what it admitted cannot drift apart. bisect's OPTION allowlist is deliberately empty: every option git's bisect takes renames its terms, changes what it checks out or limits the walk, and none of them has been considered here.
+The subcommand vocabulary safegit forwards is the one its git classification table declares -- `start`, `good`, `bad`, `old`, `new`, `skip`, `run`, `replay`, `reset`, `terms`, `log`, `view` -- and a subcommand outside it is refused. The same declaration is what tells safegit which of them write the working tree and therefore need the uncommitted-work check, so what safegit ADMITS and what it KNOWS about what it admitted cannot drift apart. bisect's OPTION allowlist is deliberately empty: every option git's bisect takes relabels its terms, changes what it checks out or limits the walk, and none of them has been considered here.
 
 ### Examples
 
@@ -1873,19 +1901,22 @@ after the parse succeeded: mutually exclusive flags, a missing commit message,
 one path named both as a whole file and in `--hunks`. Unifying the two awaits an
 upstream ruling on a framework usage-error code.
 
-The table below covers safegit's own codes. The guarded wrappers around git --
-`checkout`, `pull`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick`,
-`revert` -- exit with **git's** exit code when git itself fails, and git's codes
-are not in this registry: a conflicted merge or cherry-pick exits 1 the way git
-does, and git's fatal errors exit 128 or 129. A code from one of those commands
-is therefore only safegit's when the failure happened before git ran (the
+The table below covers safegit's own codes. The commands that FORWARD their
+arguments to git -- `switch`, `rebase`, `reset`, `bisect` -- exit with **git's**
+exit code when git itself fails, and git's codes are not in this registry:
+git's fatal errors exit 128 or 129. A code from one of those commands is
+therefore only safegit's when the failure happened before git ran (the
 coordination guard, an uninitialized repository, a rejected argument).
 
-`revert` of a SINGLE commit is the one exception, because it is not a plain
-passthrough: git computes the inverse patch and safegit commits it, so the
-conclusion engine's own refusals reach it too. It can exit **17** (the staged
-result carries an unmerged entry no resolution names) or **18** (the content it
-would commit still holds a complete conflict region) after git has already run.
+`merge`, `cherry-pick`, `revert` and `pull` use git only to COMPUTE, and
+safegit's pipeline writes the commit, so the conclusion engine's own refusals
+reach them after git has already run: exit **17** (the staged result carries an
+unmerged entry no resolution names), **18** (the content it would commit still
+holds a complete conflict region), **27** (materializing a resolution would
+destroy a hand edit) and **26** (the commit stands and its aftercare did not
+finish). A conflicted compute still surfaces git's own verdict -- a conflicted
+merge exits 1 the way git does -- and the operation parks for the matching
+`-continue` command.
 
 <!-- BEGIN generated exit-code table (scripts/gen-exit-table) -->
 
