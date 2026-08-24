@@ -1077,6 +1077,7 @@ Exactly one value, and there is no default: a doctor invocation that does not sa
 | `native_hooks` | warn | Are there git hooks in `.git/hooks` that safegit's own commit path does not run? |
 | `git_version` | warn | Is the installed git new enough for the features safegit uses? |
 | `merge_autostash` | warn | Is `MERGE_AUTOSTASH` present with no merge in flight? (It names a stash-shaped commit holding uncommitted work no ref reaches; the check reports it and removes nothing.) |
+| `unmerged_index` | error | Does the index carry unmerged entries with no merge, cherry-pick or revert in flight to resolve them? (git refuses every commit in that state and so does safegit, at exit 28; `--action fix` stages each path's own working-tree content. An unmerged index the operation in flight owns is reported as such and is not a fault.) |
 | `legacy_scrub_policies` | error | Is the pre-0.2 scrub-policy file -- which stored scrubbed patterns in plaintext inside the repository -- gone? |
 
 **Exit code 50.** `diagnose` exits `50` when at least one **error**-severity check fails; warnings alone exit `0`. After `--action fix` the code reflects what the fix LEFT: an error-severity finding that is still there keeps the exit nonzero.

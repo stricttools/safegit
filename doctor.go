@@ -135,6 +135,10 @@ var doctorChecks = []doctorCheck{
 	// Not RequiresInit: MERGE_AUTOSTASH is git's own file, and the work it names
 	// is unreachable whether or not safegit has state in this repository.
 	{Name: "merge_autostash", Severity: "warn", Fn: checkOrphanedAutostash},
+	// Not RequiresInit, and ERROR severity: the entries are git's own, and while
+	// they are there every commit in this repository refuses -- with git's
+	// refusal or safegit's exit 28 -- whether or not safegit has state here.
+	{Name: "unmerged_index", Severity: "error", Fn: checkOrphanedUnmergedIndex},
 	{Name: "legacy_scrub_policies", Severity: "error", RequiresInit: true, Fn: checkLegacyScrubPolicies},
 }
 
@@ -638,6 +642,41 @@ func checkOrphanedAutostash(env doctorEnv) doctorFinding {
 		"content no ref reaches (run 'safegit doctor --action fix', which stores it as a stash entry and "+
 		"removes %s, or recover it by hand with 'git stash apply %s')",
 		sequencer.FileMergeAutostash, sha, found.path, sha)
+}
+
+// checkOrphanedUnmergedIndex reports stage 1/2/3 entries in the shared index
+// with no merge, cherry-pick or revert in flight to resolve them.
+//
+// It is an ERROR rather than advice because of what the state costs: git refuses
+// every commit in it ("Committing is not possible because you have unmerged
+// files") and so does safegit, at exit 28. A repository in it is stopped, not
+// degraded -- and until this check existed the only ways to learn about it were
+// to have a commit refused or to run the repair blind, which is a repair whose
+// state nothing could diagnose.
+//
+// The reading is readUnmergedIndex, the same one `--action fix` repairs from, so
+// the diagnosis and the repair can never disagree. An index the operation in
+// flight owns is reported as such and is not a fault; an index with nothing
+// unmerged has no precondition to report on and says nothing.
+func checkOrphanedUnmergedIndex(env doctorEnv) doctorFinding {
+	state, kind, repair, err := readUnmergedIndex(env.ctx, env.gitDir, env.worktree)
+	switch {
+	case err != nil:
+		return findingFail("the index's unmerged entries could not be read: %v", err)
+	case state == unmergedNone:
+		return findingNone()
+	case state == unmergedOwned:
+		return findingOK(fmt.Sprintf("the index's unmerged entries belong to the %s in flight", kind))
+	}
+
+	var paths []string
+	for _, p := range repair.paths {
+		paths = append(paths, p.path)
+	}
+	return findingFail("the index carries unmerged entries for %d path(s) with no merge, cherry-pick or revert in flight "+
+		"to resolve them: %s (git refuses every commit in this state and so does safegit, at exit 28; run "+
+		"'safegit doctor --action fix', which stages each path's own working-tree content, or resolve and stage them by hand)",
+		len(paths), strings.Join(paths, ", "))
 }
 
 // autostashState is what one reading of MERGE_AUTOSTASH concluded.

@@ -97,37 +97,52 @@ type unmergedRepair struct {
 	paths []unmergedPath
 }
 
-// planUnmergedRepair reports the orphaned unmerged index this repository
-// carries, or nil when there is none.
+// unmergedState is what one reading of the index's unmerged entries concluded.
+type unmergedState int
+
+const (
+	// unmergedNone: no unmerged entries at all, or no working tree to have any.
+	unmergedNone unmergedState = iota
+	// unmergedOwned: entries an operation in flight is waiting to be told about.
+	unmergedOwned
+	// unmergedOrphaned: entries with nothing in flight left to resolve them.
+	unmergedOrphaned
+)
+
+// readUnmergedIndex is the ONE reading of the unmerged-index condition: the
+// `unmerged_index` health check reports what it returns and `--action fix`
+// repairs exactly the state it named, so the two can never disagree about what
+// an orphan is. It returns the kind of operation in flight alongside the state,
+// which is what the OWNED case is reported as.
 //
-// ONLY when git has nothing in flight. An unmerged index during a merge, a pick
-// or a revert is that operation's own working state, and the conclusion
-// commands are what resolve it -- re-staging underneath one would destroy the
-// conflict it is waiting to be told about. What this repairs is the state left
-// when the operation's state files are gone and its index entries are not: a
-// crash, a hand-deleted MERGE_HEAD, one of the several ways `git merge --abort`
-// leaves half its work behind. git refuses every commit there, and so does
-// safegit (exit 28), which is why the refusal names this repair.
-func planUnmergedRepair(ctx context.Context, gitDir, worktree string) (*unmergedRepair, error) {
+// An unmerged index during a merge, a pick or a revert is that operation's own
+// working state, and the conclusion commands are what resolve it -- re-staging
+// underneath one would destroy the conflict it is waiting to be told about. The
+// ORPHANED state is what is left when the operation's state files are gone and
+// its index entries are not: a crash, a hand-deleted MERGE_HEAD, one of the
+// several ways `git merge --abort` leaves half its work behind. git refuses every
+// commit there, and so does safegit (exit 28), which is why the refusal names the
+// repair.
+func readUnmergedIndex(ctx context.Context, gitDir, worktree string) (unmergedState, sequencer.Kind, *unmergedRepair, error) {
 	if worktree == "" {
 		// No working tree, so no content to re-stage from and no index a commit
 		// would be built beside.
-		return nil, nil
+		return unmergedNone, sequencer.KindNone, nil, nil
 	}
 	state, err := sequencer.Read(gitDir)
 	if err != nil {
-		return nil, fmt.Errorf("reading git's in-flight state: %w", err)
-	}
-	if state.InProgress() {
-		return nil, nil
+		return unmergedNone, sequencer.KindNone, nil, fmt.Errorf("reading git's in-flight state: %w", err)
 	}
 
 	entries, err := git.UnmergedStages(ctx, "")
 	if err != nil {
-		return nil, fmt.Errorf("reading the index's unmerged entries: %w", err)
+		return unmergedNone, sequencer.KindNone, nil, fmt.Errorf("reading the index's unmerged entries: %w", err)
 	}
 	if len(entries) == 0 {
-		return nil, nil
+		return unmergedNone, sequencer.KindNone, nil, nil
+	}
+	if state.InProgress() {
+		return unmergedOwned, state.Kind, nil, nil
 	}
 
 	// One repair per PATH, in the order git listed them: a conflicted path
@@ -141,6 +156,17 @@ func planUnmergedRepair(ctx context.Context, gitDir, worktree string) (*unmerged
 		seen[e.Path] = true
 		_, statErr := os.Lstat(filepath.Join(worktree, e.Path))
 		repair.paths = append(repair.paths, unmergedPath{path: e.Path, onDisk: statErr == nil})
+	}
+	return unmergedOrphaned, sequencer.KindNone, repair, nil
+}
+
+// planUnmergedRepair reports the orphaned unmerged index this repository
+// carries, or nil when there is none. It is the repair's own view of
+// readUnmergedIndex: only the orphaned state is something to fix.
+func planUnmergedRepair(ctx context.Context, gitDir, worktree string) (*unmergedRepair, error) {
+	state, _, repair, err := readUnmergedIndex(ctx, gitDir, worktree)
+	if err != nil || state != unmergedOrphaned {
+		return nil, err
 	}
 	return repair, nil
 }
