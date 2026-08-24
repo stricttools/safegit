@@ -294,6 +294,10 @@ func identityEnv(id AuthorInfo, prefix string) []string {
 // git refuses with "reference already exists" when the ref is already there.
 const ZeroSHA = "0000000000000000000000000000000000000000"
 
+// ZeroMode is how git's raw diff format spells the mode of a side that is not
+// there: the addition's source, the deletion's destination.
+const ZeroMode = "000000"
+
 // ErrNoExpectedValue is returned by UpdateRef and DeleteRef when the caller
 // supplies no expected old value.
 //
@@ -923,13 +927,31 @@ func literalPathspecs(paths []string) []string {
 	return out
 }
 
-// ChangedPath is one entry of a recursive name-status diff between two trees.
+// ChangedPath is one entry of a recursive raw diff between two trees.
 type ChangedPath struct {
-	// Status is git's single-letter name-status code: A, M, D, T (type
-	// change), and nothing else, because DiffTree turns rename detection off.
+	// Status is git's single-letter status code: A, M, D, T (type change), and
+	// nothing else, because DiffTree turns rename detection off.
 	Status string
 	// Path is the repo-relative, slash-separated path that changed.
 	Path string
+
+	// SrcMode and DstMode are the six-digit file modes on each side of the
+	// change, exactly as git's raw format writes them. The absent side of an
+	// addition or a deletion is git's all-zero mode, "000000", rather than an
+	// empty string: the raw format says so, and a reader comparing against a
+	// real mode gets a value that can never be mistaken for one.
+	SrcMode string
+	DstMode string
+
+	// SrcSHA and DstSHA are the blob names on each side, unabbreviated. The
+	// absent side is ZeroSHA, again as the raw format writes it.
+	//
+	// They are what makes a raw diff more than a list of names: a deletion and
+	// an addition carrying ONE blob name is the raw material a move-record
+	// inference is built from. The pairing itself lives in internal/commit;
+	// this package reports what git said and interprets nothing.
+	SrcSHA string
+	DstSHA string
 }
 
 // DiffTree lists every path that differs between two trees, recursively.
@@ -955,31 +977,73 @@ func DiffTree(ctx context.Context, fromTreeish, toTreeish string) ([]ChangedPath
 		}
 		changed := make([]ChangedPath, 0, len(entries))
 		for _, e := range entries {
-			changed = append(changed, ChangedPath{Status: "A", Path: e.Path})
+			// The synthesized side of a root commit is spelled the way git's raw
+			// format spells an absent side, so a reader cannot tell a root
+			// commit's additions from any other commit's by their shape.
+			changed = append(changed, ChangedPath{
+				Status:  "A",
+				Path:    e.Path,
+				SrcMode: ZeroMode,
+				DstMode: e.Mode,
+				SrcSHA:  ZeroSHA,
+				DstSHA:  e.SHA,
+			})
 		}
 		return changed, nil
 	}
 
 	out, _, err := Run(ctx, "diff-tree", "-r", "-z", "--no-commit-id", "--no-renames",
-		"--name-status", fromTreeish, toTreeish)
+		"--raw", "--no-abbrev", fromTreeish, toTreeish)
 	if err != nil {
 		return nil, fmt.Errorf("diff-tree %s %s: %w", fromTreeish, toTreeish, err)
 	}
 
-	// -z output is a flat NUL-terminated stream of alternating status and path
-	// fields. Without -z git C-quotes any path that is not plain ASCII, which
-	// would name no file at all.
+	// -z raw output is a flat NUL-terminated stream of alternating metadata and
+	// path fields, the metadata field being
+	//
+	//	:<srcmode> <dstmode> <srcsha> <dstsha> <status>
+	//
+	// Without -z git C-quotes any path that is not plain ASCII, which would
+	// name no file at all; without --no-abbrev the object names come back
+	// shortened, and a shortened name is not something to compare two sides of
+	// a diff by.
 	fields := strings.Split(out, "\x00")
 	var changed []ChangedPath
 	for i := 0; i+1 < len(fields); i += 2 {
-		status := fields[i]
+		meta := fields[i]
 		path := fields[i+1]
-		if status == "" || path == "" {
+		if meta == "" || path == "" {
 			continue
 		}
-		changed = append(changed, ChangedPath{Status: status, Path: path})
+		c, ok := parseRawDiffMeta(meta, path)
+		if !ok {
+			continue
+		}
+		changed = append(changed, c)
 	}
 	return changed, nil
+}
+
+// parseRawDiffMeta reads one raw-format metadata field into a ChangedPath. A
+// field that does not carry the five expected parts is reported as unusable
+// rather than half-filled: a half-filled entry would let a caller compare
+// against an empty mode or an empty blob name and read the answer as a fact.
+func parseRawDiffMeta(meta, path string) (ChangedPath, bool) {
+	if !strings.HasPrefix(meta, ":") {
+		return ChangedPath{}, false
+	}
+	parts := strings.Fields(meta[1:])
+	if len(parts) != 5 {
+		return ChangedPath{}, false
+	}
+	return ChangedPath{
+		Status:  parts[4],
+		Path:    path,
+		SrcMode: parts[0],
+		DstMode: parts[1],
+		SrcSHA:  parts[2],
+		DstSHA:  parts[3],
+	}, true
 }
 
 // FilterIgnored returns the subset of the given repo-relative paths that git's
