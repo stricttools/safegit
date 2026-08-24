@@ -285,6 +285,15 @@ Every future change that introduces a decision of this kind adds its entry here.
   trailers and none of its commit-time machinery, and whether a conclusion is
   safegit's or git's must not depend on whether the merge happened to change a
   file.
+
+  The refusal is **total**, and the two halves of it read differently. With an
+  operation in flight it is the one above, naming safegit's own conclusion
+  command. With **nothing** in flight — where git would answer "no cherry-pick
+  in progress" — the argv still never reaches git: safegit's git-execution
+  boundary refuses any invocation whose shape would let git author a commit,
+  and a forwarded `--continue` is exactly that shape. The command line was
+  going to fail either way; what changes is that the refusal is safegit's and
+  says why.
 - **Ruling:** ours — deliberate
 
 ### A rebase's and a mailbox application's `--continue` stay git's
