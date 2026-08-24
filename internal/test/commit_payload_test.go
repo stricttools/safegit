@@ -28,7 +28,12 @@ type commitPayloadDoc struct {
 	Files          []string `json:"files"`
 	SkippedIgnored []string `json:"skipped_ignored"`
 	Attempts       int      `json:"attempts"`
-	DryRun         bool     `json:"dry_run"`
+	// ExecutionMode names which form of `commit` ran where the argv alone does
+	// not say: "amend" or "reword" on the --amend path, null on a plain commit.
+	// The two are one command and one authorship, and the difference is reported
+	// HERE and nowhere else -- no stderr line announces it.
+	ExecutionMode *string `json:"execution_mode"`
+	DryRun        bool    `json:"dry_run"`
 }
 
 // commitPayloadOf runs safegit in machine mode and returns the decoded payload.
@@ -81,8 +86,112 @@ func TestCommitPayloadShape(t *testing.T) {
 	if doc.Attempts != 1 {
 		t.Errorf("attempts = %d, want 1", doc.Attempts)
 	}
+	if doc.ExecutionMode != nil {
+		t.Errorf("execution_mode = %q; a plain commit replaces nothing and reports none", *doc.ExecutionMode)
+	}
 	if doc.DryRun {
 		t.Error("dry_run = true for an executing run")
+	}
+}
+
+// TestExecutionModeNamesTheAmendForm is the whole of what `commit --amend`
+// announces about which of its two forms ran.
+//
+// `--amend` resolves to an AMEND when files, hunks or untrack targets are named
+// and to a REWORD when none are -- one command line, two things done, and
+// nothing on the argv says which. The two are identical in authorship and in
+// safety (both are the pipeline's own commit, both move the ref under
+// compare-and-swap, both are undoable), so the difference is reported in the
+// machine payload alone: no stderr line, no human-mode announcement.
+//
+// The member is present on every form, per the schema's own nullable
+// convention: a consumer reads it rather than inferring the form from the
+// absence of a key.
+func TestExecutionModeNamesTheAmendForm(t *testing.T) {
+	// The map decode, not the struct: a member that is ABSENT and one that is
+	// present-and-null both arrive as a nil pointer, and the schema declares
+	// this one present on every form.
+	modeOf := func(t *testing.T, dir string, args ...string) (interface{}, bool) {
+		t.Helper()
+		stdout, stderr, code := runSafegit(t, dir, append([]string{"--json"}, args...)...)
+		if code != 0 {
+			t.Fatalf("safegit %s --json failed (%d): %s", strings.Join(args, " "), code, stderr)
+		}
+		var payload map[string]interface{}
+		if err := json.Unmarshal(decodeEnvelope(t, stdout).Payload, &payload); err != nil {
+			t.Fatalf("payload does not decode: %v\n%s", err, stdout)
+		}
+		v, present := payload["execution_mode"]
+		return v, present
+	}
+
+	t.Run("a plain commit reports none", func(t *testing.T) {
+		dir := newRepo(t)
+		testutil.WriteFile(t, dir, "a.txt", "one\n")
+		mode, present := modeOf(t, dir, "commit", "-m", "plain", "--", "a.txt")
+		if !present {
+			t.Fatal("execution_mode is absent from a plain commit's payload; the schema declares it on every form")
+		}
+		if mode != nil {
+			t.Errorf("execution_mode = %v, want null: a plain commit is neither an amend nor a reword", mode)
+		}
+	})
+
+	t.Run("an amend names itself", func(t *testing.T) {
+		dir := newRepo(t)
+		testutil.WriteFile(t, dir, "tip.txt", "tip\n")
+		safegitCommit(t, dir, "tip", "tip.txt")
+		testutil.WriteFile(t, dir, "extra.txt", "extra\n")
+		mode, present := modeOf(t, dir, "commit", "--amend", "-m", "tip plus extra", "--", "extra.txt")
+		if !present {
+			t.Fatal("execution_mode is absent from an amend's payload")
+		}
+		if mode != "amend" {
+			t.Errorf("execution_mode = %v, want \"amend\"", mode)
+		}
+	})
+
+	t.Run("a reword names itself", func(t *testing.T) {
+		dir := newRepo(t)
+		testutil.WriteFile(t, dir, "tip.txt", "tip\n")
+		safegitCommit(t, dir, "tip", "tip.txt")
+		mode, present := modeOf(t, dir, "commit", "--amend", "-m", "reworded")
+		if !present {
+			t.Fatal("execution_mode is absent from a reword's payload")
+		}
+		if mode != "reword" {
+			t.Errorf("execution_mode = %v, want \"reword\"", mode)
+		}
+	})
+
+	t.Run("a previewed amend reports the same form", func(t *testing.T) {
+		dir := newRepo(t)
+		testutil.WriteFile(t, dir, "tip.txt", "tip\n")
+		safegitCommit(t, dir, "tip", "tip.txt")
+		testutil.WriteFile(t, dir, "extra.txt", "extra\n")
+		mode, _ := modeOf(t, dir, "--dry-run", "commit", "--amend", "-m", "preview", "--", "extra.txt")
+		if mode != "amend" {
+			t.Errorf("execution_mode = %v under --dry-run, want \"amend\": a preview previews a form", mode)
+		}
+	})
+}
+
+// TestNoStderrLineAnnouncesTheAmendForm: the amend/reword split is a payload
+// member and nothing else. A stderr line would be an announcement of a
+// difference that changes neither authorship nor safety.
+func TestNoStderrLineAnnouncesTheAmendForm(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "tip.txt", "tip\n")
+	safegitCommit(t, dir, "tip", "tip.txt")
+
+	_, stderr, code := runSafegit(t, dir, "commit", "--amend", "-m", "reworded")
+	if code != 0 {
+		t.Fatalf("reword failed (%d): %s", code, stderr)
+	}
+	for _, unwanted := range []string{"execution_mode", "execution mode", "resolved to"} {
+		if strings.Contains(stderr, unwanted) {
+			t.Errorf("stderr announces the amend form (%q):\n%s", unwanted, stderr)
+		}
 	}
 }
 
@@ -184,6 +293,9 @@ func TestAmendPayloadShape(t *testing.T) {
 	if doc.Attempts != 1 {
 		t.Errorf("attempts = %d, want 1", doc.Attempts)
 	}
+	if doc.ExecutionMode == nil || *doc.ExecutionMode != "amend" {
+		t.Errorf("execution_mode = %v, want \"amend\"", doc.ExecutionMode)
+	}
 }
 
 // TestAmendReportsItsFileCount: the amend line used to say only that something
@@ -221,5 +333,8 @@ func TestRewordPayloadShape(t *testing.T) {
 	}
 	if doc.Tree != testutil.Rev(t, dir, "HEAD^{tree}") {
 		t.Errorf("tree = %q, want the unchanged tree %q", doc.Tree, testutil.Rev(t, dir, "HEAD^{tree}"))
+	}
+	if doc.ExecutionMode == nil || *doc.ExecutionMode != "reword" {
+		t.Errorf("execution_mode = %v, want \"reword\"", doc.ExecutionMode)
 	}
 }

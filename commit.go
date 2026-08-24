@@ -74,8 +74,29 @@ type commitPayload struct {
 	Files          []string `json:"files"`
 	SkippedIgnored []string `json:"skipped_ignored"`
 	Attempts       int      `json:"attempts"`
-	DryRun         bool     `json:"dry_run"`
+	// ExecutionMode names which form of the command ran where the argv alone
+	// does not say: `--amend` resolves to an AMEND when files, hunks or untrack
+	// targets are named and to a REWORD when none are. It is `amend` or `reword`
+	// on that path and null on a plain commit.
+	//
+	// It is the whole of what safegit says about the split, and deliberately so.
+	// The two forms are identical in authorship and in safety -- both are the
+	// pipeline's own commit, both move the ref under compare-and-swap, both are
+	// undoable -- so a stderr line announcing which one happened would be noise
+	// about a difference that changes nothing an operator has to act on. A
+	// machine consumer that DOES care reads it here.
+	ExecutionMode *string `json:"execution_mode"`
+	DryRun        bool    `json:"dry_run"`
 }
+
+// The two values ExecutionMode takes. A plain commit reports neither.
+const (
+	executionModeAmend  = "amend"
+	executionModeReword = "reword"
+)
+
+// executionMode renders the member for one of the two --amend forms.
+func executionMode(mode string) *string { return &mode }
 
 // commitPayloadSchema declares what `commit` puts in the envelope's payload.
 // The framework validates the value against it at emission, so the declaration
@@ -90,9 +111,10 @@ var commitPayloadSchema = strictcli.SchemaObject(
 		"files":           strictcli.SchemaArray(strictcli.SchemaType("string")),
 		"skipped_ignored": strictcli.SchemaArray(strictcli.SchemaType("string")),
 		"attempts":        strictcli.SchemaType("integer"),
+		"execution_mode":  strictcli.SchemaType("string", "null"),
 		"dry_run":         strictcli.SchemaType("boolean"),
 	},
-	[]string{"ref", "parents", "tree", "sha", "old_sha", "files", "skipped_ignored", "attempts", "dry_run"},
+	[]string{"ref", "parents", "tree", "sha", "old_sha", "files", "skipped_ignored", "attempts", "execution_mode", "dry_run"},
 	false,
 )
 
@@ -245,6 +267,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		Files:          result.Files,
 		SkippedIgnored: orEmpty(result.SkippedIgnored),
 		Attempts:       result.Attempts,
+		ExecutionMode:  nil,
 		DryRun:         flags.dryRun,
 	})
 
@@ -445,6 +468,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			Files:          result.Files,
 			SkippedIgnored: orEmpty(result.SkippedIgnored),
 			Attempts:       result.Attempts,
+			ExecutionMode:  executionMode(executionModeAmend),
 			DryRun:         flags.dryRun,
 		})
 
@@ -517,6 +541,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			Files:          []string{},
 			SkippedIgnored: []string{},
 			Attempts:       result.Attempts,
+			ExecutionMode:  executionMode(executionModeReword),
 			DryRun:         flags.dryRun,
 		})
 
