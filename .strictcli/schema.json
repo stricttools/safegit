@@ -82,7 +82,7 @@
   },
   "project_id": "github.com/smm-h/safegit",
   "name": "safegit",
-  "version": "0.28.1-0.20260824220124-ce8a32815d27",
+  "version": "0.28.1-0.20260824231054-e02535d6c52b+dirty",
   "help": "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "proc_observe_allowlist": [
     [
@@ -1499,7 +1499,7 @@
       "flags": [
         {
           "name": "pre-push-hook",
-          "help": "run pre-pre-push hook scripts before pushing to remote; omitted means the hooks run. Under --dry-run they are never run whatever this says -- a hook is an arbitrary script, so running one is a mutation a preview may not perform -- and the preview says so on stderr and in the payload's pre_pre_push_hooks_skipped member. Only EXECUTION is skipped, though: DISCOVERY runs in a preview too, because it reads the filesystem and mutates nothing, and its two refusals (exit 24 for hooks left in the pre-migration .git/hooks location, exit 25 for a checkout-provided hook without its execute bit) are verdicts about the checkout that hold whether or not anything is pushed -- a preview that skipped discovery would report success for a push that could only ever exit 24 or 25. Passing --no-pre-push-hook skips discovery along with execution",
+          "help": "run pre-pre-push hook scripts before pushing to remote; omitted means the hooks run. Under --dry-run they are never run whatever this says -- a hook is an arbitrary script, so running one is a mutation a preview may not perform -- and the preview says so on stderr and in the payload's pre_pre_push_hooks_skipped member. Only EXECUTION is skipped, though: DISCOVERY runs in a preview too, because it reads the filesystem and mutates nothing, and its two refusals (exit 24 for hooks left in the pre-migration .git/hooks location, exit 25 for a discovered hook without its execute bit, in either store) are verdicts about the checkout that hold whether or not anything is pushed -- a preview that skipped discovery would report success for a push that could only ever exit 24 or 25. Passing --no-pre-push-hook skips discovery along with execution",
           "value_schema": {
             "type": "boolean"
           },
@@ -2649,7 +2649,7 @@
         },
         "run": {
           "name": "run",
-          "help": "run all installed pre-pre-push hooks (or a single named hook) immediately without performing an actual push, so you can verify that all configured hooks pass before committing to a real push operation",
+          "help": "run all installed pre-pre-push hooks (or a single named hook) immediately without performing an actual push, so you can verify that all configured hooks pass before committing to a real push operation. Discovery's own verdicts about the checkout reach here too: exit 24 while a hook is still in the pre-migration .git/hooks location, and exit 25 when a discovered hook is not executable, in EITHER store -- never a silent skip and never a 'no hooks to run', because a command whose whole purpose is to say whether the checks pass must not exit 0 because a check was passed over",
           "effect": "mutating",
           "dry_run_supported": false,
           "dry_run_unsupported_reason": "running a hook executes an operator-supplied script whose effects safegit cannot know in advance, so there is nothing honest to preview; run 'safegit hook list' to see which scripts would run",
