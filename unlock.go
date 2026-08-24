@@ -104,13 +104,6 @@ func runUnlock(flags globalFlags, ref string) int {
 		return exitcode.General
 	}
 
-	if flags.dryRun {
-		if !flags.silent() {
-			fmt.Printf("would release lock on %s\n", target.display)
-		}
-		return 0
-	}
-
 	// Deliberately the unconditional removal, not the flock-and-identity-checked
 	// reclamation doctor sweeps through.
 	//
@@ -123,13 +116,23 @@ func runUnlock(flags globalFlags, ref string) int {
 	// in which another process reclaims the same stale lock between that check and
 	// this removal. doctor, which sweeps unattended and by the hundred, takes the
 	// strict path instead.
-	if err := lock.ForceRelease(target.base, target.name); err != nil {
+	//
+	// The removal is MINTED, in both modes: releasing a lock is a change to the
+	// repository's coordination state, and an agent driving safegit in machine
+	// mode has to be able to see that it made one. A preview records the same
+	// removal and performs nothing -- which is why the dry-run branch is here,
+	// below the refusals and inside the mint, rather than a return above it.
+	if err := lock.ForceRelease(target.base, target.name, mintedRemover(flags, "lock:")); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
 	}
 
 	if !flags.silent() {
-		fmt.Printf("lock on %s released\n", target.display)
+		if flags.dryRun {
+			fmt.Printf("would release lock on %s\n", target.display)
+		} else {
+			fmt.Printf("lock on %s released\n", target.display)
+		}
 	}
 	return 0
 }

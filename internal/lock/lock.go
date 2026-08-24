@@ -223,7 +223,10 @@ func Acquire(locksBaseDir, safegitDir, ref, op string, timeout time.Duration) (*
 			f, outcome := openForReclaim(lp)
 			if f != nil {
 				var stalePid int
-				outcome, stalePid = reclaimLocked(f, lp)
+				// os.Remove, not a minted removal: the acquire path is not a
+				// command's declared effect, it is the contention handling
+				// underneath every one of them.
+				outcome, stalePid = reclaimLocked(f, lp, os.Remove)
 				if outcome == reclaimDone {
 					_ = oplog.Append(safegitDir, oplog.Entry{
 						Op: "lock_recovered",
@@ -579,9 +582,16 @@ func pidWasReused(pid int, recordedStart string) bool {
 // ForceRelease unconditionally removes the lock file for a ref.
 // locksBaseDir is the safegit directory whose "locks/" subtree holds lock files;
 // for worktrees this should be the shared (common) safegit dir.
-func ForceRelease(locksBaseDir, ref string) error {
+//
+// remove performs the unlink, and it is a parameter for the same reason
+// ReclaimIfStale's is: `safegit unlock` mints the removal through the effects
+// handle, so releasing a lock is visible in machine mode and a preview records
+// it instead of performing it. A remover that treats a missing path as success
+// turns "there was no lock" into "the lock was released", so the caller's
+// remover must report the absence -- os.Remove does.
+func ForceRelease(locksBaseDir, ref string, remove func(string) error) error {
 	lp := lockPath(locksBaseDir, ref)
-	err := os.Remove(lp)
+	err := remove(lp)
 	if os.IsNotExist(err) {
 		return fmt.Errorf("no lock held on %s", ref)
 	}

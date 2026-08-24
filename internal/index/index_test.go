@@ -74,7 +74,12 @@ func TestCleanup(t *testing.T) {
 	}
 }
 
-func TestGarbageCollect(t *testing.T) {
+// TestGarbageCollectPlan: the scanner names the orphan directories and removes
+// nothing. Removal belongs to the caller (doctor mints it through the effects
+// handle), so what is pinned here is the judgement -- a dead owner's directory
+// is named, a live owner's is not -- and that the walk itself leaves the tree
+// exactly as it found it.
+func TestGarbageCollectPlan(t *testing.T) {
 	gitDir := initIndexTestRepo(t)
 	sgDir := filepath.Join(gitDir, "safegit")
 	tmpBase := filepath.Join(sgDir, "tmp")
@@ -89,36 +94,42 @@ func TestGarbageCollect(t *testing.T) {
 	aliveDir := filepath.Join(tmpBase, "1-abcd1234") // PID 1 is always alive (init)
 	os.MkdirAll(aliveDir, 0755)
 
-	removed, err := GarbageCollect(sgDir)
+	planned, err := GarbageCollectPlan(sgDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if removed != 1 {
-		t.Errorf("removed = %d, want 1", removed)
+	if len(planned) != 1 || planned[0] != deadDir {
+		t.Errorf("planned = %v, want exactly [%s]", planned, deadDir)
 	}
 
-	// Dead dir should be gone
-	if _, err := os.Stat(deadDir); !os.IsNotExist(err) {
-		t.Error("dead PID dir should have been removed")
+	// The scanner removes nothing: both directories are still there.
+	if _, err := os.Stat(deadDir); err != nil {
+		t.Errorf("the scanner removed the dead PID dir: %v", err)
 	}
-
-	// Alive dir should remain
 	if _, err := os.Stat(aliveDir); os.IsNotExist(err) {
 		t.Error("alive PID dir should not be removed")
 	}
+
+	// And what it named really is removable by the caller.
+	if err := os.RemoveAll(planned[0]); err != nil {
+		t.Fatalf("removing the planned path: %v", err)
+	}
+	if _, err := os.Stat(deadDir); !os.IsNotExist(err) {
+		t.Error("dead PID dir should be gone once the caller removed the planned path")
+	}
 }
 
-func TestGarbageCollectEmptyTmp(t *testing.T) {
+func TestGarbageCollectPlanEmptyTmp(t *testing.T) {
 	gitDir := initIndexTestRepo(t)
 	sgDir := filepath.Join(gitDir, "safegit")
 
-	removed, err := GarbageCollect(sgDir)
+	planned, err := GarbageCollectPlan(sgDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if removed != 0 {
-		t.Errorf("removed = %d, want 0", removed)
+	if len(planned) != 0 {
+		t.Errorf("planned = %v, want none", planned)
 	}
 }
 

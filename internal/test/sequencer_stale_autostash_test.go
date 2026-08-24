@@ -106,17 +106,18 @@ func TestConclusionDoesNotConsumeAStaleAutostash(t *testing.T) {
 	}
 }
 
-// TestDoctorReportsAnOrphanedAutostash is the companion: a MERGE_AUTOSTASH with
-// no merge in flight names a stash-shaped commit whose content lives nowhere
-// else, and it is exactly the residue the crash above leaves. doctor is where a
-// repository's leftovers are named, and this one is not named at all.
-func TestDoctorReportsAnOrphanedAutostash(t *testing.T) {
-	dir := newRepo(t)
+// newOrphanedAutostashRepo plants the residue itself: a real stash-shaped
+// commit holding work that is in no commit and on no ref, and the
+// MERGE_AUTOSTASH file naming it, with no merge in flight. It returns the
+// repository and that commit.
+func newOrphanedAutostashRepo(t *testing.T) (dir, stale string) {
+	t.Helper()
+	dir = newRepo(t)
 	testutil.WriteFile(t, dir, "f.txt", "committed\n")
 	safegitCommitEnv(t, dir, conclusionSession, "base", "f.txt")
 
 	testutil.WriteFile(t, dir, "f.txt", "uncommitted work held nowhere else\n")
-	stale := strings.TrimSpace(testutil.GitOut(t, dir, "stash", "create"))
+	stale = strings.TrimSpace(testutil.GitOut(t, dir, "stash", "create"))
 	if stale == "" {
 		t.Fatal("git stash create produced no commit")
 	}
@@ -127,6 +128,71 @@ func TestDoctorReportsAnOrphanedAutostash(t *testing.T) {
 	if testutil.FileExists(filepath.Join(dir, ".git", "MERGE_HEAD")) {
 		t.Fatal("the fixture must have no merge in flight")
 	}
+	return dir, stale
+}
+
+// TestDoctorFixStoresAnOrphanedAutostashAsAStashEntry is the repair half of the
+// same finding. Reporting the orphan is worth something only if there is a way
+// out of it, and the way out cannot be "remove the file": the object name in
+// that file is the ONLY name the work has, so a removal-first repair hands the
+// next `git gc` the operator's uncommitted work.
+//
+// So the repair STORES the commit on refs/stash first -- after which it is
+// stash@{0} and every ordinary stash command reaches it -- and only then removes
+// the file.
+func TestDoctorFixStoresAnOrphanedAutostashAsAStashEntry(t *testing.T) {
+	dir, stale := newOrphanedAutostashRepo(t)
+
+	stdout, stderr, code := runSafegitEnv(t, dir, conclusionSession, "doctor", "--action", "fix")
+	if code != 0 {
+		t.Fatalf("doctor --action fix exited %d\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+
+	// The work has a name it will keep.
+	list := testutil.GitOut(t, dir, "stash", "list", "--format=%H")
+	if !strings.Contains(list, stale) {
+		t.Errorf("the orphaned autostash (%s) is not on refs/stash after the repair:\n%s", stale, list)
+	}
+	// And the content really is the work, not an empty entry.
+	if shown := testutil.GitOut(t, dir, "show", stale+":f.txt"); !strings.Contains(shown, "uncommitted work held nowhere else") {
+		t.Errorf("the stored stash entry does not hold the work it was made from:\n%s", shown)
+	}
+
+	// Only now is the file gone.
+	if testutil.FileExists(filepath.Join(dir, ".git", "MERGE_AUTOSTASH")) {
+		t.Error("doctor --action fix left MERGE_AUTOSTASH in place")
+	}
+	if !strings.Contains(stdout, "MERGE_AUTOSTASH") {
+		t.Errorf("the repair says nothing about what it did with the autostash:\n%s", stdout)
+	}
+}
+
+// TestDoctorFixPreviewLeavesTheOrphanedAutostashAlone: the preview performs
+// neither half -- no stash entry, and above all the file still there.
+func TestDoctorFixPreviewLeavesTheOrphanedAutostashAlone(t *testing.T) {
+	dir, stale := newOrphanedAutostashRepo(t)
+
+	stdout, stderr, code := runSafegitEnv(t, dir, conclusionSession, "doctor", "--action", "fix", "--dry-run")
+	if code != 0 {
+		t.Fatalf("doctor --action fix --dry-run exited %d\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	if !testutil.FileExists(filepath.Join(dir, ".git", "MERGE_AUTOSTASH")) {
+		t.Error("the preview removed MERGE_AUTOSTASH")
+	}
+	if list := testutil.GitOut(t, dir, "stash", "list", "--format=%H"); strings.Contains(list, stale) {
+		t.Errorf("the preview stored the stash entry it only promised:\n%s", list)
+	}
+	if !strings.Contains(stdout, "would store") {
+		t.Errorf("the preview does not say it would store the orphaned autostash:\n%s", stdout)
+	}
+}
+
+// TestDoctorReportsAnOrphanedAutostash is the companion: a MERGE_AUTOSTASH with
+// no merge in flight names a stash-shaped commit whose content lives nowhere
+// else, and it is exactly the residue the crash above leaves. doctor is where a
+// repository's leftovers are named, and this one is not named at all.
+func TestDoctorReportsAnOrphanedAutostash(t *testing.T) {
+	dir, stale := newOrphanedAutostashRepo(t)
 
 	stdout, stderr, _ := runSafegitEnv(t, dir, conclusionSession, "doctor", "--action", "diagnose")
 	combined := stdout + stderr
