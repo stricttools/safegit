@@ -1480,7 +1480,8 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   above runs first, and any dirt refuses the command at exit 5. `--soft`,
   `--mixed` and a bare `reset` are unguarded, because none of them touches the
   working tree. The pathspec form is not unguarded but ABSENT: it is refused
-  outright (see [The subset boundary](#the-subset-boundary)). Which modes are which is not read here at all:
+  outright (see [The subset boundary](#the-subset-boundary)). Which modes are
+  which is not read here at all:
   the classification table declares reset's effects and the guard reads that one
   view, so the vocabulary is stated in one place rather than approximated at the
   call site. The **operation lock**, by contrast, is taken unconditionally for
