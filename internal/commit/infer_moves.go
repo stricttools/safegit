@@ -55,9 +55,9 @@ import (
 // the CAP: a commit carrying more inferred moves than moveInferenceCap records
 // none of them and says so. Both live in infer_subtrees.go.
 //
-// The refusals are not silent. One aggregate line goes to stderr naming how
-// many candidates were declined and pointing at --moved, because the answer to
-// "safegit did not record my move" is always the same: declare it.
+// The refusals are not silent. One aggregate line goes to stderr, with a
+// sentence per reason counting the MOVES that went unrecorded -- and pointing
+// at --moved where declaring the move is the remedy, which is not all of them.
 //
 // STALE CATALOG ENTRY, flagged here rather than fixed: `docs/divergences.md`
 // still carries "Moves are declared; blob equality never decides anything",
@@ -90,11 +90,10 @@ var emptyBlobNames = map[string]bool{
 // record: the paths on each side and why nothing was written.
 //
 // A refusal is reported rather than dropped, because the caller who performed
-// the move needs to know safegit did not record it -- and the answer is always
-// to declare it with --moved.
+// the move needs to know safegit did not record it.
 //
-// Subphase 6.5 puts these on the commit payload; until then they ride the
-// result struct and the aggregate stderr notice.
+// They ride the commit payload itemized, and the aggregate stderr notice counts
+// them by reason.
 type RefusedMove struct {
 	// Old and New are the candidate paths on each side. A one-to-one candidate
 	// that a uniqueness fence turned down has one path in each; an ambiguous
@@ -316,17 +315,71 @@ func describePairChange(before, after []trailer.Pair) string {
 // notice writes the one aggregate stderr line an operation gets, if it has
 // anything to say. Once per operation, never once per attempt, and never
 // suppressed: a caller whose move went unrecorded learns it here or not at all.
+//
+// The line is one sentence PER REASON, because the reasons are not one reason.
+// "The repository does not single them out" is true of the ambiguity and
+// uniqueness fences and false of the other two: an overlap is a move the
+// repository singles out perfectly well and safegit declines because recording
+// it would contradict a move the commit already states, and an --untrack target
+// is a path that has not moved at all. Each sentence also carries the remedy
+// that fits it, so the advice to declare the move appears only where declaring
+// it would be accepted -- `--moved` would be refused for both of the others.
 func (m *moveInference) notice() {
-	switch {
-	case m.capped > 0:
+	if m.capped > 0 {
 		fmt.Fprintf(os.Stderr, "notice: this commit's delta witnesses %d moves, more than the %d safegit "+
 			"records on its own; none were recorded -- declare the ones you mean with --moved 'old -> new'\n",
 			m.capped, moveInferenceCap)
-	case len(m.refused) > 0:
-		fmt.Fprintf(os.Stderr, "notice: %d possible move(s) in this commit were not recorded, because the "+
-			"repository does not single them out; declare the ones you mean with --moved 'old -> new'\n",
-			len(m.refused))
+		return
 	}
+
+	var sentences []string
+	if n := refusedMoveCount(m.refused, refusedAmbiguous, refusedParentNotUnique, refusedNewNotUnique, refusedOverCap); n > 0 {
+		sentences = append(sentences, fmt.Sprintf("%d possible move(s) in this commit were not recorded, "+
+			"because the repository does not single them out; declare the ones you mean with "+
+			"--moved 'old -> new'.", n))
+	}
+	if n := refusedMoveCount(m.refused, refusedOverlaps); n > 0 {
+		sentences = append(sentences, fmt.Sprintf("%d possible move(s) were not recorded, because each would "+
+			"overlap a move this commit already states.", n))
+	}
+	if n := refusedMoveCount(m.refused, refusedUntracked); n > 0 {
+		sentences = append(sentences, fmt.Sprintf("%d possible move(s) were not recorded, because the old path "+
+			"is an --untrack target and is still on disk; commit its removal instead if it really moved.", n))
+	}
+	if len(sentences) == 0 {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "notice: %s\n", strings.Join(sentences, " "))
+}
+
+// refusedMoveCount counts the MOVES a refusal set stands for, over the reasons
+// named -- not the entries, which is what the notice used to count.
+//
+// An ambiguous blob is ONE entry naming every path on the side that was
+// ambiguous, so counting entries told a caller who moved two files that one
+// move went unrecorded. The count per entry is therefore the longer of its two
+// sides: two deleted paths and two added ones are two moves nobody recorded,
+// whichever way they were meant to pair up.
+func refusedMoveCount(refused []RefusedMove, reasons ...string) int {
+	want := make(map[string]bool, len(reasons))
+	for _, r := range reasons {
+		want[r] = true
+	}
+	total := 0
+	for _, r := range refused {
+		if !want[r.Reason] {
+			continue
+		}
+		n := len(r.Old)
+		if len(r.New) > n {
+			n = len(r.New)
+		}
+		if n == 0 {
+			n = 1
+		}
+		total += n
+	}
+	return total
 }
 
 // samePairs reports whether two inferred pair sets state the same thing. Both

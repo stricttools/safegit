@@ -521,3 +521,61 @@ func TestUntrackSuppressionIsScopedToItsOwnPaths(t *testing.T) {
 
 	assertInferredPairs(t, dir, "c.txt -> d.txt")
 }
+
+// The aggregate notice counts MOVES, not refusal entries. An ambiguous blob is
+// ONE entry naming every path on the side that was ambiguous, so counting
+// entries told an operator who moved two files that one move went unrecorded.
+func TestTheRefusalNoticeCountsMovesRatherThanEntries(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "x1.txt", "identical\n")
+	testutil.WriteFile(t, dir, "x2.txt", "identical\n")
+	safegitCommitEnv(t, dir, inferredSession, "seed", "x1.txt", "x2.txt")
+
+	moveOnDisk(t, dir, "x1.txt", "y1.txt")
+	moveOnDisk(t, dir, "x2.txt", "y2.txt")
+	_, stderr, code := runSafegitEnv(t, dir, inferredSession, "commit", "-m", "move both",
+		"--", "x1.txt", "x2.txt", "y1.txt", "y2.txt")
+	if code != 0 {
+		t.Fatalf("commit failed (code %d): %s", code, stderr)
+	}
+
+	if !strings.Contains(stderr, "2 possible move(s)") {
+		t.Errorf("the notice does not count both unrecorded moves:\n%s", stderr)
+	}
+}
+
+// The OVERLAP refusal gets its own sentence. It is not an ambiguity: the
+// repository singles the move out perfectly well, and safegit declines to
+// record it because recording it would contradict a move the commit already
+// states -- so the ambiguity wording would name the wrong reason and the advice
+// to declare it would be advice to state the contradiction by hand.
+//
+// The fixture is the shape that reaches the check: a subtree collapse whose old
+// prefix is where a declared move is moving something INTO, which chains.
+func TestTheOverlapRefusalGetsItsOwnSentence(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "src/a.txt", "first body nothing else holds\n")
+	testutil.WriteFile(t, dir, "src/b.txt", "second body nothing else holds\n")
+	testutil.WriteFile(t, dir, "x.txt", "third body nothing else holds\n")
+	safegitCommitEnv(t, dir, inferredSession, "seed", "src/a.txt", "src/b.txt", "x.txt")
+
+	moveOnDisk(t, dir, "src/a.txt", "dst/a.txt")
+	moveOnDisk(t, dir, "src/b.txt", "dst/b.txt")
+	moveOnDisk(t, dir, "x.txt", "src/x.txt")
+	_, stderr, code := runSafegitEnv(t, dir, inferredSession, "commit", "-m", "move src away and x in",
+		"--moved", "x.txt -> src/x.txt",
+		"--", "src/a.txt", "src/b.txt", "dst/a.txt", "dst/b.txt", "x.txt", "src/x.txt")
+	if code != 0 {
+		t.Fatalf("commit failed (code %d): %s", code, stderr)
+	}
+
+	// Only the declaration is on the commit: the collapsed subtree record would
+	// chain with it, so it was refused.
+	assertInferredPairs(t, dir, "x.txt -> src/x.txt")
+	if !strings.Contains(stderr, "overlap") {
+		t.Errorf("the notice does not say the refusal was an overlap:\n%s", stderr)
+	}
+	if strings.Contains(stderr, "does not single them out") {
+		t.Errorf("the notice calls an overlap an ambiguity:\n%s", stderr)
+	}
+}
