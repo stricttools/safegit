@@ -13,6 +13,7 @@ import (
 	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
+	"github.com/smm-h/safegit/internal/trailer"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 
@@ -102,6 +103,65 @@ type commitPayload struct {
 	// code would name no step at all.
 	Residue []residueEntry `json:"residue"`
 	DryRun  bool           `json:"dry_run"`
+	// MovedRecords is every move record THIS run put on the commit, in the order
+	// the message holds them: the caller's declarations first, then the records
+	// safegit minted from the commit's own delta, each naming which of the two it
+	// is. A record CARRIED ACROSS from a message being replaced is not one of
+	// them -- it was reported by the run that wrote it, and repeating it here
+	// would make an amend look like it minted a record it only preserved.
+	//
+	// It is never null: a run that recorded no move reports an empty list, which
+	// is what tells a consumer the question was answered.
+	MovedRecords []movedRecordEntry `json:"moved_records"`
+	// RefusedMoves is every candidate this commit's delta suggested and a fence
+	// declined to record, itemized -- the same facts the one aggregate stderr
+	// notice only counts. Never null.
+	RefusedMoves []refusedMoveEntry `json:"refused_moves"`
+	// MovesOverCap is how many moves the delta witnessed when the cap turned all
+	// of them down, and 0 otherwise. It is what separates "this commit witnessed
+	// nothing" from "it witnessed too much to record any of it".
+	MovesOverCap int `json:"moves_over_cap"`
+}
+
+// movedRecordEntry is one move record on the payload.
+type movedRecordEntry struct {
+	ID  string `json:"id"`
+	Old string `json:"old"`
+	New string `json:"new"`
+	// Origin is who established the claim: "declared" for a person's statement,
+	// "observed" for one safegit read off the commit's delta. The word is
+	// present on every entry, including the declared ones the message spells by
+	// writing no token at all.
+	Origin string `json:"origin"`
+}
+
+// refusedMoveEntry is one candidate a fence declined. Old and New are lists
+// because an AMBIGUOUS candidate has more than one path on the side that was
+// ambiguous, and naming only one of them would misreport which question went
+// unanswered.
+type refusedMoveEntry struct {
+	Old    []string `json:"old"`
+	New    []string `json:"new"`
+	Reason string   `json:"reason"`
+}
+
+// movedRecordEntries renders the pipeline's records for the payload, never nil.
+func movedRecordEntries(records []trailer.Record) []movedRecordEntry {
+	out := make([]movedRecordEntry, 0, len(records))
+	for _, r := range records {
+		out = append(out, movedRecordEntry{ID: r.ID, Old: r.Old, New: r.New, Origin: r.Origin.Name()})
+	}
+	return out
+}
+
+// refusedMoveEntries renders the pipeline's refusals for the payload, never
+// nil.
+func refusedMoveEntries(refused []commit.RefusedMove) []refusedMoveEntry {
+	out := make([]refusedMoveEntry, 0, len(refused))
+	for _, r := range refused {
+		out = append(out, refusedMoveEntry{Old: orEmpty(r.Old), New: orEmpty(r.New), Reason: r.Reason})
+	}
+	return out
 }
 
 // The two values ExecutionMode takes. A plain commit reports neither.
@@ -136,8 +196,29 @@ var commitPayloadSchema = strictcli.SchemaObject(
 			false,
 		)),
 		"dry_run": strictcli.SchemaType("boolean"),
+		"moved_records": strictcli.SchemaArray(strictcli.SchemaObject(
+			map[string]interface{}{
+				"id":     strictcli.SchemaType("string"),
+				"old":    strictcli.SchemaType("string"),
+				"new":    strictcli.SchemaType("string"),
+				"origin": strictcli.SchemaType("string"),
+			},
+			[]string{"id", "old", "new", "origin"},
+			false,
+		)),
+		"refused_moves": strictcli.SchemaArray(strictcli.SchemaObject(
+			map[string]interface{}{
+				"old":    strictcli.SchemaArray(strictcli.SchemaType("string")),
+				"new":    strictcli.SchemaArray(strictcli.SchemaType("string")),
+				"reason": strictcli.SchemaType("string"),
+			},
+			[]string{"old", "new", "reason"},
+			false,
+		)),
+		"moves_over_cap": strictcli.SchemaType("integer"),
 	},
-	[]string{"ref", "parents", "tree", "sha", "old_sha", "files", "skipped_ignored", "attempts", "execution_mode", "residue", "dry_run"},
+	[]string{"ref", "parents", "tree", "sha", "old_sha", "files", "skipped_ignored", "attempts", "execution_mode",
+		"residue", "dry_run", "moved_records", "refused_moves", "moves_over_cap"},
 	false,
 )
 
@@ -303,6 +384,9 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		ExecutionMode:  nil,
 		Residue:        orEmptyResidue(residue),
 		DryRun:         flags.dryRun,
+		MovedRecords:   movedRecordEntries(result.MovedRecords),
+		RefusedMoves:   refusedMoveEntries(result.RefusedMoves),
+		MovesOverCap:   result.MovesOverCap,
 	})
 
 	if !flags.silent() {
@@ -514,6 +598,9 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			ExecutionMode:  executionMode(executionModeAmend),
 			Residue:        orEmptyResidue(residue),
 			DryRun:         flags.dryRun,
+			MovedRecords:   movedRecordEntries(result.MovedRecords),
+			RefusedMoves:   refusedMoveEntries(result.RefusedMoves),
+			MovesOverCap:   result.MovesOverCap,
 		})
 
 		if !flags.silent() {
@@ -591,6 +678,12 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			ExecutionMode:  executionMode(executionModeReword),
 			Residue:        orEmptyResidue(residue),
 			DryRun:         flags.dryRun,
+			// A reword mints nothing and refuses nothing: it changes no tree, so
+			// there is no delta to read. Its declarations are records all the
+			// same, and they are what this reports.
+			MovedRecords: movedRecordEntries(result.MovedRecords),
+			RefusedMoves: refusedMoveEntries(nil),
+			MovesOverCap: 0,
 		})
 
 		if !flags.silent() {

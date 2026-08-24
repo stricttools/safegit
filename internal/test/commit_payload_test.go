@@ -42,6 +42,26 @@ type commitPayloadDoc struct {
 		Detail string `json:"detail"`
 	} `json:"residue"`
 	DryRun bool `json:"dry_run"`
+	// MovedRecords is every move record THIS operation put on the commit: the
+	// caller's declarations and the records safegit minted from the commit's own
+	// delta, each naming which of the two it is. A record carried across from a
+	// message being replaced is not one of them.
+	MovedRecords []struct {
+		ID     string `json:"id"`
+		Old    string `json:"old"`
+		New    string `json:"new"`
+		Origin string `json:"origin"`
+	} `json:"moved_records"`
+	// RefusedMoves is every candidate the delta suggested and a fence declined,
+	// with the paths on each side and the reason.
+	RefusedMoves []struct {
+		Old    []string `json:"old"`
+		New    []string `json:"new"`
+		Reason string   `json:"reason"`
+	} `json:"refused_moves"`
+	// MovesOverCap is how many moves the delta witnessed when the cap turned all
+	// of them down, and zero otherwise.
+	MovesOverCap int `json:"moves_over_cap"`
 }
 
 // commitPayloadOf runs safegit in machine mode and returns the decoded payload.
