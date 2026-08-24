@@ -181,6 +181,9 @@ func refuseUnsupportedMerge(parsed gitArgs) int {
 
 // octopusReason is the one sentence that says why, shared by the refusal above
 // and by the conclusion's own refusal of a raw-git octopus.
+//
+// DIVERGENCE: git merges any number of branches in one commit; safegit merges
+// one. Needs its row in docs/divergences.md.
 const octopusReason = "a conclusion has one staged result to check and one message to write, however many sides went into it, and every check safegit makes over a merge is written against two"
 
 // runRestructuredMerge is the whole flow.
@@ -239,6 +242,12 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 		}
 	}
 
+	// DIVERGENCE: git's own --ff-only refusal is git's; this one is safegit's,
+	// and it exists because letting git decide would let git move the ref --
+	// outside safegit's compare-and-swap -- in the race where the branches stop
+	// being diverged between the check and the run. Needs its row in
+	// docs/divergences.md, including the exit code, which is safegit's General
+	// rather than git's 128.
 	if parsed.Has("--ff-only") && resolveErr == nil && !upToDate && !fastForward {
 		fmt.Fprintf(os.Stderr, "error: %s is not a fast-forward of %s, and --ff-only was given\n",
 			other, refShortName(pos.ref))
@@ -254,6 +263,11 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 	// moved the branch silently would deny exactly that. A DETACHED HEAD is
 	// excluded too -- there is no ref to compare-and-swap -- and falls through
 	// to the compute step, where the conclusion refuses with the remedy.
+	//
+	// DIVERGENCE: `git merge --no-commit` fast-forwards anyway, because git
+	// takes the fast-forward before the flag is consulted. safegit parks a
+	// merge instead, so `--no-commit` means the same thing in every case an
+	// operator can reach. Needs its row in docs/divergences.md.
 	if fastForward && !parsed.Has("--no-ff") && !parsed.Has("--no-commit") && pos.ref != "" {
 		return fastForwardMerge(flags, gitDir, sgDir, pos, other, otherSHA)
 	}
