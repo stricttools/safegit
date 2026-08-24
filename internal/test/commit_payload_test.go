@@ -33,7 +33,15 @@ type commitPayloadDoc struct {
 	// The two are one command and one authorship, and the difference is reported
 	// HERE and nowhere else -- no stderr line announces it.
 	ExecutionMode *string `json:"execution_mode"`
-	DryRun        bool    `json:"dry_run"`
+	// Residue is every step this commit owed after its ref update and did not
+	// finish. It is declared on every form and never null: a run that finished
+	// everything reports an empty list, which is what tells a consumer the
+	// question was answered rather than not asked.
+	Residue []struct {
+		Step   string `json:"step"`
+		Detail string `json:"detail"`
+	} `json:"residue"`
+	DryRun bool `json:"dry_run"`
 }
 
 // commitPayloadOf runs safegit in machine mode and returns the decoded payload.
@@ -91,6 +99,69 @@ func TestCommitPayloadShape(t *testing.T) {
 	}
 	if doc.DryRun {
 		t.Error("dry_run = true for an executing run")
+	}
+}
+
+// TestEveryCommitFormCarriesTheResidueMember: the payload of a command that
+// moves a ref says what it owed afterwards and did not finish -- on the clean
+// run too, as an empty list.
+//
+// The member is what the commit-stands exit code (26) refers to, and it was
+// declared only on the conclusion commands' payloads. `commit`, its two --amend
+// forms and `mv` reach exactly the same aftercare failures (the index reconcile,
+// the parent's gitlink) and reported nothing about them, so an envelope carrying
+// that code from one of them named no step at all.
+func TestEveryCommitFormCarriesTheResidueMember(t *testing.T) {
+	// The map decode: an ABSENT array member and a present empty one both
+	// decode into an empty slice through the struct, and the point here is that
+	// the member is declared.
+	residueOf := func(t *testing.T, dir string, args ...string) (interface{}, bool) {
+		t.Helper()
+		stdout, stderr, code := runSafegit(t, dir, append([]string{"--json"}, args...)...)
+		if code != 0 {
+			t.Fatalf("safegit %s --json failed (%d): stdout=%s stderr=%s", strings.Join(args, " "), code, stdout, stderr)
+		}
+		var doc map[string]interface{}
+		if err := json.Unmarshal(decodeEnvelope(t, stdout).Payload, &doc); err != nil {
+			t.Fatalf("payload does not decode: %v\nstdout: %s", err, stdout)
+		}
+		v, present := doc["residue"]
+		return v, present
+	}
+
+	for _, tc := range []struct {
+		name string
+		run  func(t *testing.T, dir string) (interface{}, bool)
+	}{
+		{"commit", func(t *testing.T, dir string) (interface{}, bool) {
+			testutil.WriteFile(t, dir, "b.txt", "new\n")
+			return residueOf(t, dir, "commit", "-m", "second", "--", "b.txt")
+		}},
+		{"amend", func(t *testing.T, dir string) (interface{}, bool) {
+			testutil.WriteFile(t, dir, "a.txt", "amended\n")
+			return residueOf(t, dir, "commit", "--amend", "-m", "reworded and amended", "--", "a.txt")
+		}},
+		{"reword", func(t *testing.T, dir string) (interface{}, bool) {
+			return residueOf(t, dir, "commit", "--amend", "-m", "a new message")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := newRepo(t)
+			testutil.WriteFile(t, dir, "a.txt", "one\n")
+			safegitCommit(t, dir, "seed", "a.txt")
+
+			value, present := tc.run(t, dir)
+			if !present {
+				t.Fatalf("the %s payload declares no residue member; an envelope exiting the commit-stands code from it names no step", tc.name)
+			}
+			list, isList := value.([]interface{})
+			if !isList {
+				t.Fatalf("residue = %#v, want a list (never null)", value)
+			}
+			if len(list) != 0 {
+				t.Errorf("residue = %v on a run that finished everything it owed", list)
+			}
+		})
 	}
 }
 

@@ -94,7 +94,14 @@ type commitPayload struct {
 	// about a difference that changes nothing an operator has to act on. A
 	// machine consumer that DOES care reads it here.
 	ExecutionMode *string `json:"execution_mode"`
-	DryRun        bool    `json:"dry_run"`
+	// Residue is every step this commit owed AFTER its ref update and did not
+	// finish, never nil -- reconciling the shared index with the new tip, and
+	// bumping a parent repository's gitlink. An empty list is a run that
+	// finished everything it owed; anything in it is what the commit-stands exit
+	// code (see aftercare.go) is about, and without it an envelope carrying that
+	// code would name no step at all.
+	Residue []residueEntry `json:"residue"`
+	DryRun  bool           `json:"dry_run"`
 }
 
 // The two values ExecutionMode takes. A plain commit reports neither.
@@ -120,9 +127,17 @@ var commitPayloadSchema = strictcli.SchemaObject(
 		"skipped_ignored": strictcli.SchemaArray(strictcli.SchemaType("string")),
 		"attempts":        strictcli.SchemaType("integer"),
 		"execution_mode":  strictcli.SchemaType("string", "null"),
-		"dry_run":         strictcli.SchemaType("boolean"),
+		"residue": strictcli.SchemaArray(strictcli.SchemaObject(
+			map[string]interface{}{
+				"step":   strictcli.SchemaType("string"),
+				"detail": strictcli.SchemaType("string"),
+			},
+			[]string{"step", "detail"},
+			false,
+		)),
+		"dry_run": strictcli.SchemaType("boolean"),
 	},
-	[]string{"ref", "parents", "tree", "sha", "old_sha", "files", "skipped_ignored", "attempts", "execution_mode", "dry_run"},
+	[]string{"ref", "parents", "tree", "sha", "old_sha", "files", "skipped_ignored", "attempts", "execution_mode", "residue", "dry_run"},
 	false,
 )
 
@@ -286,6 +301,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		SkippedIgnored: orEmpty(result.SkippedIgnored),
 		Attempts:       result.Attempts,
 		ExecutionMode:  nil,
+		Residue:        orEmptyResidue(residue),
 		DryRun:         flags.dryRun,
 	})
 
@@ -496,6 +512,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			SkippedIgnored: orEmpty(result.SkippedIgnored),
 			Attempts:       result.Attempts,
 			ExecutionMode:  executionMode(executionModeAmend),
+			Residue:        orEmptyResidue(residue),
 			DryRun:         flags.dryRun,
 		})
 
@@ -572,6 +589,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			SkippedIgnored: []string{},
 			Attempts:       result.Attempts,
 			ExecutionMode:  executionMode(executionModeReword),
+			Residue:        orEmptyResidue(residue),
 			DryRun:         flags.dryRun,
 		})
 
