@@ -977,7 +977,17 @@ error-payload channel exists, and mvPayload's schema describes a
 performed mv). As built, the complete untruncated list goes to STDERR
 (which machine mode never suppresses) and the envelope carries
 exit_code 19 — the documented refusal shape. Whether a refusal payload
-should exist is the user's call at the pre-release review.
+should exist is the user's call at the pre-release review. Related,
+same review (audit-flagged): commit's exit-29 refusal exits through
+die() and emits NO envelope at all, while mv's exit-19 refusal emits
+the envelope with null payload — two different answers to a machine
+consumer for the same refusal class (a pre-existing die-path shape;
+3.1 shrinks the no-envelope set but does not touch refusals). And one
+5.2 scope question for the same review: an ABSOLUTE symlink target
+resolving INSIDE the repo is accepted (escape = "outside the
+repository" per the subphase wording), yet it is machine-specific
+exactly like an escaping one — it resolves to nothing in a checkout at
+any other path. Spec-conformant as built; listed for review.
 Divergences entry ("ours": git mv moves dirty files; safegit refuses,
 naming the two routes).
 **Verify:** red-first — dirty move refuses naming the path and both
