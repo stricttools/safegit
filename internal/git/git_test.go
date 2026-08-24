@@ -1292,3 +1292,82 @@ func TestMatchesIgnoreRulesLeavesTheIndexOutOfTheQuestion(t *testing.T) {
 		t.Error("MatchesIgnoreRules(kept.txt) = true, want false")
 	}
 }
+
+// TestLsTreePathsRecursiveMatchesNamesLiterally: the path-limited listing takes
+// NAMES, and every name it is given is the file it means.
+//
+// Two ways a pathspec stops being a name, both of them silent: a leading colon
+// is read as pathspec magic, and git then reports NO MATCH with exit 0 -- so a
+// caller asking "does this tree carry this path" is told no about a path that
+// is right there. A wildcard in a name matches other files instead. The caller
+// this exists for (the crash re-run, which removes a path the commit does not
+// carry) would delete a file on the strength of either answer.
+func TestLsTreePathsRecursiveMatchesNamesLiterally(t *testing.T) {
+	dir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@test.com",
+			"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@test.com")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v failed: %v\n%s", args, err, out)
+		}
+	}
+	run("git", "init", "--initial-branch=main")
+
+	// The two names, written and added through the same literal magic so the
+	// fixture itself does not depend on the behavior under test.
+	const colonName = ":colon.txt"
+	const starName = "a*.txt"
+	for name, content := range map[string]string{
+		colonName: "colon content\n",
+		starName:  "star content\n",
+		"ab.txt":  "decoy the wildcard would match\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+			t.Skipf("this filesystem cannot hold the name %q: %v", name, err)
+		}
+		run("git", "add", "--", ":(literal)"+name)
+	}
+	run("git", "commit", "-m", "names that are not patterns")
+
+	testutil.Chdir(t, dir)
+	ctx := context.Background()
+
+	entries, err := LsTreePathsRecursive(ctx, "HEAD", []string{colonName})
+	if err != nil {
+		t.Fatalf("LsTreePathsRecursive(%q): %v", colonName, err)
+	}
+	if len(entries) != 1 || entries[0].Path != colonName {
+		t.Errorf("listing %q returned %v; a leading colon must be part of the NAME, not pathspec magic", colonName, entries)
+	}
+
+	entries, err = LsTreePathsRecursive(ctx, "HEAD", []string{starName})
+	if err != nil {
+		t.Fatalf("LsTreePathsRecursive(%q): %v", starName, err)
+	}
+	if len(entries) != 1 || entries[0].Path != starName {
+		t.Errorf("listing %q returned %v; the wildcard must be part of the NAME and match nothing else", starName, entries)
+	}
+
+	// A path the tree does not carry is simply absent, which is how a caller
+	// learns the tree does not hold it.
+	entries, err = LsTreePathsRecursive(ctx, "HEAD", []string{"absent.txt"})
+	if err != nil {
+		t.Fatalf("LsTreePathsRecursive(absent.txt): %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("listing an absent path returned %v, want nothing", entries)
+	}
+
+	// No paths lists nothing at all, rather than the whole tree.
+	entries, err = LsTreePathsRecursive(ctx, "HEAD", nil)
+	if err != nil {
+		t.Fatalf("LsTreePathsRecursive(no paths): %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("listing no paths returned %v, want nothing", entries)
+	}
+}
