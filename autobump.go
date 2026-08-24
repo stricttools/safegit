@@ -128,12 +128,16 @@ func parseCommitSHA(output string) string {
 // guess is wrong in somebody's repository.
 var errAutoBumpUnset = fmt.Errorf("commit.autoBumpParent not configured in parent repo — run: safegit config set commit.autoBumpParent true (in the parent)")
 
-// requireAutoBumpDecision refuses, BEFORE anything is committed, when this
-// repository is a submodule whose parent has not answered the auto-bump
-// question. It is the same refusal maybeAutoBumpParent would reach afterwards,
-// moved in front of the commit: reaching it afterwards left the submodule with
-// a commit whose parent pointer was never updated and a nonzero exit, which is
-// the one outcome nobody asked for.
+// requireAutoBumpDecision refuses, BEFORE any ref moves, when this repository
+// is a submodule whose parent has not answered the auto-bump question. It is the
+// same refusal maybeAutoBumpParent would reach afterwards, moved in front of the
+// operation: reaching it afterwards left the submodule with a branch that had
+// moved and a parent pointer that had not, plus a nonzero exit, which is the one
+// outcome nobody asked for.
+//
+// Every commit-family route calls it -- the authors that make a commit and undo,
+// which takes one back. undo is not an exception to the ordering: the gitlink it
+// leaves stale is stale in exactly the same way.
 //
 // A dry run validates too. An early refusal is an honest preview -- the real
 // run would refuse for exactly this reason -- and it is the only part of the
@@ -207,9 +211,12 @@ func maybeAutoBumpParent(ctx context.Context, flags globalFlags, gitDir, newHead
 		return fmt.Errorf("loading parent config: %v", err)
 	}
 
-	// Check autoBumpParent setting. commit, amend and reword have already
-	// refused before committing anything when it is absent; undo, which can only
-	// discover it after the rollback it is undoing, reaches it here.
+	// Check autoBumpParent setting. Every route that reaches this function --
+	// commit, amend, reword, mv, the pipeline-authored merge, pull, cherry-pick
+	// and revert, the three conclusions, and undo -- has already refused through
+	// requireAutoBumpDecision when the key is absent, so this arm is the
+	// last-resort one: it fires only when the parent's answer disappeared between
+	// that refusal and this bump.
 	if cfg.Commit.AutoBumpParent == nil {
 		return errAutoBumpUnset
 	}
