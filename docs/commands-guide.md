@@ -641,6 +641,7 @@ safegit pull --merge-strategy ff-only origin main
 - **Explicit merge strategy**: No implicit default merge behavior -- you must choose `ff`, `ff-only`, or `no-ff`.
 - **Two-phase**: Runs `git fetch` then `git merge` as separate steps for clarity and control.
 - **git's own exit code**: When either step fails, safegit exits with the code that git returned, and the index is left exactly as git left it.
+- **Oplog recording**: the branch baseline (see "The oplog baseline" above), with the remote and branch alongside it. A pull whose fetch OR whose merge failed records an empty new tip and a failed outcome.
 
 ## backup
 
@@ -1278,6 +1279,14 @@ An in-flight operation does NOT by itself refuse a passthrough. The passthroughs
 
 `safegit revert` of a SINGLE commit is not a plain passthrough at all -- see its own section.
 
+### The oplog baseline
+
+Every one of these operations appends one oplog entry carrying the same three facts a commit entry carries -- the full ref name (`ref`), the tip it moved from (`parent`), the tip it ended on (`sha`) -- plus an `outcome`. The operator's own arguments ride alongside them.
+
+An operation git REFUSED records an empty new tip and a failed outcome. That is the mechanism rather than a formality: the readers of this log (`oplog.LastRefUpdate`, doctor's bypass check, `undo`'s per-ref filter) take the newest entry for a ref that carries a new tip, so an entry with none is passed over and the position safegit really last left the branch at is still the one they compare against.
+
+`checkout` and `bisect` are the exception, because neither moves a branch ref: a switch moves HEAD, and a bisect step parks HEAD on some other commit entirely. Their positions ride under `observed_parent` and `observed_tip`, names those readers do not consume. An entry claiming a branch position there would reset doctor's bypass-detection baseline and mask an out-of-band commit made before the switch.
+
 ## checkout
 
 Checkout a branch or ref with working-tree safety guards that prevent checking out while another safegit operation is in progress, and recording the operation in the oplog.
@@ -1303,7 +1312,7 @@ safegit checkout v1.0.0
 - **Coordination guard, both layers**: the worktree operation lock first (a second safegit process in this worktree waits, then exits **8** naming the holder), then the dirty-tree check (exit **5**). See "The guarded passthroughs and their two coordination layers".
 - **git's own exit code**: When `git checkout` fails, safegit exits with the code git returned.
 - **The index is git's**: safegit does not touch the index after the checkout; whatever git left there is what remains.
-- **Oplog recording**: Logs the checkout with old and new HEAD SHAs.
+- **Oplog recording**: the RESOLVED full ref name (never the operator's argument, which for a `-b` form is the literal flag string) and the positions HEAD moved between, under `observed_parent`/`observed_tip` -- see "The oplog baseline" above. A branch creation records the zero SHA as the position it came from, because the ref did not exist.
 
 ## merge
 
@@ -1330,7 +1339,7 @@ safegit merge --no-ff feature-branch
 - **git's own exit code**: When `git merge` fails -- including a conflicted merge -- safegit exits with the code git returned.
 - **The index is git's**: a conflicted merge keeps its unmerged entries and a `--no-commit` merge keeps its staged result; safegit does not touch the index after the merge.
 - **The way out is named**: when git stops with a merge in flight, safegit prints `conclude it: safegit merge-continue` / `abandon it: git merge --abort` on stderr, from the same authority every other in-flight refusal reads. `safegit merge --continue` is refused (exit **5**) and points at the same command -- see "The three conclusion commands".
-- **Oplog recording**: Logs the merge with branch name and result SHA.
+- **Oplog recording**: the branch baseline (see "The oplog baseline" above). The merged branch name rides alongside it.
 
 ## rebase
 
@@ -1356,7 +1365,7 @@ safegit rebase --interactive HEAD~5
 - **Coordination guard, both layers**: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included -- and then the dirty-tree check. See "The guarded passthroughs and their two coordination layers".
 - **git's own exit code**: When `git rebase` stops or fails, safegit exits with the code git returned.
 - **The index is git's**: a rebase stopped at a conflict keeps its unmerged entries; safegit does not touch the index after the rebase.
-- **Oplog recording**: Logs the rebase with the upstream ref.
+- **Oplog recording**: the branch baseline (see "The oplog baseline" above). The upstream ref rides alongside it.
 
 ## reset
 
@@ -1389,7 +1398,7 @@ safegit reset --keep HEAD~1
 - **Selective guard**: the worktree operation lock is taken for every reset, because every reset moves HEAD; the modes that write working-tree files -- `--hard`, `--merge`, `--keep` -- additionally go through the dirty-tree check. Which modes those are is DERIVED from internal/gitexec's classification table rather than re-read here, so the vocabulary is declared in one place.
 - **git's own exit code**: When `git reset` fails, safegit exits with the code git returned.
 - **The index is git's**: safegit does not touch the index after the reset, so a `--soft` or `--mixed` reset leaves exactly what git staged.
-- **Oplog recording**: Logs the reset with all arguments.
+- **Oplog recording**: the branch baseline (see "The oplog baseline" above). The operator's arguments ride alongside it.
 
 ## bisect
 
@@ -1418,6 +1427,7 @@ safegit bisect reset
 - **`bisect run` and build artifacts**: `git bisect run` steps by itself, so the dirty-tree check applies to the invocation and not to each step -- but a build the script performs between steps leaves whatever it wrote in the working tree. Anything the repository IGNORES never counts as dirt; a build artifact that is NOT gitignored does, and the next guarded `bisect` invocation in that worktree is refused at exit 5 until it is cleaned up or ignored.
 - **git's own exit code**: When `git bisect` fails, safegit exits with the code git returned.
 - **The index is git's**: safegit does not touch the index after the bisect step.
+- **Oplog recording**: the branch being bisected and the positions HEAD moved between, under `observed_parent`/`observed_tip` -- a bisect step moves HEAD and no branch ref, so it uses the same observed spelling `checkout` does. See "The oplog baseline" above.
 
 ## cherry-pick
 
@@ -1444,7 +1454,7 @@ safegit cherry-pick abc1234 def5678
 - **git's own exit code**: safegit exits with the code `git cherry-pick` returned.
 - **The index is git's**: a conflicted pick keeps its unmerged entries, `.git/sequencer` and `CHERRY_PICK_HEAD`, and a `--no-commit` pick keeps its staged result, so a raw `git cherry-pick --continue` sees exactly what it would after plain git.
 - **The conclusion is safegit's**: a conflicted pick is finished with `safegit cherry-pick-continue`, which is what the refusal names and what safegit prints on stderr when git stops. `safegit cherry-pick --continue` is refused (exit **5**) and points there -- see "The three conclusion commands".
-- **Oplog recording**: Logs the operation.
+- **Oplog recording**: the branch baseline (see "The oplog baseline" above). The operator's arguments ride alongside it.
 
 ## revert
 
