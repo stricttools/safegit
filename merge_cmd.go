@@ -236,9 +236,26 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 	// no-such-ref` must exit with git's own verdict on that argument, not with
 	// a message safegit invented, so the ancestry questions are simply not
 	// asked and the compute step below produces git's error.
+	// An UNBORN branch is a fast-forward from nothing, and it has to be read
+	// that way rather than left to git: `git merge --no-ff` into an empty head
+	// is a fatal error ("Non-fast-forward commit does not make sense into an
+	// empty head"), so the compute step cannot serve this case at all. The
+	// compare-and-swap below is pinned to the zero object name, git's own
+	// spelling for "this ref must not exist yet".
+	//
+	// It is unreachable TODAY, and not because of anything here: the
+	// coordination check runs `git diff HEAD`, which is itself fatal on an
+	// unborn HEAD, so every guarded command already refuses in that repository
+	// before its own handler decides anything. This branch is what merge does
+	// once that check learns about unborn HEADs; without it, merge would meet
+	// git's fatal instead.
 	var upToDate, fastForward bool
 	otherSHA, resolveErr := git.RevParse(ctx, other+"^{commit}")
-	if resolveErr == nil && pos.oldTip != "" {
+	switch {
+	case resolveErr != nil:
+	case pos.oldTip == "":
+		fastForward = true
+	default:
 		upToDate, _ = git.IsAncestorOf(ctx, otherSHA, pos.oldTip)
 		if !upToDate {
 			fastForward, _ = git.IsAncestorOf(ctx, pos.oldTip, otherSHA)
@@ -379,15 +396,23 @@ func fastForwardMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition
 
 	// Re-read the tip UNDER the lock. The ancestry decision was made before it
 	// was taken, and the compare-and-swap has to be pinned to what is there
-	// now rather than to what was there then.
+	// now rather than to what was there then. An UNBORN branch is pinned to the
+	// zero object name, which asserts the ref still does not exist.
 	current, err := git.RevParse(ctx, pos.ref)
-	if err != nil {
+	born := err == nil
+	switch {
+	case !born && pos.oldTip == "":
+		current = git.ZeroSHA
+	case !born:
 		fmt.Fprintf(os.Stderr, "error: reading where %s stands: %v\n", refShortName(pos.ref), err)
 		return exitcode.General
-	}
-	if current != pos.oldTip {
+	case current != pos.oldTip:
+		from := shortSHA(pos.oldTip)
+		if pos.oldTip == "" {
+			from = "not existing at all"
+		}
 		fmt.Fprintf(os.Stderr, "error: %s moved from %s to %s while the merge was being worked out\n",
-			refShortName(pos.ref), shortSHA(pos.oldTip), shortSHA(current))
+			refShortName(pos.ref), from, shortSHA(current))
 		fmt.Fprintf(os.Stderr, "  nothing was merged. Re-run the merge against the branch as it stands now.\n")
 		appendOperationEntry(flags, sgDir, "merge", pos, false, mergeExtra(other, oplogOutcomeFailed))
 		return exitcode.CASExhausted
