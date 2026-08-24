@@ -158,6 +158,19 @@ func TestUndoPreviewInASubmoduleRecordsBothMutationsInExecutionOrder(t *testing.
 	if grant, _ := mutations[1]["grant"].(string); grant != "parent-bump" {
 		t.Errorf("the SECOND record must be the parent bump (grant %q), got grant %q: %v", "parent-bump", grant, mutations[1])
 	}
+	// The Triggered-by value is the REAL rollback target, not the placeholder.
+	// The placeholder stands where a preview CANNOT know the object name -- a
+	// commit that does not exist yet -- and undo authors no commit in the
+	// submodule: it rolls the branch back onto one that already exists, which the
+	// op log named before the first record was made. A preview that hid a value
+	// it held would understate what the run does.
+	bumpDetail, _ := mutations[1]["detail"].(string)
+	if !strings.Contains(bumpDetail, "Triggered-by: "+rollbackTarget) {
+		t.Errorf("the parent bump's Triggered-by must carry the real rollback target %s, got: %s", rollbackTarget, bumpDetail)
+	}
+	if strings.Contains(bumpDetail, "<new-commit>") {
+		t.Errorf("the parent bump records the new-commit placeholder where undo knows the real object name: %s", bumpDetail)
+	}
 	for i, rec := range mutations {
 		if recorded, _ := rec["recorded"].(bool); !recorded {
 			t.Errorf("record %d is not marked recorded, which means the preview performed it: %v", i, rec)

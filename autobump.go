@@ -175,12 +175,19 @@ func planParentBump(ctx context.Context, flags globalFlags, newHeadSHA string) (
 }
 
 // recordParentBumpPreview mints the would-do record for the parent's own commit.
-// The argv is the one the execute path runs, with previewCommitPlaceholder
-// standing in for the Triggered-by object name -- the sub's new commit, which no
-// preview can name.
-func recordParentBumpPreview(flags globalFlags, plan *parentBumpPlan, operation, firstLine string) error {
+// The argv is the one the execute path runs, down to the trailers.
+//
+// triggeredBy is the object name that goes in the Triggered-by trailer, and it
+// is the CALLER's to supply because only the caller knows whether a preview can
+// name it. A caller that is about to AUTHOR the sub's commit cannot -- the object
+// a real run builds carries the committer timestamp, so no preview can name it --
+// and passes previewCommitPlaceholder. undo can: the commit it rolls the branch
+// back to is in hand, read off the op log, and it is exactly what the execute
+// path writes there. A placeholder in its place would be a preview hiding a value
+// it holds.
+func recordParentBumpPreview(flags globalFlags, plan *parentBumpPlan, triggeredBy, operation, firstLine string) error {
 	_, err := runParentBumpCommit(flags, plan.parentWorkTree, plan.subRelPath,
-		parentBumpMessage(plan.subRelPath, firstLine, previewCommitPlaceholder, operation))
+		parentBumpMessage(plan.subRelPath, firstLine, triggeredBy, operation))
 	return err
 }
 
@@ -299,7 +306,10 @@ func maybeAutoBumpParent(ctx context.Context, flags globalFlags, gitDir, newHead
 			// names this SHA. Nothing to record and nothing to announce.
 			return nil
 		}
-		if err := recordParentBumpPreview(flags, plan, operation, firstLineMsg); err != nil {
+		// Every route through here is about to author the sub's own commit, which
+		// no preview can name: the placeholder is the honest value. undo, which
+		// holds the real one, records its bump itself (see runUndo).
+		if err := recordParentBumpPreview(flags, plan, previewCommitPlaceholder, operation, firstLineMsg); err != nil {
 			return err
 		}
 		if !flags.silent() {
