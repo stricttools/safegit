@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Regenerate the doctor health-check table in docs/commands-guide.md from the
+# check registry in doctor.go. Run it after adding or changing a check.
+#
+# Unlike scripts/gen-exit-table, the generation runs THROUGH a test rather than
+# through `go run`: the registry lives in package main, next to the check
+# functions it binds, and no external program can import package main. Splitting
+# the registry's metadata out to make it importable would leave two lists to keep
+# aligned, which is the same drift class in a new place. The rendering and the
+# freshness comparison are one implementation either way (doctor_doc.go), so a
+# registry change that was not regenerated fails `go test .` rather than shipping
+# a stale table.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+exec go test . -run '^TestDoctorHealthCheckTableIsGenerated$' -count=1 -v -update-doctor-table "$@"
