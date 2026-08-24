@@ -109,6 +109,15 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
 	}
 
+	// Before any lock is taken and long before a ref moves: undoing a commit in a
+	// submodule moves the parent's gitlink back, and a parent that has not
+	// answered the auto-bump question is a refusal rather than a rollback
+	// followed by one. It is the same refusal, in the same place, that every
+	// other commit-family route makes.
+	if err := requireAutoBumpDecision(flags.ctx(), flags); err != nil {
+		die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+	}
+
 	// Outermost, and taken BEFORE the in-flight check below so the check reads a
 	// state no passthrough in this worktree can change while undo acts on it.
 	// The ref lock further down is the inner one.
