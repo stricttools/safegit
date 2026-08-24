@@ -185,10 +185,11 @@ func TestUndoOfAMergeConclusionIsNotRefusedForTheMergedSide(t *testing.T) {
 		t.Fatal("the merge did not move HEAD")
 	}
 
-	// A passthrough merge is not an undoable oplog operation, so undo reaches
-	// the safegit commit underneath -- which is exactly the case the range
-	// check must refuse, naming the merge commit. What it must NOT do is name
-	// the side's commits: they are not in the first-parent range.
+	// Whether undo reverses the merge commit itself or reaches the safegit
+	// commit underneath it, the assertion is the same and it is about the
+	// RANGE: the commits that came in on the merge's other side were never
+	// created by any operation being reversed, they are not in the first-parent
+	// range, and no refusal may name them.
 	_, stderr, _ := runSafegitEnv(t, dir, undoForeignSession, "undo")
 	sideSHA := testutil.Rev(t, dir, "feature")
 	if strings.Contains(stderr, sideSHA[:7]) {
