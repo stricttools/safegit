@@ -19,16 +19,23 @@ import (
 // RULED TARGET: a conclusion whose commit already stands finishes the cleanup
 // instead of committing again.
 //
-// The window is simulated rather than raced: the three files that define the
-// state a re-run would see -- .git/index (the unmerged stages), .git/MERGE_HEAD
-// and .git/MERGE_MSG -- are snapshotted before a successful conclusion and
-// restored after it, which is exactly the on-disk state a crash in that window
-// leaves behind.
+// The window is simulated rather than raced: the files that define the state a
+// re-run would see -- .git/index (the unmerged stages), .git/MERGE_HEAD,
+// .git/MERGE_MSG and .git/AUTO_MERGE -- are snapshotted before a successful
+// conclusion and restored after it, which is exactly the on-disk state a crash
+// in that window leaves behind.
 
 // crashWindowFiles are the files whose contents define "a merge is in flight
-// here": the unmerged stages plus the two state files sequencer.Read consults
-// for a merge.
-var crashWindowFiles = []string{"index", "MERGE_HEAD", "MERGE_MSG"}
+// here": the unmerged stages, the two state files sequencer.Read consults for a
+// merge, and AUTO_MERGE.
+//
+// AUTO_MERGE is in the set because a REAL crash in this window leaves it there:
+// it is removed by the same cleanup the crash interrupted. Leaving it out made
+// the restored state one safegit refuses for a different reason entirely -- a
+// content conflict git recorded no AUTO_MERGE for is a merge safegit does not
+// conclude -- so the fixture would have been testing that refusal instead of
+// the crash.
+var crashWindowFiles = []string{"index", "MERGE_HEAD", "MERGE_MSG", "AUTO_MERGE"}
 
 // snapshotCrashWindow reads the three files, failing when one is missing --
 // the fixture is meant to be parked mid-merge, and a missing file would make

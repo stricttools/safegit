@@ -15,6 +15,7 @@ import (
 	"github.com/smm-h/safegit/internal/coord"
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/oplog"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/sequencer"
 	"github.com/smm-h/safegit/internal/trailer"
@@ -289,6 +290,16 @@ type conclusionResult struct {
 	state    sequencer.State
 	commit   *commit.CommitResult
 	declared []resolution
+	// sides is the conflict as the shared index held it, kept so the report can
+	// say what each resolution DID to the working tree rather than what its
+	// keyword usually means: a stage the conflict does not have removes the file
+	// instead of writing one.
+	sides map[string]conflict.Sides
+	// stood reports that the commit was already there when this run started --
+	// the crash-window case, where a previous run moved the ref and was killed
+	// before its cleanup. Nothing was authored, so the report says so and the
+	// payload's sha names an earlier run's commit even under --dry-run.
+	stood bool
 	// declines are the checks this conclusion did NOT make -- today, the marker
 	// verification over a path carrying the committed exemption. An unreported
 	// skip is a clean verdict over unchecked content.
@@ -469,6 +480,19 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	if code := op.refuseUnreadableConflict(ctx, sides); code != 0 {
 		return code
 	}
+
+	// BEFORE the completeness check, because in this state the answer to "is
+	// this conclusion still to be made" is already no: the commit exists, and
+	// what is left is the cleanup a crash interrupted. See alreadyConcluded.
+	stood, err := op.alreadyConcluded(ctx, sgDir, state)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return exitcode.General
+	}
+	if stood != nil {
+		return op.finishWhatCrashed(ctx, flags, gitDir, state, stood, sides, declared)
+	}
+
 	if code := op.checkCompleteness(ctx, state, sides, declared); code != 0 {
 		return code
 	}
@@ -523,7 +547,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		// against the state on disk, not taken on trust.
 		Sequencer: &coord.SequencerContext{Kind: op.kind},
 	})
-	out := conclusionResult{state: state, commit: result, declared: declared, declines: declines, author: recorded, autostash: noAutostash()}
+	out := conclusionResult{state: state, commit: result, declared: declared, sides: sides, declines: declines, author: recorded, autostash: noAutostash()}
 	if partial := commitStands(err); partial != nil && result != nil {
 		// Not a refusal: the ref moved. The rest of the aftercare still runs --
 		// the state files above all have to go, or the repository stays
@@ -598,6 +622,190 @@ func (out *conclusionResult) concludeAftercare(
 	stash, residue := consumeAutostash(ctx, gitDir, state, firstParentOf(result))
 	out.autostash = stash
 	out.residue = append(out.residue, residue...)
+}
+
+// conclusionOplogOps names every op a conclusion of this kind is recorded under
+// in the op log.
+//
+// There is more than one because there are two doors into the same engine. A
+// conclusion an operator ran is recorded under the -continue command's own
+// name; a conclusion `safegit merge`, `safegit pull`, `safegit cherry-pick` or
+// `safegit revert` made for itself, immediately after computing the operation,
+// is recorded under THAT command's name. Both leave the same state behind when
+// they are killed after the ref moved, and both are finished by the -continue
+// command, so both have to be recognized here.
+func conclusionOplogOps(kind sequencer.Kind) []string {
+	switch kind {
+	case sequencer.KindMerge:
+		return []string{"merge-continue", "merge", "pull"}
+	case sequencer.KindCherryPick:
+		return []string{"cherry-pick-continue", "cherry-pick"}
+	case sequencer.KindRevert:
+		return []string{"revert-continue", "revert"}
+	}
+	return nil
+}
+
+// alreadyConcluded answers whether the commit this conclusion would make is
+// ALREADY THERE -- and hands back what it is, so the run can finish the part
+// that did not happen instead of committing a second time.
+//
+// The state it recognizes is a crash window. A conclusion moves the ref first
+// and removes the operation's state files afterwards, so a process killed
+// between the two leaves the commit on the branch AND git still calling the
+// repository mid-operation. Re-running the same command in that state used to
+// mint a SECOND commit whose extra parent was already an ancestor of its first
+// -- a degenerate merge -- and report it as a clean success.
+//
+// The evidence is safegit's own, and it is two facts for a merge:
+//
+//   - the OP LOG's last entry for this branch names one of the ops that
+//     conclude this kind of operation and records the commit HEAD stands at.
+//     The pipeline appends that entry immediately after the ref update and
+//     before anything else, so in this window it is already written.
+//   - for a MERGE, HEAD's parent set is HEAD-before plus every MERGE_HEAD line,
+//     which is exactly the commit this conclusion would build. It corroborates
+//     the log rather than replacing it: a foreign merge commit with the same
+//     parents is not something safegit's own log would name.
+//
+// ACKNOWLEDGED WINDOW: the pipeline's ref update and its op-log append are two
+// steps, so a crash BETWEEN them leaves no entry. A merge is still recognized
+// by its parentage; a cherry-pick or revert killed in that sliver is not
+// recognized, and re-running it commits again. That is a stated scope limit,
+// alongside the other half of the same story -- a crash AFTER the state files
+// were removed, where nothing is in flight any more and doctor is what reports
+// the leftovers.
+//
+// It FAILS CLOSED on an unreadable op log: a log that is missing lines cannot
+// answer the question, and answering "no" from one would be the double commit
+// this exists to prevent.
+func (op continueOp) alreadyConcluded(ctx context.Context, sgDir string, state sequencer.State) (*commit.CommitResult, error) {
+	ref, err := git.HeadRef(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("reading which branch HEAD is on: %w", err)
+	}
+	head, err := git.RevParse(ctx, ref)
+	if err != nil {
+		// An unborn branch has nothing concluded on it.
+		return nil, nil
+	}
+
+	entry, err := oplog.LastRefUpdate(sgDir, ref)
+	if err != nil {
+		return nil, fmt.Errorf("reading the operation log to tell whether this %s was already concluded: %w", op.kind, err)
+	}
+	if entry == nil || oplog.TipSHA(entry.Extra) != head {
+		return nil, nil
+	}
+	recognized := false
+	for _, name := range conclusionOplogOps(op.kind) {
+		if entry.Op == name {
+			recognized = true
+		}
+	}
+	if !recognized {
+		return nil, nil
+	}
+
+	info, err := git.ParseCommit(ctx, head)
+	if err != nil {
+		return nil, fmt.Errorf("reading the commit %s the operation log names: %w", shortSHA(head), err)
+	}
+	if op.kind == sequencer.KindMerge && !parentsMatchMergeHeads(info.Parents, state.MergeHeads) {
+		return nil, nil
+	}
+
+	var files []string
+	from := ""
+	if len(info.Parents) > 0 {
+		from = info.Parents[0]
+	}
+	changed, err := git.DiffTree(ctx, from, head)
+	if err != nil {
+		return nil, fmt.Errorf("reading what the already-created commit %s changed: %w", shortSHA(head), err)
+	}
+	for _, c := range changed {
+		files = append(files, c.Path)
+	}
+
+	return &commit.CommitResult{
+		SHA:     head,
+		Ref:     ref,
+		Parents: info.Parents,
+		Tree:    info.Tree,
+		// No attempt was made by THIS run: it committed nothing.
+		Attempts: 0,
+		Files:    files,
+	}, nil
+}
+
+// parentsMatchMergeHeads reports whether a commit's parents are exactly what
+// concluding the merge in flight would produce: the branch tip followed by
+// every MERGE_HEAD line, in file order.
+func parentsMatchMergeHeads(parents, mergeHeads []string) bool {
+	if len(parents) != len(mergeHeads)+1 {
+		return false
+	}
+	for i, head := range mergeHeads {
+		if parents[i+1] != head {
+			return false
+		}
+	}
+	return true
+}
+
+// finishWhatCrashed completes a conclusion whose commit already stands: the
+// state files, the index and the working tree, and then the rest of the
+// aftercare, without committing anything.
+//
+// It reports the commit that IS there rather than one it made, which is the
+// whole difference from the ordinary path: nothing was authored here, so the
+// attempt count is zero and the payload's sha names a commit an earlier run
+// created.
+func (op continueOp) finishWhatCrashed(
+	ctx context.Context,
+	flags globalFlags,
+	gitDir string,
+	state sequencer.State,
+	stood *commit.CommitResult,
+	sides map[string]conflict.Sides,
+	declared []resolution,
+) int {
+	edits, err := indexEditsFor(sides, declared)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return exitcode.General
+	}
+
+	info, err := git.ParseCommit(ctx, stood.SHA)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: reading the commit %s that already concluded this %s: %v\n",
+			shortSHA(stood.SHA), op.kind, err)
+		return exitcode.General
+	}
+
+	out := conclusionResult{state: state, commit: stood, declared: declared, sides: sides, autostash: noAutostash(), stood: true}
+	if op.reportsAuthor() {
+		// Read off the commit rather than re-derived: the identity the payload
+		// reports is the one the existing commit records.
+		author := info.Author
+		out.author = &author
+	}
+
+	// stderr, and never suppressed: an operator who re-ran the command has to be
+	// told why no commit was made, and in machine mode stdout is the envelope's.
+	fmt.Fprintf(os.Stderr, "note: this %s was already concluded by commit %s, which stands on %s\n",
+		op.kind, shortSHA(stood.SHA), refShortName(stood.Ref))
+	fmt.Fprintf(os.Stderr, "  a run was killed after the commit and before the cleanup, so git still calls this repository\n")
+	fmt.Fprintf(os.Stderr, "  mid-%s. Nothing is committed again; what is left of the conclusion is finished.\n", op.kind)
+
+	if !flags.dryRun {
+		out.concludeAftercare(ctx, flags, gitDir, state, stood, edits, sides, declared, op.command, info.Message)
+	}
+
+	op.reportPayload(flags, out)
+	op.renderStood(flags, out)
+	return aftercareExit(out.residue)
 }
 
 // parkedConclusion describes one IMMEDIATE conclusion: the operation git has
@@ -721,7 +929,7 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 		AllowEmpty:   req.allowEmpty,
 		Sequencer:    &coord.SequencerContext{Kind: state.Kind},
 	})
-	out = conclusionResult{state: state, commit: result, declared: declared, declines: declines, author: recorded, autostash: noAutostash()}
+	out = conclusionResult{state: state, commit: result, declared: declared, sides: sides, declines: declines, author: recorded, autostash: noAutostash()}
 	if partial := commitStands(err); partial != nil && result != nil {
 		// The ref moved, so this is a report rather than a refusal -- see
 		// runContinue's own arm, which reaches the same verdict.
