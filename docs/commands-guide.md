@@ -1763,6 +1763,7 @@ would commit still holds a complete conflict region) after git has already run.
 | 23 | The branch has no backup slot on the remote |
 | 24 | Hooks are still in the pre-migration .git/hooks location (run `safegit hook migrate`) |
 | 25 | A discovered hook is not executable, in either store |
+| 29 | A named symlink's target leaves the repository (`--allow-escaping-targets` records it anyway) |
 | 30 | A history rewrite was refused before any ref moved (nothing changed) |
 | 31 | A history rewrite stands, but post-rewrite verification found residue or skipped the working-tree sync |
 | 40 | The push did not get through: git push failed, or the refs could not be safely re-read around it |
