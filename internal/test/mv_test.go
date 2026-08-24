@@ -1,6 +1,7 @@
 package test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -94,6 +95,34 @@ func TestMvMovesRecordsAndCommitsInOneInvocation(t *testing.T) {
 	// Nothing is left staged or unstaged: the working tree and the commit agree.
 	if porcelain := testutil.Git(t, dir, "status", "--porcelain"); porcelain != "" {
 		t.Errorf("the working tree is dirty after a move:\n%s", porcelain)
+	}
+}
+
+// TestMvPayloadCarriesTheResidueMember: `mv` reaches the same aftercare as
+// every other commit-authoring route -- the index reconcile, the parent's
+// gitlink -- so its payload declares what it owed afterwards and did not
+// finish, empty on a run that finished everything.
+func TestMvPayloadCarriesTheResidueMember(t *testing.T) {
+	dir := mvSeed(t)
+
+	stdout, stderr, code := runSafegit(t, dir, "--json", "mv", "-m", "move a", "a.txt -> c.txt")
+	if code != 0 {
+		t.Fatalf("mv failed (code %d): %s\n%s", code, stderr, stdout)
+	}
+	var doc map[string]interface{}
+	if err := json.Unmarshal(decodeEnvelope(t, stdout).Payload, &doc); err != nil {
+		t.Fatalf("the mv payload does not decode: %v\nstdout: %s", err, stdout)
+	}
+	value, present := doc["residue"]
+	if !present {
+		t.Fatal("the mv payload declares no residue member; an envelope exiting the commit-stands code from it names no step")
+	}
+	list, isList := value.([]interface{})
+	if !isList {
+		t.Fatalf("residue = %#v, want a list (never null)", value)
+	}
+	if len(list) != 0 {
+		t.Errorf("residue = %v on a move that finished everything it owed", list)
 	}
 }
 

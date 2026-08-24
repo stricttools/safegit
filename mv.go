@@ -101,7 +101,13 @@ type mvPayload struct {
 	Moves    []mvMove `json:"moves"`
 	Files    []string `json:"files"`
 	Attempts int      `json:"attempts"`
-	DryRun   bool     `json:"dry_run"`
+	// Residue is every step this move owed AFTER its ref update and did not
+	// finish, never nil -- the same aftercare every commit-authoring route owes,
+	// reached through the same pipeline. An empty list is a move that finished
+	// everything; anything in it is what the commit-stands exit code (see
+	// aftercare.go) is about.
+	Residue []residueEntry `json:"residue"`
+	DryRun  bool           `json:"dry_run"`
 }
 
 var mvPayloadSchema = strictcli.SchemaObject(
@@ -121,9 +127,17 @@ var mvPayloadSchema = strictcli.SchemaObject(
 		)),
 		"files":    strictcli.SchemaArray(strictcli.SchemaType("string")),
 		"attempts": strictcli.SchemaType("integer"),
-		"dry_run":  strictcli.SchemaType("boolean"),
+		"residue": strictcli.SchemaArray(strictcli.SchemaObject(
+			map[string]interface{}{
+				"step":   strictcli.SchemaType("string"),
+				"detail": strictcli.SchemaType("string"),
+			},
+			[]string{"step", "detail"},
+			false,
+		)),
+		"dry_run": strictcli.SchemaType("boolean"),
 	},
-	[]string{"ref", "parents", "tree", "sha", "moves", "files", "attempts", "dry_run"},
+	[]string{"ref", "parents", "tree", "sha", "moves", "files", "attempts", "residue", "dry_run"},
 	false,
 )
 
@@ -800,6 +814,7 @@ func commitMvMoves(flags globalFlags, gitDir, message string, pairs []mvPair) in
 		Moves:    moves,
 		Files:    orEmpty(result.Files),
 		Attempts: result.Attempts,
+		Residue:  orEmptyResidue(residue),
 		DryRun:   flags.dryRun,
 	})
 
