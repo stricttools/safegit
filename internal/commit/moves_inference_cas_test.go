@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/smm-h/safegit/internal/exitcode"
+	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/testutil"
 )
@@ -185,4 +186,56 @@ func headSHA(t *testing.T) string {
 		t.Fatalf("rev-parse HEAD: %v", err)
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// The refusals and the cap are the WINNING attempt's, not the first attempt's.
+//
+// The PAIRS are deliberately attempt 1's -- their ids are already in the cached
+// message, so a commit's records must not depend on how many attempts it took,
+// and a set that differs aborts the operation outright. The refusals are the
+// opposite case: they are not on the commit, they describe what the delta the
+// commit was BUILT FROM did not single out, and that delta is the winning
+// attempt's. Retaining attempt 1's answer would report a candidate against a
+// tree the commit was never built on.
+//
+// This drives the inference type directly, because the state is per operation
+// and the two attempts have to differ in exactly one way. Both deltas leave the
+// same (empty) pair set, so the operation proceeds; they name different paths
+// on the ambiguous side. Neither reaches a tree listing -- an ambiguous blob is
+// turned down before fence 4 needs either tree.
+func TestTheRefusalSetIsTheWinningAttemptsNotTheFirsts(t *testing.T) {
+	const blob = "1111111111111111111111111111111111111111"
+	del := func(path string) git.ChangedPath {
+		return git.ChangedPath{Status: "D", Path: path, SrcMode: "100644", SrcSHA: blob,
+			DstMode: "000000", DstSHA: git.ZeroSHA}
+	}
+	add := func(path string) git.ChangedPath {
+		return git.ChangedPath{Status: "A", Path: path, DstMode: "100644", DstSHA: blob,
+			SrcMode: "000000", SrcSHA: git.ZeroSHA}
+	}
+
+	m := newAmendMoveInference()
+	ctx := context.Background()
+
+	first := []git.ChangedPath{del("x1.txt"), del("x2.txt"), add("y1.txt"), add("y2.txt")}
+	if _, err := m.records(ctx, first, "", "", nil, nil); err != nil {
+		t.Fatalf("attempt 1: %v", err)
+	}
+	if len(m.refused) != 1 || strings.Join(m.refused[0].Old, ",") != "x1.txt,x2.txt" {
+		t.Fatalf("attempt 1 refused %+v, want the ambiguous blob at both deleted paths", m.refused)
+	}
+
+	// The retry's delta drops one of the deleted paths. The blob is still
+	// ambiguous -- one deletion, two additions -- so the pair set is empty on
+	// both attempts and the operation proceeds.
+	second := []git.ChangedPath{del("x1.txt"), add("y1.txt"), add("y2.txt")}
+	if _, err := m.records(ctx, second, "", "", nil, nil); err != nil {
+		t.Fatalf("attempt 2: %v", err)
+	}
+	if len(m.refused) != 1 {
+		t.Fatalf("refused = %+v, want one entry", m.refused)
+	}
+	if got := strings.Join(m.refused[0].Old, ","); got != "x1.txt" {
+		t.Errorf("refused names %q, want the winning attempt's x1.txt alone", got)
+	}
 }
