@@ -214,6 +214,11 @@ func TestMergeRefusesRawGitShapes(t *testing.T) {
 		says string
 	}{
 		{"octopus", []string{"merge", "feature", "other"}, "one branch"},
+		// --commit was accepted and quietly dropped from the argv the compute
+		// step forwards. What it asks for is the one thing the restructure
+		// cannot give: git's own commit, moving the ref outside safegit's
+		// compare-and-swap. cherry-pick and revert already refuse it by name.
+		{"commit", []string{"merge", "--commit", "feature"}, "--commit"},
 		{"strategy selection", []string{"merge", "-s", "ours", "feature"}, "strateg"},
 		{"strategy option", []string{"merge", "-X", "ours", "feature"}, "strateg"},
 		{"squash", []string{"merge", "--squash", "feature"}, "--squash"},

@@ -134,8 +134,9 @@ var mergeSubset = argvSubset{
 		"--no-edit",
 		// safegit's own fast-forward and commit selections. They never reach git:
 		// the compute step is pinned to --no-ff --no-commit and these are removed
-		// from the argv it forwards (see withoutMergeSelectors).
-		"--ff", "--no-ff", "--ff-only", "--commit", "--no-commit",
+		// from the argv it forwards (see withoutMergeSelectors). --commit is NOT
+		// among them: it is refused by name, below.
+		"--ff", "--no-ff", "--ff-only", "--no-commit",
 		// Message-draft flags: git writes the trailer, the shortlog and the
 		// "into <name>" wording into MERGE_MSG, and the pipeline commits it.
 		"--signoff", "--no-signoff", "--log", "--no-log", "--into-name",
@@ -167,6 +168,20 @@ var mergeSubset = argvSubset{
 		{
 			[]string{"-e", "--edit"},
 			"--edit opens an editor, and safegit's commit surface has none; pass -m to give the merge commit its message",
+		},
+		{
+			// DIVERGENCE: git's merge takes --commit and commits; safegit's
+			// refuses it by name. Needs its row in docs/divergences.md.
+			//
+			// It was accepted and quietly stripped from the forwarded argv,
+			// which is the shape safegit refuses everywhere else: an operator
+			// who asks for something gets it or gets told they cannot have it.
+			// And the request is not a no-op -- git takes the LAST of the pair,
+			// so a --commit trailing the --no-commit the compute step is pinned
+			// to would hand the commit back to git. cherry-pick and revert
+			// refuse it in the same words, for the same reason.
+			[]string{"--commit"},
+			"--commit is the opposite of the --no-commit the compute step is pinned to, and passing it would hand the commit back to git -- authored by git, with none of safegit's trailers, and moving the ref outside safegit's compare-and-swap",
 		},
 		{
 			[]string{"--autostash"},
