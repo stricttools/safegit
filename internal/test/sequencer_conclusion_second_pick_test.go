@@ -72,3 +72,64 @@ func TestASecondPickIsNotMistakenForTheFirst(t *testing.T) {
 	}
 	assertNoSequencerResidue(t, dir, "the conclusion of a second pick")
 }
+
+// TestASecondPickWithTheSameSubjectIsNotMistakenForTheFirst is the same loss by
+// a different door.
+//
+// Corroborating the op log with the commit's MESSAGE cannot tell two picks
+// apart when the commits being picked carry the SAME subject, which is exactly
+// what a branch of `wip` commits is. The message the second conclusion would
+// write is `wip`, the tip left by the first conclusion opens with `wip`, so the
+// prefix agrees and the second pick is swallowed: its state removed, its commit
+// never made, its work gone with an exit 0 on top.
+//
+// The evidence has to be anchored to the operation itself -- the SOURCE commit
+// the parked state names -- rather than to text two commits can share.
+func TestASecondPickWithTheSameSubjectIsNotMistakenForTheFirst(t *testing.T) {
+	dir := newRepo(t)
+
+	testutil.WriteFile(t, dir, "a.txt", "base a\n")
+	testutil.WriteFile(t, dir, "b.txt", "l1\nbase\nl3\n")
+	safegitCommitEnv(t, dir, conclusionSession, "base", "a.txt", "b.txt")
+
+	testutil.Git(t, dir, "branch", "feature")
+	testutil.Git(t, dir, "switch", "-q", "feature")
+	testutil.WriteFile(t, dir, "a.txt", "feature a\n")
+	// The same subject on both, which is what a run of `wip` commits looks like.
+	first := safegitCommitEnv(t, dir, conclusionSession, "wip", "a.txt")
+	testutil.WriteFile(t, dir, "b.txt", "l1\nfeature\nl3\n")
+	second := safegitCommitEnv(t, dir, conclusionSession, "wip", "b.txt")
+
+	testutil.Git(t, dir, "switch", "-q", "main")
+	testutil.WriteFile(t, dir, "b.txt", "l1\nmain\nl3\n")
+	safegitCommitEnv(t, dir, conclusionSession, "main edits b", "b.txt")
+
+	if stdout, stderr, code := runSafegitEnv(t, dir, conclusionSession, "cherry-pick", first); code != 0 {
+		t.Fatalf("the clean pick failed (code %d): %s\n%s", code, stderr, stdout)
+	}
+	afterFirst := testutil.Rev(t, dir, "HEAD")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, conclusionSession, "cherry-pick", second)
+	if code == 0 {
+		t.Fatalf("the second pick was expected to conflict\nstdout=%s stderr=%s", stdout, stderr)
+	}
+
+	stdout, stderr, code = runSafegitEnv(t, dir, conclusionSession,
+		"cherry-pick-continue", "--resolve", "b.txt=theirs")
+	if code != 0 {
+		t.Fatalf("the conclusion of the second pick failed (code %d): %s\n%s", code, stderr, stdout)
+	}
+
+	head := testutil.Rev(t, dir, "HEAD")
+	if head == afterFirst {
+		t.Fatalf("HEAD did not move: the two picks share the subject %q, so the message corroboration read the FIRST pick's\n"+
+			"commit as this pick's own, removed the state and dropped the work\nstdout=%s\nstderr=%s", "wip", stdout, stderr)
+	}
+	if got := testutil.MustShow(t, dir, "HEAD", "b.txt"); got != "l1\nfeature\nl3\n" {
+		t.Errorf("b.txt in the concluded commit = %q, want the picked side's content", got)
+	}
+	if got := testutil.MustShow(t, dir, "HEAD", "a.txt"); got != "feature a\n" {
+		t.Errorf("a.txt = %q; the first pick's content must still be there", got)
+	}
+	assertNoSequencerResidue(t, dir, "the conclusion of a second pick with a shared subject")
+}

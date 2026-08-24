@@ -229,6 +229,19 @@ type CommitRequest struct {
 	// put the concluded operation back in flight.
 	OplogOp string
 
+	// OplogSource is the commit the operation being concluded was APPLYING --
+	// what CHERRY_PICK_HEAD or REVERT_HEAD named -- recorded in the op log
+	// entry beside the new tip. Empty for every caller that is not concluding a
+	// cherry-pick or a revert (a merge names its sides in the commit's own
+	// parents instead).
+	//
+	// It exists so that a re-run can tell "the commit at this tip concluded THE
+	// OPERATION IN FLIGHT" from "the commit at this tip concluded an earlier
+	// one": the two are indistinguishable from the tip alone, and reading the
+	// commit's message instead cannot separate two picks of commits that share
+	// a subject. See alreadyConcluded in sequencer_continue.go.
+	OplogSource string
+
 	// Sequencer declares that this caller is the conclusion path for an
 	// operation git has in flight. Nil -- which is every ordinary caller --
 	// means the commit is refused whenever git is mid-merge, mid-cherry-pick,
@@ -703,15 +716,22 @@ func (p *Pipeline) tryCommit(
 	if oplogOp == "" {
 		oplogOp = "commit"
 	}
+	extra := map[string]interface{}{
+		"ref":      ref,
+		"tree":     treeSHA,
+		"parent":   parentSHA,
+		"sha":      commitSHA,
+		"attempts": attempt,
+	}
+	// Only where there is one: an absent key is what a re-run reads as "this
+	// entry cannot say which operation it concluded", which is the fail-closed
+	// answer for entries written before the key existed.
+	if req.OplogSource != "" {
+		extra["source"] = req.OplogSource
+	}
 	_ = oplog.Append(p.SafegitDir, oplog.Entry{
-		Op: oplogOp,
-		Extra: map[string]interface{}{
-			"ref":      ref,
-			"tree":     treeSHA,
-			"parent":   parentSHA,
-			"sha":      commitSHA,
-			"attempts": attempt,
-		},
+		Op:    oplogOp,
+		Extra: extra,
 	})
 
 	// Step 9: Reconcile the shared index with the commit, preserving whatever
