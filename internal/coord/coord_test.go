@@ -91,7 +91,7 @@ func TestRefuseMessage(t *testing.T) {
 		ModifiedFiles: []string{" M src/foo.go", "?? scratch.txt"},
 	}
 
-	msg := ds.Refuse("checkout")
+	msg := ds.Refuse("switch")
 
 	// Check key parts of the message
 	checks := []string{

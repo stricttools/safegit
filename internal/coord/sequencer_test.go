@@ -190,13 +190,13 @@ func TestGuardInFlightRefusesAnUnreadableState(t *testing.T) {
 func TestRefuseSwitchesAdviceWhileAnOperationIsInFlight(t *testing.T) {
 	dirty := &DirtyState{ModifiedFiles: []string{"M  conflicted.txt"}}
 
-	ordinary := dirty.Refuse("checkout")
+	ordinary := dirty.Refuse("switch")
 	if !strings.Contains(ordinary, "working tree is not clean") || !strings.Contains(ordinary, "safegit commit") {
 		t.Errorf("the ordinary refusal lost its shape:\n%s", ordinary)
 	}
 
 	dirty.Sequencer = sequencer.State{Kind: sequencer.KindCherryPick, Source: strings.Repeat("b", 40)}
-	midOperation := dirty.Refuse("checkout")
+	midOperation := dirty.Refuse("switch")
 	if strings.Contains(midOperation, "safegit commit -m") {
 		t.Errorf("mid-cherry-pick refusal still advises a commit that safegit itself refuses:\n%s", midOperation)
 	}
