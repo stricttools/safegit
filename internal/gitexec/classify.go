@@ -323,7 +323,7 @@ var verbs = []Verb{
 			{
 				Tokens:  []string{"push", "save", "pop", "apply", "drop", "clear", "store", "create", "branch"},
 				Effects: MutatesObjects | MutatesRefs | MutatesIndex | MutatesWorktree,
-				Why:     "safegit only reads with `stash list`",
+				Why:     "safegit reads with `stash list`, and writes only where a repair says so: `stash store` (doctor's orphaned-autostash fix, which gives an unreachable commit a name) and `stash apply` (a conclusion putting a merge's own autostash back)",
 			},
 		},
 	},

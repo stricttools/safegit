@@ -1081,7 +1081,7 @@ This table is generated from the check registry in `doctor.go` by `scripts/gen-d
 | `hooks_migrated` | error | Are safegit's pre-pre-push hooks out of the pre-migration `.git/hooks` location? (While they are not, every push refuses with exit 24.) |
 | `native_hooks` | warn | Are there git hooks in `.git/hooks` that safegit's own commit path does not run? |
 | `git_version` | warn | Is the installed git new enough for the features safegit uses? |
-| `merge_autostash` | warn | Is `MERGE_AUTOSTASH` present with no merge in flight? (It names a stash-shaped commit holding uncommitted work no ref reaches; the check reports it and removes nothing.) |
+| `merge_autostash` | warn | Is `MERGE_AUTOSTASH` present with no merge in flight? (It names a stash-shaped commit holding uncommitted work no ref reaches; the check itself removes nothing, and `--action fix` stores that commit as a stash entry before removing the file, so the work gains a name instead of losing its only one.) |
 | `unmerged_index` | error | Does the index carry unmerged entries with no merge, cherry-pick or revert in flight to resolve them? (git refuses every commit in that state and so does safegit, at exit 28; `--action fix` stages each path's own working-tree content. An unmerged index the operation in flight owns is reported as such and is not a fault.) |
 | `legacy_scrub_policies` | error | Is the pre-0.2 scrub-policy file -- which stored scrubbed patterns in plaintext inside the repository -- gone? |
 
