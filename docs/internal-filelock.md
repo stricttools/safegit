@@ -1,6 +1,6 @@
 ---
 title: internal/filelock
-description: "Package filelock provides platform-safe file locking for append operations."
+description: "flock(2)-guarded appends, which is what makes a concurrent append atomic. There is no Windows implementation on purpose: a Windows build fails to compile."
 generated: true
 nav_group: "API Reference"
 nav_order: 6
