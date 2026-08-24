@@ -241,6 +241,37 @@ func TestMergeRefusesRawGitShapes(t *testing.T) {
 	}
 }
 
+// TestMergeSubsetRefusalsApplyToAPreviewToo: an option safegit's merge does not
+// implement is refused whether or not the run was going to happen. A preview of
+// a command that cannot run is not a preview of anything, and nothing is
+// recorded in the would-do log for it either.
+//
+// These three cases used to be preview-specific refusals ("merge-tree
+// implements only ort"), which said the outcome could not be COMPUTED. It is
+// the wrong answer now that the option cannot be RUN.
+func TestMergeSubsetRefusalsApplyToAPreviewToo(t *testing.T) {
+	for _, args := range [][]string{
+		{"--dry-run", "merge", "-s", "resolve", "feature"},
+		{"--dry-run", "merge", "-X", "ours", "feature"},
+		{"--dry-run", "merge", "--squash", "feature"},
+	} {
+		t.Run(strings.Join(args[2:], " "), func(t *testing.T) {
+			dir := newMergeableRepo(t)
+			stdout, stderr, code := runSafegitEnv(t, dir, mergeSession, args...)
+			if code != exitcode.Usage {
+				t.Fatalf("safegit %s exited %d, want %d (Usage)\nstdout=%s\nstderr=%s",
+					strings.Join(args, " "), code, exitcode.Usage, stdout, stderr)
+			}
+			if !strings.Contains(stderr, "does not support") {
+				t.Errorf("the refusal does not name the absent capability:\n%s", stderr)
+			}
+			if strings.Contains(stdout, "run: git") {
+				t.Errorf("the refused invocation was still recorded as a would-do:\n%s", stdout)
+			}
+		})
+	}
+}
+
 // TestMergeNoCommitParksWithoutConcluding: `--no-commit` is the operator saying
 // they want to look at the result before it becomes a commit, so safegit
 // computes the merge and PARKS it -- even though it is clean and could have

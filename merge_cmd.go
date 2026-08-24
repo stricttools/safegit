@@ -78,6 +78,9 @@ const (
 // merge is COMPUTED but never who authors the commit -- the compute step is
 // pinned to `--no-ff --no-commit`, so git cannot commit whatever else is on the
 // command line.
+//
+// DIVERGENCE: every entry here is one git capability safegit deliberately does
+// not have, and each needs its row in docs/divergences.md.
 var mergeRefusedOptions = []struct {
 	names []string
 	why   string

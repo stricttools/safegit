@@ -281,6 +281,13 @@ func previewTree(t *testing.T, stdout string) string {
 // that changes how the TREE is computed and that safegit's merge-tree
 // invocation does not carry is refused with its reason, rather than previewed
 // under rules the real run would not use.
+//
+// The merge rows this table used to carry (-s, -X, --squash) moved to
+// TestMergeSubsetRefusalsApplyToAPreviewToo: safegit's merge does not implement
+// those options at ALL any more, so the refusal an operator meets is the
+// command's rather than the preview's, and it applies to the real run too. The
+// criterion still governs every verb that does accept them, which is what the
+// surviving row exercises.
 func TestPreviewRefusesWhatItCannotCompute(t *testing.T) {
 	cases := []struct {
 		name string
@@ -288,24 +295,9 @@ func TestPreviewRefusesWhatItCannotCompute(t *testing.T) {
 		want string
 	}{
 		{
-			name: "a non-ort strategy",
-			args: []string{"--dry-run", "merge", "-s", "resolve", "side"},
-			want: "merge strategy other than ort",
-		},
-		{
-			name: "a strategy option",
-			args: []string{"--dry-run", "merge", "-X", "ours", "side"},
-			want: "changes how the merge resolves",
-		},
-		{
 			name: "an attached strategy option",
 			args: []string{"--dry-run", "cherry-pick", "-Xtheirs", "side"},
 			want: "changes how the merge resolves",
-		},
-		{
-			name: "a squashed merge",
-			args: []string{"--dry-run", "merge", "--squash", "side"},
-			want: "stages the merge's result",
 		},
 	}
 
