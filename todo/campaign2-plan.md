@@ -262,6 +262,13 @@ pre-operation tip, and the post-operation tip in commit-entry spelling
   Navigation entries therefore record their tips under a spelling the
   TipSHA readers do not consume (e.g. `observed_tip`), and this
   subphase AUDITS the three consumers against the new entry shapes.
+- Bisect records the NAVIGATION spelling too `[plan — ratified during
+  execution]`: no bisect subcommand ever moves a branch ref (`start`
+  detaches HEAD; `reset` restores HEAD), so the commit-entry spelling
+  would hand the TipSHA readers a detached-HEAD tip and recreate the
+  doctor false-positive class this subphase removes. The enumeration
+  above listing bisect among the baseline recorders is corrected by
+  this rule, not the other way around.
 - Failure entries: the return-before-append sites (checkout :160-162,
   pull :211-213 and :227-229, merge :277-280, rebase :316-318, reset
   :364-366, bisect :412-414) now append entries with ref + old tip +
@@ -353,6 +360,15 @@ emits the envelope).
 Depends on 1.1 (guard column), 1.2 (entry spelling), 1.3.
 
 ### 2.1 The boundary guard
+EXECUTION ORDER `[plan — sequencing correction]`: this subphase is
+implemented AFTER 2.2-2.5 and 2.7. Until the restructure lands, the
+production tree still constructs authoring argv (the passthrough merge
+and cherry-pick, the delegation machinery), so enforcing the runtime
+guard first would refuse commands the plan has not yet restructured.
+The guard turns on once the tree is clean of undeclared authoring argv;
+its numbering stays 2.1 because it is the phase's structural statement,
+not its first task.
+
 Enforcement of single authorship lives at the git-execution boundary,
 which every git subprocess already passes through. The mechanism is a
 PAIR `[plan — the campaign-1 AST guard alone cannot see runtime argv]`:
