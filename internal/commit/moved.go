@@ -484,6 +484,33 @@ func commitTrailers(userTrailers, preserved, declared []string) []string {
 	return append(out, declared...)
 }
 
+// mintedRecords reads the records back out of the trailer lines one operation
+// is writing, which is what the result reports and the payload carries.
+//
+// It parses rather than being handed structs because the lines are what the
+// commit actually gets: they come from three places (the caller's --moved, an
+// already-minted set a caller hands in, and the inference), and a payload built
+// from anything else could disagree with the message. Retraction lines are not
+// records and are passed over; a line this version cannot parse is passed over
+// too, exactly as every other reader treats one.
+func mintedRecords(lines []string) []trailer.Record {
+	if len(lines) == 0 {
+		return nil
+	}
+	var out []trailer.Record
+	for _, kv := range trailer.ParseTrailerBlock(strings.Join(lines, "\n")) {
+		if kv.Key != trailer.MovedKey {
+			continue
+		}
+		record, err := trailer.ParseRecord(kv.Value)
+		if err != nil {
+			continue
+		}
+		out = append(out, record)
+	}
+	return out
+}
+
 // preservedMovedLines are the move records a REPLACEMENT message must carry
 // forward.
 //

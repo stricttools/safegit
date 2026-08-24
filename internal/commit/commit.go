@@ -295,15 +295,26 @@ type CommitResult struct {
 	// expansion passed over. Nil when nothing was skipped.
 	SkippedIgnored []string `json:"skippedIgnored,omitempty"`
 
-	// RefusedMoves lists the moves this commit's delta suggested and the
-	// inference declined to record, each with the fence that declined it.
+	// MovedRecords lists the move records THIS operation put on the commit, in
+	// the order the message holds them: the caller's declarations (and any
+	// already-minted records handed in) first, then the ones inference minted
+	// from the commit's own delta. Each carries its origin, so a consumer reads
+	// who established the claim without re-parsing the commit message.
 	//
-	// NOT SERIALIZED YET. Subphase 6.5 adds the payload's move members -- the
-	// minted records of both origins, these refusals, and the cap fact -- in one
-	// lockstep commit across the struct, the schema, the required list and every
-	// emission site. Until then it carries the facts the aggregate stderr notice
-	// summarizes, so the emission commit has something to emit.
-	RefusedMoves []RefusedMove `json:"-"`
+	// A record carried across from a message being replaced is NOT here -- see
+	// AmendResult, where the distinction has something to be distinguished from.
+	MovedRecords []trailer.Record `json:"movedRecords,omitempty"`
+
+	// RefusedMoves lists the moves this commit's delta suggested and the
+	// inference declined to record, each with the fence that declined it. It is
+	// what the aggregate stderr notice counts, itemized.
+	RefusedMoves []RefusedMove `json:"refusedMoves,omitempty"`
+
+	// MovesOverCap is how many moves the delta witnessed when the cap turned all
+	// of them down, and zero otherwise. Past the cap a commit records none of
+	// them, so this is the difference between "nothing was witnessed" and "too
+	// much was".
+	MovesOverCap int `json:"movesOverCap,omitempty"`
 }
 
 // Execute runs the full two-phase commit pipeline.
@@ -732,7 +743,9 @@ func (p *Pipeline) tryCommit(
 			Attempts:       attempt,
 			Files:          changedPaths(changed),
 			SkippedIgnored: files.skipped,
+			MovedRecords:   mintedRecords(allMoved),
 			RefusedMoves:   inference.refused,
+			MovesOverCap:   inference.capped,
 		}, false, nil
 	}
 
@@ -781,7 +794,9 @@ func (p *Pipeline) tryCommit(
 		Attempts:       attempt,
 		Files:          changedPaths(changed),
 		SkippedIgnored: files.skipped,
+		MovedRecords:   mintedRecords(allMoved),
 		RefusedMoves:   inference.refused,
+		MovesOverCap:   inference.capped,
 	}
 
 	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {

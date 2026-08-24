@@ -69,6 +69,18 @@ type AmendResult struct {
 	// SkippedIgnored lists the gitignored repo-relative paths a directory
 	// expansion passed over. Nil when nothing was skipped.
 	SkippedIgnored []string `json:"skippedIgnored,omitempty"`
+
+	// MovedRecords lists the move records THIS amend put on the commit: the
+	// caller's declarations, then what inference minted from the authoring
+	// event's own delta. The records PRESERVED from the message being replaced
+	// are not among them -- they were reported by the operation that wrote them,
+	// and an amend that repeated them would look like an amend that minted them.
+	MovedRecords []trailer.Record `json:"movedRecords,omitempty"`
+
+	// RefusedMoves and MovesOverCap are the same facts CommitResult carries, for
+	// the amend's own delta.
+	RefusedMoves []RefusedMove `json:"refusedMoves,omitempty"`
+	MovesOverCap int           `json:"movesOverCap,omitempty"`
 }
 
 // Amend rewrites the tip of the current branch with new files staged.
@@ -321,8 +333,11 @@ func (p *Pipeline) tryAmend(
 	// replaces the message carries the replaced message's move records forward:
 	// dropping a record is a retraction the caller states, never a side effect
 	// of rewording.
-	trailers := commitTrailers(req.Trailers, preservedMovedLines(tip.Message, req.Message != ""),
-		append(append([]string{}, movedTrailers...), inferred...))
+	// What this amend itself writes: the declarations it resolved and the records
+	// it minted, in that order. The preserved lines are a separate argument
+	// because they are a separate claim about who wrote them.
+	amendMoved := append(append([]string{}, movedTrailers...), inferred...)
+	trailers := commitTrailers(req.Trailers, preservedMovedLines(tip.Message, req.Message != ""), amendMoved)
 	msg, err := hooks.commitMsg(ctx, tmpIdx.IndexPath, trailer.AppendCustom(message, trailers))
 	if err != nil {
 		return nil, false, err
@@ -374,6 +389,9 @@ func (p *Pipeline) tryAmend(
 			Attempts:       attempt,
 			Files:          changedPaths(changed),
 			SkippedIgnored: files.skipped,
+			MovedRecords:   mintedRecords(amendMoved),
+			RefusedMoves:   inference.refused,
+			MovesOverCap:   inference.capped,
 		}, false, nil
 	}
 
@@ -403,6 +421,9 @@ func (p *Pipeline) tryAmend(
 		Attempts:       attempt,
 		Files:          changedPaths(changed),
 		SkippedIgnored: files.skipped,
+		MovedRecords:   mintedRecords(amendMoved),
+		RefusedMoves:   inference.refused,
+		MovesOverCap:   inference.capped,
 	}
 
 	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
@@ -455,6 +476,13 @@ type RewordResult struct {
 	Tree     string   `json:"tree"`
 	OldSHA   string   `json:"oldSha"`
 	Attempts int      `json:"attempts"`
+
+	// MovedRecords lists the move records THIS reword put on the commit, which
+	// are its declarations and nothing else: a reword changes no tree, so there
+	// is no delta for inference to read and it mints none. The records carried
+	// across from the replaced message are preserved and, exactly as on an
+	// amend, are not reported here.
+	MovedRecords []trailer.Record `json:"movedRecords,omitempty"`
 }
 
 // Reword rewrites only the commit message of the tip of the current branch.
@@ -631,11 +659,12 @@ func (p *Pipeline) tryReword(
 
 	if req.DryRun {
 		return &RewordResult{
-			Ref:      ref,
-			Parents:  parents,
-			Tree:     treeSHA,
-			OldSHA:   headSHA,
-			Attempts: attempt,
+			Ref:          ref,
+			MovedRecords: mintedRecords(movedTrailers),
+			Parents:      parents,
+			Tree:         treeSHA,
+			OldSHA:       headSHA,
+			Attempts:     attempt,
 		}, false, nil
 	}
 
@@ -651,12 +680,13 @@ func (p *Pipeline) tryReword(
 	})
 
 	result := &RewordResult{
-		SHA:      commitSHA,
-		Ref:      ref,
-		Parents:  parents,
-		Tree:     treeSHA,
-		OldSHA:   headSHA,
-		Attempts: attempt,
+		SHA:          commitSHA,
+		MovedRecords: mintedRecords(movedTrailers),
+		Ref:          ref,
+		Parents:      parents,
+		Tree:         treeSHA,
+		OldSHA:       headSHA,
+		Attempts:     attempt,
 	}
 
 	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
