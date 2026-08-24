@@ -322,20 +322,33 @@ func refuseEmptyRevert() int {
 	return exitcode.General
 }
 
-// refuseOwnedConclusion refuses `safegit <verb> --continue` for the operations
-// safegit concludes ITSELF, and names its own command instead.
+// refuseOwnedConclusion refuses `safegit <verb> --continue` while git has an
+// operation in flight, and names the command that DOES conclude it.
 //
-// The dirty-tree guard already gives this refusal most of the time, because a
-// repository mid-merge is dirty by construction -- but not always: a merge
+// It exists because forwarding `--continue` is the one route by which git could
+// still author a commit behind a safegit command name, and it covers both halves
+// of that:
+//
+//   - the operation safegit CONCLUDES ITSELF (a merge, a single cherry-pick or
+//     revert): git's own --continue would commit the whole index with none of
+//     safegit's trailers and none of its commit-time machinery, so the refusal
+//     names safegit's own conclusion command;
+//   - the operation safegit does NOT conclude (a raw-git queue, an octopus,
+//     a rebase): git's --continue is the right command, and the operator runs it
+//     THEMSELVES. safegit will not run it for them, because the commits it makes
+//     are git's and a safegit command that produced them would be the second
+//     authorship class this campaign deleted.
+//
+// The dirty-tree guard already gives the first refusal most of the time, because
+// a repository mid-merge is dirty by construction -- but not always: a merge
 // whose result equals the current tip leaves nothing for `git diff HEAD` to
-// report, and `safegit merge --continue` would then pass the guard and let git
-// author a commit with none of safegit's trailers and none of its commit-time
-// machinery. Whether a conclusion is safegit's or git's must not depend on
-// whether the merge happened to change a file.
+// report, and a queue BETWEEN STEPS (git stopped, the operator committed the
+// step with git) leaves a clean tree with the queue still in place. Whether a
+// conclusion is safegit's or git's must not depend on whether the working tree
+// happens to be dirty.
 //
-// It is scoped to the three operations safegit owns, read from the single
-// way-out authority rather than from a list here: a rebase's or a mailbox
-// application's `--continue` is git's own and passes through untouched.
+// Which command ends the state comes from the single way-out authority, so this
+// refusal and every other message about the same state name the same command.
 func refuseOwnedConclusion(flags globalFlags, gitDir, verb string, args []string) int {
 	if !hasExactArg(args, "--continue") {
 		return 0
@@ -347,13 +360,17 @@ func refuseOwnedConclusion(flags globalFlags, gitDir, verb string, args []string
 		return 0
 	}
 	w := coord.WayOutOf(state)
-	if !strings.HasPrefix(w.Conclude, "safegit ") {
-		return 0
-	}
 
-	fmt.Fprintf(os.Stderr, "error: safegit %s --continue does not conclude %s; safegit does\n", verb, state.String())
-	fmt.Fprintf(os.Stderr, "  git's own --continue would commit the whole index itself, with none of safegit's trailers\n")
-	fmt.Fprintf(os.Stderr, "  and none of its commit-time machinery. Use the command that does:\n")
+	if strings.HasPrefix(w.Conclude, "safegit ") {
+		fmt.Fprintf(os.Stderr, "error: safegit %s --continue does not conclude %s; safegit does\n", verb, state.String())
+		fmt.Fprintf(os.Stderr, "  git's own --continue would commit the whole index itself, with none of safegit's trailers\n")
+		fmt.Fprintf(os.Stderr, "  and none of its commit-time machinery. Use the command that does:\n")
+	} else {
+		fmt.Fprintf(os.Stderr, "error: safegit %s --continue does not conclude %s\n", verb, state.String())
+		fmt.Fprintf(os.Stderr, "  this one is git's to finish, and every commit its --continue makes is git's: no safegit\n")
+		fmt.Fprintf(os.Stderr, "  trailers, safegit's commit-time machinery never runs, and 'safegit undo' cannot reverse\n")
+		fmt.Fprintf(os.Stderr, "  them. safegit does not put its own name on that -- run git's own command yourself:\n")
+	}
 	fmt.Fprintf(os.Stderr, "    conclude it:  %s\n", w.Conclude)
 	if w.Abandon != "" {
 		fmt.Fprintf(os.Stderr, "    abandon it:   %s\n", w.Abandon)
