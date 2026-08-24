@@ -203,8 +203,9 @@ func (op continueOp) refuseContradictedDeclarations(ctx context.Context, stood s
 	fmt.Fprintf(os.Stderr, "  run did not finish, and nothing was cleaned up here.\n")
 	fmt.Fprintf(os.Stderr, "  Finish it with the declarations dropped:\n")
 	fmt.Fprintf(os.Stderr, "    safegit %s\n", op.command)
-	fmt.Fprintf(os.Stderr, "  To commit something else, finish this one first and then make that change as its own commit\n")
-	fmt.Fprintf(os.Stderr, "  (or reverse the conclusion with 'safegit undo' and conclude it again).\n")
+	fmt.Fprintf(os.Stderr, "  To end up with different content, finish the cleanup FIRST -- 'safegit undo' refuses while git\n")
+	fmt.Fprintf(os.Stderr, "  still calls this repository mid-%s -- and then either commit the change on top of it, or undo\n", op.kind)
+	fmt.Fprintf(os.Stderr, "  the conclusion and make the %s again.\n", op.kind)
 	return exitcode.ConclusionUnresolved
 }
 
