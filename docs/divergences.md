@@ -1080,9 +1080,16 @@ allowlist tables hold.
 What is admitted follows one rule on the four pipeline-authoring commands: an
 option is allowed when it reaches only the COMPUTE step or the message draft git
 writes there — the pipeline commits that draft — and refused when it would change
-how git COMMITS, since nothing of git's commit path runs. `--signoff` is
-allowed because git writes the trailer into the draft; `--gpg-sign` is not,
-because safegit's pipeline is what signs, and it does not.
+how git COMMITS, since nothing of git's commit path runs. `--signoff` is allowed
+because git writes the trailer into the draft at the compute step; `--gpg-sign`
+is not, because the pipeline is what commits here, and it does not sign.
+
+One spelling in the code's tables is not in this one: `--continue` passes each
+command's option allowlist and is then refused by name further in, since
+concluding one of these operations is safegit's own job. It is listed under
+[safegit concludes a stopped merge, cherry-pick and
+revert](#safegit-concludes-a-stopped-merge-cherry-pick-and-revert-git-verb---continue-is-refused)
+rather than here, because what an operator meets is a refusal.
 
 ---
 
