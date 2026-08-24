@@ -120,6 +120,10 @@ var doctorChecks = []doctorCheck{
 	{Name: "oplog", Severity: "error", RequiresInit: true, Fn: checkOplog},
 	{Name: "bypass_detect", Severity: "warn", RequiresInit: true, Fn: checkBypassDetect},
 	{Name: "filesystem", Severity: "warn", Fn: checkFilesystemRegistered},
+	// Not RequiresInit: what a repository CONTAINS is readable whether or not
+	// safegit has state here yet, and an unreadable answer is the same problem
+	// either way.
+	{Name: "submodules", Severity: "error", Fn: checkSubmodules},
 	{Name: "hook_perms", Severity: "error", RequiresInit: true, Fn: checkHookPerms},
 	// Not RequiresInit: hooks can sit in the pre-migration location in a
 	// repository whose .git/safegit was later removed, and a push there
@@ -439,6 +443,27 @@ func checkFilesystemRegistered(env doctorEnv) doctorFinding {
 	return findingAt(r.Status, "%s", r.Detail)
 }
 
+// checkSubmodules reports a submodule enumeration safegit cannot perform.
+//
+// Everything that has to know what this repository contains asks the same
+// enumerator: `doctor --action fix` cleans each submodule's own state directory
+// with it, and a scrub decides what it rewrites with it. A failure is therefore
+// not advice -- the answer to it is a repair, never a smaller scope quietly
+// taken -- so it reports at error severity and the exit code carries it.
+//
+// A repository with no submodules has no precondition to report on and says
+// nothing, rather than adding a line to every doctor run.
+func checkSubmodules(env doctorEnv) doctorFinding {
+	subs, err := submodule.Enumerate(env.ctx, env.gitDir)
+	if err != nil {
+		return findingFail("enumerating submodules: %v", err)
+	}
+	if len(subs) == 0 {
+		return findingNone()
+	}
+	return findingOK(fmt.Sprintf("%d enumerated", len(subs)))
+}
+
 // checkHookPerms reports hooks whose mode says they cannot run.
 //
 // It reads the location enumerator, so it sees exactly the set discovery sees
@@ -685,9 +710,15 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 
 	// Submodule safegit directory cleanup (runs in both dry-run and normal mode;
 	// doctorFixSubmodule handles dry-run internally).
+	// A failed enumeration empties this cleanup's scope: nothing below runs, and
+	// the run would otherwise report the repairs it did make with no sign that
+	// the submodule half never happened. It is stated as an error, unconditional
+	// of --quiet (which is about progress chatter), and the `submodules` check
+	// carries the same failure into the exit code.
 	submodules, enumErr := submodule.Enumerate(ctx, gitDir)
-	if enumErr != nil && !flags.silent() {
-		fmt.Fprintf(os.Stderr, "warning: enumerating submodules: %v\n", enumErr)
+	if enumErr != nil {
+		fmt.Fprintf(os.Stderr, "error: enumerating submodules: %v\n"+
+			"No submodule state directory was cleaned.\n", enumErr)
 	}
 	for _, sub := range submodules {
 		if _, err := os.Stat(sub.SafegitDir); os.IsNotExist(err) {
