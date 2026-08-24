@@ -294,6 +294,16 @@ type CommitResult struct {
 	// SkippedIgnored lists the gitignored repo-relative paths a directory
 	// expansion passed over. Nil when nothing was skipped.
 	SkippedIgnored []string `json:"skippedIgnored,omitempty"`
+
+	// RefusedMoves lists the moves this commit's delta suggested and the
+	// inference declined to record, each with the fence that declined it.
+	//
+	// NOT SERIALIZED YET. Subphase 6.5 adds the payload's move members -- the
+	// minted records of both origins, these refusals, and the cap fact -- in one
+	// lockstep commit across the struct, the schema, the required list and every
+	// emission site. Until then it carries the facts the aggregate stderr notice
+	// summarizes, so the emission commit has something to emit.
+	RefusedMoves []RefusedMove `json:"-"`
 }
 
 // Execute runs the full two-phase commit pipeline.
@@ -397,10 +407,18 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	}
 	defer hooks.cleanup()
 
+	// The moves this commit's own delta witnesses but the caller did not
+	// declare. Unlike the declared records above, this cannot be resolved
+	// pre-loop: it reads the ATTEMPT'S delta, and a concurrent session moving
+	// the ref changes that delta. So the state is once-per-operation -- the ids
+	// minted once, attempt 1's answer retained as data -- while the inference
+	// itself runs per attempt. See moveInference.
+	inference := newMoveInference(req, movedTrailers)
+
 	maxAttempts := p.Config.Commit.CASMaxAttempts
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryCommit(ctx, ref, repoRoot, previewArea, files, movedTrailers, req, hooks, attempt)
+		result, retry, err := p.tryCommit(ctx, ref, repoRoot, previewArea, files, movedTrailers, req, hooks, inference, attempt)
 		if err != nil {
 			// result is nil for every refusal and non-nil for the commit-stands
 			// verdict alone, which is the one error a caller has something to
@@ -473,6 +491,7 @@ func (p *Pipeline) tryCommit(
 	movedTrailers []string,
 	req CommitRequest,
 	hooks *nativeHooks,
+	inference *moveInference,
 	attempt int,
 ) (*CommitResult, bool, error) {
 
@@ -579,6 +598,17 @@ func (p *Pipeline) tryCommit(
 		}
 	}
 
+	// Step 3.55: the moves this commit's delta witnesses on its own, minted into
+	// records beside the declared ones. It runs HERE, after the refusals and
+	// before the message is composed, so a commit safegit is about to refuse
+	// infers nothing and so the records are on the message the commit-msg hook
+	// sees, exactly like every other piece of caller content.
+	inferred, err := inference.records(ctx, changed, parentTree, treeSHA)
+	if err != nil {
+		return nil, false, err
+	}
+	allMoved := append(append([]string{}, movedTrailers...), inferred...)
+
 	// Step 3.6: the commit-msg hook, on the user's message with the user's own
 	// trailers and move records already on it, before safegit's own session
 	// trailer goes on, adopting whatever the hook left in the file. It comes
@@ -586,7 +616,7 @@ func (p *Pipeline) tryCommit(
 	// sets an operator's message hook running -- the same order git uses, which
 	// stops at "nothing to commit" before it asks for a message.
 	message, err := hooks.commitMsg(ctx, tmpIdx.IndexPath,
-		trailer.AppendCustom(req.Message, commitTrailers(req.Trailers, nil, movedTrailers)))
+		trailer.AppendCustom(req.Message, commitTrailers(req.Trailers, nil, allMoved)))
 	if err != nil {
 		return nil, false, err
 	}
@@ -698,6 +728,7 @@ func (p *Pipeline) tryCommit(
 			Attempts:       attempt,
 			Files:          changedPaths(changed),
 			SkippedIgnored: files.skipped,
+			RefusedMoves:   inference.refused,
 		}, false, nil
 	}
 
@@ -746,6 +777,7 @@ func (p *Pipeline) tryCommit(
 		Attempts:       attempt,
 		Files:          changedPaths(changed),
 		SkippedIgnored: files.skipped,
+		RefusedMoves:   inference.refused,
 	}
 
 	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {

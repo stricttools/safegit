@@ -281,6 +281,16 @@ func (p *Pipeline) tryAmend(
 		return nil, false, unmatchedSourceError(unmatched, ref)
 	}
 
+	// SEAM for subphase 6.4: an amend mints NOTHING for now. Its arm of the
+	// inference is not this diff -- `changed` above compares the amended tree
+	// against the REPLACED TIP, which is the amend's own edit and not the step
+	// the commit describes. The records an amend adds are inferred against the
+	// AUTHORING EVENT's delta, the new tree against the replaced tip's first
+	// parent (parents[0] below), which is a second per-attempt diff taken here.
+	// Preservation of the records already on the message is unaffected and
+	// happens below; a reword mints nothing at all, because rewording changes no
+	// tree.
+
 	// The commit-msg hook, on the message with the user's own trailers and move
 	// records on it and before safegit's session trailer goes on. A -m that
 	// replaces the message carries the replaced message's move records forward:

@@ -405,7 +405,11 @@ func TestAmendPreservesARetractionToo(t *testing.T) {
 
 func TestAmendCanAddARecordToACommitThatLacksOne(t *testing.T) {
 	dir := seedMove(t, "a.txt", "b.txt")
-	// The move is committed with no record at all -- the ordinary mistake.
+	// The content changes on the way, so the commit's own delta witnesses no
+	// move and mints no record: the file's blob at the new path is not the blob
+	// that left the old one. That is what leaves the commit without a record for
+	// the amend to add -- the ordinary mistake.
+	testutil.WriteFile(t, dir, "b.txt", "content that DID change\n")
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "move a to b", "--", "a.txt", "b.txt"); code != 0 {
 		t.Fatalf("move commit failed (code %d): %s", code, stderr)
 	}
