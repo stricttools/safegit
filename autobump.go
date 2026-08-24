@@ -191,6 +191,37 @@ func recordParentBumpPreview(flags globalFlags, plan *parentBumpPlan, triggeredB
 	return err
 }
 
+// previewAutoBumpParent is the parent bump's whole PREVIEW half: the decision,
+// made from reads alone; the would-do record, minted with the Triggered-by value
+// the CALLER supplies; and the notice. It is the single site for all three, so a
+// caller that knows the real object name differs from one that does not in that
+// value and in nothing else.
+//
+// Two callers know it. maybeAutoBumpParent's dry branch does not -- every route
+// through it is about to author the sub's commit -- and passes the placeholder.
+// The crash re-stand path does: the conclusion's commit is already on the branch,
+// read off it before this is called, and it is exactly what the execute path
+// writes into the parent's message. (undo also knows it, and arranges the two
+// halves itself so its records come out in execution order -- see runUndo.)
+func previewAutoBumpParent(ctx context.Context, flags globalFlags, newHeadSHA, triggeredBy, operation, firstLineMsg string) error {
+	plan, err := planParentBump(ctx, flags, newHeadSHA)
+	if err != nil {
+		return err
+	}
+	if plan == nil {
+		// No bump would happen: the key says no, or the gitlink already names
+		// this SHA. Nothing to record and nothing to announce.
+		return nil
+	}
+	if err := recordParentBumpPreview(flags, plan, triggeredBy, operation, firstLineMsg); err != nil {
+		return err
+	}
+	if !flags.silent() {
+		fmt.Fprintf(os.Stderr, "  parent: would bump %s pointer (dry run; parent repo untouched)\n", plan.subRelPath)
+	}
+	return nil
+}
+
 // parseCommitSHA extracts the SHA from safegit commit output.
 // Format: "[branch sha] message"
 func parseCommitSHA(output string) string {
@@ -297,25 +328,12 @@ func maybeAutoBumpParent(ctx context.Context, flags globalFlags, gitDir, newHead
 	// which arranges the two halves itself so its records come out in execution
 	// order (see runUndo).
 	if flags.dryRun {
-		plan, err := planParentBump(ctx, flags, newHeadSHA)
-		if err != nil {
-			return err
-		}
-		if plan == nil {
-			// No bump would happen: the key says no, or the gitlink already
-			// names this SHA. Nothing to record and nothing to announce.
-			return nil
-		}
 		// Every route through here is about to author the sub's own commit, which
-		// no preview can name: the placeholder is the honest value. undo, which
-		// holds the real one, records its bump itself (see runUndo).
-		if err := recordParentBumpPreview(flags, plan, previewCommitPlaceholder, operation, firstLineMsg); err != nil {
-			return err
-		}
-		if !flags.silent() {
-			fmt.Fprintf(os.Stderr, "  parent: would bump %s pointer (dry run; parent repo untouched)\n", subRelPath)
-		}
-		return nil
+		// no preview can name: the placeholder is the honest value. The callers
+		// that hold the real one -- undo, and the crash re-stand path, where the
+		// commit already exists -- record their bump through
+		// previewAutoBumpParent themselves.
+		return previewAutoBumpParent(ctx, flags, newHeadSHA, previewCommitPlaceholder, operation, firstLineMsg)
 	}
 
 	// Ensure parent's safegit dir exists

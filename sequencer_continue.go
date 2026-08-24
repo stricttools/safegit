@@ -579,7 +579,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	}
 
 	if flags.dryRun {
-		out.previewParentBump(ctx, flags, gitDir, result, op.command, message)
+		out.previewParentBump(ctx, flags, result, op.command, message, previewCommitPlaceholder)
 	} else {
 		out.concludeAftercare(ctx, flags, gitDir, state, result, edits, func(ctx context.Context) error {
 			return materializeResolutions(ctx, sides, declared)
@@ -671,21 +671,26 @@ func (out *conclusionResult) concludeAftercare(
 // the single mint site, so the preview's decision and its recorded argv are the
 // execute path's own.
 //
-// Both doors come here: the -continue command, whose commit the pipeline has just
-// computed (and not published), and the re-run that found a crashed conclusion's
-// commit already standing, where the bump is the only mutation left to make.
+// Both doors come here, and they differ in ONE value: the Triggered-by object
+// name the parent's commit message carries. The -continue command's own commit
+// does not exist yet -- the object a real run builds carries the committer
+// timestamp, so no preview can name it -- and it passes the placeholder. The
+// re-run that found a crashed conclusion's commit already standing CAN name it:
+// the commit is on the branch, read off it before this is called, and it is
+// exactly what the execute path writes there. A preview that hid a value it held
+// would understate the argv the run performs.
 func (out *conclusionResult) previewParentBump(
 	ctx context.Context,
 	flags globalFlags,
-	gitDir string,
 	result *commit.CommitResult,
 	parentBumpOp string,
 	message string,
+	triggeredBy string,
 ) {
 	if result == nil {
 		return
 	}
-	if err := maybeAutoBumpParent(ctx, flags, gitDir, result.SHA, parentBumpOp, firstLine(message)); err != nil {
+	if err := previewAutoBumpParent(ctx, flags, result.SHA, triggeredBy, parentBumpOp, firstLine(message)); err != nil {
 		out.residue = reportAftercareFailure(out.residue, stepParentBump, err)
 	}
 }
@@ -923,7 +928,9 @@ func (op continueOp) finishWhatCrashed(
 	fmt.Fprintf(os.Stderr, "  mid-%s. Nothing is committed again; what is left of the conclusion is finished.\n", op.kind)
 
 	if flags.dryRun {
-		out.previewParentBump(ctx, flags, gitDir, stood, op.command, info.Message)
+		// The stood commit's real object name, not the placeholder: nothing is
+		// authored here, and it is what the execute path's bump records.
+		out.previewParentBump(ctx, flags, stood, op.command, info.Message, stood.SHA)
 	} else {
 		out.concludeAftercare(ctx, flags, gitDir, state, stood, edits, func(ctx context.Context) error {
 			return materializeCommitted(ctx, committed)

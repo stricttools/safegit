@@ -96,6 +96,20 @@ func assertPreviewInventedNoAftercareRecords(t *testing.T, env machineEnvelope) 
 	}
 }
 
+// parentBumpDetail returns the recorded argv of the parent bump the preview
+// carries, failing when there is none.
+func parentBumpDetail(t *testing.T, env machineEnvelope) string {
+	t.Helper()
+	for _, rec := range procMutations(env) {
+		if grant, _ := rec["grant"].(string); grant == "parent-bump" {
+			detail, _ := rec["detail"].(string)
+			return detail
+		}
+	}
+	t.Fatalf("the preview carries no parent-bump record: %v", effectDetails(env))
+	return ""
+}
+
 // TestMergeContinuePreviewInASubmoduleRecordsTheParentBump: the -continue door.
 func TestMergeContinuePreviewInASubmoduleRecordsTheParentBump(t *testing.T) {
 	parentDir, fx := newConflictedMergeInSubmodule(t)
@@ -110,6 +124,14 @@ func TestMergeContinuePreviewInASubmoduleRecordsTheParentBump(t *testing.T) {
 	env := decodeEnvelope(t, stdout)
 	parentBumpAfterRefUpdate(t, env)
 	assertPreviewInventedNoAftercareRecords(t, env)
+
+	// The ORDINARY door keeps the placeholder: the conclusion's own commit does
+	// not exist yet -- the object a real run builds carries the committer
+	// timestamp -- so no preview can name it, and the placeholder is the honest
+	// value. The crash re-stand door below is the opposite case.
+	if detail := parentBumpDetail(t, env); !strings.Contains(detail, "Triggered-by: <new-commit>") {
+		t.Errorf("the -continue preview's parent bump must carry the placeholder, since the commit it triggers on does not exist yet: %s", detail)
+	}
 
 	// Neither repository moved, and the merge is still in flight: a preview
 	// performs no aftercare at all.
@@ -176,6 +198,20 @@ func TestCrashReStandPreviewInASubmoduleRecordsTheParentBump(t *testing.T) {
 			effectDetails(env))
 	}
 	assertPreviewInventedNoAftercareRecords(t, env)
+
+	// The Triggered-by value is the STOOD commit's real object name, not the
+	// placeholder. The placeholder stands where a preview CANNOT know the name --
+	// a commit that does not exist yet -- and this door authors nothing: the
+	// conclusion's commit is already on the branch and was read off it before the
+	// record was made. A preview that hid a value it held would understate the
+	// argv the run performs.
+	bumpDetail := parentBumpDetail(t, env)
+	if !strings.Contains(bumpDetail, "Triggered-by: "+concluded) {
+		t.Errorf("the parent bump's Triggered-by must carry the stood commit %s, got: %s", concluded, bumpDetail)
+	}
+	if strings.Contains(bumpDetail, "<new-commit>") {
+		t.Errorf("the parent bump records the new-commit placeholder where the re-run knows the stood commit's real object name: %s", bumpDetail)
+	}
 
 	if now := testutil.Rev(t, fx.dir, "HEAD"); now != concluded {
 		t.Errorf("the preview moved the submodule's HEAD: %s -> %s", concluded, now)
