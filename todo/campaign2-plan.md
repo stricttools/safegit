@@ -1209,6 +1209,10 @@ Catalog work:
 - Deletions: the timeout-override entry (mechanism deleted, 1.4); the
   mv-missing-directory entry (behavior now MATCHES git, 5.1 — the
   matches-git-means-no-entry rule `[user]`).
+- Execution-flagged: the old "Conclusion commits are pipeline-authored;
+  a queued sequence stays git-authored" entry still describes the
+  deleted delegation — rewrite it to the 2.7 refusals (raw-git queues
+  are concluded by git, named in the refusal).
 - The entries 1.1's derivation falsifies (the dirty-tree scope entry's
   reset/bisect sentences; the reset-hard-only entry) update.
 - Fate rule `[plan]`: rewritten entries carry deliberate status (they
@@ -1452,6 +1456,22 @@ plan defect)
   switch's DWIM reading (a remote-only branch name still creates and
   lands on a local branch; unresolvable arguments fall through to
   git's own error) is stated in its entry for the user's verdict.
+- 2.1 (boundary guard, added during execution): test fixtures that
+  built commits/merges through internal/git's own runner or drove
+  `--continue` through RunPassthroughWithEnv moved to testutil.Git /
+  testutil.GitTryEnv (internal/git/git_test.go — 11 calls;
+  delegation_probe_test.go's two recorded-fact probes);
+  gitexec_test.go's root-pin fixture argv became a suppressed form;
+  TestValidateAcceptsDeclaredVerbs excludes Authors verbs (other side
+  pinned); coord_cmd_test.go's runGitMutation argv list was already
+  stale after 2.2-2.4 and now lists the real compute shapes plus the
+  rebase door. RATIFIED: with NOTHING in flight, a forwarded
+  `--continue` on merge/cherry-pick/revert is refused by the boundary
+  (exit 1, its reason) instead of forwarding to git's own exit-128
+  error — forced by the strict boundary (--continue authors; a
+  carve-out to preserve git's error voice would admit exactly the
+  authoring argv); divergences entry updated, reviewable at the
+  catalog review.
 - 2.8 (--hunks): pins of the 3way retry if any exist at the
   commit_hunks seams (verify; the stage package has none).
 - 3.2: no rewrites (the fallback was never built; the probe confirmed
