@@ -593,7 +593,9 @@ func (out *conclusionResult) concludeAftercare(
 		out.residue = reportAftercareFailure(out.residue, stepParentBump, err)
 	}
 
-	stash, residue := consumeAutostash(ctx, gitDir, state)
+	// The first parent is the tip this conclusion committed onto, which is where
+	// git's own autostash for this merge was set aside from.
+	stash, residue := consumeAutostash(ctx, gitDir, state, firstParentOf(result))
 	out.autostash = stash
 	out.residue = append(out.residue, residue...)
 }
@@ -767,12 +769,30 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 // It RETURNS what became of the work and what it left behind, rather than a
 // bare exit code: the outcome is a fact the payload states (see
 // autostashOutcome), and an exit code cannot say WHERE the operator's work is.
-func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State) (autostashOutcome, []residueEntry) {
+func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State, tip string) (autostashOutcome, []residueEntry) {
 	if state.Kind != sequencer.KindMerge || state.Autostash == "" {
 		return noAutostash(), nil
 	}
 	path := filepath.Join(gitDir, sequencer.FileMergeAutostash)
 	stash := state.Autostash
+
+	// Whose work is this? MERGE_AUTOSTASH is a plain file holding an object
+	// name, and nothing in git ties that object to the merge in flight -- see
+	// autostashIsThisMerges. A file that names anything else is left exactly
+	// where it is.
+	if why, ours := autostashIsThisMerges(ctx, stash, tip); !ours {
+		fmt.Fprintf(os.Stderr, "error: %s names a commit this merge did not set aside, so nothing was put back\n",
+			sequencer.FileMergeAutostash)
+		fmt.Fprintf(os.Stderr, "  %s\n", why)
+		fmt.Fprintf(os.Stderr, "  The commit %s and the file are untouched. Inspect it and decide whose work it is:\n", stash)
+		fmt.Fprintf(os.Stderr, "    git show %s\n", stash)
+		fmt.Fprintf(os.Stderr, "    git stash apply %s     # put it in the working tree\n", stash)
+		fmt.Fprintf(os.Stderr, "    rm %s     # once it is somewhere you can reach\n", path)
+		return autostashOutcome{State: autostashForeign, Stash: &stash}, []residueEntry{{
+			Step:   stepAutostashForeign,
+			Detail: fmt.Sprintf("%s names %s, which this merge did not set aside (%s); it was neither applied nor removed", path, stash, why),
+		}}
+	}
 
 	gitSaid, applyErr := git.StashApply(ctx, stash)
 	if applyErr == nil {
@@ -843,6 +863,59 @@ func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State)
 		Step:   stepAutostashApply,
 		Detail: fmt.Sprintf("the autostash conflicted with the merge result; the work is parked as stash@{0} (commit %s)", stash),
 	}}
+}
+
+// autostashIsThisMerges answers the question git itself never asks: is the
+// commit MERGE_AUTOSTASH names the stash git created for THE MERGE BEING
+// CONCLUDED?
+//
+// The file is a plain file holding an object name, and git checks nothing about
+// that object before applying and deleting it. A file left behind by a merge
+// that crashed, was abandoned, or was concluded by something that did not
+// consume it therefore makes the NEXT merge's conclusion apply somebody else's
+// uncommitted work into the working tree and announce it as its own -- a
+// working-tree write nobody asked for, in files the merge never touched.
+//
+// Two facts answer it together, and neither is sufficient alone:
+//
+//   - the stash commit's FIRST PARENT is the commit HEAD stood at when git set
+//     the work aside, which for this merge is the tip the conclusion committed
+//     onto. A stash from an earlier operation on a branch that has moved since
+//     names a different one. (A stale file planted while the branch has NOT
+//     moved passes this half, which is why the second exists.)
+//   - the MESSAGE shape. git writes "On <branch>: autostash" on an autostash
+//     and "WIP on <branch>: ..." on every ordinary stash, which is the only
+//     thing that tells an autostash from an operator's own `git stash` entry.
+//     The fact is recorded permanently by the probes in
+//     internal/git/autostash_probe_test.go rather than trusted to memory.
+//
+// A stash that fails either is not consumed and NOT DELETED: it names content
+// that may live nowhere else, and deciding whose it is belongs to an operator.
+// The reason is returned so the refusal can say which half failed.
+func autostashIsThisMerges(ctx context.Context, stash, tip string) (why string, ours bool) {
+	info, err := git.ParseCommit(ctx, stash)
+	if err != nil {
+		return fmt.Sprintf("the commit it names cannot be read: %v", err), false
+	}
+	if len(info.Parents) == 0 {
+		return "the commit it names has no parent, so it is not a stash of anything", false
+	}
+	if tip != "" && info.Parents[0] != tip {
+		return fmt.Sprintf("the work was set aside on top of %s, and this merge was built on %s",
+			shortSHA(info.Parents[0]), shortSHA(tip)), false
+	}
+	if subject := firstLine(info.Message); !isAutostashSubject(subject) {
+		return fmt.Sprintf("its subject is %q; git writes %q on an autostash and %q on an ordinary stash",
+			subject, "On <branch>: autostash", "WIP on <branch>: ..."), false
+	}
+	return "", true
+}
+
+// isAutostashSubject recognizes git's autostash message shape, "On <branch>:
+// autostash". The branch is whatever the merge ran on, so the shape is matched
+// rather than a literal.
+func isAutostashSubject(subject string) bool {
+	return strings.HasPrefix(subject, "On ") && strings.HasSuffix(subject, ": autostash")
 }
 
 // finishConclusion removes the concluded operation's state and puts the shared

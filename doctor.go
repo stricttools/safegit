@@ -17,6 +17,7 @@ import (
 	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/oplog"
 	"github.com/smm-h/safegit/internal/repo"
+	"github.com/smm-h/safegit/internal/sequencer"
 	"github.com/smm-h/safegit/internal/submodule"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
@@ -131,6 +132,9 @@ var doctorChecks = []doctorCheck{
 	{Name: "hooks_migrated", Severity: "error", Fn: checkHooksMigrated},
 	{Name: "native_hooks", Severity: "warn", Fn: checkUnusedNativeHooks},
 	{Name: "git_version", Severity: "warn", Fn: checkGitVersion},
+	// Not RequiresInit: MERGE_AUTOSTASH is git's own file, and the work it names
+	// is unreachable whether or not safegit has state in this repository.
+	{Name: "merge_autostash", Severity: "warn", Fn: checkOrphanedAutostash},
 	{Name: "legacy_scrub_policies", Severity: "error", RequiresInit: true, Fn: checkLegacyScrubPolicies},
 }
 
@@ -598,6 +602,43 @@ func checkGitVersion(env doctorEnv) doctorFinding {
 		return findingFail("git %s is older than %s, required by %s", v, highest.Floor, highest.Name)
 	}
 	return findingOK(fmt.Sprintf("git %s (highest feature floor: %s for %s)", v, highest.Floor, highest.Name))
+}
+
+// checkOrphanedAutostash reports a MERGE_AUTOSTASH with no merge in flight.
+//
+// The file names a stash-shaped commit holding uncommitted work, and it is the
+// ONE piece of a merge's state whose content lives nowhere else -- no branch
+// reaches it, `git stash list` does not show it, and a `git gc` that prunes it
+// takes the work with it. A merge that was abandoned, or a conclusion that was
+// killed before it consumed the file, leaves exactly this.
+//
+// It reports rather than repairs, and deliberately removes nothing: a diagnosis
+// that quietly deleted the only name a piece of work has left would be the loss
+// it exists to prevent.
+func checkOrphanedAutostash(env doctorEnv) doctorFinding {
+	path := filepath.Join(env.gitDir, sequencer.FileMergeAutostash)
+	if _, err := os.Stat(path); err != nil {
+		// No file: nothing to say, rather than a state to report as healthy.
+		return findingNone()
+	}
+	state, err := sequencer.Read(env.gitDir)
+	if err != nil {
+		return findingFail("%s is present and git's in-flight state could not be read: %v",
+			sequencer.FileMergeAutostash, err)
+	}
+	if state.Kind == sequencer.KindMerge {
+		return findingOK(fmt.Sprintf("%s belongs to the merge in flight", sequencer.FileMergeAutostash))
+	}
+
+	sha := "an unreadable object name"
+	if raw, err := os.ReadFile(path); err == nil {
+		if trimmed := strings.TrimSpace(string(raw)); trimmed != "" {
+			sha = trimmed
+		}
+	}
+	return findingFail("%s is present with no merge in flight: it names %s, a stash-shaped commit whose "+
+		"content no ref reaches (recover it with 'git stash apply %s', then remove %s)",
+		sequencer.FileMergeAutostash, sha, sha, path)
 }
 
 // checkLegacyScrubPolicies reports a leftover scrub-policies.jsonl.
