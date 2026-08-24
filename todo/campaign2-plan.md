@@ -587,6 +587,35 @@ expectations get the same op-name care as 2.2's).
 commit; `--rebase` refuses; oplog baseline entry present under Op
 "pull".
 
+PHASE-2 AUDIT FINDINGS (remediated post-audit) `[plan]`:
+- THE OCTOPUS ESCAPE (the audit's one defect): `merge FETCH_HEAD` with
+  multiple for-merge lines produced a pipeline-authored THREE-PARENT
+  commit (token counting, the exact error class the rev-set correction
+  fixed for pick/revert — FETCH_HEAD is one token resolving to N
+  heads), and on the fast-forward arm silently ff'd onto the FIRST
+  line dropping the rest. Fix: FETCH_HEAD is the only token git
+  special-cases into multiple heads — when the merge argument is
+  spelled FETCH_HEAD, read .git/FETCH_HEAD and refuse >1 for-merge
+  lines UP FRONT (before the ff decision, so both arms are covered;
+  pull inherits); plus defense in depth, `concludeParkedOperation`
+  refuses a multi-line MERGE_HEAD park (the raw-shape octopus check
+  now guards the immediate-conclusion path too, keeping 3.5's
+  totality structural), cleaning up the state safegit itself just
+  parked. Red-first from all three audit probes (loud octopus,
+  silent ff drop, conflicting-octopus control).
+- `merge --commit` was accepted and silently stripped —
+  accept-and-quietly-ignore is the shape this campaign kills, and
+  pick/revert refuse it by name; merge now refuses it by name too
+  (uniformity; divergences entry rides it).
+- REVIEW NOTE (catalog review): 2.2's "exactly one BRANCH argument"
+  is enforced as exactly-one-COMMITTISH — a tag or SHA merges (no
+  detach harm; switch's branch-ness check has no analogue here). The
+  merge entry states this reading for the user's verdict.
+- FOR 3.3's IMPLEMENTOR: the crash-window red currently fails for
+  2.7's no-AUTO_MERGE refusal, not its own reason — its fixture
+  snapshots only index/MERGE_HEAD/MERGE_MSG while a REAL crash in the
+  window leaves AUTO_MERGE present; add AUTO_MERGE to the fixture
+  snapshot (faithful state), no production ordering change for this.
 EXECUTION CORRECTIONS after 2.3-2.5 (executed by 2.6/2.7) `[plan]`:
 - `-s`/`-X` are REFUSED on cherry-pick and revert too, matching merge.
   Forced for `-s` by 3.5's ruled totality (a pick computed with
@@ -1212,7 +1241,12 @@ Catalog work:
 - Execution-flagged: the old "Conclusion commits are pipeline-authored;
   a queued sequence stays git-authored" entry still describes the
   deleted delegation — rewrite it to the 2.7 refusals (raw-git queues
-  are concluded by git, named in the refusal).
+  are concluded by git, named in the refusal). The Phase-2 audit's
+  actively-false rows join the sweep: the revert entry's "ordinary
+  guarded passthrough" fallback text, the three checkout-as-a-command
+  mentions, and the merge-continue octopus text in the templates
+  ("EVERY MERGE_HEAD line as parents, an octopus merge included" — now
+  the opposite of shipped behavior).
 - The entries 1.1's derivation falsifies (the dirty-tree scope entry's
   reset/bisect sentences; the reset-hard-only entry) update.
 - Fate rule `[plan]`: rewritten entries carry deliberate status (they
