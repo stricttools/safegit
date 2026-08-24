@@ -63,6 +63,12 @@ const (
 	// stepAutostashState is removing the state the autostash's own apply left
 	// behind, which is a merge's residue because the apply is a merge.
 	stepAutostashState = "removing the autostash apply's leftover state"
+	// stepAutostashForeign is the autostash this merge did not create: the file
+	// names a commit that is not the stash git made here, so the conclusion put
+	// nothing back and removed nothing. It is residue because the file is still
+	// there and something has to be done about it -- by an operator, not by a
+	// conclusion guessing whose work it holds.
+	stepAutostashForeign = "applying an autostash this merge did not create"
 )
 
 // residueEntry is one aftercare step that did not finish, as the payload reports
@@ -91,6 +97,11 @@ const (
 	// autostashPending: the aftercare stopped before the autostash was reached,
 	// so MERGE_AUTOSTASH still holds the work untouched.
 	autostashPending = "pending"
+	// autostashForeign: MERGE_AUTOSTASH names a commit that is not the stash git
+	// made for THIS merge -- residue of an operation that is over, or a file
+	// somebody wrote by hand. It was neither applied nor removed, so the work it
+	// names (whosever it is) is exactly where it was.
+	autostashForeign = "foreign"
 )
 
 // autostashOutcome is what became of the work git set aside, as the payload
