@@ -1,8 +1,7 @@
 ---
 title: internal/conflict
-description: "Package conflict reads and reproduces what git recorded about a conflicted path, so a conclusion can verify a resolution against what git actually wrote instead of against a guess."
+description: "Reads what git recorded about a conflicted path -- attributes, index stages, AUTO_MERGE -- so a conclusion checks a resolution against git's own bytes."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 3
 ---

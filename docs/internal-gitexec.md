@@ -1,8 +1,7 @@
 ---
 title: internal/gitexec
-description: "Package gitexec is safegit's single git-execution boundary."
+description: "The single git-execution boundary: argv construction, the subcommand classification table, and the closed list of sites exempt from the repository-root pin."
 generated: true
-seeded: true
 nav_group: "API Reference"
 nav_order: 8
 ---
