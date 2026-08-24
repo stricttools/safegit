@@ -325,9 +325,6 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	defer hooks.cleanup()
 
 	maxAttempts := p.Config.Commit.CASMaxAttempts
-	if maxAttempts <= 0 {
-		maxAttempts = 5
-	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		result, retry, err := p.tryCommit(ctx, ref, repoRoot, previewArea, files, movedTrailers, req, hooks, attempt)
@@ -571,9 +568,6 @@ func (p *Pipeline) tryCommit(
 		// one. The ref update at Step 7 is the mutation a preview must withhold,
 		// and it is the one that IS minted.
 		lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second
-		if lockTimeout <= 0 {
-			lockTimeout = 30 * time.Second
-		}
 		refLock, err := lock.Acquire(repo.SharedSafegitDir(ctx, p.SafegitDir), p.SafegitDir, ref, "commit", lockTimeout)
 		if err != nil {
 			return nil, false, fmt.Errorf("acquiring lock on %s: %w", ref, err)

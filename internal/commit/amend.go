@@ -141,9 +141,6 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	defer hooks.cleanup()
 
 	maxAttempts := p.Config.Commit.CASMaxAttempts
-	if maxAttempts <= 0 {
-		maxAttempts = 5
-	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		result, retry, err := p.tryAmend(ctx, ref, repoRoot, previewArea, files, movedTrailers, req, hooks, attempt)
@@ -295,9 +292,6 @@ func (p *Pipeline) tryAmend(
 	// update, which it records instead of performing.
 	if !req.DryRun {
 		lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second
-		if lockTimeout <= 0 {
-			lockTimeout = 30 * time.Second
-		}
 		refLock, err := lock.Acquire(repo.SharedSafegitDir(ctx, p.SafegitDir), p.SafegitDir, ref, "amend", lockTimeout)
 		if err != nil {
 			return nil, false, fmt.Errorf("acquiring lock on %s: %w", ref, err)
@@ -472,9 +466,6 @@ func (p *Pipeline) Reword(ctx context.Context, req RewordRequest) (*RewordResult
 	defer hooks.cleanup()
 
 	maxAttempts := p.Config.Commit.CASMaxAttempts
-	if maxAttempts <= 0 {
-		maxAttempts = 5
-	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		result, retry, err := p.tryReword(ctx, ref, movedTrailers, req, hooks, attempt)
@@ -557,9 +548,6 @@ func (p *Pipeline) tryReword(
 		}
 
 		lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second
-		if lockTimeout <= 0 {
-			lockTimeout = 30 * time.Second
-		}
 		refLock, err := lock.Acquire(repo.SharedSafegitDir(ctx, p.SafegitDir), p.SafegitDir, ref, "reword", lockTimeout)
 		if err != nil {
 			return nil, false, fmt.Errorf("acquiring lock on %s: %w", ref, err)

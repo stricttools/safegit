@@ -291,9 +291,6 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	var hookResults []hooks.HookResult
 	if !noPrePrePush && !flags.dryRun {
 		timeoutSec := cfg.Hooks.PrePrePush.TimeoutSeconds
-		if timeoutSec <= 0 {
-			timeoutSec = 1800
-		}
 
 		hookEnv := []string{
 			"SAFEGIT_REMOTE_NAME=" + remote,
@@ -326,9 +323,6 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 
 	// Execute git push with retries
 	retryAttempts := cfg.Push.RetryAttempts
-	if retryAttempts <= 0 {
-		retryAttempts = 3
-	}
 
 	pushArgs := buildGitPushArgs(remote, refs, forceFlag)
 	var pushErr error
