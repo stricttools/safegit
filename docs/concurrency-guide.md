@@ -150,30 +150,30 @@ The oplog enables:
 
 ## Coordination guards for tree-mutating operations
 
-Not all git operations can be safely parallelized. Commands that mutate the working tree -- checkout, pull, merge, rebase, reset, bisect, cherry-pick, revert -- can clobber uncommitted work from other sessions. safegit wraps these commands with a coordination guard that checks whether the working tree is clean before proceeding.
+Not all git operations can be safely parallelized. Commands that mutate the working tree -- switch, pull, merge, rebase, reset, bisect, cherry-pick, revert -- can clobber uncommitted work from other sessions. safegit wraps these commands with a coordination guard that checks whether the working tree is clean before proceeding.
 
 :-: ref path="internal/coord" lang="go"
 
-If any tracked file is modified or any untracked file exists, the guarded command is refused with exit code 5 and a suggestion to commit the outstanding changes first. This prevents one session from running `safegit checkout other-branch` while another session has uncommitted edits in the working tree.
+If any tracked file is modified or any untracked file exists, the guarded command is refused with exit code 5 and a suggestion to commit the outstanding changes first. This prevents one session from running `safegit switch other-branch` while another session has uncommitted edits in the working tree.
 
 Two commands narrow the check to the forms that actually write to the working tree: `reset` runs it for `--hard`, `--merge` and `--keep`, and `bisect` for its stepping subcommands. Neither narrowing is re-derived at the call site -- both read `internal/gitexec`'s classification table, the single authority over what a git invocation does, and an argv the table does not declare is refused rather than assumed harmless. Neither narrowing touches the operation lock, which every invocation of both takes unconditionally.
 
 The guard uses `git diff HEAD` (not `git status`, which depends on the potentially stale main index) to detect modifications, ensuring accuracy even when the shared index is out of sync with the actual committed state.
 
-Where git has an operation in flight, the same dirt is that operation's conflict markers and staged result, and "commit your work" is advice nobody can follow -- `safegit commit` is pathspec-only and refuses mid-merge. So the refusal names the operation and the command that ends it instead, rendered from one authority so no two refusals can name different commands for the same state. An in-flight operation does NOT by itself refuse a passthrough: the passthroughs are how an operator reaches `rebase --continue` and `merge --abort`, and refusing on state alone would refuse the way out.
+Where git has an operation in flight, the same dirt is that operation's conflict markers and staged result, and "commit your work" is advice nobody can follow -- `safegit commit` is pathspec-only and refuses mid-merge. So the refusal names the operation and the command that ends it instead, rendered from one authority so no two refusals can name different commands for the same state. An in-flight operation does NOT by itself refuse a guarded command: they are how an operator reaches `rebase --continue` and `merge --abort`, and refusing on state alone would refuse the way out.
 
 ### The worktree operation lock
 
-The dirty-tree guard answers "is it safe to start?" at one instant. The operation lock answers "is anyone else already working here?" for the whole operation, and it is what makes the first answer worth anything: without it, a passthrough could put the repository mid-merge in the window between another process's check and its ref update.
+The dirty-tree guard answers "is it safe to start?" at one instant. The operation lock answers "is anyone else already working here?" for the whole operation, and it is what makes the first answer worth anything: without it, another process could put the repository mid-merge in the window between one process's check and its ref update.
 
-Every command that mutates a worktree takes it first: the guarded passthroughs (checkout, pull, merge, rebase, reset, bisect, cherry-pick, revert), `commit` (including `--amend` and reword), `mv`, the three conclusion commands (`merge-continue`, `cherry-pick-continue`, `revert-continue`), and `undo`. `mv` is the one whose ORDER inside the lock is worth stating: it checks for an in-flight git operation inside the lock and before its first move, because reaching the commit pipeline's own check afterwards would have moved every file and then refused to commit them. It lives at `safegit/operation` in the **worktree-local** safegit directory, so two worktrees of one repository work independently while two processes in one worktree serialize.
+Every command that mutates a worktree takes it first: the guarded commands (switch, pull, merge, rebase, reset, bisect, cherry-pick, revert), `commit` (including `--amend` and reword), `mv`, the three conclusion commands (`merge-continue`, `cherry-pick-continue`, `revert-continue`), and `undo`. `mv` is the one whose ORDER inside the lock is worth stating: it checks for an in-flight git operation inside the lock and before its first move, because reaching the commit pipeline's own check afterwards would have moved every file and then refused to commit them. It lives at `safegit/operation` in the **worktree-local** safegit directory, so two worktrees of one repository work independently while two processes in one worktree serialize.
 
 Lock ordering is fixed: the operation lock is **outermost**, and the per-ref locks the commit pipeline and undo take are acquired inside it. Nothing takes them the other way round, which is the whole deadlock argument. One acquisition crosses repositories without closing a cycle: the submodule auto-bump spawns `safegit commit` in the **parent** worktree while still holding the submodule's own operation lock, an edge that only ever runs from child to parent -- the observable consequence being that two sibling submodules bumping one parent serialize on the parent's operation lock, and the one that waits out `lock.acquireTimeoutSeconds` fails its bump with exit 8 after its own commit has already been made.
 
-A passthrough holds the lock for the **full duration** of the git command it wraps -- including an interactive `rebase -i`'s editor session. A second safegit process in that worktree waits `lock.acquireTimeoutSeconds` and then exits 8, naming the holder; it never runs concurrently. Two notes on interactive passthroughs, both measured rather than assumed (`testdata/experiments/exp-passthrough-editor-stdin.sh`):
+A guarded command holds the lock for the **full duration** of the git command it wraps -- including an interactive `rebase -i`'s editor session. A second safegit process in that worktree waits `lock.acquireTimeoutSeconds` and then exits 8, naming the holder; it never runs concurrently. Two notes on the interactive case, both measured rather than assumed (`testdata/experiments/exp-passthrough-editor-stdin.sh`):
 
 - The editor does run. A terminal editor (vim, nano, `emacs -nw`) opens `/dev/tty` and works normally.
-- `checkout`, `pull`, `merge`, `rebase`, `reset` and `bisect` reach git through the effects handle, which gives the child no stdin: anything that reads standard input sees EOF immediately. `cherry-pick` and `revert` exec git directly and inherit stdin whole.
+- `switch`, `pull`, `merge`, `rebase`, `reset` and `bisect` reach git through the effects handle, which gives the child no stdin: anything that reads standard input sees EOF immediately. `cherry-pick` and `revert` exec git directly and inherit stdin whole.
 
 A dry run takes no lock: it performs no mutation, and acquiring one would mean a command that promises to change nothing writing a file into `.git/safegit`.
 
@@ -191,7 +191,7 @@ Git worktrees allow multiple checkouts of the same repository. safegit places **
 
 The `SharedSafegitDir` function resolves the common git directory at runtime, so those lock files always land in the shared location regardless of which worktree initiated the commit.
 
-The **operation** lock is the deliberate exception: it lives in the worktree-local safegit directory, because it protects one worktree's tree rather than a ref every worktree shares. Two worktrees therefore checkout, merge and rebase independently, while two processes in one worktree serialize. `safegit doctor` scans both trees.
+The **operation** lock is the deliberate exception: it lives in the worktree-local safegit directory, because it protects one worktree's tree rather than a ref every worktree shares. Two worktrees therefore switch, merge and rebase independently, while two processes in one worktree serialize. `safegit doctor` scans both trees.
 
 :-: ref path="internal/repo" lang="go"
 
