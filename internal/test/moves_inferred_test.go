@@ -311,9 +311,11 @@ func TestConclusionInfersNothing(t *testing.T) {
 	assertInferredPairs(t, dir)
 }
 
-// An AMEND mints nothing for now: preservation of the records already on the
-// message is unaffected, and subphase 6.4 gives the amend path its own arm.
-func TestAmendMintsNothingYet(t *testing.T) {
+// An AMEND infers against the AUTHORING EVENT's own delta -- the amended tree
+// against the replaced tip's first parent -- rather than against the tip it
+// replaces. The commit that comes out is the one the record describes: the step
+// from that parent to this commit, moves and all.
+func TestAmendMintsTheMovesTheAuthoringEventWitnesses(t *testing.T) {
 	dir := newRepo(t)
 	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
 	safegitCommitEnv(t, dir, inferredSession, "seed", "a.txt")
@@ -326,5 +328,87 @@ func TestAmendMintsNothingYet(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("amend failed (code %d): %s", code, stderr)
 	}
+	assertInferredPairs(t, dir, "a.txt -> b.txt")
+	assertOrigins(t, commitMessageOf(t, dir, "HEAD"), "observed")
+}
+
+// An amend's inference is ADDITIVE: the records already on the message are
+// preserved verbatim, and what the amend's own delta witnesses joins them. The
+// first record's id is the pin -- a preserved record is carried across, never
+// re-minted.
+func TestAmendAddsToTheRecordsTheMessageAlreadyCarries(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
+	testutil.WriteFile(t, dir, "c.txt", "other content nothing else holds\n")
+	safegitCommitEnv(t, dir, inferredSession, "seed", "a.txt", "c.txt")
+
+	moveOnDisk(t, dir, "a.txt", "b.txt")
+	if _, stderr, code := runSafegitEnv(t, dir, inferredSession, "commit", "-m", "move a",
+		"--moved", "a.txt -> b.txt", "--", "a.txt", "b.txt"); code != 0 {
+		t.Fatalf("commit failed (code %d): %s", code, stderr)
+	}
+	declaredID := movedRecordsIn(t, commitMessageOf(t, dir, "HEAD"))[0][0]
+
+	// The second move rides an amend of that same commit.
+	moveOnDisk(t, dir, "c.txt", "d.txt")
+	if _, stderr, code := runSafegitEnv(t, dir, inferredSession, "commit", "--amend",
+		"--", "c.txt", "d.txt"); code != 0 {
+		t.Fatalf("amend failed (code %d): %s", code, stderr)
+	}
+
+	msg := commitMessageOf(t, dir, "HEAD")
+	assertInferredPairs(t, dir, "a.txt -> b.txt", "c.txt -> d.txt")
+	assertOrigins(t, msg, "declared", "observed")
+	if got := movedRecordsIn(t, msg)[0][0]; got != declaredID {
+		t.Errorf("the preserved record's id is %q, want the original %q", got, declaredID)
+	}
+}
+
+// A REWORD mints nothing, because rewording changes no tree: there is no
+// authoring event to read. What it does do is carry every record across
+// verbatim -- dropping one is a retraction the caller states, never a side
+// effect of replacing the message.
+func TestRewordMintsNothingAndKeepsEveryRecord(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
+	safegitCommitEnv(t, dir, inferredSession, "seed", "a.txt")
+
+	// A move committed by raw git, so the commit carries no record at all while
+	// its delta witnesses one. A reword of it still records nothing.
+	moveOnDisk(t, dir, "a.txt", "b.txt")
+	testutil.Git(t, dir, "add", "a.txt", "b.txt")
+	testutil.Git(t, dir, "commit", "-m", "move a with raw git")
+	if _, stderr, code := runSafegitEnv(t, dir, inferredSession, "commit", "--amend",
+		"-m", "reworded subject"); code != 0 {
+		t.Fatalf("reword failed (code %d): %s", code, stderr)
+	}
+	msg := commitMessageOf(t, dir, "HEAD")
+	if !strings.HasPrefix(msg, "reworded subject") {
+		t.Fatalf("the reword did not replace the message:\n%s", msg)
+	}
 	assertInferredPairs(t, dir)
+
+	// And a reword of a commit that DOES carry a record keeps it, id and origin
+	// intact.
+	testutil.WriteFile(t, dir, "c.txt", "other content nothing else holds\n")
+	safegitCommitEnv(t, dir, inferredSession, "seed c", "c.txt")
+	moveOnDisk(t, dir, "c.txt", "d.txt")
+	if _, stderr, code := runSafegitEnv(t, dir, inferredSession, "commit", "-m", "move c",
+		"--", "c.txt", "d.txt"); code != 0 {
+		t.Fatalf("commit failed (code %d): %s", code, stderr)
+	}
+	before := movedRecordsIn(t, commitMessageOf(t, dir, "HEAD"))
+	if len(before) != 1 {
+		t.Fatalf("the fixture recorded %v, want one record", before)
+	}
+
+	if _, stderr, code := runSafegitEnv(t, dir, inferredSession, "commit", "--amend",
+		"-m", "move c, said better"); code != 0 {
+		t.Fatalf("reword failed (code %d): %s", code, stderr)
+	}
+	after := commitMessageOf(t, dir, "HEAD")
+	if got := movedRecordsIn(t, after); len(got) != 1 || got[0] != before[0] {
+		t.Errorf("the reword changed the records: %v, want %v; message:\n%s", got, before, after)
+	}
+	assertOrigins(t, after, "observed")
 }

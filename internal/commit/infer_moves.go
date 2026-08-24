@@ -124,10 +124,6 @@ type moveInference struct {
 	// newMoveInference.
 	enabled bool
 
-	// declared is the pair set the caller already stated, whose paths are
-	// suppressed before any pairing happens.
-	declared []trailer.Pair
-
 	// done marks that attempt 1 has run and the three fields below hold its
 	// answer.
 	done    bool
@@ -153,16 +149,25 @@ type moveInference struct {
 //     the reverted commit's own message and arrives as MovedRecords.
 //   - an operation with no delta to read at all, which is nothing today.
 //
-// AMEND AND REWORD reach none of this: they have their own attempt loop
-// (tryAmend, tryReword) and mint nothing for now. Subphase 6.4 gives amend its
-// own arm -- inference against the AUTHORING EVENT's delta, the new tree
-// against the replaced tip's first parent -- and reword keeps minting nothing,
-// because rewording changes no tree.
-func newMoveInference(req CommitRequest, movedTrailers []string) *moveInference {
-	return &moveInference{
-		enabled:  req.IndexBase == IndexBaseParentTree,
-		declared: declaredPairs(movedTrailers),
-	}
+// AMEND has its own constructor below, because its delta is not this one's.
+// REWORD has none at all: rewording changes no tree, so there is no authoring
+// event to read and nothing that could be witnessed.
+func newMoveInference(req CommitRequest) *moveInference {
+	return &moveInference{enabled: req.IndexBase == IndexBaseParentTree}
+}
+
+// newAmendMoveInference prepares inference for one amend operation.
+//
+// An amend replaces the tip, and the commit it writes describes the step from
+// that tip's FIRST PARENT to itself -- so that is the delta this reads, and it
+// is a second per-attempt diff rather than the one tryAmend already takes
+// (which compares against the replaced tip, and is the amend's own edit).
+//
+// What it mints is ADDITIVE: the records already on the message are preserved
+// whatever happens here, and the paths they name suppress, so an amend of a
+// commit that already recorded its move records it once.
+func newAmendMoveInference() *moveInference {
+	return &moveInference{enabled: true}
 }
 
 // declaredPairs reads the pairs out of the move records this commit already
@@ -195,13 +200,22 @@ func declaredPairs(movedTrailers []string) []trailer.Pair {
 // on the first attempt and re-checking every later one against that answer.
 //
 // parentTreeSHA is the tree of the commit being built on, empty for a root
-// commit; newTreeSHA is the tree just written.
-func (m *moveInference) records(ctx context.Context, changed []git.ChangedPath, parentTreeSHA, newTreeSHA string) ([]string, error) {
+// commit; newTreeSHA is the tree just written. declared is the pair set this
+// commit already states -- the caller's own declarations, plus (on an amend)
+// the records being preserved from the message it replaces -- whose paths are
+// suppressed before any pairing happens.
+//
+// declared is a per-attempt ARGUMENT rather than retained state because the
+// amend path reads it off the tip it is replacing, which a concurrent session
+// can move between attempts. A declared set that changes therefore changes the
+// inferred set, and the compare below aborts, which is the right answer: the
+// message was already composed against the earlier one.
+func (m *moveInference) records(ctx context.Context, changed []git.ChangedPath, parentTreeSHA, newTreeSHA string, declared []trailer.Pair) ([]string, error) {
 	if !m.enabled {
 		return nil, nil
 	}
 
-	pairs, refused, capped, err := inferMoves(ctx, changed, m.declared, parentTreeSHA, newTreeSHA)
+	pairs, refused, capped, err := inferMoves(ctx, changed, declared, parentTreeSHA, newTreeSHA)
 	if err != nil {
 		return nil, err
 	}

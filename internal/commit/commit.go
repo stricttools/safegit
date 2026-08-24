@@ -413,12 +413,15 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	// the ref changes that delta. So the state is once-per-operation -- the ids
 	// minted once, attempt 1's answer retained as data -- while the inference
 	// itself runs per attempt. See moveInference.
-	inference := newMoveInference(req, movedTrailers)
+	inference := newMoveInference(req)
+	// The pairs this commit already states, resolved once with the records
+	// themselves: a plain commit's declarations cannot change between attempts.
+	declaredMoves := declaredPairs(movedTrailers)
 
 	maxAttempts := p.Config.Commit.CASMaxAttempts
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryCommit(ctx, ref, repoRoot, previewArea, files, movedTrailers, req, hooks, inference, attempt)
+		result, retry, err := p.tryCommit(ctx, ref, repoRoot, previewArea, files, movedTrailers, declaredMoves, req, hooks, inference, attempt)
 		if err != nil {
 			// result is nil for every refusal and non-nil for the commit-stands
 			// verdict alone, which is the one error a caller has something to
@@ -489,6 +492,7 @@ func (p *Pipeline) tryCommit(
 	ref, repoRoot, previewArea string,
 	files *intake,
 	movedTrailers []string,
+	declaredMoves []trailer.Pair,
 	req CommitRequest,
 	hooks *nativeHooks,
 	inference *moveInference,
@@ -603,7 +607,7 @@ func (p *Pipeline) tryCommit(
 	// before the message is composed, so a commit safegit is about to refuse
 	// infers nothing and so the records are on the message the commit-msg hook
 	// sees, exactly like every other piece of caller content.
-	inferred, err := inference.records(ctx, changed, parentTree, treeSHA)
+	inferred, err := inference.records(ctx, changed, parentTree, treeSHA, declaredMoves)
 	if err != nil {
 		return nil, false, err
 	}
