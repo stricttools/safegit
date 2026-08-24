@@ -438,6 +438,46 @@ func TestPickAndRevertContinuePassthroughsNameSafegitsCommand(t *testing.T) {
 	}
 }
 
+// TestContinuePassthroughWithNothingInFlightIsRefusedAtTheBoundary pins the
+// SECOND half of the forwarded-`--continue` refusal, which arrives from a
+// different place than the first.
+//
+// With an operation in flight the refusal is the operation-specific one above.
+// With NOTHING in flight there is no operation to name, and the old behavior was
+// to forward the argv and let git answer "no cherry-pick in progress". It is no
+// longer forwarded: the git-execution boundary refuses any invocation whose
+// shape would let git author a commit, and a forwarded `--continue` is exactly
+// that shape -- git's own `--continue` is its commit-making invocation.
+//
+// AS BUILT, and awaiting a ruling on the trade: the command line failed either
+// way, and what changed is that the refusal is safegit's (exit 1, with the
+// reason) rather than git's (exit 128, "no cherry-pick in progress"). The entry
+// in docs/divergences.md states it.
+func TestContinuePassthroughWithNothingInFlightIsRefusedAtTheBoundary(t *testing.T) {
+	for _, verb := range []string{"merge", "cherry-pick", "revert"} {
+		t.Run(verb, func(t *testing.T) {
+			dir := newRepo(t)
+			testutil.WriteFile(t, dir, "c.txt", "base\n")
+			safegitCommitEnv(t, dir, revertSession, "base", "c.txt")
+			tip := testutil.Rev(t, dir, "HEAD")
+
+			_, stderr, code := runSafegitEnv(t, dir, revertSession, verb, "--continue")
+			if code == 0 {
+				t.Fatalf("safegit %s --continue exited 0 with nothing in flight:\n%s", verb, stderr)
+			}
+			if !strings.Contains(stderr, "AUTHOR a commit") {
+				t.Errorf("the refusal is not the single-authorship boundary's:\n%s", stderr)
+			}
+			if stderr == "" {
+				t.Error("the refusal printed nothing at all; a bare nonzero exit tells an operator nothing")
+			}
+			if head := testutil.Rev(t, dir, "HEAD"); head != tip {
+				t.Errorf("HEAD moved to %s despite the refusal (was %s)", head, tip)
+			}
+		})
+	}
+}
+
 // TestQueuedContinuePassthroughNamesGitInstead is the boundary of the refusal
 // above: a raw-git QUEUE is git's operation, so `safegit cherry-pick --continue`
 // must not claim safegit concludes it -- and no refusal issued in that state may
