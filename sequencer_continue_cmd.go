@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 
+	"github.com/smm-h/safegit/internal/conflict"
+	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/sequencer"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
@@ -274,7 +276,7 @@ func (op continueOp) renderHuman(flags globalFlags, out conclusionResult, headli
 			fmt.Printf(" the autostash %s would then be applied to the working tree and %s removed\n",
 				shortSHA(out.state.Autostash), sequencer.FileMergeAutostash)
 		}
-		if written, removed := worktreeEffects(out.declared); len(written)+len(removed) > 0 {
+		if written, removed := worktreeEffects(out.declared, out.sides); len(written)+len(removed) > 0 {
 			if len(written) > 0 {
 				fmt.Printf(" %d working-tree file(s) would be overwritten with the resolved content: %s\n", len(written), joinPaths(written))
 			}
@@ -301,7 +303,7 @@ func (op continueOp) renderHuman(flags globalFlags, out conclusionResult, headli
 	// was committed (git's own `checkout --ours`), and `delete` removes it (git's
 	// own `rm`). A `worktree` resolution needs no line -- the file on disk was
 	// the source.
-	written, removed := worktreeEffects(out.declared)
+	written, removed := worktreeEffects(out.declared, out.sides)
 	if len(written) > 0 {
 		fmt.Printf(" %d working-tree file(s) written with the resolved content: %s\n", len(written), joinPaths(written))
 	}
@@ -316,20 +318,38 @@ func (op continueOp) renderHuman(flags globalFlags, out conclusionResult, headli
 // deletes. A `worktree` resolution appears in neither: its file on disk is
 // where the committed content came from.
 //
-// The split is by KEYWORD, not by what the stages hold, so it is the same
-// answer before the commit (a preview) and after it (the report). A stage the
-// conflict does not have turns an overwrite into a deletion on disk, which the
-// listing already says and which this line does not try to predict.
-func worktreeEffects(declared []resolution) (written, removed []string) {
+// The split is by what the resolution DOES, not by its keyword. `ours` and
+// `theirs` name an index stage, and a stage the conflict does not have is the
+// side that DELETED the path -- resolving to it removes the file from disk
+// exactly as `delete` does (see writeStageToWorktree, which is the one place
+// that behavior lives). Reporting it as a write would name a file that is no
+// longer there and describe the opposite of what happened.
+//
+// The answer is the same before the commit and after it, because both are read
+// from the same stages: a preview and a report of the same command line say the
+// same thing.
+func worktreeEffects(declared []resolution, sides map[string]conflict.Sides) (written, removed []string) {
 	for _, r := range declared {
+		s := sides[r.Path]
 		switch r.Choice {
-		case resolveOurs, resolveTheirs:
-			written = append(written, r.Path)
+		case resolveOurs:
+			written, removed = appendByStage(written, removed, r.Path, s.Ours)
+		case resolveTheirs:
+			written, removed = appendByStage(written, removed, r.Path, s.Theirs)
 		case resolveDelete:
 			removed = append(removed, r.Path)
 		}
 	}
 	return written, removed
+}
+
+// appendByStage files one stage resolution under what it does on disk: an
+// absent stage removes the path, a present one writes its content.
+func appendByStage(written, removed []string, path string, e *git.UnmergedEntry) ([]string, []string) {
+	if e == nil {
+		return written, append(removed, path)
+	}
+	return append(written, path), removed
 }
 
 // messageSubject renders something to head a preview line with. A preview has
