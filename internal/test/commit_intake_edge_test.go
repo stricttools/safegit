@@ -204,9 +204,11 @@ func TestIntakeEdgeColonNameDeletion(t *testing.T) {
 // itself) and staging (`git add` records the link text happily), and then MOVE
 // DETECTION hashed it with `git hash-object -- <path>`, which opens the TARGET
 // and fails. Detection skipped disk-absent paths but not paths whose target was
-// absent. Move detection is gone entirely -- a move is declared, never guessed
-// (see internal/commit/moved.go) -- so nothing on the commit path opens a
-// symlink's target any more.
+// absent. That detection is gone: safegit records moves either because a caller
+// DECLARED one or because a commit's own raw delta witnesses it, and the delta
+// is read from the object names git already reported (internal/commit's
+// infer_moves.go). Nothing on the commit path hashes a working-tree file to ask
+// what it holds, so nothing opens a symlink's target any more.
 func TestIntakeEdgeDanglingSymlinkNoColon(t *testing.T) {
 	dir := newRepo(t)
 	name := "link1"

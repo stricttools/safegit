@@ -21,11 +21,15 @@ import (
 //
 // The grammar is one line:
 //
-//	Moved: <id> <old> -> <new>
+//	Moved: <id> [observed] <old> -> <new>
 //
 // with each path token quoted when it needs to be (cquote.go) and a trailing
-// slash on BOTH sides meaning "everything under this prefix". The retraction is
-// the same shape with nothing but an id:
+// slash on BOTH sides meaning "everything under this prefix". The slot between
+// the id and the pair is the ORIGIN, and it holds one token or none: `observed`
+// for a claim safegit derived from a commit's delta, NOTHING for a declared one
+// -- absence is the value, which is why every record written before the slot
+// existed is a declared record without anything being migrated (see Origin).
+// The retraction is the same shape with nothing but an id:
 //
 //	Moved-Retract: <id>
 //
