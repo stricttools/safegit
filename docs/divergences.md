@@ -511,6 +511,14 @@ Every future change that introduces a decision of this kind adds its entry here.
   put somebody else's uncommitted work into files the merge never touched and
   then remove the only name that work has left. `safegit doctor` reports the
   same file as an orphan when no merge is in flight at all.
+- **The limit, stated:** the two facts cannot separate a genuine abandoned
+  autostash from this merge's own when the branch has **not moved** since — it
+  carries git's own message shape and the same first parent, so it passes both
+  halves and is applied. That state takes hand-mutilated repository state to
+  reach: git's `merge --abort` and `rebase --abort` re-apply the autostash and
+  remove the file, so it survives at an unmoved tip only where somebody deleted
+  the operation's state files by hand. Whether to strengthen the key is part of
+  what this entry awaits.
 - **Ruling:** ours — **provisional, newly cataloged, awaiting review**
 
 ### A detached HEAD is refused, with the exact way back
