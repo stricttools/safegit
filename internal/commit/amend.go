@@ -151,10 +151,15 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	}
 	defer hooks.cleanup()
 
+	// The moves the amended commit's own authoring event witnesses. Once per
+	// operation, exactly like the plain commit path's -- the ids are minted once
+	// and attempt 1's answer is retained as data. See moveInference.
+	inference := newAmendMoveInference()
+
 	maxAttempts := p.Config.Commit.CASMaxAttempts
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryAmend(ctx, ref, repoRoot, previewArea, files, movedTrailers, req, hooks, attempt)
+		result, retry, err := p.tryAmend(ctx, ref, repoRoot, previewArea, files, movedTrailers, req, hooks, inference, attempt)
 		if err != nil {
 			// Non-nil for the commit-stands verdict alone -- see PartialError.
 			return result, err
@@ -213,6 +218,7 @@ func (p *Pipeline) tryAmend(
 	movedTrailers []string,
 	req AmendRequest,
 	hooks *nativeHooks,
+	inference *moveInference,
 	attempt int,
 ) (*AmendResult, bool, error) {
 
@@ -281,22 +287,42 @@ func (p *Pipeline) tryAmend(
 		return nil, false, unmatchedSourceError(unmatched, ref)
 	}
 
-	// SEAM for subphase 6.4: an amend mints NOTHING for now. Its arm of the
-	// inference is not this diff -- `changed` above compares the amended tree
-	// against the REPLACED TIP, which is the amend's own edit and not the step
-	// the commit describes. The records an amend adds are inferred against the
-	// AUTHORING EVENT's delta, the new tree against the replaced tip's first
-	// parent (parents[0] below), which is a second per-attempt diff taken here.
-	// Preservation of the records already on the message is unaffected and
-	// happens below; a reword mints nothing at all, because rewording changes no
-	// tree.
+	// The moves the AUTHORING EVENT witnesses. Not `changed` above, which
+	// compares the amended tree against the REPLACED TIP and is the amend's own
+	// edit: the commit that comes out describes the step from the tip's first
+	// parent to itself, so that is the delta a record on it has to be read from.
+	// It is a second per-attempt diff, taken against the trees this attempt
+	// actually resolved.
+	//
+	// The records already on the message SUPPRESS -- they are preserved either
+	// way (below), and a path one of them names is already answered for -- so
+	// what this adds is only what the message does not already say.
+	authoringTree := ""
+	if len(parents) > 0 {
+		authoringTree, err = p.parentTreeSHA(ctx, parents[0])
+		if err != nil {
+			return nil, false, fmt.Errorf("resolving the tree of %s: %w", parents[0], err)
+		}
+	}
+	authored, err := git.DiffTree(ctx, authoringTree, treeSHA)
+	if err != nil {
+		return nil, false, fmt.Errorf("comparing the amended tree against %s: %w",
+			refOrEmptyTree(len(parents) == 0, firstParent(parents)), err)
+	}
+	existingMoved := trailer.MovedLines(tip.Message)
+	inferred, err := inference.records(ctx, authored, authoringTree, treeSHA,
+		declaredPairs(append(append([]string{}, existingMoved...), movedTrailers...)))
+	if err != nil {
+		return nil, false, err
+	}
 
 	// The commit-msg hook, on the message with the user's own trailers and move
 	// records on it and before safegit's session trailer goes on. A -m that
 	// replaces the message carries the replaced message's move records forward:
 	// dropping a record is a retraction the caller states, never a side effect
 	// of rewording.
-	trailers := commitTrailers(req.Trailers, preservedMovedLines(tip.Message, req.Message != ""), movedTrailers)
+	trailers := commitTrailers(req.Trailers, preservedMovedLines(tip.Message, req.Message != ""),
+		append(append([]string{}, movedTrailers...), inferred...))
 	msg, err := hooks.commitMsg(ctx, tmpIdx.IndexPath, trailer.AppendCustom(message, trailers))
 	if err != nil {
 		return nil, false, err
