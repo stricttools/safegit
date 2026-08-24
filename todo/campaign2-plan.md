@@ -314,9 +314,11 @@ Depends on 1.1 (guard column), 1.2 (entry spelling), 1.3.
 Enforcement of single authorship lives at the git-execution boundary,
 which every git subprocess already passes through:
 - `internal/gitexec`'s classification table gains an AUTHORS-COMMIT view:
-  the argv shapes under which git itself would create a commit (`git
-  commit`; `merge` without `--no-commit` when not fast-forward-only;
-  `cherry-pick`/`revert` without `--no-commit`; `am`; `rebase`).
+  the argv shapes under which git itself would create or move a commit ref
+  (`git commit`; `merge` without `--no-commit`; `cherry-pick`/`revert`
+  without `--no-commit`; `am`; `rebase`). safegit's own compute
+  invocations always carry `--no-commit` (and merge's carries `--no-ff`,
+  per 2.2), so no production door for a bare form exists.
 - A guard (registration/AST level, the campaign-1 exec-boundary guard
   pattern) refuses construction of authors-commit argv anywhere outside
   the DECLARED DOORS: the pipeline's compute invocations (the
@@ -347,8 +349,14 @@ asserted in the payload tests.
   exists to author), records the oplog entry with a fast-forward
   outcome, and reports it; `--no-ff` elects a merge commit; `--ff-only`
   refuses non-fast-forward.
-- Non-fast-forward path: run `git merge --no-commit` (git never
-  commits). Clean result: the parked state (MERGE_HEAD, staged index)
+- Non-fast-forward path: run `git merge --no-ff --no-commit` — BOTH
+  flags always, regardless of what the operator passed: `--no-commit`
+  alone cannot stop a fast-forward (git documents this), so if the
+  ff-ness check races a concurrent tip move, a bare `--no-commit`
+  invocation would fast-forward the ref directly, outside CAS;
+  `--no-ff` makes that impossible (git always parks a merge state,
+  and the conclusion's CAS ref update then catches any tip movement).
+  Clean result: the parked state (MERGE_HEAD, staged index)
   is concluded IMMEDIATELY through the merge-continue engine with an
   empty resolution set — message from `-m` or the stripped MERGE_MSG,
   commit-msg hook, trailers, CAS ref update, state cleanup — a
@@ -624,7 +632,8 @@ comments (autobump.go:210-212, :131-136) update.
 
 ## Phase 4 — Effects honesty `[user]`
 
-Depends on 1.5. 3.2's and 3.6's doctor FIX actions ship inside 4.2.
+Depends on 1.5 and 3.1 (the payload conventions the effects records
+ride). 3.2's and 3.6's doctor FIX actions ship inside 4.2.
 
 ### 4.1 Undo
 Mint the ref update / root-undo deletion through the effects handle
@@ -750,7 +759,10 @@ routes, and the refusal text names them: (1) edits belong in their own
 commit -> commit the content first, then mv; (2) edits should ride
 along with the move -> move on disk yourself, then `safegit commit
 --moved 'old -> new' -- <new>`, which stages from disk and commits
-content + move together. Mechanics: dirtiness is filter-aware —
+content + move together. The refusal joins mv's collected refusal at
+exit 19 (the world contradicts the move's preconditions — the same
+family as a missing destination) `[plan]`. Mechanics: dirtiness is
+filter-aware —
 compare `git hash-object --path <newpath>` of the disk bytes against
 the parent blob (attributes decided by the NEW path), so
 CRLF-conversion checkouts never false-refuse (control test); the
@@ -1097,6 +1109,13 @@ plan defect)
   TestPickAndRevertContinuePassthroughsNameSafegitsCommand/revert;
   the multi-commit-no-records test (becomes a refusal pin).
   scrub_remap_test.go:403 STAYS GREEN (no remap change exists).
+- 2.5 (pull restructure): pins asserting pull's passthrough shape or
+  git-authored merge results; pull's rows in the guarded-passthrough
+  registries and classification pins.
+- 2.6 (allowlist): any existing test exercising a now-refused
+  forwarded form through safegit is rewritten to an allowed form or
+  becomes a refusal pin (raw-git fixture setup is unaffected — tests
+  drive fixtures with git directly).
 - 2.7 (delegation deletion): the sequencer_delegation suites and the
   delegation-notice literal-sentence pins (the sentence's producer is
   deleted); sequencer_delegation_delete rewritten as the raw-git-queue
