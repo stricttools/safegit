@@ -345,17 +345,24 @@ func (m *moveInference) notice() {
 		return
 	}
 
+	// The first group is the COMPLEMENT of the two named ones rather than a list
+	// of its own members, so a reason added later is counted in the general
+	// sentence instead of vanishing from the notice entirely. Reporting a
+	// refusal under slightly broad wording is a smaller failure than not
+	// reporting it.
 	var sentences []string
-	if n := refusedMoveCount(m.refused, refusedAmbiguous, refusedParentNotUnique, refusedNewNotUnique, refusedOverCap); n > 0 {
+	if n := refusedMoveCount(m.refused, func(reason string) bool {
+		return reason != refusedOverlaps && reason != refusedUntracked
+	}); n > 0 {
 		sentences = append(sentences, fmt.Sprintf("%d possible move(s) in this commit were not recorded, "+
 			"because the repository does not single them out; declare the ones you mean with "+
 			"--moved 'old -> new'.", n))
 	}
-	if n := refusedMoveCount(m.refused, refusedOverlaps); n > 0 {
+	if n := refusedMoveCount(m.refused, func(reason string) bool { return reason == refusedOverlaps }); n > 0 {
 		sentences = append(sentences, fmt.Sprintf("%d possible move(s) were not recorded, because each would "+
 			"overlap a move this commit already states.", n))
 	}
-	if n := refusedMoveCount(m.refused, refusedUntracked); n > 0 {
+	if n := refusedMoveCount(m.refused, func(reason string) bool { return reason == refusedUntracked }); n > 0 {
 		sentences = append(sentences, fmt.Sprintf("%d possible move(s) were not recorded, because the old path "+
 			"is an --untrack target and is still on disk; commit its removal instead if it really moved.", n))
 	}
@@ -365,22 +372,19 @@ func (m *moveInference) notice() {
 	fmt.Fprintf(os.Stderr, "notice: %s\n", strings.Join(sentences, " "))
 }
 
-// refusedMoveCount counts the MOVES a refusal set stands for, over the reasons
-// named -- not the entries, which is what the notice used to count.
+// refusedMoveCount counts the MOVES a refusal set stands for, over the entries
+// whose reason the predicate selects -- not the entries themselves, which is
+// what the notice used to count.
 //
 // An ambiguous blob is ONE entry naming every path on the side that was
 // ambiguous, so counting entries told a caller who moved two files that one
 // move went unrecorded. The count per entry is therefore the longer of its two
 // sides: two deleted paths and two added ones are two moves nobody recorded,
 // whichever way they were meant to pair up.
-func refusedMoveCount(refused []RefusedMove, reasons ...string) int {
-	want := make(map[string]bool, len(reasons))
-	for _, r := range reasons {
-		want[r] = true
-	}
+func refusedMoveCount(refused []RefusedMove, selects func(reason string) bool) int {
 	total := 0
 	for _, r := range refused {
-		if !want[r.Reason] {
+		if !selects(r.Reason) {
 			continue
 		}
 		n := len(r.Old)
