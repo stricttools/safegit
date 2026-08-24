@@ -1,6 +1,7 @@
 package test
 
 import (
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,7 +10,8 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// `safegit revert` of a SINGLE commit, and the passthrough refusals around it.
+// `safegit revert` is single-form, and every command line it cannot author is
+// refused rather than handed to git.
 //
 // A plain passthrough revert left two things behind: a commit git authored,
 // with none of safegit's trailers, and git's own operation state (REVERT_HEAD,
@@ -19,8 +21,11 @@ import (
 //
 // The restructured form splits the operation where git splits it: `git revert
 // --no-commit` computes the inverse patch and stages it, and the conclusion
-// engine commits it. The tests below assert both halves, plus the cases that
-// deliberately stay plain passthroughs.
+// engine commits it. There is no second arm any more: the passthrough that used
+// to catch everything the restructure could not honor is gone, so a command
+// line outside the subset meets a refusal that names what is absent. The tests
+// below assert both halves, plus the two forms that author nothing and
+// therefore stay plain passthroughs.
 
 // revertSession is the handshake these tests spawn safegit with, so the session
 // trailer is observable at all.
@@ -128,72 +133,192 @@ func TestConflictedSingleRevertComposesWithRevertContinue(t *testing.T) {
 	assertNoSequencerResidue(t, dir, "revert-continue after a conflicted safegit revert")
 }
 
-// TestMultiCommitRevertStaysASequencerPassthrough: more than one commit is a
-// queue, which safegit does not restructure -- git's sequencer runs it, and a
-// mid-queue conflict is concluded by revert-continue's delegation.
-func TestMultiCommitRevertStaysASequencerPassthrough(t *testing.T) {
-	dir := newRepo(t)
-	testutil.WriteFile(t, dir, "a.txt", "a1\n")
-	safegitCommitEnv(t, dir, revertSession, "a1", "a.txt")
-	first := testutil.Rev(t, dir, "HEAD")
-	testutil.WriteFile(t, dir, "b.txt", "b1\n")
-	safegitCommitEnv(t, dir, revertSession, "b1", "b.txt")
-	second := testutil.Rev(t, dir, "HEAD")
+// TestSingleRevertWritesExactlyOneOplogEntry: one operation, one entry, under
+// the COMMAND's own op name.
+//
+// The restructure used to write two: the compute step appended an entry of its
+// own naming the argv, and the conclusion's pipeline appended a second under
+// the conclusion command's name. The first recorded no commit and could not be
+// undone, so the audit trail carried an operation that was really half of
+// another one.
+func TestSingleRevertWritesExactlyOneOplogEntry(t *testing.T) {
+	dir, target := newRevertRepo(t)
+	tip := testutil.Rev(t, dir, "HEAD")
 
-	if _, stderr, code := runSafegitEnv(t, dir, revertSession, "revert", "--no-edit", second, first); code != 0 {
-		t.Fatalf("a clean two-commit revert failed (code %d): %s", code, stderr)
+	if _, stderr, code := runSafegitEnv(t, dir, revertSession, "revert", "--no-edit", target); code != 0 {
+		t.Fatalf("safegit revert failed (code %d): %s", code, stderr)
 	}
-	// git ran the queue: two revert commits on top of the fixture.
-	subjects := testutil.GitOut(t, dir, "log", "--format=%s", "-2")
-	for _, want := range []string{`Revert "a1"`, `Revert "b1"`} {
-		if !strings.Contains(subjects, want) {
-			t.Errorf("the queue did not run; log holds:\n%s", subjects)
-		}
+	head := testutil.Rev(t, dir, "HEAD")
+
+	entries := oplogEntries(t, dir, "revert")
+	if len(entries) != 1 {
+		t.Fatalf("expected exactly one revert oplog entry, got %d: %v", len(entries), entries)
 	}
-	// A queue's commits are git's, so they carry no safegit trailer. Stated as
-	// an assertion so the difference between the two forms stays deliberate.
-	if msg := commitMessage(t, dir, "HEAD"); strings.Contains(msg, "Claude-Code-Session-Id") {
-		t.Errorf("a queued revert's commit carries a safegit trailer; only the single-commit form is pipeline-authored:\n%s", msg)
+	extra := oplogExtra(entries[0])
+	if got, _ := oplogExtraString(extra, "ref"); got != "refs/heads/main" {
+		t.Errorf("the revert entry records ref %q, want refs/heads/main; extra=%v", got, extra)
+	}
+	if got, _ := oplogExtraString(extra, "parent"); got != tip {
+		t.Errorf("the revert entry records old tip %q, want %q; extra=%v", got, tip, extra)
+	}
+	if got, _ := oplogExtraString(extra, "sha", "to", "result"); got != head {
+		t.Errorf("the revert entry records new tip %q, want %q; extra=%v", got, head, extra)
+	}
+	if n := len(oplogEntries(t, dir, "revert-continue")); n != 0 {
+		t.Errorf("the revert recorded %d revert-continue entries; the command records under its OWN name", n)
+	}
+
+	// And the one entry is the undoable one.
+	if _, stderr, code := runSafegitEnv(t, dir, revertSession, "undo"); code != 0 {
+		t.Fatalf("undo of a pipeline-authored revert failed (code %d): %s", code, stderr)
+	}
+	if back := testutil.Rev(t, dir, "HEAD"); back != tip {
+		t.Errorf("undo left HEAD at %s, want the pre-revert tip %s", back, tip)
 	}
 }
 
-// TestRevertFormsThatStayPassthroughs: the restructure applies only where
-// safegit can honor every flag. Each case below must behave exactly as it did
-// before the restructure existed, which for --no-commit means the staged result
-// and the state files are still there for the operator to use.
-func TestRevertFormsThatStayPassthroughs(t *testing.T) {
-	t.Run("--no-commit", func(t *testing.T) {
-		dir, target := newRevertRepo(t)
-		tip := testutil.Rev(t, dir, "HEAD")
+// TestSingleRevertCarriesAPayload: `revert` declares a payload schema of its
+// own, so a machine-mode run says what it did rather than emitting a null
+// payload beside a commit it made.
+//
+// The members are the conclusion payload's minus the resolution and queue
+// members -- a revert safegit itself started has neither -- plus the reverted
+// commit, which nothing else in the document names.
+func TestSingleRevertCarriesAPayload(t *testing.T) {
+	dir, target := newRevertRepo(t)
 
-		if _, stderr, code := runSafegitEnv(t, dir, revertSession,
-			"revert", "--no-commit", "--no-edit", target); code != 0 {
-			t.Fatalf("revert --no-commit failed (code %d): %s", code, stderr)
-		}
-		if head := testutil.Rev(t, dir, "HEAD"); head != tip {
-			t.Error("--no-commit committed anyway: the restructure must not claim this form")
-		}
-		if !testutil.FileExists(filepath.Join(dir, ".git", "REVERT_HEAD")) {
-			t.Error("--no-commit left no REVERT_HEAD, so its staged result cannot be concluded")
-		}
-		if status := testutil.Git(t, dir, "status", "--porcelain"); !strings.Contains(status, "r.txt") {
-			t.Errorf("--no-commit staged nothing:\n%s", status)
-		}
-	})
+	stdout, stderr, code := runSafegitEnv(t, dir, revertSession, "--json", "revert", "--no-edit", target)
+	if code != exitcode.OK {
+		t.Fatalf("safegit --json revert failed (code %d): %s", code, stderr)
+	}
+	var payload struct {
+		Operation      string   `json:"operation"`
+		Source         string   `json:"source"`
+		Ref            string   `json:"ref"`
+		SHA            *string  `json:"sha"`
+		Parents        []string `json:"parents"`
+		Tree           string   `json:"tree"`
+		Files          []string `json:"files"`
+		StateCleared   bool     `json:"state_cleared"`
+		DeclinedChecks []struct {
+			Check string `json:"check"`
+		} `json:"declined_checks"`
+	}
+	if err := json.Unmarshal(decodeEnvelope(t, stdout).Payload, &payload); err != nil {
+		t.Fatalf("the revert payload does not parse: %v\nstdout=%s", err, stdout)
+	}
+	if payload.Operation != "revert" {
+		t.Errorf("payload operation = %q, want revert", payload.Operation)
+	}
+	if payload.Source != target {
+		t.Errorf("payload source = %q, want the reverted commit %s", payload.Source, target)
+	}
+	if payload.SHA == nil || *payload.SHA != testutil.Rev(t, dir, "HEAD") {
+		t.Errorf("payload sha = %v, want the commit that was created", payload.SHA)
+	}
+	if payload.Ref != "refs/heads/main" {
+		t.Errorf("payload ref = %q, want refs/heads/main", payload.Ref)
+	}
+	if !payload.StateCleared {
+		t.Error("payload state_cleared = false, but the revert's state files were removed")
+	}
+	if !testutil.Contains(payload.Files, "r.txt") {
+		t.Errorf("payload files = %v, want the reverted path", payload.Files)
+	}
+	if payload.DeclinedChecks == nil {
+		t.Error("payload declined_checks is null; an empty list is the answer when nothing was declined")
+	}
+}
 
-	t.Run("--edit", func(t *testing.T) {
-		dir, target := newRevertRepo(t)
-		// GIT_EDITOR=true accepts the draft without a terminal, which is what
-		// an --edit revert needs; the point of the case is that git's own
-		// commit path ran, not that an editor appeared.
-		env := append([]string{"GIT_EDITOR=true"}, revertSession...)
-		if _, stderr, code := runSafegitEnv(t, dir, env, "revert", "--edit", target); code != 0 {
-			t.Fatalf("revert --edit failed (code %d): %s", code, stderr)
-		}
-		if msg := commitMessage(t, dir, "HEAD"); strings.Contains(msg, "Claude-Code-Session-Id") {
-			t.Errorf("--edit was restructured; safegit's conclusion has no editor to honor it:\n%s", msg)
-		}
-	})
+// TestRevertRefusesRawGitShapes pins the subset boundary. The git-authored
+// passthrough arm is gone, so a command line safegit cannot author is a refusal
+// naming the capability that is absent -- never a quiet handover to git.
+func TestRevertRefusesRawGitShapes(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args func(target string) []string
+		says string
+	}{
+		{"two commits", func(tg string) []string { return []string{"revert", "--no-edit", "HEAD", "HEAD~1"} }, "one commit"},
+		{"two-dot range", func(tg string) []string { return []string{"revert", "--no-edit", "HEAD~2..HEAD"} }, "range"},
+		{"three-dot range", func(tg string) []string { return []string{"revert", "--no-edit", "HEAD~2...HEAD"} }, "range"},
+		{"exclusion", func(tg string) []string { return []string{"revert", "--no-edit", "HEAD", "^HEAD~2"} }, "range"},
+		{"skip", func(tg string) []string { return []string{"revert", "--skip"} }, "--skip"},
+		{"edit", func(tg string) []string { return []string{"revert", "--edit", tg} }, "--edit"},
+		{"gpg sign", func(tg string) []string { return []string{"revert", "--no-edit", "-S", tg} }, "sign"},
+		{"commit override", func(tg string) []string { return []string{"revert", "--no-edit", "--commit", tg} }, "--commit"},
+		{"cleanup", func(tg string) []string { return []string{"revert", "--no-edit", "--cleanup", "verbatim", tg} }, "--cleanup"},
+		{"no commit named", func(tg string) []string { return []string{"revert", "--no-edit"} }, "names no commit"},
+		{"pathspec", func(tg string) []string { return []string{"revert", "--no-edit", tg, "--", "r.txt"} }, "pathspec"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, target := newRevertRepo(t)
+			// A third commit, so HEAD~2 resolves in the range rows.
+			testutil.WriteFile(t, dir, "extra.txt", "extra\n")
+			safegitCommitEnv(t, dir, revertSession, "extra", "extra.txt")
+			tip := testutil.Rev(t, dir, "HEAD")
+
+			args := tc.args(target)
+			stdout, stderr, code := runSafegitEnv(t, dir, revertSession, args...)
+			if code != exitcode.Usage {
+				t.Fatalf("safegit %s exited %d, want %d (Usage)\nstdout=%s\nstderr=%s",
+					strings.Join(args, " "), code, exitcode.Usage, stdout, stderr)
+			}
+			if !strings.Contains(stderr, tc.says) {
+				t.Errorf("the refusal does not say %q:\n%s", tc.says, stderr)
+			}
+			if head := testutil.Rev(t, dir, "HEAD"); head != tip {
+				t.Errorf("the refused revert moved HEAD to %s (was %s)", head, tip)
+			}
+			assertNoSequencerResidue(t, dir, "refused revert")
+			if n := len(oplogEntries(t, dir, "revert")); n != 0 {
+				t.Errorf("a refused command line recorded %d oplog entries; nothing happened to the repository", n)
+			}
+		})
+	}
+}
+
+// TestRevertNoCommitStaysAPassthrough: `--no-commit` authors nothing, so it is
+// forwarded to git unchanged -- the staged inverse patch and the state files
+// are there for the operator to use, exactly as they were before the
+// restructure existed.
+func TestRevertNoCommitStaysAPassthrough(t *testing.T) {
+	dir, target := newRevertRepo(t)
+	tip := testutil.Rev(t, dir, "HEAD")
+
+	if _, stderr, code := runSafegitEnv(t, dir, revertSession,
+		"revert", "--no-commit", "--no-edit", target); code != 0 {
+		t.Fatalf("revert --no-commit failed (code %d): %s", code, stderr)
+	}
+	if head := testutil.Rev(t, dir, "HEAD"); head != tip {
+		t.Error("--no-commit committed anyway: safegit must not claim this form")
+	}
+	if !testutil.FileExists(filepath.Join(dir, ".git", "REVERT_HEAD")) {
+		t.Error("--no-commit left no REVERT_HEAD, so its staged result cannot be concluded")
+	}
+	if status := testutil.Git(t, dir, "status", "--porcelain"); !strings.Contains(status, "r.txt") {
+		t.Errorf("--no-commit staged nothing:\n%s", status)
+	}
+}
+
+// TestRevertPreviewRecordsTheArgvItWouldRun: the would-do log lists the
+// mutations the execute path performs, and the execute path computes the revert
+// with `--no-commit`. A preview that recorded a bare `git revert` would be
+// describing the operation safegit stopped performing.
+func TestRevertPreviewRecordsTheArgvItWouldRun(t *testing.T) {
+	dir, target := newRevertRepo(t)
+
+	stdout, stderr, code := runSafegitEnv(t, dir, revertSession, "--dry-run", "revert", "--no-edit", target)
+	if code != 0 {
+		t.Fatalf("revert --dry-run failed (code %d): %s", code, stderr)
+	}
+	log := wouldDoLog(stdout)
+	if !strings.Contains(log, "revert --no-commit") {
+		t.Errorf("the would-do log does not record the argv the run would use:\n%s", log)
+	}
+	if head := testutil.Rev(t, dir, "HEAD"); head == "" {
+		t.Error("the preview left no readable HEAD")
+	}
 }
 
 // TestMergeContinuePassthroughNamesMergeContinue: `safegit merge --continue`

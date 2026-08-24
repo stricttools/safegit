@@ -572,7 +572,7 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 	if flags.dryRun {
 		// No git ran: the invocation is recorded, and the outcome it would have
 		// is COMPUTED with git's own merge engine rather than left unsaid.
-		return previewSequencerOperation(flags, gitCmd, args)
+		return previewSequencerOperation(flags, gitCmd, args, append([]string{gitCmd}, args...))
 	}
 
 	pos := readOplogPosition(flags)

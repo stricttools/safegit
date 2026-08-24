@@ -224,7 +224,7 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 	if flags.dryRun {
 		// No git merge runs: the invocation is recorded, and the outcome it
 		// would have is COMPUTED with git's own merge engine instead of guessed.
-		return previewSequencerOperation(flags, "merge", args)
+		return previewSequencerOperation(flags, "merge", args, append([]string{"merge"}, args...))
 	}
 
 	ctx := flags.ctx()

@@ -243,7 +243,7 @@ func runRestructuredCherryPick(flags globalFlags, args []string, parsed gitArgs)
 		// No git cherry-pick runs: the invocation is recorded, and the outcome
 		// it would have is COMPUTED with git's own merge engine instead of
 		// guessed.
-		return previewSequencerOperation(flags, "cherry-pick", args)
+		return previewSequencerOperation(flags, "cherry-pick", args, append([]string{"cherry-pick"}, args...))
 	}
 
 	ctx := flags.ctx()
