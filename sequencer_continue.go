@@ -1177,13 +1177,22 @@ func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State,
 //   - the stash commit's FIRST PARENT is the commit HEAD stood at when git set
 //     the work aside, which for this merge is the tip the conclusion committed
 //     onto. A stash from an earlier operation on a branch that has moved since
-//     names a different one. (A stale file planted while the branch has NOT
-//     moved passes this half, which is why the second exists.)
+//     names a different one.
 //   - the MESSAGE shape. git writes "On <branch>: autostash" on an autostash
 //     and "WIP on <branch>: ..." on every ordinary stash, which is the only
 //     thing that tells an autostash from an operator's own `git stash` entry.
 //     The fact is recorded permanently by the probes in
 //     internal/git/autostash_probe_test.go rather than trusted to memory.
+//
+// STATED LIMIT: the two together cannot tell a GENUINE abandoned autostash from
+// this merge's own when the branch has NOT moved since -- it has git's message
+// shape and the same first parent, so it passes both halves and is applied.
+// Reaching that state takes hand-mutilated repository state: git's own
+// `merge --abort` and `rebase --abort` re-apply the autostash and remove the
+// file, so the file only survives at an unmoved tip if somebody deleted the
+// operation's state files by hand. The key is not tightened for it, and the
+// same limit is written down in docs/divergences.md beside the entry for this
+// behavior.
 //
 // A stash that fails either is not consumed and NOT DELETED: it names content
 // that may live nowhere else, and deciding whose it is belongs to an operator.
