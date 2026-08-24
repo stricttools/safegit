@@ -578,7 +578,9 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		die(pipelineExitCode(err), err.Error())
 	}
 
-	if !flags.dryRun {
+	if flags.dryRun {
+		out.previewParentBump(ctx, flags, gitDir, result, op.command, message)
+	} else {
 		out.concludeAftercare(ctx, flags, gitDir, state, result, edits, func(ctx context.Context) error {
 			return materializeResolutions(ctx, sides, declared)
 		}, op.command, message)
@@ -651,6 +653,41 @@ func (out *conclusionResult) concludeAftercare(
 	stash, residue := consumeAutostash(ctx, gitDir, state, firstParentOf(result))
 	out.autostash = stash
 	out.residue = append(out.residue, residue...)
+}
+
+// previewParentBump is the aftercare a conclusion PREVIEW owes -- all of it, and
+// nothing beyond it.
+//
+// A preview performs no aftercare: the operation's state files stay where they
+// are, the index and the working tree are not written, and the autostash is not
+// consumed. Those are effects on THIS repository that the run's own report
+// describes in prose, so a preview neither performs them nor invents records for
+// them.
+//
+// The parent bump is the one that cannot be left out. It is a commit in a SECOND
+// repository, spawned through the effects handle, and a preview that recorded
+// nothing for it described half of what the run does -- the same defect the
+// ordinary commit path was fixed for. It is routed through maybeAutoBumpParent,
+// the single mint site, so the preview's decision and its recorded argv are the
+// execute path's own.
+//
+// Both doors come here: the -continue command, whose commit the pipeline has just
+// computed (and not published), and the re-run that found a crashed conclusion's
+// commit already standing, where the bump is the only mutation left to make.
+func (out *conclusionResult) previewParentBump(
+	ctx context.Context,
+	flags globalFlags,
+	gitDir string,
+	result *commit.CommitResult,
+	parentBumpOp string,
+	message string,
+) {
+	if result == nil {
+		return
+	}
+	if err := maybeAutoBumpParent(ctx, flags, gitDir, result.SHA, parentBumpOp, firstLine(message)); err != nil {
+		out.residue = reportAftercareFailure(out.residue, stepParentBump, err)
+	}
 }
 
 // conclusionOplogOps names every op a conclusion of this kind is recorded under
@@ -885,7 +922,9 @@ func (op continueOp) finishWhatCrashed(
 	fmt.Fprintf(os.Stderr, "  a run was killed after the commit and before the cleanup, so git still calls this repository\n")
 	fmt.Fprintf(os.Stderr, "  mid-%s. Nothing is committed again; what is left of the conclusion is finished.\n", op.kind)
 
-	if !flags.dryRun {
+	if flags.dryRun {
+		out.previewParentBump(ctx, flags, gitDir, stood, op.command, info.Message)
+	} else {
 		out.concludeAftercare(ctx, flags, gitDir, state, stood, edits, func(ctx context.Context) error {
 			return materializeCommitted(ctx, committed)
 		}, op.command, info.Message)
@@ -1039,6 +1078,11 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 		// -continue commands run. No index edits and no working-tree writes: a
 		// parked conclusion declares no resolutions, because git's compute step
 		// left nothing unmerged.
+		//
+		// No preview arm here, unlike the two -continue doors: a preview of
+		// `merge`, `pull`, `cherry-pick` or `revert` RECORDS the compute step
+		// rather than performing it, so nothing is ever parked and this immediate
+		// conclusion is not reached at all under --dry-run.
 		out.concludeAftercare(ctx, flags, gitDir, state, result, nil, nil, req.parentBumpOp, message)
 	}
 	return out, aftercareExit(out.residue), true

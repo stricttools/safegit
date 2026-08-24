@@ -40,13 +40,20 @@ type conflictedMergeOpts struct {
 	// index unmerged -- the state an agent reaches after editing every
 	// conflicted file. Without it the conflict markers stay on disk.
 	resolveInTree bool
+	// dir builds the conflict in an EXISTING repository instead of a fresh one.
+	// It is how the fixture reaches a SUBMODULE checkout, where concluding the
+	// merge also moves the parent's gitlink.
+	dir string
 }
 
 // newConflictedMergeRepo builds a repo whose main and feature branches both
 // edited conflicted.txt and merges feature into main, which conflicts.
 func newConflictedMergeRepo(t *testing.T, opts conflictedMergeOpts) conflictedMergeFixture {
 	t.Helper()
-	dir := newRepo(t)
+	dir := opts.dir
+	if dir == "" {
+		dir = newRepo(t)
+	}
 
 	commit := func(msg string, paths ...string) string {
 		t.Helper()
