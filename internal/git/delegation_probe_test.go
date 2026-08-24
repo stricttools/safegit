@@ -10,12 +10,19 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// These are RECORDED-FACT probes, kept as tests rather than as prose: they
-// pin what git does when an operation is finished through
-// RunPassthroughWithEnv with GIT_INDEX_FILE pointing at a copy of the shared
-// index -- the mechanism the conclusion delegation is built on. If a future git
-// changes any of it, one of these fails and the delegation is re-decided
-// against fact instead of against a remembered claim.
+// These are RECORDED-FACT probes, kept as tests rather than as prose: they pin
+// what git does when an operation is finished through RunPassthroughWithEnv with
+// GIT_INDEX_FILE pointing at a copy of the shared index.
+//
+// NOTHING in safegit relies on it any more. The conclusion DELEGATION that did
+// -- safegit checking a queued cherry-pick or revert and handing the rest of the
+// queue to git's own --continue with that copy as its index -- is deleted: a
+// queue is a state only raw git can create, and safegit's conclusions refuse it
+// rather than author part of it. What the probes are now is the record of the
+// git behavior that decision was made against, which is worth keeping precisely
+// because the decision can be revisited: a future git that stopped honoring a
+// substituted index would break the assumption the deleted feature rested on,
+// and these say so rather than leaving it to memory.
 
 // indexCopy copies the repository's shared index into a scratch file and
 // returns its path.
