@@ -500,6 +500,7 @@ func performMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition, re
 		StateCleared:   out.cleared,
 		Attempts:       out.commit.Attempts,
 		DeclinedChecks: orEmptyDeclines(out.declines),
+		Residue:        orEmptyResidue(out.residue),
 		DryRun:         flags.dryRun,
 	}
 	mergeContinueOp.renderHuman(flags, out, req.headline(out))
@@ -593,7 +594,9 @@ func reportMergeWithoutCommit(flags globalFlags, req mergeRequest, pos oplogPosi
 		StateCleared:   false,
 		Attempts:       0,
 		DeclinedChecks: []declinedCheck{},
-		DryRun:         flags.dryRun,
+		// Nothing was committed, so there is no aftercare to have failed.
+		Residue: []residueEntry{},
+		DryRun:  flags.dryRun,
 	}
 	if flags.silent() {
 		return payload, true, exitcode.OK
@@ -674,7 +677,19 @@ type mergePayload struct {
 	StateCleared   bool            `json:"state_cleared"`
 	Attempts       int             `json:"attempts"`
 	DeclinedChecks []declinedCheck `json:"declined_checks"`
-	DryRun         bool            `json:"dry_run"`
+	// Residue is every step this merge owed AFTER its commit and did not
+	// finish, never nil. An empty list is a merge that finished everything it
+	// owed; anything in it is what the commit-stands exit code is about, and
+	// without it an envelope carrying that code says only state_cleared:false.
+	//
+	// There is no autostash member beside it, unlike the conclusion commands'
+	// payload. This command's coordination check refuses a dirty working tree
+	// before git runs at all, and `--autostash` is refused outright, so a merge
+	// safegit starts can carry no autostash by construction -- a member that
+	// could only ever report "none" would be an answer to a question this
+	// command cannot be asked.
+	Residue []residueEntry `json:"residue"`
+	DryRun  bool           `json:"dry_run"`
 }
 
 // mergePayloadSchema is merge's machine payload contract.
@@ -698,9 +713,17 @@ var mergePayloadSchema = strictcli.SchemaObject(
 		)),
 		"state_cleared": strictcli.SchemaType("boolean"),
 		"attempts":      strictcli.SchemaType("integer"),
-		"dry_run":       strictcli.SchemaType("boolean"),
+		"residue": strictcli.SchemaArray(strictcli.SchemaObject(
+			map[string]interface{}{
+				"step":   strictcli.SchemaType("string"),
+				"detail": strictcli.SchemaType("string"),
+			},
+			[]string{"step", "detail"},
+			false,
+		)),
+		"dry_run": strictcli.SchemaType("boolean"),
 	},
-	[]string{"operation", "outcome", "ref", "sha", "parents", "tree", "files", "state_cleared", "attempts", "declined_checks", "dry_run"},
+	[]string{"operation", "outcome", "ref", "sha", "parents", "tree", "files", "state_cleared", "attempts", "declined_checks", "residue", "dry_run"},
 	false,
 )
 

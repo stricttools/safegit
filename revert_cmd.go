@@ -236,6 +236,7 @@ func concludeComputedRevert(flags globalFlags, gitDir, sgDir, reverted string) i
 		StateCleared:   out.cleared,
 		Attempts:       out.commit.Attempts,
 		DeclinedChecks: orEmptyDeclines(out.declines),
+		Residue:        orEmptyResidue(out.residue),
 		DryRun:         flags.dryRun,
 	})
 	op.renderHuman(flags, out, "reverted "+short(reverted, state.Source))
@@ -271,7 +272,17 @@ type revertPayload struct {
 	StateCleared   bool            `json:"state_cleared"`
 	Attempts       int             `json:"attempts"`
 	DeclinedChecks []declinedCheck `json:"declined_checks"`
-	DryRun         bool            `json:"dry_run"`
+	// Residue is every step this revert owed AFTER its commit and did not finish,
+	// never nil. An empty list is a run that finished everything it owed;
+	// anything in it is what the commit-stands exit code is about, and without
+	// it an envelope carrying that code says only state_cleared:false.
+	//
+	// There is no autostash member beside it, unlike the conclusion commands'
+	// payload: an autostash is a merge's, and this command's coordination check
+	// refuses a dirty working tree before git runs at all, so no state safegit
+	// starts here can carry one.
+	Residue []residueEntry `json:"residue"`
+	DryRun  bool           `json:"dry_run"`
 }
 
 // revertPayloadSchema is revert's machine payload contract.
@@ -303,9 +314,17 @@ var revertPayloadSchema = strictcli.SchemaObject(
 		)),
 		"state_cleared": strictcli.SchemaType("boolean"),
 		"attempts":      strictcli.SchemaType("integer"),
-		"dry_run":       strictcli.SchemaType("boolean"),
+		"residue": strictcli.SchemaArray(strictcli.SchemaObject(
+			map[string]interface{}{
+				"step":   strictcli.SchemaType("string"),
+				"detail": strictcli.SchemaType("string"),
+			},
+			[]string{"step", "detail"},
+			false,
+		)),
+		"dry_run": strictcli.SchemaType("boolean"),
 	},
-	[]string{"operation", "source", "ref", "sha", "parents", "tree", "files", "author", "state_cleared", "attempts", "declined_checks", "dry_run"},
+	[]string{"operation", "source", "ref", "sha", "parents", "tree", "files", "author", "state_cleared", "attempts", "declined_checks", "residue", "dry_run"},
 	false,
 )
 
