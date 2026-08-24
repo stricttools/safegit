@@ -791,6 +791,22 @@ name; paths are spelled in full):
   NOT the reason (die already releases pending locks).
 - Exits stay outcome-only; the stored-autostash exit moves from General
   to 26.
+- AS-BUILT notes (ratified): the typed result travels through all
+  THREE result types (RewordResult too — the plan's "both" predated
+  it); at the NOT-converted pipelineExitCode sites a PartialError with
+  a non-nil result reports-then-returns while everything else still
+  dies with its real code (a 26 through die() would lack the envelope
+  the ruling mandates); the autostash enum gained `pending` (the
+  not-reached state — "none" would lie); undo's post-ref reconcile arm
+  joined the family AND now writes its oplog entry where die() used to
+  skip it (an unrecorded ref move read as foreign by later passes).
+  RIDER for 3.2-3.5's implementor: the four Phase-2 command payload
+  schemas (merge/cherry-pick/revert/pull) gain the `residue` member
+  too — they are pipeline authors exiting 26 whose envelopes currently
+  say only state_cleared:false; the ruled "payload carries aftercare"
+  principle covers them (autostash stays OFF those four: their
+  clean-tree precondition makes autostash state impossible by
+  construction there — stated in the schema comment).
 **Verify (red to green):** both conclusion_envelope tests. NEW
 red-first: each aftercare shape exits 26 with the envelope; ordinary
 commit's post-ref reconcile failure emits the envelope naming the
