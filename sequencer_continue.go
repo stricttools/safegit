@@ -1535,7 +1535,9 @@ func (op continueOp) rawGitShape(state sequencer.State) (what, why string, refus
 // about them agree.
 //
 // DIVERGENCE: git concludes a queue and an octopus with its own `--continue`;
-// safegit refuses both and says so. Two rows for docs/divergences.md.
+// safegit refuses both and says so. Cataloged in docs/divergences.md: the queue
+// under "Every commit made through safegit is safegit's; the ones it cannot
+// write, it refuses", the octopus under "A merge has exactly one other side".
 func (op continueOp) refuseRawGitShape(state sequencer.State) int {
 	what, why, refused := op.rawGitShape(state)
 	if !refused {
@@ -1625,8 +1627,10 @@ func refuseParkedRawGitShape(flags globalFlags, gitDir string, state sequencer.S
 // conflict carries no merged text to compare against.
 //
 // DIVERGENCE: git concludes a conflict computed by any strategy; safegit
-// concludes only the ones the default strategy recorded. One row for
-// docs/divergences.md.
+// concludes only the ones the default strategy recorded. Cataloged in
+// docs/divergences.md as "Merge strategies and strategy options are refused"
+// (the front-door half) and "Every commit made through safegit is safegit's;
+// the ones it cannot write, it refuses" (this raw-git half).
 func (op continueOp) refuseUnreadableConflict(ctx context.Context, sides map[string]conflict.Sides) int {
 	if op.kind != sequencer.KindMerge {
 		return 0

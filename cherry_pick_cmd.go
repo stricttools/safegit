@@ -122,7 +122,8 @@ func refuseUnsupportedCherryPick(parsed gitArgs) int {
 // let exactly that command line through as "one commit".
 //
 // DIVERGENCE: git's cherry-pick and revert take the full revision-set grammar;
-// safegit's take the name of one commit. Needs its row in docs/divergences.md.
+// safegit's take the name of one commit. Cataloged in docs/divergences.md as
+// "One commit per cherry-pick, one per revert; ranges are refused".
 func refuseRevisionSet(verb, rev string) int {
 	var operator string
 	switch {
@@ -152,7 +153,8 @@ func refuseRevisionSet(verb, rev string) int {
 // thing.
 //
 // DIVERGENCE: git applies any number of commits in one invocation; safegit
-// applies one. Needs its row in docs/divergences.md.
+// applies one. Cataloged in docs/divergences.md as "One commit per cherry-pick,
+// one per revert; ranges are refused" (the same entry as the rev-set refusal).
 func sequentialFormReason(verb string) string {
 	return fmt.Sprintf("safegit %s applies ONE commit and authors the result itself; run it once per commit, in the order you want them applied. See docs/divergences.md.", verb)
 }

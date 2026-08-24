@@ -371,8 +371,10 @@ func refuseEmptyRevert() int {
 // refusal and every other message about the same state name the same command.
 //
 // DIVERGENCE: `git <verb> --continue` concludes whatever is in flight; safegit's
-// forwarded `--continue` concludes nothing and names the command that does. One
-// row for docs/divergences.md.
+// forwarded `--continue` concludes nothing and names the command that does.
+// Cataloged in docs/divergences.md as "safegit concludes a stopped merge,
+// cherry-pick and revert; `git <verb> --continue` is refused", whose second half
+// covers the nothing-in-flight case the boundary refuses.
 func refuseOwnedConclusion(flags globalFlags, gitDir, verb string, args []string) int {
 	if !hasExactArg(args, "--continue") {
 		return 0

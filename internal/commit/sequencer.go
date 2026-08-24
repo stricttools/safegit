@@ -65,8 +65,9 @@ func concludesInFlightOperation(declared *coord.SequencerContext, base IndexBase
 // guardUnmergedIndex refuses when the repository's SHARED index still carries
 // unmerged entries and this commit is not the conclusion that resolves them.
 //
-// DIVERGENCE (Phase 7 catalog entry, direction git-like): safegit's own
-// mid-operation refusal reads git's STATE FILES, so a repository whose state
+// PARITY, deliberately carrying NO divergences entry: this refusal makes safegit
+// agree with git, and the catalog records the places the two disagree. safegit's
+// own mid-operation refusal reads git's STATE FILES, so a repository whose state
 // files are gone -- a crashed operation, a hand-deleted MERGE_HEAD, one of the
 // several ways `git merge --abort` leaves half its work behind -- reads as idle
 // while the index still holds stage 1/2/3 entries. git refuses every commit in

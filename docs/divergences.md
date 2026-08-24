@@ -61,18 +61,18 @@ entry, whatever its direction says.
 >   nothing](#a-conclusion-whose-commit-already-stands-finishes-the-cleanup-and-commits-nothing)
 > - [A working-tree write that would destroy a hand edit is
 >   refused](#a-working-tree-write-that-would-destroy-a-hand-edit-is-refused)
-> - [`--ff-only` is refused by safegit, with safegit's own exit
->   code](#ff-only-is-refused-by-safegit-with-safegits-own-exit-code)
-> - [`--no-commit` parks a merge that git would have
->   fast-forwarded](#no-commit-parks-a-merge-that-git-would-have-fast-forwarded)
-> - [A fast-forward is safegit's own ref move, and `undo` refuses
->   it](#a-fast-forward-is-safegits-own-ref-move-and-undo-refuses-it)
-> - [`FETCH_HEAD` is refused when the fetch marked more than one
->   branch](#fetch_head-is-refused-when-the-fetch-marked-more-than-one-branch)
-> - [An `--untrack`ed path never pairs into an observed
->   move](#an-untracked-path-never-pairs-into-an-observed-move)
-> - and every entry under [The subset boundary](#the-subset-boundary), which is
->   where the allowlist verdicts live.
+> - [A path the commit stops tracking never pairs into an observed
+>   move](#a-path-the-commit-stops-tracking-never-pairs-into-an-observed-move)
+> - every entry under [The subset boundary](#the-subset-boundary), which is
+>   where the allowlist verdicts live — including the fast-forward rulings
+>   ([the fast-forward-only
+>   refusal](#the-fast-forward-only-refusal-is-safegits-not-gits), [a parked
+>   merge stays
+>   parked](#a-parked-merge-stays-parked-even-when-it-could-have-fast-forwarded),
+>   [a fast-forward is safegit's own ref
+>   move](#a-fast-forward-is-safegits-own-ref-move-and-undo-refuses-it)) and
+>   [the `FETCH_HEAD`
+>   refusal](#a-fetch-that-marked-several-branches-is-not-a-merge-safegit-will-make).
 >
 > Every entry under "The subset boundary" is a verdict about what safegit will
 > not do, and every one of them is open at the review: overturning one means
@@ -183,10 +183,14 @@ Every future change that introduces a decision of this kind adds its entry here.
   select content interactively.
 - **safegit:** no command ever opens an editor or an interactive picker. A
   message comes from `-m`, from `-F`, or (for a conclusion) from the draft git
-  already wrote. Hunk selection is declared as data: `--hunks 'path:1,3'`. The
-  consequence is that safegit is fully usable from a script or an agent with no
-  terminal, and that a `prepare-commit-msg` hook has nothing to prepare (see
-  below).
+  already wrote. Hunk selection is declared as data: `--hunks 'path:1,3'`, and
+  `git reset -p`'s interactive session has no counterpart either. `-e`/`--edit`
+  is refused by name on `merge`, `cherry-pick` and `revert` rather than
+  forwarded into a command that would then try to open one; the refusal names
+  `-m`, or the matching `-continue` command's `-m`, as where the message comes
+  from instead. The consequence is that safegit is fully usable from a script or
+  an agent with no terminal, and that a `prepare-commit-msg` hook has nothing to
+  prepare (see below).
 - **Ruling:** ours — deliberate
 
 ### Grammar is never decided by what is on disk
@@ -664,6 +668,424 @@ Every future change that introduces a decision of this kind adds its entry here.
 
 ---
 
+## The subset boundary
+
+The commands that take git's own vocabulary — `switch`, `merge`, `cherry-pick`,
+`revert`, `pull`, `rebase`, `reset`, `bisect` — are where the subset law has to
+be stated, because an operator can type anything git accepts and expect it to
+arrive. Every entry in this section is one git capability safegit deliberately
+does not have.
+
+They are all open at the review, and overturning one is cheap: it means putting
+a capability back into an allowlist, not writing new machinery. [What each
+guarded command allows](#what-each-guarded-command-allows), at the end of the
+section, is the other half of the picture — the refusals below only make sense
+next to what is admitted.
+
+### The forwarded command line is an allowlist, not a refusal list
+
+- **git's idiom:** a wrapper forwards what it does not recognize. git itself
+  accepts every option it documents, and an option a tool has not thought about
+  reaches git and does what git does.
+- **safegit:** each of these commands validates its argv against an explicit
+  ALLOWLIST before the operation lock is taken, before any git runs, and before
+  the repository is read at all. An option the command honors passes; anything
+  else is refused, parser-shaped, at exit 2.
+
+  The direction is the whole point. A refusal LIST answers "is this one of the
+  things we already thought about and decided against", and an option nobody has
+  thought about passes it, reaches git, and changes what git does while safegit's
+  checks, its record of the operation and its report stay written for something
+  else. An allowlist answers the other question — "is this one of the things
+  safegit can honor" — which is the only honest one for a tool that promises a
+  subset rather than a wrapper.
+
+  Two refusals come out of one table. A capability the table NAMES carries its
+  own reason, because "safegit's merge does not select a merge strategy, and here
+  is why" is an answer an operator can act on while "unsupported option" is not.
+  Everything else carries the subset law itself, and points here.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+### Navigation is `safegit switch`, and there is no `safegit checkout`
+
+- **git's idiom:** `git checkout` is the command everyone reaches for, and it is
+  two commands wearing one name: it moves HEAD, and it restores files from a
+  commit over the working tree. git's own answer to that overload was to add
+  `switch` and `restore` without removing anything.
+- **safegit:** safegit implements the navigation half, under git's own modern
+  name for it, and `checkout` is not a safegit command at all. `safegit switch
+  <branch>` moves onto a branch that exists; `safegit switch -c <new>` makes one
+  where you are standing (switch's own spelling, which replaces checkout's
+  `-b`). That is the whole surface.
+
+  An operator's muscle memory will be wrong here, and deliberately so: typing
+  `safegit checkout` gets an unknown-command error rather than a helpful alias,
+  because an alias would carry the overload back in.
+- **Ruling:** ours — deliberate
+
+### File restoration is absent, not refused
+
+- **git's idiom:** `git checkout -- <path>` (and its successor `git restore`)
+  writes a commit's content over whatever the working tree holds, destroying
+  uncommitted work with no record anywhere. The content was in no object, so
+  nothing brings it back.
+- **safegit:** there is no file mode on `switch` and no restore command, so the
+  destructive shape is **inexpressible** as a safegit command line rather than
+  refused by one. A pathspec after `safegit switch` is rejected with that
+  reason.
+
+  The distinction matters more than it looks. A refusal is a check, and a check
+  can be conditioned, flagged past, or forgotten in a code path nobody tested. An
+  absent command has none of those failure modes. In a worktree several sessions
+  share, the work this shape destroys may not even be the operator's own, which
+  is why it is the one capability removed rather than guarded.
+- **Ruling:** ours — deliberate
+
+### `switch` takes a branch name, and only a branch name
+
+- **git's idiom:** `git switch` takes any commit-ish with `--detach`, `-C`
+  force-recreates a branch that already exists, `--orphan` starts a history with
+  no parent, and `--force`/`--discard-changes` and `--merge` exist to get past a
+  dirty working tree.
+- **safegit:** an argument that resolves to a commit but is not a branch is
+  refused, and the refusal names both ways forward — make a branch there and
+  switch to it, or use `git switch --detach` when a detached HEAD is deliberately
+  what you want. Switching onto anything else DETACHES HEAD, and a detached HEAD
+  is the state safegit's commit, conclusion and undo paths all refuse, since
+  every commit safegit makes is a compare-and-swap on a ref. Note that
+  `--detach` guards nothing here: the ARGUMENT is what detaches, so refusing the
+  flag while accepting the argument would be a check that never fires — and the
+  flag is refused too, for the operator who typed it meaning to be explicit.
+
+  The other refusals, each with its own reason: `-C` re-points a branch that
+  already exists at wherever you are standing, which is a ref move dressed as
+  navigation and outside the compare-and-swap; `--orphan` is a decision about
+  the repository rather than a step between branches;
+  `--force`/`--discard-changes` and `--merge` are dead flags (see below).
+
+  What is NOT refused is git's DWIM reading: a name that exists only on a remote
+  still creates and lands on a local branch tracking it, because git resolves
+  that before safegit's branch-ness question is even asked. An argument that
+  resolves to nothing at all is left to git, so `safegit switch no-such-thing`
+  exits with git's own verdict rather than a message safegit invented about
+  branches.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+### A flag whose whole job is to carry a dirty tree is dead here
+
+- **git's idiom:** `git merge --autostash` stashes uncommitted changes, merges,
+  and puts them back. `git switch --merge` carries local modifications across a
+  branch change by merging them, and `--discard-changes` throws them away to make
+  the switch possible.
+- **safegit:** all three are refused by name, and the reason is the same: the
+  coordination check refuses ANY dirty working tree before git runs. A clean tree
+  has nothing to stash or carry, and a dirty tree never reaches git, so the flag
+  could not fire even if it were forwarded. Accepting a flag that cannot do
+  anything is the accept-and-quietly-ignore shape safegit refuses everywhere
+  else.
+
+  There is a second reason for the discarding forms specifically. In a worktree
+  several sessions share, the uncommitted changes being carried or discarded may
+  be another session's work, and safegit cannot tell whose they are. The refusal
+  says to commit first, which is the one answer that is safe whoever made them.
+- **Ruling:** ours — deliberate
+
+### A merge has exactly one other side
+
+- **git's idiom:** `git merge a b c` makes one octopus commit with four parents.
+- **safegit:** exactly one other side, and an octopus is refused. A conclusion
+  has one staged result to check and one message to write however many sides
+  went into it, and every check safegit makes over a merge — the completeness
+  check, the marker verification, the overwrite refusal, the crash-window
+  parentage corroboration — is written against two. Supporting a shape those
+  checks cannot reason about would mean a merge safegit committed and did not
+  verify.
+
+  The refusal reaches the conclusion too: a `MERGE_HEAD` carrying more than one
+  line can now only have come from raw git, and `safegit merge-continue` refuses
+  it naming git's own `--continue`. The argument may be a branch, a tag or an
+  object name — there is no branch-ness requirement, because merging from a tag
+  detaches nothing.
+- **Ruling:** ours — deliberate
+
+### A fetch that marked several branches is not a merge safegit will make
+
+- **git's idiom:** `FETCH_HEAD` is git's one token that expands into SEVERAL
+  heads. `git merge FETCH_HEAD` after a fetch that marked three branches for
+  merging makes an octopus out of one argument.
+- **safegit:** when the merge argument is spelled exactly `FETCH_HEAD`, safegit
+  reads `.git/FETCH_HEAD` and refuses when more than one line is marked
+  for-merge — up front, before the fast-forward decision, so both arms of the
+  merge are covered, and `safegit pull` inherits it.
+
+  It is cataloged separately from the octopus refusal because counting the
+  revisions on the command line does not catch it: this is ONE token. Without
+  the check it produced a many-parent commit through the front door, and on the
+  fast-forward arm it silently took the first line and dropped the rest. An
+  unreadable or absent `FETCH_HEAD` is left to git, which is the same convention
+  every unresolvable revision follows here.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+### One commit per cherry-pick, one per revert; ranges are refused
+
+- **git's idiom:** `git cherry-pick a b c` and `git revert A..B` queue the
+  commits in git's sequencer and apply them one after another, authoring each.
+- **safegit:** each command applies ONE commit and authors the result itself.
+  Several revisions on the command line are refused, and so are the range and
+  revision-set spellings — `A..B`, `A...B`, a leading `^`, `^!`, `^@` — with the
+  refusal naming the sequential form: run the command once per commit, in the
+  order you want them applied.
+
+  The refusal is on the OPERATORS rather than on how many arguments were typed,
+  and that is not pedantry. `git cherry-pick A..B` hands the operation to git's
+  sequencer — queue directory and all — even where the range holds a single
+  commit, so a check that counted argv tokens would let exactly that command
+  line through as "one commit" and produce a queue safegit cannot conclude.
+
+  What an operator loses is the convenience of one command line; what they get
+  is that every commit is separately checked, separately recorded and separately
+  undoable, and that none of them is git's.
+- **Ruling:** ours — deliberate
+
+### Merge strategies and strategy options are refused
+
+- **git's idiom:** `-s ort`, `-s resolve`, `-X ours`, `-X theirs` and the rest
+  change how git computes and stages a merge, a pick or a revert.
+- **safegit:** refused on `merge`, `cherry-pick` and `revert` alike. Everything
+  safegit checks about the result — the completeness check over the conflicted
+  paths, the differential marker verification, the overwrite refusal that reads
+  `AUTO_MERGE` — is written against what the DEFAULT strategy stages, and a
+  strategy those checks cannot read would be protected by nothing while still
+  reporting as protected.
+
+  It is not hypothetical: a pick computed with `-s resolve` parks a content
+  conflict with no `AUTO_MERGE` at all, which is precisely the shape the
+  overwrite refusal has nothing to compare against — and the same shape
+  `merge-continue` refuses when raw git produces it. Refusing at the front door
+  is what keeps that check total rather than degraded.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+### `--squash` is refused
+
+- **git's idiom:** `git merge --squash` stages a merge's whole result and leaves
+  you to commit it as an ordinary commit, with none of the merge's parents
+  recorded.
+- **safegit:** refused. A squash produces a commit with a merge's CONTENT and
+  none of its HISTORY, so nothing afterwards can tell that the branches were
+  brought together, and `safegit merge` either records a merge commit or records
+  nothing. An operator who wants the content without the history can stage it
+  themselves and commit it with `safegit commit`, where it is what it looks like.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+### Options that would hand the commit or the ref back to git are refused
+
+- **git's idiom:** `--commit` is `merge`'s and `cherry-pick`'s default and can be
+  spelled explicitly; `git cherry-pick --ff` lets git fast-forward the branch
+  onto the picked commit outright.
+- **safegit:** both are refused by name. The compute step is pinned to
+  `--no-commit`, and git takes the LAST of a conflicting pair, so a `--commit`
+  trailing safegit's own flag would hand the commit back to git — authored by
+  git, with none of safegit's trailers, moving the ref outside the
+  compare-and-swap. `--ff` on a pick does the same to the ref without even
+  making a commit.
+
+  `merge --commit` used to be accepted and quietly stripped from the forwarded
+  argv, which is the shape this tool refuses everywhere else: an operator who
+  asks for something gets it, or gets told they cannot have it. It is now
+  refused by name in all three tables.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+### Options that govern git's own commit step are refused, not ignored
+
+- **git's idiom:** `-S`/`--gpg-sign` signs the commit git makes; `--no-verify`
+  skips the hooks git's commit path runs; `--cleanup` governs how git strips the
+  message at its commit time; `--allow-empty`, `--allow-empty-message`,
+  `--keep-redundant-commits` and `--empty` govern what git commits when a pick
+  produces nothing.
+- **safegit:** the commit here is safegit's pipeline's, so none of git's commit
+  path runs and every one of these would silently do nothing. They are refused
+  rather than forwarded into a no-op:
+  - safegit's pipeline does not sign, so a signature asked for here would simply
+    not be on the result.
+  - the pipeline runs the repository's `commit-msg` hook and has no flag that
+    turns it off, so `--no-verify` would skip nothing.
+  - the message the pipeline takes is git's draft with its comment block
+    stripped, or the text passed to the matching `-continue` command's `-m`, so
+    `--cleanup` has no step to govern.
+  - the pipeline refuses a commit that changes nothing outright, and there is no
+    flag here that turns that refusal off.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+### `--skip` is refused
+
+- **git's idiom:** `git cherry-pick --skip` and `git revert --skip` move past the
+  commit that stopped a SEQUENCE and keep the rest of the queue going.
+- **safegit:** refused, because there is no sequence to keep going: each command
+  applies one commit. The refusal names what actually ends the state — `git
+  cherry-pick --abort`, or concluding the revert you are in with `safegit
+  revert-continue` and then `git revert --abort` — and then the sequential form
+  for the commits you did want.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+### The fast-forward-only refusal is safegit's, not git's
+
+- **git's idiom:** `git merge --ff-only` refuses a non-fast-forward with git's
+  own message and exit code 128.
+- **safegit:** safegit decides fast-forward-ness itself, with a merge-base
+  ancestry check, and raises its own refusal at its own general failure code
+  rather than letting git raise one.
+
+  The reason is a race rather than a preference. Letting git make the call means
+  letting git MOVE the ref, and between safegit's check and git's run the two
+  branches can stop being diverged — at which point git would fast-forward
+  outside safegit's compare-and-swap, which is the one thing the whole commit
+  design exists to prevent. The cost is that an operator scripting against git's
+  128 sees a different number here.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+### A parked merge stays parked, even when it could have fast-forwarded
+
+- **git's idiom:** `git merge --no-commit` fast-forwards anyway when the merge is
+  a fast-forward, because git takes the fast-forward before the flag is
+  consulted. The flag means "do not commit the merge you computed", and a
+  fast-forward computes nothing.
+- **safegit:** `--no-commit` parks in every case an operator can reach. The flag
+  says the operator wants to look at the result before it becomes anything, and
+  a fast-forward that moved the branch silently would deny exactly that. So the
+  fast-forward arm is taken only where nothing on the command line asks for a
+  commit to inspect, and the parked state is concluded with `safegit
+  merge-continue` like any other.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+### A fast-forward is safegit's own ref move, and undo refuses it
+
+- **git's idiom:** a fast-forward merge moves the branch ref and updates the
+  index and working tree, in one step, inside git.
+- **safegit:** safegit performs it itself: a compare-and-swap onto the incoming
+  tip, then a read-tree that puts the index and working tree in step with it.
+  The sync is not a tidy-up — a bare ref move leaves the INVERSE of the incoming
+  diff staged — so it is part of the operation, and a failure there is the
+  commit-stands family (exit 26) with the sync named in the residue.
+
+  `safegit undo` REFUSES a fast-forward. The tip is a commit safegit did not
+  create, and undo never rolls a branch back over one; the refusal names the
+  skipped fast-forward rather than reversing it. The mechanism is worth stating,
+  because the obvious one is not enough: any oplog entry carrying an `outcome`
+  key is a record of what git did to the branch rather than a commit safegit
+  authored — the pipeline never writes that key — so a one-commit fast-forward,
+  which the ancestry check alone would have happily reversed, is excluded by
+  construction.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+### `reset` takes a commit; the pathspec form is refused
+
+- **git's idiom:** `git reset <commit> -- <path>` resets one path's index entry,
+  and `git reset -p` opens an interactive hunk session to do it selectively.
+- **safegit:** `safegit reset` takes a COMMIT in one of five modes, and the
+  pathspec form is refused in every spelling that gives it away — an explicit
+  `-- <path>`, a second revision that names a path, a bare argument that
+  resolves to no commit but does name one, and the `--pathspec-from-file`
+  family.
+
+  The pathspec form writes the SHARED index entry by entry, and safegit's whole
+  design keeps out of that file: every commit stages into a temporary index of
+  its own precisely so that concurrent sessions cannot stage over each other. A
+  reset of one path would be the single exception, and what it did to a path
+  another session staged would be invisible to everything safegit records. The
+  refusal names the route that stays inside the design: reset the whole path and
+  commit the hunks you want with `safegit commit --hunks`.
+
+  `-p`/`--patch` is refused separately, as one instance of a rule that holds
+  everywhere in safegit: there is no interactive mode anywhere. An argument that
+  resolves to NEITHER a commit nor a path is deliberately left to git, so
+  `safegit reset --hard no-such-ref` exits with git's own verdict on it.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+### `rebase` is one upstream and a replay, and nothing else
+
+- **git's idiom:** `git rebase` has two backends, replays merges with
+  `--rebase-merges`, runs a command after each commit with `--exec`, rewrites
+  from the root with `--root`, and takes `<upstream> <branch>` to switch
+  branches before it starts.
+- **safegit:** the door safegit declares is a replay onto an upstream, and the
+  allowlist keeps the forms of that door and nothing more.
+  - the **apply backend** (`--apply`, and its `--whitespace`/`-C` patch options)
+    is refused: safegit's in-flight state reader, its conflict machinery and its
+    refusals are all written against the merge backend, and the apply backend
+    keeps its state under a directory `git am` shares, where safegit's readers
+    would answer about the wrong operation.
+  - `-x`/`--exec` is refused: a rebase through safegit is a replay and nothing
+    else, and running an operator's command after every replayed commit is a
+    second, unbounded operation inside one lock. Run it yourself when the rebase
+    finishes.
+  - `-r`/`--rebase-merges` is refused: it re-merges the sides of every merge
+    commit, so the operation creates merges safegit never computed and cannot
+    check. Rebase a linear range, or redo the merges with `safegit merge`.
+  - `--root` is refused: rewriting every commit including the first is a history
+    rewrite rather than a replay, and safegit's history-rewriting surface is
+    `safegit scrub`, with its own lock, verification and journal.
+  - `rebase <upstream> <branch>` is refused because it switches branches first,
+    which is a navigation safegit makes you state: switch to the branch, then
+    rebase it. A pathspec is refused too — a rebase replays whole commits, and
+    there is no part of one it can replay.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+### `pull --rebase` is refused, naming the two commands
+
+- **git's idiom:** `git pull --rebase` is one command, and `pull.rebase` can make
+  it the default.
+- **safegit:** refused, and the refusal names the two steps: `git fetch
+  <remote>`, then `safegit rebase <remote>/<branch>`. A pull's merge step is
+  safegit's own — it authors the commit — while a rebase is git's replay from
+  end to end, which is a different operation with a different door. Folding them
+  into one flag would put two authorship models behind one command line, decided
+  by a flag or, worse, by configuration.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+### `bisect`'s subcommand vocabulary is its allowlist, and it takes no options
+
+- **git's idiom:** `git bisect` has its own subcommand language plus options that
+  rename its terms (`--term-old`, `--term-new`), change what it checks out
+  (`--no-checkout`) and limit the walk.
+- **safegit:** the subcommands safegit forwards are exactly the ones its git
+  classification table declares, and one outside that vocabulary is refused. The
+  point of reading them from the table rather than restating them is that the
+  same declaration is what tells safegit which subcommands write the working
+  tree and therefore need the uncommitted-work check — so what safegit ADMITS
+  and what it KNOWS about what it admitted cannot drift apart.
+
+  The option allowlist is deliberately EMPTY. Every option git's bisect takes
+  renames its terms, changes what it checks out, or limits the walk, and none of
+  them has been considered against safegit's guards.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+### What each guarded command allows
+
+The refusals above are only half the picture, and this table is the other half:
+what each command ADMITS, which is what a reviewer needs in order to judge
+whether a refusal is drawn in the right place. It is the same set the code's
+allowlist tables hold.
+
+| Command | Arguments | Options it honors |
+|---|---|---|
+| `switch` | one existing branch name, or nothing with `-c` | `-c`/`--create` |
+| `merge` | exactly one commit-ish (branch, tag or object name) | `-m`/`--message`, `-F`/`--file`, `--no-edit`, `--ff`/`--no-ff`/`--ff-only`/`--no-commit` (safegit's own selectors; they never reach git), `--signoff`/`--no-signoff`, `--log`/`--no-log`, `--into-name`, `--stat`/`--no-stat`, `--allow-unrelated-histories`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
+| `cherry-pick` | exactly one commit | `-x`, `-s`/`--signoff`, `--no-edit`, `-m`/`--mainline`, `-n`/`--no-commit`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
+| `revert` | exactly one commit | `-s`/`--signoff`, `--no-edit`, `-m`/`--mainline`, `-n`/`--no-commit`, `--reference`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
+| `pull` | an optional remote and branch | `--merge-strategy ff\|ff-only\|no-ff` (required, no default) |
+| `rebase` | exactly one upstream | `--onto`, `-i`/`--interactive`, `--continue`/`--abort`/`--skip` (git's own, taking no argument), `--autostash` |
+| `reset` | one commit | `--soft`, `--mixed`, `--hard`, `--merge`, `--keep` |
+| `bisect` | one subcommand from the classification table's vocabulary | none |
+
+What is admitted follows one rule on the four pipeline-authoring commands: an
+option is allowed when it reaches only the COMPUTE step or the message draft git
+writes there — the pipeline commits that draft — and refused when it would change
+how git COMMITS, since nothing of git's commit path runs. `--signoff` is
+allowed because git writes the trailer into the draft; `--gpg-sign` is not,
+because safegit's pipeline is what signs, and it does not.
+
+---
+
 ## Moves
 
 ### Moves are recorded, never detected by similarity
@@ -720,6 +1142,58 @@ Every future change that introduces a decision of this kind adds its entry here.
   content changes at a moved path stay uncommitted and are a separate commit — a
   move is a move. This also makes a preview and a real run compute the same tree.
 - **Ruling:** git-like — deliberate
+
+### `safegit mv` refuses to move a file with uncommitted edits
+
+- **git's idiom:** `git mv` moves whatever is on disk and STAGES it, so a file
+  with uncommitted content changes arrives at the new path with those changes
+  staged, and the next commit records the move and the edit together as one
+  change.
+- **safegit:** the commit is the move and nothing else — each path is carried
+  across as the exact blob its parent commit held — so a moved path whose disk
+  content has been edited would have those edits silently left behind,
+  uncommitted, at a path that no longer exists in the tree. `safegit mv`
+  therefore REFUSES rather than moving it (exit 19, the collected refusal it
+  shares with a destination the world contradicts), and nothing moves.
+
+  There is no override flag, because both legitimate intents already have a
+  route and the refusal names them: the edits belong in their own commit, so
+  commit the content first and then move it; or the edits should ride along with
+  the move, so move the files on disk yourself and
+  `safegit commit --moved 'old -> new' -- <new>`, which stages from disk and
+  commits the content and the move together. A flag would be a third answer to a
+  question that already has two.
+
+  The check is filter-aware: the disk bytes are hashed with `--path <newpath>`
+  so the repository's own attributes decide, and a checkout that converted line
+  endings never false-refuses. Every dirty path is named — the human output
+  aggregates them for a subtree move, and the complete list is never truncated —
+  and a dry run refuses identically.
+- **Ruling:** ours — deliberate
+
+### A path the commit stops tracking never pairs into an observed move
+
+- **git's idiom:** git has no move records, so nothing here has a counterpart.
+  Rename DETECTION would happily pair a removed index entry with a same-content
+  addition, since it reads trees and knows nothing about why a path left one.
+- **safegit:** `safegit commit --untrack <path>` removes a path from the index
+  and LEAVES THE FILE ON DISK. Its removal is real in the tree, so the same blob
+  arriving at another path in that commit satisfies every pairing condition, and
+  inference would mint a move record for it — true about the tree, while the old
+  file is still sitting right there for anyone to open.
+
+  safegit does not mint it. The paths named by `--untrack` join the suppressed
+  set exactly as declared paths do, and each candidate they suppress is reported
+  as a refused pair naming `--untrack`. What forces it is safegit's own
+  consistency rather than a judgement about tastefulness: the DECLARED spelling
+  already refuses that same claim — `--moved 'old -> new'` with the old path
+  still on disk exits 19 — so inference stating it would have had safegit assert
+  what safegit refuses to be told.
+
+  The fence is scoped to the paths this command line named, not to a general
+  on-disk check: a `--branch` commit's working tree is unrelated to the tree
+  being built, and consulting it would be inference reading the wrong world.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
 
 ### `safegit undo` of a move reverses the commit, not the files
 

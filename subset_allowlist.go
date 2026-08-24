@@ -37,7 +37,12 @@ import (
 // before any git runs.
 //
 // DIVERGENCE: every entry in every table below is one git capability safegit
-// deliberately does not have, and each needs its row in docs/divergences.md.
+// deliberately does not have. They are cataloged under "The subset boundary" in
+// docs/divergences.md -- the default-deny stance itself as "The forwarded
+// command line is an allowlist, not a refusal list", and each refused capability
+// class as its own entry, with the ALLOWED sets tabulated beside them under
+// "What each guarded command allows". A capability added to or removed from a
+// table below changes that section in the same commit.
 
 // refusedCapability is one capability the command deliberately lacks, with the
 // reason it lacks it. The names are every spelling git accepts for it, so a
@@ -171,7 +176,8 @@ var mergeSubset = argvSubset{
 		},
 		{
 			// DIVERGENCE: git's merge takes --commit and commits; safegit's
-			// refuses it by name. Needs its row in docs/divergences.md.
+			// refuses it by name. Cataloged in docs/divergences.md as "Options
+			// that would hand the commit or the ref back to git are refused".
 			//
 			// It was accepted and quietly stripped from the forwarded argv,
 			// which is the shape safegit refuses everywhere else: an operator

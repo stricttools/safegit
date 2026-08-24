@@ -59,13 +59,11 @@ import (
 // sentence per reason counting the MOVES that went unrecorded -- and pointing
 // at --moved where declaring the move is the remedy, which is not all of them.
 //
-// STALE CATALOG ENTRY, flagged here rather than fixed: `docs/divergences.md`
-// still carries "Moves are declared; blob equality never decides anything",
-// which describes the declared-only stance this package overturned -- safegit
-// still detects no renames, but it does record what a delta witnesses. The
-// entry says of itself that it will be rewritten when this ships; it has
-// shipped. The correction belongs to the documentation pass that owns the
-// catalog, which has ONE writer on purpose, so no code change edits it.
+// DIVERGENCE: `docs/divergences.md` carries this as "Moves are recorded, never
+// detected by similarity" -- the entry that used to describe a declared-only
+// stance, rewritten for what this package does rather than duplicated beside
+// it. safegit still detects nothing by similarity; what it records is what a
+// delta exactly witnesses, under the fences above.
 
 // regularFileModes are the two modes an inferred pair may carry on either side.
 // Everything else -- a symlink, a gitlink, a tree -- is content whose identity

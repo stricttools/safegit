@@ -142,8 +142,8 @@ func runPull(flags globalFlags, mode pullMode, remote, branch string, rebase boo
 //
 // DIVERGENCE: `git pull --rebase` is one command; safegit's is two, because a
 // rebase is its own command with its own door -- git replays and authors the
-// replayed commits there, which is the one place safegit lets it. Needs its row
-// in docs/divergences.md.
+// replayed commits there, which is the one place safegit lets it. Cataloged in
+// docs/divergences.md as "`pull --rebase` is refused, naming the two commands".
 func refusePullRebase() int {
 	fmt.Fprintf(os.Stderr, "error: safegit pull does not support --rebase\n")
 	fmt.Fprintf(os.Stderr, "  a pull's merge step is safegit's own -- it authors the commit -- while a rebase is git's\n")
