@@ -138,8 +138,8 @@ func runMerge(flags globalFlags, args []string) int {
 //
 // Every refusal is parser-shaped (exit 2) and names the capability that is
 // absent, because "safegit does not do this" is a different answer from "this
-// failed" and an operator has to be able to tell them apart. Each has its entry
-// in the divergences catalog.
+// failed" and an operator has to be able to tell them apart. Each needs its
+// entry in the divergences catalog.
 func refuseUnsupportedMerge(parsed gitArgs) int {
 	for _, refused := range mergeRefusedOptions {
 		if o, ok := parsed.Find(refused.names...); ok {
@@ -179,8 +179,9 @@ func refuseUnsupportedMerge(parsed gitArgs) int {
 	return 0
 }
 
-// octopusReason is the one sentence that says why, shared by the refusal above
-// and by the conclusion's own refusal of a raw-git octopus.
+// octopusReason is the one sentence that says why an octopus is not in the
+// subset, spelled once so anything else that has to refuse one can say the
+// same thing.
 //
 // DIVERGENCE: git merges any number of branches in one commit; safegit merges
 // one. Needs its row in docs/divergences.md.
