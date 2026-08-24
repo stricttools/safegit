@@ -156,7 +156,7 @@ var doctorChecks = []doctorCheck{
 	// Not RequiresInit: MERGE_AUTOSTASH is git's own file, and the work it names
 	// is unreachable whether or not safegit has state in this repository.
 	{Name: "merge_autostash", Severity: "warn", Fn: checkOrphanedAutostash,
-		Question: "Is `MERGE_AUTOSTASH` present with no merge in flight? (It names a stash-shaped commit holding uncommitted work no ref reaches; the check reports it and removes nothing.)"},
+		Question: "Is `MERGE_AUTOSTASH` present with no merge in flight? (It names a stash-shaped commit holding uncommitted work no ref reaches; the check itself removes nothing, and `--action fix` stores that commit as a stash entry before removing the file, so the work gains a name instead of losing its only one.)"},
 	// Not RequiresInit, and ERROR severity: the entries are git's own, and while
 	// they are there every commit in this repository refuses -- with git's
 	// refusal or safegit's exit 28 -- whether or not safegit has state here.
