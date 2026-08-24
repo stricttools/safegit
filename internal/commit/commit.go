@@ -44,6 +44,53 @@ func (e *CommitError) Error() string { return e.Message }
 // Unwrap exposes the underlying cause to errors.Is/errors.As.
 func (e *CommitError) Unwrap() error { return e.Err }
 
+// PartialError is the pipeline's commit-stands verdict: the ref MOVED, the
+// commit object is the branch's tip, and a step that runs after the ref update
+// did not finish.
+//
+// It is a distinct type rather than a CommitError with a code because the two
+// say opposite things about what happened. A CommitError is a refusal -- nothing
+// was written, and re-running the command after fixing the cause is the remedy.
+// This says the operation succeeded and something it owed afterwards did not,
+// so re-running would make a SECOND commit. A caller that cannot tell them
+// apart retries by default, which is the expensive guess.
+//
+// The result value is returned ALONGSIDE it, not instead of it: a caller has to
+// be able to report which commit stands, and that is the result's job.
+type PartialError struct {
+	// SHA is the commit that was created and is now the branch's tip.
+	SHA string
+	// Step names the aftercare that did not finish, from the vocabulary below.
+	Step string
+	// Err is the underlying cause.
+	Err error
+}
+
+// Error states the outcome in the order it has to be read: the commit first,
+// the failure second.
+func (e *PartialError) Error() string {
+	return fmt.Sprintf("commit %s was created, but %s failed: %v", shortSHA(e.SHA), e.Step, e.Err)
+}
+
+// Unwrap exposes the cause to errors.Is/errors.As.
+func (e *PartialError) Unwrap() error { return e.Err }
+
+// StepIndexReconcile is the pipeline's own aftercare: putting the repository's
+// shared index in step with the commit that was just made. It is the only step
+// the pipeline itself performs after the ref update, so it is the only member of
+// the vocabulary this package declares; the rest of the family's steps belong to
+// the commands that run them.
+const StepIndexReconcile = "reconciling the shared index"
+
+// shortSHA renders a commit for a message, tolerating a value shorter than the
+// abbreviation length rather than slicing past its end.
+func shortSHA(sha string) string {
+	if len(sha) <= 8 {
+		return sha
+	}
+	return sha[:8]
+}
+
 // ErrTreeUnchanged is the cause behind the empty-commit refusal, so a caller
 // can recognize that particular refusal without matching on its text.
 //
@@ -337,7 +384,10 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		result, retry, err := p.tryCommit(ctx, ref, repoRoot, previewArea, files, movedTrailers, req, hooks, attempt)
 		if err != nil {
-			return nil, err
+			// result is nil for every refusal and non-nil for the commit-stands
+			// verdict alone, which is the one error a caller has something to
+			// report alongside.
+			return result, err
 		}
 		if !retry {
 			return result, nil
@@ -663,17 +713,7 @@ func (p *Pipeline) tryCommit(
 	// staged work the parent tip does not account for. Only when committing to
 	// the current branch -- a cross-branch commit must not touch this working
 	// tree's index at all.
-	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
-		if err := git.ReconcileMainIndex(ctx, parentSHA, "HEAD"); err != nil {
-			return nil, false, fmt.Errorf("commit %s was created, but reconciling the shared index failed: %w", commitSHA[:8], err)
-		}
-	}
-
-	// Step 10: the post-commit hook, once the commit is real and nothing can
-	// take it back.
-	hooks.postCommit(ctx)
-
-	return &CommitResult{
+	result := &CommitResult{
 		SHA:            commitSHA,
 		Ref:            ref,
 		Parents:        parents,
@@ -681,7 +721,21 @@ func (p *Pipeline) tryCommit(
 		Attempts:       attempt,
 		Files:          changedPaths(changed),
 		SkippedIgnored: files.skipped,
-	}, false, nil
+	}
+
+	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
+		if err := git.ReconcileMainIndex(ctx, parentSHA, "HEAD"); err != nil {
+			// The RESULT travels with the error: the ref moved, so the caller
+			// has a commit to report and an outcome to report it as.
+			return result, false, &PartialError{SHA: commitSHA, Step: StepIndexReconcile, Err: err}
+		}
+	}
+
+	// Step 10: the post-commit hook, once the commit is real and nothing can
+	// take it back.
+	hooks.postCommit(ctx)
+
+	return result, false, nil
 }
 
 // updateRef mints the commit family's ref update through the caller-supplied

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/smm-h/safegit/internal/commit"
 	"github.com/smm-h/safegit/internal/coord"
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
@@ -82,7 +83,11 @@ var conclusionOps = map[string]string{
 // the resolved value in rather than reaching for the environment here.
 const sessionIDEnvVar = "CLAUDE_CODE_SESSION_ID"
 
-func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string) {
+// runUndo RETURNS its exit code rather than exiting, for the same reason the
+// commit family does: once the ref has moved, an aftercare failure is a
+// ref-moved-stands outcome that has to be REPORTED, and os.Exit runs below the
+// seam that reports it. Every refusal above the ref update still dies.
+func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string) int {
 	const cmd = "undo"
 
 	// Post-parse argument validation: the framework accepted the command line,
@@ -294,7 +299,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		} else {
 			outf(flags, "  %s -> %s\n", currentSHA[:8], targetSHA[:8])
 		}
-		return
+		return exitcode.OK
 	}
 
 	// Acquire lock on the ref
@@ -323,12 +328,20 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	// Reconcile the shared index so git status/diff reflect the rollback while
 	// every staged change the undone commit does not account for survives it.
 	// For a root undo the target is the empty tree, spelled "".
+	//
+	// The ref has already moved, so a failure here is a ref-moved-stands outcome
+	// rather than a refusal: it is recorded and carried in the exit code, and the
+	// rest of the undo -- the notes, and the oplog entry that keeps every later
+	// reader from mistaking this move for one safegit did not make -- still runs.
 	syncTreeish := targetSHA
 	if isRootUndo {
 		syncTreeish = ""
 	}
+	var residue []residueEntry
 	if err := git.ReconcileMainIndex(ctx, currentSHA, syncTreeish); err != nil {
-		die(exitcode.General, fmt.Sprintf("%s was undone, but reconciling the shared index failed: %v", currentSHA[:8], err))
+		detail := fmt.Sprintf("%s was undone, but reconciling the shared index failed: %v", currentSHA[:8], err)
+		fmt.Fprintf(os.Stderr, "error: %s\n", detail)
+		residue = recordAftercareFailure(residue, commit.StepIndexReconcile, detail)
 	}
 
 	// A conclusion's undo is partial by construction: the ref is back, the git
@@ -358,13 +371,14 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		fmt.Fprintf(os.Stderr, "note: undoing commit that triggered parent bump %s\n", bumpSHA[:8])
 	}
 
-	// die(), not a bare os.Exit: two locks are held here -- the worktree
-	// operation lock taken at the top and the ref lock taken just above -- and
-	// os.Exit runs no deferred function. Only die() releases them, so exiting
-	// any other way leaves both lock files behind for the next contender to
-	// wait out and for doctor to report.
+	// A RETURN, not die(): the ref is already back where the oplog says, so a
+	// parent bump that failed is one more piece of aftercare residue rather than
+	// a reason to exit as though nothing happened. Returning also releases both
+	// locks held here -- the worktree operation lock taken at the top and the ref
+	// lock taken just above -- through their own defers, which os.Exit would
+	// have run past.
 	if err := maybeAutoBumpParent(ctx, flags, gitDir, targetSHA, "undo", ""); err != nil {
-		die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+		residue = reportAftercareFailure(residue, stepParentBump, err)
 	}
 
 	// Log the undo to the oplog. A ROOT undo deletes the ref rather than moving
@@ -395,6 +409,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 			fmt.Printf("  %s -> %s\n", currentSHA[:8], targetSHA[:8])
 		}
 	}
+	return aftercareExit(residue)
 }
 
 // refuseUnaccountedRange is the check that stands between undo's arithmetic and

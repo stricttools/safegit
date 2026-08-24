@@ -299,6 +299,16 @@ type conclusionResult struct {
 	// this field.
 	author  *git.AuthorInfo
 	cleared bool
+	// autostash is what became of the work git set aside before the merge began,
+	// and noAutostash() for every conclusion that had none. It is a member of the
+	// result rather than a return value of the step that produced it because
+	// Context.Payload is one-shot: the aftercare RETURNS its outcomes and ONE
+	// payload is built at the end, from this.
+	autostash autostashOutcome
+	// residue is every aftercare step that did not finish. Empty is a conclusion
+	// that finished everything it owed; anything in it makes the exit the
+	// commit-stands family code (see aftercare.go).
+	residue []residueEntry
 }
 
 // preservesSourceAuthor reports whether this conclusion records the identity of
@@ -513,7 +523,14 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		// against the state on disk, not taken on trust.
 		Sequencer: &coord.SequencerContext{Kind: op.kind},
 	})
-	if err != nil {
+	out := conclusionResult{state: state, commit: result, declared: declared, declines: declines, author: recorded, autostash: noAutostash()}
+	if partial := commitStands(err); partial != nil && result != nil {
+		// Not a refusal: the ref moved. The rest of the aftercare still runs --
+		// the state files above all have to go, or the repository stays
+		// mid-operation on top of a commit that concluded it.
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		out.residue = recordAftercareFailure(out.residue, partial.Step, err.Error())
+	} else if err != nil {
 		// The empty-commit refusal names --allow-empty, a flag these commands do
 		// not have. A conclusion that produces nothing is a real situation with
 		// its own ways out, so it gets its own message rather than a pointer at
@@ -524,29 +541,61 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		die(pipelineExitCode(err), err.Error())
 	}
 
-	out := conclusionResult{state: state, commit: result, declared: declared, declines: declines, author: recorded}
-
-	exit := exitcode.OK
 	if !flags.dryRun {
-		if err := finishConclusion(ctx, gitDir, state, result, edits, sides, declared); err != nil {
-			die(exitcode.General, err.Error())
-		}
-		out.cleared = true
-
-		if err := maybeAutoBumpParent(ctx, flags, gitDir, result.SHA, op.command, firstLine(message)); err != nil {
-			die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
-		}
-
-		// LAST, and after the state files are gone: the commit is made and the
-		// operation is over, so whatever this does to the working tree can no
-		// longer leave the repository mid-merge. A failure here is reported and
-		// carried out in the exit code rather than thrown -- the commit stands
-		// either way, and the operator has to be told that it does.
-		exit = consumeAutostash(ctx, gitDir, state)
+		out.concludeAftercare(ctx, flags, gitDir, state, result, edits, sides, declared, op.command, message)
 	}
 
 	op.report(flags, out)
-	return exit
+	return aftercareExit(out.residue)
+}
+
+// concludeAftercare runs everything a conclusion owes AFTER its commit exists,
+// and records what did not finish.
+//
+// It is one function because the two doors into the engine owe the same three
+// steps in the same order, for the same reasons: the state files and the index
+// first (finishConclusion), then the parent's gitlink, then -- last, once the
+// state files are gone -- the autostash, because until then putting work back
+// into the working tree could leave the repository mid-merge.
+//
+// The chain STOPS at a finishConclusion failure. The steps after it are built on
+// a repository that is no longer mid-operation and an index that matches the new
+// tip, and running them over a half-finished state would be guessing.
+func (out *conclusionResult) concludeAftercare(
+	ctx context.Context,
+	flags globalFlags,
+	gitDir string,
+	state sequencer.State,
+	result *commit.CommitResult,
+	edits []commit.IndexEdit,
+	sides map[string]conflict.Sides,
+	declared []resolution,
+	parentBumpOp string,
+	message string,
+) {
+	if r := finishConclusion(ctx, gitDir, state, result, edits, sides, declared); r != nil {
+		fmt.Fprintf(os.Stderr, "error: %s\n", r.Detail)
+		out.residue = append(out.residue, *r)
+		if state.Kind == sequencer.KindMerge && state.Autostash != "" {
+			// Said explicitly, because the alternative is silence about work
+			// that exists nowhere else: the autostash was never reached, so
+			// MERGE_AUTOSTASH still holds it exactly as git left it.
+			stash := state.Autostash
+			out.autostash = autostashOutcome{State: autostashPending, Stash: &stash}
+			fmt.Fprintf(os.Stderr, "  the autostash was not reached: %s still holds your uncommitted work (commit %s)\n",
+				sequencer.FileMergeAutostash, stash)
+		}
+		return
+	}
+	out.cleared = true
+
+	if err := maybeAutoBumpParent(ctx, flags, gitDir, result.SHA, parentBumpOp, firstLine(message)); err != nil {
+		out.residue = reportAftercareFailure(out.residue, stepParentBump, err)
+	}
+
+	stash, residue := consumeAutostash(ctx, gitDir, state)
+	out.autostash = stash
+	out.residue = append(out.residue, residue...)
 }
 
 // parkedConclusion describes one IMMEDIATE conclusion: the operation git has
@@ -670,31 +719,26 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 		AllowEmpty:   req.allowEmpty,
 		Sequencer:    &coord.SequencerContext{Kind: state.Kind},
 	})
-	if err != nil {
+	out = conclusionResult{state: state, commit: result, declared: declared, declines: declines, author: recorded, autostash: noAutostash()}
+	if partial := commitStands(err); partial != nil && result != nil {
+		// The ref moved, so this is a report rather than a refusal -- see
+		// runContinue's own arm, which reaches the same verdict.
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		out.residue = recordAftercareFailure(out.residue, partial.Step, err.Error())
+	} else if err != nil {
 		if errors.Is(err, commit.ErrTreeUnchanged) {
-			return out, req.onEmpty(), false
+			return conclusionResult{}, req.onEmpty(), false
 		}
 		die(pipelineExitCode(err), err.Error())
 	}
 
-	out = conclusionResult{state: state, commit: result, declared: declared, declines: declines, author: recorded}
-
-	exit = exitcode.OK
 	if !flags.dryRun {
-		if err := finishConclusion(ctx, gitDir, state, result, nil, sides, declared); err != nil {
-			die(exitcode.General, err.Error())
-		}
-		out.cleared = true
-
-		if err := maybeAutoBumpParent(ctx, flags, gitDir, result.SHA, req.parentBumpOp, firstLine(message)); err != nil {
-			die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
-		}
-
-		// LAST, and after the state files are gone -- the same order and the
-		// same reason as runContinue's.
-		exit = consumeAutostash(ctx, gitDir, state)
+		// The same aftercare, in the same order and for the same reasons, as the
+		// -continue commands run. No index edits: a parked conclusion declares no
+		// resolutions, because git's compute step left nothing unmerged.
+		out.concludeAftercare(ctx, flags, gitDir, state, result, nil, sides, declared, req.parentBumpOp, message)
 	}
-	return out, exit, true
+	return out, aftercareExit(out.residue), true
 }
 
 // consumeAutostash puts back the uncommitted work git set aside before this
@@ -719,18 +763,25 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 // of fact as undo's "the merge state is NOT restored" note, --quiet is a request
 // for less chatter rather than for the whereabouts of one's own work to be
 // withheld, and in machine mode stdout belongs to the envelope.
-func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State) int {
+//
+// It RETURNS what became of the work and what it left behind, rather than a
+// bare exit code: the outcome is a fact the payload states (see
+// autostashOutcome), and an exit code cannot say WHERE the operator's work is.
+func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State) (autostashOutcome, []residueEntry) {
 	if state.Kind != sequencer.KindMerge || state.Autostash == "" {
-		return exitcode.OK
+		return noAutostash(), nil
 	}
 	path := filepath.Join(gitDir, sequencer.FileMergeAutostash)
+	stash := state.Autostash
 
-	gitSaid, applyErr := git.StashApply(ctx, state.Autostash)
+	gitSaid, applyErr := git.StashApply(ctx, stash)
 	if applyErr == nil {
+		applied := autostashOutcome{State: autostashApplied, Stash: &stash}
 		if rmErr := os.Remove(path); rmErr != nil && !os.IsNotExist(rmErr) {
-			fmt.Fprintf(os.Stderr, "error: the autostash was applied but %s could not be removed: %v\n", path, rmErr)
+			detail := fmt.Sprintf("the autostash was applied but %s could not be removed: %v", path, rmErr)
+			fmt.Fprintf(os.Stderr, "error: %s\n", detail)
 			fmt.Fprintf(os.Stderr, "  remove it by hand; leaving it there would make the next conclusion apply the same work twice\n")
-			return exitcode.General
+			return applied, []residueEntry{{Step: stepAutostashFile, Detail: detail}}
 		}
 		// The apply is itself a merge, so it leaves the same residue any merge
 		// leaves -- AUTO_MERGE, and MERGE_RR where rerere is on. The conclusion
@@ -740,11 +791,12 @@ func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State)
 		// apply; after a conflicting one that residue belongs to the conflict now
 		// sitting in the working tree.
 		if err := sequencer.Cleanup(gitDir, sequencer.KindMerge); err != nil {
-			fmt.Fprintf(os.Stderr, "error: the autostash was applied but its own leftover state could not be removed: %v\n", err)
-			return exitcode.General
+			detail := fmt.Sprintf("the autostash was applied but its own leftover state could not be removed: %v", err)
+			fmt.Fprintf(os.Stderr, "error: %s\n", detail)
+			return applied, []residueEntry{{Step: stepAutostashState, Detail: detail}}
 		}
 		fmt.Fprintf(os.Stderr, "Applied autostash.\n")
-		return exitcode.OK
+		return applied, nil
 	}
 
 	fmt.Fprintf(os.Stderr, "error: applying the autostash resulted in conflicts; the merge commit was created and stands\n")
@@ -758,22 +810,39 @@ func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State)
 		fmt.Fprintf(os.Stderr, "  %s\n", line)
 	}
 
-	if storeErr := git.StashStore(ctx, state.Autostash, "autostash"); storeErr != nil {
+	if storeErr := git.StashStore(ctx, stash, "autostash"); storeErr != nil {
 		// Nothing was stored, so the file is the only name the work has left and
 		// it stays exactly where it is.
 		fmt.Fprintf(os.Stderr, "  it could not be stored as a stash entry either: %v\n", storeErr)
-		fmt.Fprintf(os.Stderr, "  your changes are the commit %s, still recorded in %s. Recover them with:\n", state.Autostash, path)
-		fmt.Fprintf(os.Stderr, "    git stash apply %s\n", state.Autostash)
-		return exitcode.General
+		fmt.Fprintf(os.Stderr, "  your changes are the commit %s, still recorded in %s. Recover them with:\n", stash, path)
+		fmt.Fprintf(os.Stderr, "    git stash apply %s\n", stash)
+		return autostashOutcome{State: autostashUnstored, Stash: &stash},
+			[]residueEntry{{
+				Step:   stepAutostashStore,
+				Detail: fmt.Sprintf("the autostash could not be applied or stored; the work is the commit %s, still recorded in %s", stash, path),
+			}}
 	}
+
+	stored := autostashOutcome{State: autostashStored, Stash: &stash}
 	if rmErr := os.Remove(path); rmErr != nil && !os.IsNotExist(rmErr) {
 		fmt.Fprintf(os.Stderr, "  your changes are safe in the stash, but %s could not be removed: %v\n", path, rmErr)
 		fmt.Fprintf(os.Stderr, "  remove it by hand; the work is recorded twice until you do\n")
-		return exitcode.General
+		return stored, []residueEntry{{
+			Step:   stepAutostashFile,
+			Detail: fmt.Sprintf("the work is parked as stash@{0}, but %s could not be removed: %v", path, rmErr),
+		}}
 	}
-	fmt.Fprintf(os.Stderr, "  your changes are safe in the stash, as stash@{0} (commit %s).\n", state.Autostash)
+	fmt.Fprintf(os.Stderr, "  your changes are safe in the stash, as stash@{0} (commit %s).\n", stash)
 	fmt.Fprintf(os.Stderr, "  run 'git stash pop' or 'git stash drop' at any time\n")
-	return exitcode.General
+	// A stored autostash is residue in its own right: the conclusion could not
+	// put the operator's work back, and it is sitting in a stash entry nobody
+	// asked for until they deal with it. That is what carries the family exit
+	// code -- see the divergence catalog's "An autostash that cannot be applied
+	// exits nonzero".
+	return stored, []residueEntry{{
+		Step:   stepAutostashApply,
+		Detail: fmt.Sprintf("the autostash conflicted with the merge result; the work is parked as stash@{0} (commit %s)", stash),
+	}}
 }
 
 // finishConclusion removes the concluded operation's state and puts the shared
@@ -797,21 +866,35 @@ func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State)
 // nothing inconsistent behind: the commit is real, the state is gone and the
 // index matches it, so a file that could not be written is one named error
 // about one path rather than a repository stuck mid-operation.
-func finishConclusion(ctx context.Context, gitDir string, state sequencer.State, result *commit.CommitResult, edits []commit.IndexEdit, sides map[string]conflict.Sides, declared []resolution) error {
+//
+// It RETURNS its outcome rather than throwing it: every failure here is an
+// aftercare failure over a commit that stands, so the caller has a report to
+// build out of it. A nil answer is a conclusion that finished everything it
+// owed; a non-nil one names the step that did not and carries the sentence the
+// caller prints. The chain stops at the first failure, because each step is
+// built on the one before it.
+func finishConclusion(ctx context.Context, gitDir string, state sequencer.State, result *commit.CommitResult, edits []commit.IndexEdit, sides map[string]conflict.Sides, declared []resolution) *residueEntry {
+	stands := func(step string, err error) *residueEntry {
+		return &residueEntry{
+			Step:   step,
+			Detail: fmt.Sprintf("commit %s was created, but %s failed: %v", shortSHA(result.SHA), step, err),
+		}
+	}
+
 	if err := sequencer.Cleanup(gitDir, state.Kind); err != nil {
-		return fmt.Errorf("commit %s was created, but removing the %s state files failed: %w", shortSHA(result.SHA), state.Kind, err)
+		return stands(stepStateCleanup, err)
 	}
 
 	if err := commit.ApplyIndexEditsTo(ctx, "", edits); err != nil {
-		return fmt.Errorf("commit %s was created, but resolving the shared index failed: %w", shortSHA(result.SHA), err)
+		return stands(stepIndexResolve, err)
 	}
 
 	if err := git.ReconcileMainIndex(ctx, firstParentOf(result), "HEAD"); err != nil {
-		return fmt.Errorf("commit %s was created, but reconciling the shared index failed: %w", shortSHA(result.SHA), err)
+		return stands(commit.StepIndexReconcile, err)
 	}
 
 	if err := materializeResolutions(ctx, sides, declared); err != nil {
-		return fmt.Errorf("commit %s was created, but %w", shortSHA(result.SHA), err)
+		return stands(stepWorktreeResolution, err)
 	}
 	return nil
 }
@@ -859,7 +942,10 @@ func materializeResolutions(ctx context.Context, sides map[string]conflict.Sides
 			return fmt.Errorf("internal: %s carries an unrecognized resolution %q", r.Path, r.Choice)
 		}
 		if writeErr != nil {
-			return fmt.Errorf("writing the resolved content of %s into the working tree failed: %w", r.Path, writeErr)
+			// The path and the cause only: the step this is part of is named by
+			// the caller that reports it, so repeating it here would print the
+			// same phrase twice in one sentence.
+			return fmt.Errorf("%s: %w", r.Path, writeErr)
 		}
 	}
 	return nil

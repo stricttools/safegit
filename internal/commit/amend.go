@@ -150,7 +150,8 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		result, retry, err := p.tryAmend(ctx, ref, repoRoot, previewArea, files, movedTrailers, req, hooks, attempt)
 		if err != nil {
-			return nil, err
+			// Non-nil for the commit-stands verdict alone -- see PartialError.
+			return result, err
 		}
 		if !retry {
 			return result, nil
@@ -351,16 +352,7 @@ func (p *Pipeline) tryAmend(
 	// Reconcile the shared index with the amended commit, preserving whatever
 	// staged work the pre-amend tip does not account for. Only when amending
 	// the current branch: a cross-branch amend must not touch this index.
-	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
-		if err := git.ReconcileMainIndex(ctx, headSHA, "HEAD"); err != nil {
-			return nil, false, fmt.Errorf("amended commit %s was created, but reconciling the shared index failed: %w", commitSHA[:8], err)
-		}
-	}
-
-	// The post-commit hook, once the amended commit is the branch's tip.
-	hooks.postCommit(ctx)
-
-	return &AmendResult{
+	result := &AmendResult{
 		SHA:            commitSHA,
 		Ref:            ref,
 		Parents:        parents,
@@ -369,7 +361,20 @@ func (p *Pipeline) tryAmend(
 		Attempts:       attempt,
 		Files:          changedPaths(changed),
 		SkippedIgnored: files.skipped,
-	}, false, nil
+	}
+
+	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
+		if err := git.ReconcileMainIndex(ctx, headSHA, "HEAD"); err != nil {
+			// The commit-stands verdict, with the result beside it -- see
+			// PartialError.
+			return result, false, &PartialError{SHA: commitSHA, Step: StepIndexReconcile, Err: err}
+		}
+	}
+
+	// The post-commit hook, once the amended commit is the branch's tip.
+	hooks.postCommit(ctx)
+
+	return result, false, nil
 }
 
 // RewordRequest holds inputs for a reword operation.
@@ -475,7 +480,8 @@ func (p *Pipeline) Reword(ctx context.Context, req RewordRequest) (*RewordResult
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		result, retry, err := p.tryReword(ctx, ref, movedTrailers, req, hooks, attempt)
 		if err != nil {
-			return nil, err
+			// Non-nil for the commit-stands verdict alone -- see PartialError.
+			return result, err
 		}
 		if !retry {
 			return result, nil
@@ -596,21 +602,25 @@ func (p *Pipeline) tryReword(
 		},
 	})
 
-	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
-		if err := git.ReconcileMainIndex(ctx, headSHA, "HEAD"); err != nil {
-			return nil, false, fmt.Errorf("reworded commit %s was created, but reconciling the shared index failed: %w", commitSHA[:8], err)
-		}
-	}
-
-	// The post-commit hook, once the reworded commit is the branch's tip.
-	hooks.postCommit(ctx)
-
-	return &RewordResult{
+	result := &RewordResult{
 		SHA:      commitSHA,
 		Ref:      ref,
 		Parents:  parents,
 		Tree:     treeSHA,
 		OldSHA:   headSHA,
 		Attempts: attempt,
-	}, false, nil
+	}
+
+	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
+		if err := git.ReconcileMainIndex(ctx, headSHA, "HEAD"); err != nil {
+			// The commit-stands verdict, with the result beside it -- see
+			// PartialError.
+			return result, false, &PartialError{SHA: commitSHA, Step: StepIndexReconcile, Err: err}
+		}
+	}
+
+	// The post-commit hook, once the reworded commit is the branch's tip.
+	hooks.postCommit(ctx)
+
+	return result, false, nil
 }

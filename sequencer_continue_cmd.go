@@ -49,7 +49,18 @@ type continuePayload struct {
 	// DeclinedChecks are the checks this conclusion did NOT make, never nil. A
 	// silent skip reads as a clean verdict over content nothing looked at.
 	DeclinedChecks []declinedCheck `json:"declined_checks"`
-	DryRun         bool            `json:"dry_run"`
+	// Autostash says where the uncommitted work git set aside before the merge
+	// began now is, and reports state "none" for every conclusion that had none
+	// (which is every cherry-pick and revert conclusion, since only a merge
+	// carries one). Without it a conclusion that could not put that work back is
+	// indistinguishable from a clean success once the commit's own identity is
+	// set aside.
+	Autostash autostashOutcome `json:"autostash"`
+	// Residue is every step this conclusion owed AFTER its commit and did not
+	// finish, never nil. An empty list is a conclusion that finished everything;
+	// anything in it is what the commit-stands exit code is about.
+	Residue []residueEntry `json:"residue"`
+	DryRun  bool           `json:"dry_run"`
 }
 
 // continueAuthor is the identity the concluding commit RECORDS as its author.
@@ -115,9 +126,25 @@ func continuePayloadSchema(withAuthor bool) map[string]interface{} {
 			[]string{"check", "path", "reason"},
 			false,
 		)),
+		"autostash": strictcli.SchemaObject(
+			map[string]interface{}{
+				"state": strictcli.SchemaType("string"),
+				"stash": strictcli.SchemaType("string", "null"),
+			},
+			[]string{"state", "stash"},
+			false,
+		),
+		"residue": strictcli.SchemaArray(strictcli.SchemaObject(
+			map[string]interface{}{
+				"step":   strictcli.SchemaType("string"),
+				"detail": strictcli.SchemaType("string"),
+			},
+			[]string{"step", "detail"},
+			false,
+		)),
 		"dry_run": strictcli.SchemaType("boolean"),
 	}
-	required := []string{"operation", "ref", "sha", "parents", "tree", "files", "resolutions", "state_cleared", "attempts", "declined_checks", "dry_run"}
+	required := []string{"operation", "ref", "sha", "parents", "tree", "files", "resolutions", "state_cleared", "attempts", "declined_checks", "autostash", "residue", "dry_run"}
 
 	if withAuthor {
 		members["author"] = strictcli.SchemaObject(
@@ -166,6 +193,8 @@ func (op continueOp) reportPayload(flags globalFlags, out conclusionResult) {
 		StateCleared:   out.cleared,
 		Attempts:       out.commit.Attempts,
 		DeclinedChecks: orEmptyDeclines(out.declines),
+		Autostash:      out.autostash,
+		Residue:        orEmptyResidue(out.residue),
 		DryRun:         flags.dryRun,
 	}
 	// The shape is chosen by the COMMAND, not by whether an author was
