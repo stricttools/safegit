@@ -330,7 +330,7 @@ func (u effectsRefUpdate) Update(_ context.Context, ref, newSHA, expected string
 		recorded = previewCommitPlaceholder
 	}
 
-	argv, err := gitexec.ArgvAny(gitexec.ExemptCommitRefUpdate, "update-ref", ref, recorded, expected)
+	argv, err := gitexec.ArgvAny(gitexec.ExemptCommitRefUpdate, gitexec.NoDoor, "update-ref", ref, recorded, expected)
 	if err != nil {
 		return err
 	}

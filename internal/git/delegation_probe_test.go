@@ -98,10 +98,15 @@ func TestRevertContinueHonorsASubstitutedIndexFile(t *testing.T) {
 		t.Fatalf("the shared index holds %d unmerged entries before the delegation, want 3", n)
 	}
 
-	if err := RunPassthroughWithEnv(ctx,
+	// Driven with RAW git rather than through internal/git, and that is the
+	// probe being honest about what it measures: the fact recorded here is
+	// GIT's, and safegit's execution boundary refuses a `revert --continue`
+	// argv outright -- concluding a revert is safegit's own job, so no safegit
+	// call site may build one.
+	if out, code := testutil.GitTryEnv(t, dir,
 		[]string{"GIT_INDEX_FILE=" + copyPath, "GIT_EDITOR=true"},
-		"revert", "--continue", "--no-edit"); err != nil {
-		t.Fatalf("revert --continue through the delegation: %v", err)
+		"revert", "--continue", "--no-edit"); code != 0 {
+		t.Fatalf("revert --continue with a substituted index file (exit %d):\n%s", code, out)
 	}
 
 	// The resolution staged in the COPY is what got committed.
@@ -167,10 +172,14 @@ func TestRebaseContinueHonorsASubstitutedIndexFile(t *testing.T) {
 	}
 	sharedBefore := unmergedCount(t, "")
 
-	if err := RunPassthroughWithEnv(ctx,
+	// Raw git, for the same reason as the revert probe above: the fact is
+	// git's. safegit's own rebase does pass an authoring argv to git -- it is
+	// the ONE declared door -- but it does so through the effects-handle path,
+	// which is not this one.
+	if out, code := testutil.GitTryEnv(t, dir,
 		[]string{"GIT_INDEX_FILE=" + copyPath, "GIT_EDITOR=true"},
-		"rebase", "--continue"); err != nil {
-		t.Fatalf("rebase --continue with a substituted index file: %v", err)
+		"rebase", "--continue"); code != 0 {
+		t.Fatalf("rebase --continue with a substituted index file (exit %d):\n%s", code, out)
 	}
 
 	// ANSWER: yes. git rebase --continue honors the substitution exactly as the

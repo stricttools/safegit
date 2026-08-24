@@ -6,6 +6,7 @@ import (
 
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
@@ -87,7 +88,7 @@ func runPull(flags globalFlags, mode pullMode, remote, branch string, rebase boo
 		// preview that computed against a STALE FETCH_HEAD would answer a
 		// question about a fetch that already happened, days ago, rather than
 		// about this command.
-		if code := runGitMutation(flags, fetchArgs...); code != 0 {
+		if code := runGitMutation(flags, gitexec.NoDoor, fetchArgs...); code != 0 {
 			return code
 		}
 		infof(flags, "the merge that follows cannot be previewed: what it does depends on the commits the fetch\n")
@@ -95,7 +96,7 @@ func runPull(flags globalFlags, mode pullMode, remote, branch string, rebase boo
 		return exitcode.OK
 	}
 
-	if code := runGitMutation(flags, fetchArgs...); code != 0 {
+	if code := runGitMutation(flags, gitexec.NoDoor, fetchArgs...); code != 0 {
 		appendOperationEntry(flags, sgDir, "pull", pos, false, pullExtraBase(remote, branch))
 		return code
 	}

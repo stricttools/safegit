@@ -9,6 +9,7 @@ import (
 	"github.com/smm-h/safegit/internal/conflict"
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/gitexec"
 )
 
 // Honest previews for merge, cherry-pick and revert.
@@ -68,7 +69,7 @@ func previewSequencerOperation(flags globalFlags, verb string, args []string, re
 	// The invocation is recorded in the framework's would-do log, exactly as it
 	// was before there was anything to compute: the preview below is an
 	// addition to the effects regime's answer, not a replacement for it.
-	if code := runGitMutation(flags, recordedArgv...); code != 0 {
+	if code := runGitMutation(flags, gitexec.NoDoor, recordedArgv...); code != 0 {
 		return code
 	}
 

@@ -94,7 +94,33 @@ type Verb struct {
 	// tokens are the mutating half of this list, and a subcommand that is in
 	// neither is refused before git is started.
 	Subcommands []string
-	Note        string
+
+	// Authors marks a verb whose invocation can make GIT author a commit.
+	//
+	// It is a field of its own rather than an Effect bit or a ConditionalEffect,
+	// and deliberately so. The effect vocabulary is ADDITIVE and presence-only,
+	// and Base is deliberately the WIDER of a verb's possibilities -- both are
+	// right for "what may this invocation touch" and both are wrong for "may
+	// git write a commit here", whose answer has to be exact in the other
+	// direction: a false yes refuses a command safegit needs, and a false no
+	// admits a second class of authorship. So the authoring fact reads its own
+	// field and leaves ObservePrefixes' reasoning about conditionals untouched.
+	Authors bool
+
+	// SuppressedBy are the argv tokens whose PRESENCE takes the authoring away:
+	// with any one of them after the subcommand, git cannot author a commit
+	// through this invocation. Only a token whose presence is decisive belongs
+	// here -- the absence of an option is not a token, and a token that merely
+	// makes authoring unlikely is not a suppressor.
+	//
+	// The sets are per verb rather than shared, because the same spelling does
+	// not mean the same thing across git's verbs: `-n` is `--no-commit` on
+	// cherry-pick and revert, and `--no-stat` on merge. One shared list would
+	// therefore read `git merge -n topic` as a merge that cannot commit, which
+	// is the opposite of what git does with it.
+	SuppressedBy []string
+
+	Note string
 }
 
 // verbs is the argv classification table: the single authority over the git
@@ -153,14 +179,20 @@ var verbs = []Verb{
 		Note: "safegit only ever reads, with `config --get`, but the SET form is two bare positionals (`git config merge.conflictStyle diff3`) and no single token tells it apart from a read; the base set is therefore the wider one",
 	},
 	{
-		Name: "cherry-pick",
-		Base: MutatesObjects | MutatesRefs | MutatesIndex | MutatesWorktree,
-		Note: "guarded passthrough; the operator's own argv",
+		Name:    "cherry-pick",
+		Base:    MutatesObjects | MutatesRefs | MutatesIndex | MutatesWorktree,
+		Authors: true,
+		// `-n` is cherry-pick's own spelling of --no-commit. `--continue` is
+		// deliberately absent: git's --continue is exactly the invocation that
+		// authors the commit.
+		SuppressedBy: []string{"-n", "--no-commit", "--abort", "--quit"},
+		Note:         "safegit computes a pick with --no-commit and commits the staged result itself; the state-control forms stay a guarded passthrough",
 	},
 	{
-		Name: "commit",
-		Base: MutatesObjects | MutatesRefs | MutatesIndex,
-		Note: "safegit's own pipeline never uses it -- it builds commits from commit-tree plus a compare-and-swap update-ref, precisely so it never writes the shared index -- but the verb is part of the vocabulary the boundary classifies, and repository fixtures reach it through the plumbing interface",
+		Name:    "commit",
+		Base:    MutatesObjects | MutatesRefs | MutatesIndex,
+		Authors: true,
+		Note:    "safegit's own pipeline never uses it -- it builds commits from commit-tree plus a compare-and-swap update-ref, precisely so it never writes the shared index -- but the verb is part of the vocabulary the boundary classifies, and repository fixtures reach it through the plumbing interface. It declares no suppressor: there is no shape of `git commit` safegit has any use for",
 	},
 	{Name: "commit-tree", Base: MutatesObjects},
 	{Name: "diff", Base: ObserveOnly},
@@ -184,8 +216,16 @@ var verbs = []Verb{
 	{Name: "ls-remote", Base: Network},
 	{Name: "ls-tree", Base: ObserveOnly},
 	{
-		Name: "merge",
-		Base: MutatesObjects | MutatesRefs | MutatesIndex | MutatesWorktree,
+		Name:    "merge",
+		Base:    MutatesObjects | MutatesRefs | MutatesIndex | MutatesWorktree,
+		Authors: true,
+		// --ff-only is a suppressor because a fast-forward moves a ref onto a
+		// commit that ALREADY EXISTS, and where no fast-forward is possible git
+		// refuses instead of merging: the flag admits `backup restore`'s
+		// fast-forward without admitting anything that writes a commit object.
+		// `-n` is deliberately NOT here: on merge it means --no-stat.
+		SuppressedBy: []string{"--no-commit", "--abort", "--quit", "--ff-only"},
+		Note:         "safegit computes a merge with --no-ff --no-commit and commits the staged result itself; the state-control forms stay a guarded passthrough",
 	},
 	{Name: "merge-base", Base: ObserveOnly},
 	{
@@ -224,9 +264,15 @@ var verbs = []Verb{
 		},
 	},
 	{
-		Name: "rebase",
-		Base: MutatesObjects | MutatesRefs | MutatesIndex | MutatesWorktree,
-		Note: "guarded passthrough; the operator's own argv",
+		Name:    "rebase",
+		Base:    MutatesObjects | MutatesRefs | MutatesIndex | MutatesWorktree,
+		Authors: true,
+		// The state-control forms end a rebase without replaying anything.
+		// --continue and --skip are absent on purpose: both resume the replay,
+		// and the replay is where git writes commits. They do not need to be
+		// suppressors, because the rebase door admits them.
+		SuppressedBy: []string{"--abort", "--quit"},
+		Note:         "guarded passthrough; the operator's own argv, and the ONE declared door through which git authors commits behind a safegit command name -- see the door table in authoring.go",
 	},
 	{
 		Name: "reflog",
@@ -256,9 +302,12 @@ var verbs = []Verb{
 		Note: "guarded passthrough; the operator's own argv",
 	},
 	{
-		Name: "revert",
-		Base: MutatesObjects | MutatesRefs | MutatesIndex | MutatesWorktree,
-		Note: "guarded passthrough; the operator's own argv",
+		Name:    "revert",
+		Base:    MutatesObjects | MutatesRefs | MutatesIndex | MutatesWorktree,
+		Authors: true,
+		// `-n` is revert's own spelling of --no-commit, as it is on cherry-pick.
+		SuppressedBy: []string{"-n", "--no-commit", "--abort", "--quit"},
+		Note:         "safegit computes an inverse patch with --no-commit and commits the staged result itself; the state-control forms stay a guarded passthrough",
 	},
 	{Name: "rev-list", Base: ObserveOnly},
 	{Name: "rev-parse", Base: ObserveOnly},
@@ -389,9 +438,14 @@ func Subcommand(args []string) (string, bool) {
 	return "", false
 }
 
-// Validate errors when an argv names no subcommand at all, or names one the
-// classification table does not declare.
-func Validate(args []string) error {
+// Validate errors when an argv names no subcommand at all, when it names one
+// the classification table does not declare, and when its shape would let git
+// author a commit from a call site that declares no door for it (see
+// authoring.go).
+//
+// door is the call site's declared permission to let git author. Every site but
+// one passes NoDoor.
+func Validate(door DoorID, args []string) error {
 	name, ok := Subcommand(args)
 	if !ok {
 		return &Error{Msg: "gitexec: git argv names no subcommand: " + strings.Join(args, " ")}
@@ -399,7 +453,7 @@ func Validate(args []string) error {
 	if _, ok := byName[name]; !ok {
 		return &Error{Msg: fmt.Sprintf("gitexec: undeclared git subcommand %q in argv %q; declare it in the classification table (internal/gitexec/classify.go)", name, strings.Join(args, " "))}
 	}
-	return nil
+	return checkAuthoring(door, args)
 }
 
 // EffectsOf returns the effects a specific argv can have. It errors on an

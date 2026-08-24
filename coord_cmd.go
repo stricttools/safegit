@@ -36,8 +36,13 @@ import (
 // therefore git's verdict, not safegit's; exitcode.General is reserved for the
 // two failures that happen before git runs (argv construction, effects-handle
 // refusal), and those print their reason because no child ever spoke.
-func runGitMutation(flags globalFlags, args ...string) int {
-	argv, err := gitexec.ArgvAny(gitexec.ExemptGitMutation, args...)
+//
+// door is this call site's declared permission to let git AUTHOR a commit, and
+// it is stated at every call rather than defaulted: the boundary refuses an
+// authoring argv that carries no door, so a caller has to have decided. Every
+// caller but the rebase passthrough passes gitexec.NoDoor.
+func runGitMutation(flags globalFlags, door gitexec.DoorID, args ...string) int {
+	argv, err := gitexec.ArgvAny(gitexec.ExemptGitMutation, door, args...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
@@ -313,7 +318,11 @@ func runRebase(flags globalFlags, args []string) int {
 	// rather than off argv[0], which for `--onto <base> <upstream>` and for the
 	// state-control forms is an option rather than a revision.
 	where := map[string]interface{}{"upstream": rebaseUpstream(parsed)}
-	if code := runGitMutation(flags, append([]string{"rebase"}, args...)...); code != 0 {
+	// THE one declared door through the single-authorship boundary: a rebase is
+	// git's replay, and every commit it produces is git's. Nothing else in
+	// safegit names a door, and the boundary refuses an authoring argv that does
+	// not.
+	if code := runGitMutation(flags, gitexec.DoorRebasePassthrough, append([]string{"rebase"}, args...)...); code != 0 {
 		appendOperationEntry(flags, sgDir, "rebase", pos, false, where)
 		return code
 	}
@@ -360,7 +369,7 @@ func runReset(flags globalFlags, args []string) int {
 
 	pos := readOplogPosition(flags)
 	where := map[string]interface{}{"args": strings.Join(args, " ")}
-	if code := runGitMutation(flags, append([]string{"reset"}, args...)...); code != 0 {
+	if code := runGitMutation(flags, gitexec.NoDoor, append([]string{"reset"}, args...)...); code != 0 {
 		appendOperationEntry(flags, sgDir, "reset", pos, false, where)
 		return code
 	}
@@ -407,7 +416,7 @@ func runBisect(flags globalFlags, args []string) int {
 	// step, because after `bisect start` there is no branch name to read.
 	pos := readOplogPosition(flags)
 	where := map[string]interface{}{"args": strings.Join(args, " ")}
-	if code := runGitMutation(flags, append([]string{"bisect"}, args...)...); code != 0 {
+	if code := runGitMutation(flags, gitexec.NoDoor, append([]string{"bisect"}, args...)...); code != 0 {
 		appendNavigationEntry(flags, sgDir, "bisect", pos.ref, pos.oldTip, "", false, where)
 		return code
 	}
@@ -479,7 +488,19 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 // typed. Every other context-carried override still applies.
 func runPassthrough(flags globalFlags, gitCmd string, args []string) int {
 	ctx := flags.ctx()
-	return passthroughExitCode(git.RunPassthrough(ctx, append([]string{gitCmd}, args...)...))
+	err := git.RunPassthrough(ctx, append([]string{gitCmd}, args...)...)
+	// A failure that is NOT git's own exit status is one that happened before
+	// git ran -- the execution boundary refusing to construct the invocation, a
+	// missing binary -- so no child ever wrote to stderr and the reason has to be
+	// printed here. Without this the operator gets a bare nonzero exit and no
+	// text at all, which is what happened to a forwarded `--continue` the
+	// single-authorship boundary declines to hand to git.
+	if err != nil {
+		if _, isExit := err.(*exec.ExitError); !isExit {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		}
+	}
+	return passthroughExitCode(err)
 }
 
 // passthroughStdout names where a passthrough child's stdout goes.

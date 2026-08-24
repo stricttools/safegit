@@ -53,7 +53,7 @@ func recordHistoryRewrite(ctx context.Context, flags globalFlags, oldHeadSHA str
 	}
 	e := flags.effects()
 	record := func(resource string, args ...string) {
-		argv, err := gitexec.ArgvAny(gitexec.ExemptHistoryRewriteRecord, args...)
+		argv, err := gitexec.ArgvAny(gitexec.ExemptHistoryRewriteRecord, gitexec.NoDoor, args...)
 		if err != nil {
 			return
 		}

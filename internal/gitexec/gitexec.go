@@ -236,8 +236,14 @@ func (s Spec) explicitDir() bool {
 // It errors when the argv names a subcommand the classification table does not
 // declare, and when the spec's directory targeting is not backed by a declared
 // exemption. It never starts the process; the caller owns that.
+// A spec carries no single-authorship door, and cannot: the argv Command builds
+// is one safegit constructs and starts ITSELF, and none of those may let git
+// author a commit. The one declared door is on the effects-handle path
+// (ArgvAny), because the command that has it -- the rebase passthrough -- runs
+// there. A site that ever needs a door here has to add the field deliberately,
+// which is the point.
 func Command(ctx context.Context, s Spec) (*exec.Cmd, error) {
-	if err := Validate(s.Args); err != nil {
+	if err := Validate(NoDoor, s.Args); err != nil {
 		return nil, err
 	}
 	if err := s.validateExemption(); err != nil {
@@ -400,8 +406,11 @@ func dedupePaths(paths []string) []string {
 //
 // Outside a preview there is no quarantine to reach in the first place: an
 // executing run writes its objects into the repository on purpose.
-func ArgvAny(exempt ExemptionID, args ...string) ([]interface{}, error) {
-	if err := Validate(args); err != nil {
+//
+// door is the call site's declared permission to let git author a commit. Every
+// site but the rebase passthrough passes NoDoor; see authoring.go.
+func ArgvAny(exempt ExemptionID, door DoorID, args ...string) ([]interface{}, error) {
+	if err := Validate(door, args); err != nil {
 		return nil, err
 	}
 	if _, err := lookupExemption(exempt); err != nil {

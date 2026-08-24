@@ -7,6 +7,7 @@ import (
 
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
+	"github.com/smm-h/safegit/internal/gitexec"
 	"github.com/smm-h/safegit/internal/repo"
 )
 
@@ -112,7 +113,7 @@ func runSwitch(flags globalFlags, args []string) int {
 		oldHead = git.ZeroSHA
 	}
 
-	if code := runGitMutation(flags, append([]string{"switch"}, args...)...); code != 0 {
+	if code := runGitMutation(flags, gitexec.NoDoor, append([]string{"switch"}, args...)...); code != 0 {
 		// The ref name is the one HEAD still points at: the navigation did not
 		// happen, so the operator's argument names nowhere this repository went.
 		failedRef, _ := git.HeadRef(ctx)

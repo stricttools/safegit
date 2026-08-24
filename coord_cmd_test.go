@@ -52,20 +52,30 @@ func TestObserveAllowlistCannotAdmitAMutation(t *testing.T) {
 	}
 
 	// End two: the argv runGitMutation actually builds. The verbs are the ones
-	// its callers pass -- switch, pull's fetch and merge, merge, rebase,
-	// reset, bisect, and the recorded dry runs of cherry-pick and revert.
-	for _, args := range [][]string{
-		{"switch", "other"},
-		{"fetch", "origin", "main"},
-		{"merge", "--ff-only", "FETCH_HEAD"},
-		{"merge", "topic"},
-		{"rebase", "main"},
-		{"reset", "--hard", "HEAD~1"},
-		{"bisect", "start"},
-		{"cherry-pick", "abc1234"},
-		{"revert", "abc1234"},
+	// its callers pass -- switch, pull's fetch, the restructured merge,
+	// cherry-pick and revert compute steps (each pinned to --no-commit, which is
+	// what the execute path and the recorded dry run both carry), rebase, reset
+	// and bisect.
+	//
+	// The rebase row rides the declared single-authorship door and every other
+	// row rides gitexec.NoDoor, exactly as the call sites do: an argv that would
+	// not pass the boundary is not an argv this test may claim safegit builds.
+	for _, tc := range []struct {
+		door gitexec.DoorID
+		args []string
+	}{
+		{gitexec.NoDoor, []string{"switch", "other"}},
+		{gitexec.NoDoor, []string{"fetch", "origin", "main"}},
+		{gitexec.NoDoor, []string{"merge", "--ff-only", "FETCH_HEAD"}},
+		{gitexec.NoDoor, []string{"merge", "--no-ff", "--no-commit", "topic"}},
+		{gitexec.DoorRebasePassthrough, []string{"rebase", "main"}},
+		{gitexec.NoDoor, []string{"reset", "--hard", "HEAD~1"}},
+		{gitexec.NoDoor, []string{"bisect", "start"}},
+		{gitexec.NoDoor, []string{"cherry-pick", "--no-commit", "abc1234"}},
+		{gitexec.NoDoor, []string{"revert", "--no-commit", "abc1234"}},
 	} {
-		argv, err := gitexec.ArgvAny(gitexec.ExemptGitMutation, args...)
+		args := tc.args
+		argv, err := gitexec.ArgvAny(gitexec.ExemptGitMutation, tc.door, args...)
 		if err != nil {
 			t.Fatalf("building the argv for %v: %v", args, err)
 		}

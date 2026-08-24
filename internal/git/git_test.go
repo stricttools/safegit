@@ -183,7 +183,7 @@ func TestParseCommit(t *testing.T) {
 	ctx := context.Background()
 
 	// Make a second commit so HEAD has a parent
-	Run(ctx, "commit", "--allow-empty", "-m", "second")
+	testutil.Git(t, dir, "commit", "--allow-empty", "-m", "second")
 	sha, err := RevParse(ctx, "HEAD")
 	if err != nil {
 		t.Fatal(err)
@@ -243,10 +243,10 @@ func TestParseCommitMerge(t *testing.T) {
 
 	// Create a branch from the initial commit, make commits on each, merge
 	Run(ctx, "switch", "-c", "feature")
-	Run(ctx, "commit", "--allow-empty", "-m", "feature commit")
+	testutil.Git(t, dir, "commit", "--allow-empty", "-m", "feature commit")
 	Run(ctx, "switch", "main")
-	Run(ctx, "commit", "--allow-empty", "-m", "main commit")
-	Run(ctx, "merge", "feature", "--no-ff", "-m", "merge")
+	testutil.Git(t, dir, "commit", "--allow-empty", "-m", "main commit")
+	testutil.Git(t, dir, "merge", "feature", "--no-ff", "-m", "merge")
 
 	sha, err := RevParse(ctx, "HEAD")
 	if err != nil {
@@ -270,7 +270,7 @@ func TestParseCommitMultiLineMessage(t *testing.T) {
 
 	// Create a commit with a multi-line message including an internal blank line
 	wantMsg := "line1\n\nline3"
-	Run(ctx, "commit", "--allow-empty", "-m", wantMsg)
+	testutil.Git(t, dir, "commit", "--allow-empty", "-m", wantMsg)
 
 	sha, err := RevParse(ctx, "HEAD")
 	if err != nil {
@@ -348,13 +348,13 @@ func TestCommitTreeWithIdentityMultipleParents(t *testing.T) {
 	ctx := context.Background()
 
 	// Create two commits to use as parents
-	Run(ctx, "commit", "--allow-empty", "-m", "commit A")
+	testutil.Git(t, dir, "commit", "--allow-empty", "-m", "commit A")
 	shaA, err := RevParse(ctx, "HEAD")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	Run(ctx, "commit", "--allow-empty", "-m", "commit B")
+	testutil.Git(t, dir, "commit", "--allow-empty", "-m", "commit B")
 	shaB, err := RevParse(ctx, "HEAD")
 	if err != nil {
 		t.Fatal(err)
@@ -403,8 +403,8 @@ func TestIsAncestorOfTrue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	Run(ctx, "commit", "--allow-empty", "-m", "second")
-	Run(ctx, "commit", "--allow-empty", "-m", "third")
+	testutil.Git(t, dir, "commit", "--allow-empty", "-m", "second")
+	testutil.Git(t, dir, "commit", "--allow-empty", "-m", "third")
 	third, err := RevParse(ctx, "HEAD")
 	if err != nil {
 		t.Fatal(err)
@@ -445,7 +445,7 @@ func TestIsAncestorOfFalse(t *testing.T) {
 
 	// Create a branch from the initial commit and commit on it.
 	Run(ctx, "switch", "-c", "feature")
-	Run(ctx, "commit", "--allow-empty", "-m", "feature commit")
+	testutil.Git(t, dir, "commit", "--allow-empty", "-m", "feature commit")
 	featureSHA, err := RevParse(ctx, "HEAD")
 	if err != nil {
 		t.Fatal(err)
@@ -453,7 +453,7 @@ func TestIsAncestorOfFalse(t *testing.T) {
 
 	// Switch back to main and commit there.
 	Run(ctx, "switch", "main")
-	Run(ctx, "commit", "--allow-empty", "-m", "main commit")
+	testutil.Git(t, dir, "commit", "--allow-empty", "-m", "main commit")
 	mainSHA, err := RevParse(ctx, "HEAD")
 	if err != nil {
 		t.Fatal(err)

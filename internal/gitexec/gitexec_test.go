@@ -60,7 +60,10 @@ func TestEmptyRootIsNoPin(t *testing.T) {
 
 func TestDeclaredExemptionSuspendsTheRootPin(t *testing.T) {
 	ctx := WithoutRootPin(WithRoot(context.Background(), "/repo/root"), ExemptGuardedPassthrough)
-	cmd, err := Command(ctx, Spec{Args: []string{"cherry-pick", "abc123"}})
+	// `-n` is the operator's own --no-commit, which is one of the forms this
+	// exemption's site really forwards: a bare `cherry-pick abc123` is refused
+	// by the single-authorship boundary before the root pin is even consulted.
+	cmd, err := Command(ctx, Spec{Args: []string{"cherry-pick", "-n", "abc123"}})
 	if err != nil {
 		t.Fatalf("Command: %v", err)
 	}
@@ -212,7 +215,7 @@ func TestExemptSpecStillGetsTheCommonEnvironmentTail(t *testing.T) {
 }
 
 func TestArgvAnyCarriesBinaryAndPrefix(t *testing.T) {
-	argv, err := ArgvAny(ExemptGitMutation, "switch", "other")
+	argv, err := ArgvAny(ExemptGitMutation, NoDoor, "switch", "other")
 	if err != nil {
 		t.Fatalf("ArgvAny: %v", err)
 	}
@@ -228,10 +231,10 @@ func TestArgvAnyCarriesBinaryAndPrefix(t *testing.T) {
 }
 
 func TestArgvAnyRefusesUndeclaredExemptionAndSubcommand(t *testing.T) {
-	if _, err := ArgvAny(ExemptionID("main.invented"), "switch"); err == nil {
+	if _, err := ArgvAny(ExemptionID("main.invented"), NoDoor, "switch"); err == nil {
 		t.Error("ArgvAny accepted an undeclared exemption")
 	}
-	if _, err := ArgvAny(ExemptGitMutation, "filter-branch"); err == nil {
+	if _, err := ArgvAny(ExemptGitMutation, NoDoor, "filter-branch"); err == nil {
 		t.Error("ArgvAny accepted an undeclared subcommand")
 	}
 }
