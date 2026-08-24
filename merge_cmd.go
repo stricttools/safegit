@@ -569,11 +569,19 @@ func fastForwardMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition
 	// files that are also gitignored.
 	if _, err := git.SyncMainIndexWithWorktree(ctx, otherSHA); err != nil {
 		appendOperationEntry(flags, sgDir, req.op, pos, true, req.oplogExtra(mergeOutcomeFastForward))
+		// The commit-stands family, by the same reasoning that puts every other
+		// member in it: the ref move is real and a step after it did not finish.
+		// A refusal's answer -- no payload, the undifferentiated General -- would
+		// tell a machine consumer nothing about a branch that has moved, and the
+		// guess a script makes from a 1 is to retry an operation that happened.
+		detail := fmt.Sprintf("%s was fast-forwarded to %s and stands there, but %s failed: %v",
+			refShortName(pos.ref), shortSHA(otherSHA), stepFastForwardSync, err)
 		fmt.Fprintf(os.Stderr, "error: %s was fast-forwarded to %s and stands there, but putting the index and the\n",
 			refShortName(pos.ref), shortSHA(otherSHA))
 		fmt.Fprintf(os.Stderr, "  working tree in step with it failed: %v\n", err)
 		fmt.Fprintf(os.Stderr, "  until that is done, git reports the incoming changes as staged deletions.\n")
-		return mergePayload{}, false, exitcode.General
+		return reportMergeWithoutCommit(flags, req, pos, mergeOutcomeFastForward, otherSHA,
+			residueEntry{Step: stepFastForwardSync, Detail: detail})
 	}
 
 	appendOperationEntry(flags, sgDir, req.op, pos, true, req.oplogExtra(mergeOutcomeFastForward))
@@ -582,7 +590,12 @@ func fastForwardMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition
 
 // reportMergeWithoutCommit reports the outcomes that created no commit: a
 // fast-forward, a merge left parked, and a branch that was already up to date.
-func reportMergeWithoutCommit(flags globalFlags, req mergeRequest, pos oplogPosition, outcome, newTip string) (mergePayload, bool, int) {
+//
+// residue is what this outcome owed after its ref move and did not finish,
+// which only the fast-forward can carry: nothing moved on the other two. An
+// empty list is the ordinary case and exits OK; anything in it carries the
+// commit-stands family code, exactly as the commit-authoring routes' does.
+func reportMergeWithoutCommit(flags globalFlags, req mergeRequest, pos oplogPosition, outcome, newTip string, residue ...residueEntry) (mergePayload, bool, int) {
 	payload := mergePayload{
 		Operation:      "merge",
 		Outcome:        outcome,
@@ -594,12 +607,11 @@ func reportMergeWithoutCommit(flags globalFlags, req mergeRequest, pos oplogPosi
 		StateCleared:   false,
 		Attempts:       0,
 		DeclinedChecks: []declinedCheck{},
-		// Nothing was committed, so there is no aftercare to have failed.
-		Residue: []residueEntry{},
-		DryRun:  flags.dryRun,
+		Residue:        orEmptyResidue(residue),
+		DryRun:         flags.dryRun,
 	}
 	if flags.silent() {
-		return payload, true, exitcode.OK
+		return payload, true, aftercareExit(residue)
 	}
 	switch outcome {
 	case mergeOutcomeFastForward:
@@ -610,7 +622,7 @@ func reportMergeWithoutCommit(flags globalFlags, req mergeRequest, pos oplogPosi
 	case mergeOutcomeUpToDate:
 		fmt.Printf("[%s] already up to date\n", refShortName(pos.ref))
 	}
-	return payload, true, exitcode.OK
+	return payload, true, aftercareExit(residue)
 }
 
 // secondParentOf names the side that was merged in, for the human summary. It
@@ -677,10 +689,13 @@ type mergePayload struct {
 	StateCleared   bool            `json:"state_cleared"`
 	Attempts       int             `json:"attempts"`
 	DeclinedChecks []declinedCheck `json:"declined_checks"`
-	// Residue is every step this merge owed AFTER its commit and did not
-	// finish, never nil. An empty list is a merge that finished everything it
-	// owed; anything in it is what the commit-stands exit code is about, and
-	// without it an envelope carrying that code says only state_cleared:false.
+	// Residue is every step this merge owed AFTER its ref move and did not
+	// finish, never nil -- the steps after the commit on the merge-commit
+	// outcome, and the index-and-working-tree sync on a fast-forward, whose ref
+	// move creates no commit but owes the same aftercare. An empty list is a
+	// merge that finished everything it owed; anything in it is what the
+	// commit-stands exit code is about, and without it an envelope carrying that
+	// code says only state_cleared:false.
 	//
 	// There is no autostash member beside it, unlike the conclusion commands'
 	// payload. This command's coordination check refuses a dirty working tree

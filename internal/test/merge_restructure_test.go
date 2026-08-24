@@ -1,6 +1,7 @@
 package test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -199,6 +200,70 @@ func TestFastForwardMergeMovesTheRefAndSyncs(t *testing.T) {
 	}
 	if head := testutil.Rev(t, dir, "HEAD"); head != featureSHA {
 		t.Errorf("the refused undo moved HEAD to %s (was %s)", head, featureSHA)
+	}
+}
+
+// TestFastForwardSyncFailureIsTheCommitStandsFamily: the ref move is real and
+// the step after it did not finish, which is what exit 26 means -- for a
+// fast-forward exactly as for a commit.
+//
+// The arm used to exit General with a NULL payload, so a machine consumer was
+// told nothing at all about a branch that had moved: the one guess a script
+// makes by default from a 1 is to retry, and the operation it would retry has
+// already happened.
+//
+// The failure is planted rather than raced: .git/index.lock is the file every
+// index write has to create, so the sync that follows the ref move cannot make
+// one while it is there.
+func TestFastForwardSyncFailureIsTheCommitStandsFamily(t *testing.T) {
+	dir := newFastForwardableRepo(t)
+	featureSHA := testutil.Rev(t, dir, "feature")
+
+	lock := filepath.Join(dir, ".git", "index.lock")
+	if err := os.WriteFile(lock, []byte("planted\n"), 0o644); err != nil {
+		t.Fatalf("planting the index lock: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(lock) })
+
+	stdout, stderr, code := runSafegitEnv(t, dir, mergeSession, "--json", "merge", "feature")
+	if head := testutil.Rev(t, dir, "HEAD"); head != featureSHA {
+		t.Fatalf("the fast-forward did not move the ref (HEAD=%s, want %s); this is not the arm the finding is about\nstderr=%s",
+			head, featureSHA, stderr)
+	}
+	if code != exitcode.CommitStands {
+		t.Errorf("the fast-forward moved the ref and its sync failed, and the run exited %d; want %d (the commit-stands family)\nstderr=%s",
+			code, exitcode.CommitStands, stderr)
+	}
+
+	var payload struct {
+		Operation string  `json:"operation"`
+		Outcome   string  `json:"outcome"`
+		SHA       *string `json:"sha"`
+		Residue   []struct {
+			Step   string `json:"step"`
+			Detail string `json:"detail"`
+		} `json:"residue"`
+	}
+	envelope := decodeEnvelope(t, stdout)
+	if len(envelope.Payload) == 0 || string(envelope.Payload) == "null" {
+		t.Fatalf("the envelope carries a null payload beside a ref that moved to %s:\n%s", featureSHA, stdout)
+	}
+	if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+		t.Fatalf("the merge payload does not parse: %v\nstdout=%s", err, stdout)
+	}
+	if payload.Outcome != "fast-forward" {
+		t.Errorf("payload outcome = %q, want fast-forward: the ref moved that way whether or not the sync finished", payload.Outcome)
+	}
+	if payload.SHA == nil || *payload.SHA != featureSHA {
+		t.Errorf("payload sha = %v, want the tip the branch was moved onto (%s)", payload.SHA, featureSHA)
+	}
+	if len(payload.Residue) == 0 {
+		t.Errorf("the payload records no residue for the step that did not finish:\n%s", stdout)
+	}
+	for _, r := range payload.Residue {
+		if !strings.Contains(r.Step+r.Detail, "index") && !strings.Contains(r.Step+r.Detail, "working tree") {
+			t.Errorf("the residue entry does not name the step that failed: %+v", r)
+		}
 	}
 }
 

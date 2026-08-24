@@ -286,10 +286,14 @@ const (
 	// run either. Produced by push and `hook run`.
 	HookNotExecutable = 25
 
-	// CommitStands is the family code for every outcome in which safegit's own
-	// commit is REAL -- the ref moved, the object is the branch's tip, `safegit
-	// undo` can reverse it -- and a step that runs after the ref update did not
-	// finish.
+	// CommitStands is the family code for every outcome in which the operation's
+	// REF MOVE IS REAL and a step that runs after it did not finish.
+	//
+	// For the commit-authoring routes the move is safegit's own commit -- the
+	// object exists, it is the branch's tip, `safegit undo` can reverse it. For
+	// a FAST-FORWARD no commit is created at all: the branch stands on the
+	// incoming tip, and the index-and-working-tree sync that follows is the
+	// aftercare it owes. Both answer the same pair of questions the same way.
 	//
 	// It exists because the two halves of such a run answer opposite questions,
 	// and a single General (1) answers neither. "Did the operation happen?" is
@@ -297,13 +301,14 @@ const (
 	// guess which, and the guess that costs the most is the one a script makes by
 	// default -- retrying an operation that already succeeded.
 	//
-	// The members of the family are the steps that can only run once a commit
-	// exists: reconciling the shared index with the new tip, removing the
+	// The members of the family are the steps that can only run once the ref has
+	// moved: reconciling the shared index with the new tip, removing the
 	// concluded operation's state files, writing the declared resolutions into
-	// the working tree, bumping a parent repository's gitlink, and putting back
-	// the autostash git set aside before a merge. Every one of them leaves the
-	// commit standing, and every one of them names in its own message what was
-	// left behind.
+	// the working tree, putting a fast-forwarded branch's index and working tree
+	// in step with the tip it moved onto, bumping a parent repository's gitlink,
+	// and putting back the autostash git set aside before a merge. Every one of
+	// them leaves the move standing, and every one of them names in its own
+	// message what was left behind.
 	//
 	// The whole family emits its report: under --json the envelope is emitted
 	// with the payload the run would have carried, so a machine consumer is never
@@ -474,7 +479,7 @@ func All() []Entry {
 		{BackupNoSlot, "BackupNoSlot", "The branch has no backup slot on the remote"},
 		{HooksNotMigrated, "HooksNotMigrated", "Hooks are still in the pre-migration .git/hooks location (run `safegit hook migrate`)"},
 		{HookNotExecutable, "HookNotExecutable", "A discovered hook is not executable, in either store"},
-		{CommitStands, "CommitStands", "The commit was created and the ref moved, but a step after the ref update did not finish"},
+		{CommitStands, "CommitStands", "The operation's ref move is real, but a step after it did not finish (aftercare)"},
 		{ConclusionWouldOverwrite, "ConclusionWouldOverwrite", "A conclusion's working-tree write would destroy a hand edit no side of the conflict accounts for"},
 		{UnmergedIndex, "UnmergedIndex", "The shared index carries an unmerged entry, so no commit can be built beside it"},
 		{EscapingSymlinkTarget, "EscapingSymlinkTarget", "A named symlink's target leaves the repository (`--allow-escaping-targets` records it anyway)"},
