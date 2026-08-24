@@ -1671,3 +1671,14 @@ plan defect)
   (observed becomes valid).
 - 6.6: assertNoRenameNotice deleted; moves_test/moves_cross_session
   headers re-pointed.
+- 6.4-6.6 execution additions (forced, ratified):
+  TestAmendMintsNothingYet -> the additive-amend test (its own comment
+  sanctioned it); TestRefuseRedeclaredPairs ->
+  TestSupersedeRedeclaredPairs (the ruled rename; every original
+  assertion kept plus the observed arm); NewRecord call sites in
+  internal/trailer tests (compile-forced by the origin parameter);
+  movedRecordPattern/movedRecordsIn made origin-aware;
+  TestNoMoveDetection_ExplicitBothPaths now asserts the record IS
+  minted (the behavior arrived with 6.1-6.3, previously unasserted);
+  internal/lock/lock_test.go ForceRelease call sites (4.2's remover
+  parameter — also listed at Phase 4's as-built notes).
