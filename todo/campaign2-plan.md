@@ -1197,6 +1197,25 @@ Identical set -> proceed with the cached message.
 **Verify:** the fence/pairing spec tests (each fence red-first); the
 CAS mismatch abort (two sessions, differing attempt-2 delta); the
 shared-index skips.
+AS-BUILT notes (6.1-6.3): ratified — the CAS-mismatch abort exits
+General with the retry advice (no Phase-6 code was allocated;
+CASExhausted's meaning would be falsified); a minted-vs-declared/
+minted-vs-minted `trailer.Overlap` fence refuses self-contradictory
+record sets; single pairs never collapse to subtree records; collapse
+is greedy shallowest-first per group. CORRECTION ordered (executed by
+6.4-6.6) `[plan — forced by the ruled un-blocking rationale]`: the
+uniqueness fences' tree listings must EXCLUDE declared-away paths
+(suppression extends to the fence views, not just the candidate sets)
+— as first built, a blob at two parent paths never minted even when
+one path was declared, making the ruling's own example unreachable.
+REVIEW NOTE (audit + user): an `--untrack`ed path (removed from the
+index, still on disk) can pair with a same-blob addition and mint a
+move record — true about the TREE (which is what records describe)
+while the old path still exists on disk; whether that claim should be
+fenced off is open. Appendix-B addition:
+TestAmendCanAddARecordToACommitThatLacksOne's fixture now changes
+content in flight (its old clean-move fixture is exactly what
+inference records; subject unchanged).
 
 ### 6.3 Witnessed subtree collapse and the cap `[user]`
 One observed subtree record when the commit's delta fully witnesses a
