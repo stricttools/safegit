@@ -140,6 +140,8 @@ var argvTakingCalls = map[string]string{
 	"runGit":                "internal/submodule.runGit",
 	"runGitMutation":        "main.runGitMutation, the effects-handle route for the guarded commands",
 	"runPassthrough":        "main.runPassthrough",
+	"runBackupGit":          "main.runBackupGit, the effects-handle route for a restore's fetch and fast-forward",
+	"runRepairGit":          "main.runRepairGit, the effects-handle route for the doctor repairs",
 	"ArgvAny":               "the boundary's own effects-handle argv builder",
 }
 

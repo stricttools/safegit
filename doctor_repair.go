@@ -21,13 +21,6 @@ import (
 // Both are minted through the effects handle, like every other mutation the fix
 // makes, so a preview records the invocations and performs none of them.
 
-// previewBlobPlaceholder stands for the object name a preview cannot know: the
-// blob `git hash-object -w` would write for the working tree's content. Its
-// sibling is previewCommitPlaceholder in commit.go, for the same reason -- a
-// would-do log naming an object that does not exist and will not exist under
-// that name invites a reader to go looking for it.
-const previewBlobPlaceholder = "<new-blob>"
-
 // runRepairGit mints one git invocation of a doctor repair.
 //
 // The working directory is DECLARED rather than inherited: the effects handle
@@ -93,10 +86,10 @@ func fixOrphanedAutostash(flags globalFlags, found *autostashRepair) {
 // path is not on disk at all -- drop it from the index entirely.
 type unmergedPath struct {
 	path string
-	// mode is the file mode the stage-0 entry takes, read off the stages git
-	// left. An empty mode means the path is gone from the working tree and the
-	// entry is removed instead.
-	mode string
+	// onDisk is false when the working tree does not hold the path, which is
+	// what resolving the conflict by DELETING it looks like: the entry is
+	// removed rather than a blob staged for it.
+	onDisk bool
 }
 
 // unmergedRepair is an unmerged index with no operation in flight to resolve it.
@@ -137,39 +130,19 @@ func planUnmergedRepair(ctx context.Context, gitDir, worktree string) (*unmerged
 		return nil, nil
 	}
 
-	// One repair per PATH, in the order git listed them. The mode comes off the
-	// stages themselves -- ours first, then theirs, then the base -- because
-	// that is what the path was recorded as on the side the working tree most
-	// likely holds, and nothing else in the repository still says.
-	modes := map[string]string{}
-	var order []string
-	for _, e := range entries {
-		if _, seen := modes[e.Path]; !seen {
-			order = append(order, e.Path)
-		}
-		if better(modes[e.Path], e.Stage) {
-			modes[e.Path] = e.Mode
-		}
-	}
-
+	// One repair per PATH, in the order git listed them: a conflicted path
+	// occupies up to three stages, and all three are one decision.
+	seen := map[string]bool{}
 	repair := &unmergedRepair{}
-	for _, path := range order {
-		mode := modes[path]
-		if _, err := os.Lstat(filepath.Join(worktree, path)); err != nil {
-			// Gone from disk: the resolution the operator made was a deletion,
-			// so the entry goes rather than a blob being staged for it.
-			mode = ""
+	for _, e := range entries {
+		if seen[e.Path] {
+			continue
 		}
-		repair.paths = append(repair.paths, unmergedPath{path: path, mode: mode})
+		seen[e.Path] = true
+		_, statErr := os.Lstat(filepath.Join(worktree, e.Path))
+		repair.paths = append(repair.paths, unmergedPath{path: e.Path, onDisk: statErr == nil})
 	}
 	return repair, nil
-}
-
-// better reports whether a stage's mode should replace what is recorded so far:
-// nothing yet, or a lower-priority stage. Stage 2 (ours) wins over 3 (theirs)
-// wins over 1 (the merge base).
-func better(current string, stage int) bool {
-	return current == "" || stage == 2
 }
 
 // fixOrphanedUnmergedIndex re-stages the working tree's own content over an
@@ -212,9 +185,16 @@ func fixOrphanedUnmergedIndex(flags globalFlags, gitDir string, repair *unmerged
 		paths = fresh.paths
 	}
 
+	// `update-index --add` is git's own way to resolve a conflicted path: it
+	// hashes what the working tree holds, writes the blob, and replaces stages
+	// 1/2/3 with one stage-0 entry. It is a single invocation with nothing in it
+	// a preview would have to guess at -- no object name to placeholder -- and it
+	// gets the cases a hand-rolled hash-and-cacheinfo pair gets wrong: the file
+	// mode, the clean filters the repository declares, and a SYMLINK, which is
+	// stored as its own link text rather than as the content it points at.
 	var repaired, dropped []string
 	for _, p := range paths {
-		if p.mode == "" {
+		if !p.onDisk {
 			if _, err := runRepairGit(flags, worktree, "index-entry:"+p.path,
 				"update-index", "--force-remove", "--", p.path); err != nil {
 				fmt.Fprintf(os.Stderr, "error: dropping %s from the index: %v\n", p.path, err)
@@ -223,22 +203,8 @@ func fixOrphanedUnmergedIndex(flags globalFlags, gitDir string, repair *unmerged
 			dropped = append(dropped, p.path)
 			continue
 		}
-
-		sha := previewBlobPlaceholder
-		done, err := runRepairGit(flags, worktree, "blob:"+p.path, "hash-object", "-w", "--", p.path)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: writing %s to the object store: %v\n", p.path, err)
-			continue
-		}
-		if !flags.dryRun {
-			sha = strings.TrimSpace(done.Stdout())
-			if sha == "" {
-				fmt.Fprintf(os.Stderr, "error: git hash-object named no object for %s\n", p.path)
-				continue
-			}
-		}
 		if _, err := runRepairGit(flags, worktree, "index-entry:"+p.path,
-			"update-index", "--add", "--cacheinfo", p.mode+","+sha+","+p.path); err != nil {
+			"update-index", "--add", "--", p.path); err != nil {
 			fmt.Fprintf(os.Stderr, "error: staging %s: %v\n", p.path, err)
 			continue
 		}
