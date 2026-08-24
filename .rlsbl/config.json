@@ -167,6 +167,87 @@
             "line": 44
           }
         ]
+      },
+      {
+        "reason": "**`safegit merge` writes its own commit.** A merge that resolves cleanly is authored by safegit's pipeline instead of by git, so it carries safegit's trailers, runs the repository's `commit-msg` hook, writes one oplog entry and can be reversed with `safegit undo`. A fast-forward moves the ref under compare-and-swap and then puts the index and working tree in step with it, and `safegit undo` refuses that one because the tip is a commit safegit did not create. The command line is a deliberate subset: exactly one committish, and an octopus merge, `-s`, `-X`, `--squash`, `--edit`, `--autostash`, `--commit` and a `FETCH_HEAD` naming more than one side are each refused by name rather than accepted and quietly reinterpreted.",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 46
+          }
+        ]
+      },
+      {
+        "reason": "**A commit records the moves its own delta witnesses, without being told.** `commit`, `amend` and `mv` mint a move record for every rename the commit's tree delta proves. A whole moved directory collapses into one subtree record when every entry beneath it moved together, symlinks included, and a scatter of moves past the cap records none rather than an arbitrary subset. Each record now says whether safegit observed it or you declared it, the payload reports the records that were written, the ones that were declined and why, and the notice on stderr states each reason and counts what it found. A source whose blob changes between the inference and the commit is a hard error at exit 32 -- purely transient, and re-running is the whole remedy -- rather than a record that is silently wrong.",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 63
+          }
+        ]
+      },
+      {
+        "reason": "**Every mutation goes through the effects handle, so a dry run and the machine-readable effect log tell the whole truth.** `undo`'s ref move, `unlock`'s lock removals, `doctor --action fix`'s repairs, `backup backup`'s push and `backup restore`'s fetch and fast-forward are all recorded now, and `undo` carries a payload of its own. A preview of a commit, a conclusion or an undo inside a submodule records the parent-bump commit it would make, naming the real object it would be triggered by, and a guarded command's dry run no longer writes an oplog entry for an operation it did not perform.",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 65
+          }
+        ]
+      },
+      {
+        "reason": "**The documentation is rewritten against the tool as built.** The commands, integration, architecture and concurrency guides, the README and CLAUDE templates and the affected help strings now describe single authorship, the subset law, the forwarded-option allowlist, the `switch` rename, the conclusion refusals, the overwrite and commit-stands behavior, the crash re-run, mv's refusals, the symlink policy, the `--untrack` fence and the move vocabulary. `docs/divergences.md` gains an entry for every new refusal and loses its delegation-era claims, and the health-check table in the commands guide is generated from the check registry instead of hand-maintained.",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 72
+          }
+        ]
+      },
+      {
+        "reason": "campaign planning documents, execution-log entries, ruling records, todo filings and triage, plus the gitignored experiments directory convention",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 73
+          }
+        ]
+      },
+      {
+        "reason": "the second campaign's red-test wave: specification tests written before their fixes, each reproducing a defect",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 74
+          }
+        ]
+      },
+      {
+        "reason": "tests and recorded-fact probes pinning the second campaign's new behavior",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 75
+          }
+        ]
+      },
+      {
+        "reason": "regenerated machine-readable schema dumps and the campaign test-baseline artifact and its distiller",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 76
+          }
+        ]
+      },
+      {
+        "reason": "internal single-authority work: the git-execution boundary's authoring guard, one move-record parser, the raw tree-delta reader, dead config fallbacks removed, and code comments",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 77
+          }
+        ]
       }
     ]
   },
