@@ -231,11 +231,24 @@ func MustShow(t *testing.T, dir, rev, path string) string {
 	return content
 }
 
+// GitDir is git's own answer to where this checkout's git directory is, rather
+// than the <dir>/.git a fixture can usually assume. A SUBMODULE checkout's .git
+// is a FILE pointing into the parent's modules directory, so every helper that
+// reads a state file by path goes through here.
+func GitDir(t *testing.T, dir string) string {
+	t.Helper()
+	gitDir := strings.TrimSpace(GitOut(t, dir, "rev-parse", "--git-dir"))
+	if !filepath.IsAbs(gitDir) {
+		gitDir = filepath.Join(dir, gitDir)
+	}
+	return gitDir
+}
+
 // MergeStateGone reports whether git considers a merge concluded, i.e. whether
-// .git/MERGE_HEAD is absent.
+// MERGE_HEAD is absent from the git directory.
 func MergeStateGone(t *testing.T, dir string) bool {
 	t.Helper()
-	_, err := os.Stat(filepath.Join(dir, ".git", "MERGE_HEAD"))
+	_, err := os.Stat(filepath.Join(GitDir(t, dir), "MERGE_HEAD"))
 	return os.IsNotExist(err)
 }
 
@@ -244,9 +257,10 @@ func MergeStateGone(t *testing.T, dir string) bool {
 // which step of a fixture or which post-condition broke.
 func AssertMergeHead(t *testing.T, dir, want, context string) {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(dir, ".git", "MERGE_HEAD"))
+	path := filepath.Join(GitDir(t, dir), "MERGE_HEAD")
+	data, err := os.ReadFile(path)
 	if err != nil {
-		t.Fatalf("%s: reading .git/MERGE_HEAD: %v", context, err)
+		t.Fatalf("%s: reading %s: %v", context, path, err)
 	}
 	if got := strings.TrimSpace(string(data)); got != want {
 		t.Fatalf("%s: MERGE_HEAD = %s, want %s", context, got, want)

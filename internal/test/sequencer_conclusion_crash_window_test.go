@@ -42,13 +42,17 @@ var crashWindowFiles = []string{"index", "MERGE_HEAD", "MERGE_MSG", "AUTO_MERGE"
 // snapshotCrashWindow reads the three files, failing when one is missing --
 // the fixture is meant to be parked mid-merge, and a missing file would make
 // the restore below silently reconstruct a different state.
+// The git dir is git's own answer rather than <dir>/.git, so a SUBMODULE
+// checkout -- whose .git is a file pointing into the parent's modules
+// directory -- is snapshotted as readily as an ordinary repository.
 func snapshotCrashWindow(t *testing.T, dir string) map[string][]byte {
 	t.Helper()
+	gitDir := submoduleGitDir(t, dir)
 	snap := make(map[string][]byte, len(crashWindowFiles))
 	for _, name := range crashWindowFiles {
-		data, err := os.ReadFile(filepath.Join(dir, ".git", name))
+		data, err := os.ReadFile(filepath.Join(gitDir, name))
 		if err != nil {
-			t.Fatalf("the fixture must be parked mid-merge; reading .git/%s: %v", name, err)
+			t.Fatalf("the fixture must be parked mid-merge; reading %s: %v", filepath.Join(gitDir, name), err)
 		}
 		snap[name] = data
 	}
@@ -59,9 +63,10 @@ func snapshotCrashWindow(t *testing.T, dir string) map[string][]byte {
 // process killed between the ref update and the cleanup leaves behind.
 func restoreCrashWindow(t *testing.T, dir string, snap map[string][]byte) {
 	t.Helper()
+	gitDir := submoduleGitDir(t, dir)
 	for _, name := range crashWindowFiles {
-		if err := os.WriteFile(filepath.Join(dir, ".git", name), snap[name], 0o644); err != nil {
-			t.Fatalf("restoring .git/%s: %v", name, err)
+		if err := os.WriteFile(filepath.Join(gitDir, name), snap[name], 0o644); err != nil {
+			t.Fatalf("restoring %s: %v", filepath.Join(gitDir, name), err)
 		}
 	}
 }
