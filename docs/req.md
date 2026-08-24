@@ -49,6 +49,6 @@ description: "Requirements for safegit: multi-agent concurrency safety, lock-fre
 
 ## Reliability
 
-- Every mutating operation should be undoable *(as built: `safegit undo` reverses commit, amend, reword, `mv` and the three conclusion commands, by moving a ref. It moves no working tree, it does not restore the git operation state a conclusion removed, and it refuses to roll a branch back over a commit safegit did not author -- a passthrough's commits, or the ones git writes when a queued cherry-pick or revert is delegated to it. A history rewrite invalidates every earlier oplog entry and blocks undo outright)*
+- Every mutating operation should be undoable *(as built: `safegit undo` reverses every operation safegit's own commit pipeline authored -- a commit, an amend, a reword, an `mv`, a `merge`, `pull`, `cherry-pick` or `revert` that ended in a commit, and the three conclusion commands -- by moving a ref. It moves no working tree, it does not restore the git operation state a conclusion removed, and it refuses to roll a branch back over a commit safegit did not author: a fast-forward's tip, a passthrough's commits, and the commits git writes when a rebase replays them or when a queued sequence started with raw git is concluded through git's own `--continue`. A history rewrite invalidates every earlier oplog entry and blocks undo outright)*
 - No operation should silently lose work
 - Crash recovery must be automatic or trivial
