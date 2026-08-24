@@ -127,7 +127,12 @@ var mvPayloadSchema = strictcli.SchemaObject(
 // reverse it -- see undoableOps.
 const mvOplogOp = "mv"
 
-func runMv(flags globalFlags, messages []string, args []string) int {
+// runMv performs the whole command. createMissingDirs is the caller's election
+// to have the destination's parent directories minted when they are not there;
+// without it a destination whose directory does not exist is a refusal. The
+// election is mv-local -- it reaches the validation and the filesystem half and
+// nothing else, because there is no commit-pipeline behaviour it changes.
+func runMv(flags globalFlags, messages []string, args []string, createMissingDirs bool) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -178,11 +183,11 @@ func runMv(flags globalFlags, messages []string, args []string) int {
 	if code != 0 {
 		return code
 	}
-	if code := checkMvWorld(ctx, repoRoot, ignoreCase, pairs); code != 0 {
+	if code := checkMvWorld(ctx, repoRoot, ignoreCase, createMissingDirs, pairs); code != 0 {
 		return code
 	}
 
-	if err := performMvMoves(flags, ignoreCase, repoRoot, pairs); err != nil {
+	if err := performMvMoves(flags, ignoreCase, createMissingDirs, repoRoot, pairs); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
 	}
@@ -279,7 +284,7 @@ func refuseMvOverlaps(pairs []mvPair) int {
 // made to discover them one command at a time -- and a set of moves that is
 // refused must leave the working tree exactly as it was, so there is no reason
 // to stop at the first.
-func checkMvWorld(ctx context.Context, repoRoot string, ignoreCase bool, pairs []mvPair) int {
+func checkMvWorld(ctx context.Context, repoRoot string, ignoreCase, createMissingDirs bool, pairs []mvPair) int {
 	head, err := git.RevParse(ctx, "HEAD")
 	if err != nil || head == "" {
 		fmt.Fprintf(os.Stderr, "error: this branch has no commit yet, so nothing is tracked for a move to come out of\n")
@@ -300,7 +305,7 @@ func checkMvWorld(ctx context.Context, repoRoot string, ignoreCase bool, pairs [
 
 	var refusals []string
 	for i := range pairs {
-		if why := checkMvPair(repoRoot, ignoreCase, tracked, sorted, &pairs[i]); why != "" {
+		if why := checkMvPair(ctx, repoRoot, ignoreCase, createMissingDirs, tracked, sorted, &pairs[i]); why != "" {
 			refusals = append(refusals, fmt.Sprintf("%s: %s", pairs[i].arg, why))
 		}
 	}
@@ -317,7 +322,7 @@ func checkMvWorld(ctx context.Context, repoRoot string, ignoreCase bool, pairs [
 
 // checkMvPair is the whole check one pair gets, and it fills in the entries the
 // move carries. An empty answer means the pair holds.
-func checkMvPair(repoRoot string, ignoreCase bool, tracked map[string]git.TreeEntry, sorted []string, p *mvPair) string {
+func checkMvPair(ctx context.Context, repoRoot string, ignoreCase, createMissingDirs bool, tracked map[string]git.TreeEntry, sorted []string, p *mvPair) string {
 	absOld := git.Anchor(repoRoot, p.oldPrefix())
 	absNew := git.Anchor(repoRoot, p.newPrefix())
 
@@ -379,7 +384,35 @@ func checkMvPair(repoRoot string, ignoreCase bool, tracked map[string]git.TreeEn
 	} else if _, ok := tracked[p.new]; ok {
 		return fmt.Sprintf("%s is already tracked in HEAD", p.new)
 	}
+
+	// The destination's parent has to BE there. safegit invents no place for
+	// content to land in: a destination naming a directory that does not exist
+	// is far more often a typo than an intention, and the move that "worked"
+	// left the operator with a directory they never asked for and no way to tell
+	// it apart from one they already had.
+	// --create-missing-directories is how the other intention is said out loud.
+	if !createMissingDirs {
+		if missing := missingDestinationDir(repoRoot, absNew); missing != "" {
+			return fmt.Sprintf("%s does not exist, so %s has nowhere to land; make the directory first, "+
+				"or pass --create-missing-directories to have this command make it", missing, p.newPrefix())
+		}
+	}
 	return ""
+}
+
+// missingDestinationDir returns the repo-relative parent directory a move's
+// destination needs and does not have, or the empty string when the parent is
+// there (the repository root always is).
+func missingDestinationDir(repoRoot, absNew string) string {
+	parent := filepath.Dir(absNew)
+	rel, err := filepath.Rel(repoRoot, parent)
+	if err != nil || rel == "." || rel == "" {
+		return ""
+	}
+	if _, err := os.Stat(parent); err == nil {
+		return ""
+	}
+	return filepath.ToSlash(rel)
 }
 
 // pathsUnder returns every sorted tree path inside a directory prefix.
@@ -406,6 +439,10 @@ type mvFilesystem struct {
 	// once per invocation by the caller and shared with the validation that
 	// decided a case-only destination was free. See gitIgnoreCase.
 	ignoreCase bool
+	// createMissingDirs is the caller's election to have a destination's absent
+	// parent directories minted. Without it the validation has already refused
+	// every pair whose parent is not there, so this half never has one to make.
+	createMissingDirs bool
 	// undo is the inverse of every step taken so far, newest last.
 	undo []func() error
 	// ensured is the set of directories this invocation has already created (or
@@ -419,8 +456,13 @@ type mvFilesystem struct {
 
 // performMvMoves renames every pair, rolling back what it already did when one
 // of them fails.
-func performMvMoves(flags globalFlags, ignoreCase bool, repoRoot string, pairs []mvPair) error {
-	fs := &mvFilesystem{flags: flags, ignoreCase: ignoreCase, ensured: map[string]bool{}}
+func performMvMoves(flags globalFlags, ignoreCase, createMissingDirs bool, repoRoot string, pairs []mvPair) error {
+	fs := &mvFilesystem{
+		flags:             flags,
+		ignoreCase:        ignoreCase,
+		createMissingDirs: createMissingDirs,
+		ensured:           map[string]bool{},
+	}
 	for _, p := range pairs {
 		if err := fs.move(repoRoot, p); err != nil {
 			fs.rollback()
@@ -437,8 +479,13 @@ func (fs *mvFilesystem) move(repoRoot string, p mvPair) error {
 	absOld := git.Anchor(repoRoot, p.oldPrefix())
 	absNew := git.Anchor(repoRoot, p.newPrefix())
 
-	if err := fs.ensureParent(absNew); err != nil {
-		return err
+	// Only when the caller elected it. Without the election the validation
+	// refused every pair whose parent was absent, so there is nothing here to
+	// make and no directory this command could mint unasked.
+	if fs.createMissingDirs {
+		if err := fs.ensureParent(absNew); err != nil {
+			return err
+		}
 	}
 	if p.caseOnly && fs.ignoreCase {
 		return fs.renameThroughTemp(absOld, absNew)

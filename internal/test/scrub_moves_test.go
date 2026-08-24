@@ -28,7 +28,10 @@ func seedMovedSecret(t *testing.T) (string, string) {
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "seed the secret", "--", "secret.env"); code != 0 {
 		t.Fatalf("seed commit failed (code %d): %s", code, stderr)
 	}
-	if _, stderr, code := runSafegit(t, dir, "mv", "-m", "move the secret into config",
+	// config/ does not exist yet, and mv refuses a missing destination directory
+	// unless the creation is elected. The election is fixture setup here.
+	if _, stderr, code := runSafegit(t, dir, "mv", "--create-missing-directories",
+		"-m", "move the secret into config",
 		"secret.env -> config/secret.env"); code != 0 {
 		t.Fatalf("mv failed (code %d): %s", code, stderr)
 	}
@@ -119,7 +122,8 @@ func TestScrubMatchRewritesInsideARecordWithoutBreakingIt(t *testing.T) {
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "add the file", "--", "secret.txt"); code != 0 {
 		t.Fatalf("seed commit failed (code %d): %s", code, stderr)
 	}
-	if _, stderr, code := runSafegit(t, dir, "mv", "-m", "put it under config",
+	if _, stderr, code := runSafegit(t, dir, "mv", "--create-missing-directories",
+		"-m", "put it under config",
 		"secret.txt -> config/secret.txt"); code != 0 {
 		t.Fatalf("mv failed (code %d): %s", code, stderr)
 	}

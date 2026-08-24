@@ -322,7 +322,8 @@ func newApp() *strictcli.App {
 
 	app.Command("mv", "move tracked paths and commit the moves with their records in one operation", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		gf := globalsToFlags(ctx, kwargs)
-		return strictcli.Exit(runMv(gf, kwargsStrSlice(kwargs["m"]), kwargsStrSlice(kwargs["pairs"])))
+		createMissingDirs := optBool(kwargs["create_missing_directories"], false)
+		return strictcli.Exit(runMv(gf, kwargsStrSlice(kwargs["m"]), kwargsStrSlice(kwargs["pairs"]), createMissingDirs))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
 		strictcli.WithTags("json"),
@@ -338,9 +339,14 @@ func newApp() *strictcli.App {
 			// is exactly what the mutating-default ban forbids -- and "moved
 			// some files" is not a commit message anyone wanted.
 			strictcli.StringFlag("m", "commit message paragraph; repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body", strictcli.Short("m"), strictcli.Repeatable(), strictcli.Unique(false), strictcli.Required()),
+			// The election that turns the missing-destination-directory refusal
+			// into a creation. A directory this command minted unasked is
+			// indistinguishable, afterwards, from one the operator already had,
+			// so making it is something they say rather than something they get.
+			strictcli.BoolFlag("create-missing-directories", "make the destination's parent directories when they are not there, removing again what this invocation made if the move is rolled back; omitted, and with --no-create-missing-directories, a destination whose directory does not exist is refused and nothing is moved", strictcli.Optional()),
 		),
 		strictcli.WithArgs(
-			strictcli.NewArg("pairs", "one move each, written 'old -> new'. End BOTH paths with a slash to move a whole directory, which is recorded as ONE subtree record however many files it holds. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. Every pair is checked before the first file is touched -- the source must be tracked and on disk, the destination must be free, and no two pairs may speak for the same path or chain into one another -- and a failure part-way through puts back everything already moved. The commit is the rename and nothing else: each path is carried across as the blob its parent commit held, so uncommitted content changes stay uncommitted", strictcli.ArgRequired(), strictcli.Variadic()),
+			strictcli.NewArg("pairs", "one move each, written 'old -> new'. End BOTH paths with a slash to move a whole directory, which is recorded as ONE subtree record however many files it holds. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. Every pair is checked before the first file is touched -- the source must be tracked and on disk, the destination must be free and its directory must already exist unless --create-missing-directories says otherwise, and no two pairs may speak for the same path or chain into one another -- and a failure part-way through puts back everything already moved. The commit is the rename and nothing else: each path is carried across as the blob its parent commit held, so uncommitted content changes stay uncommitted", strictcli.ArgRequired(), strictcli.Variadic()),
 		),
 	)
 

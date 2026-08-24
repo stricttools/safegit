@@ -57,7 +57,11 @@ func mvFoldsCase(t *testing.T, dir string) bool {
 func TestMvMovesRecordsAndCommitsInOneInvocation(t *testing.T) {
 	dir := mvSeed(t)
 
-	stdout, stderr, code := runSafegit(t, dir, "mv", "-m", "move a", "a.txt -> sub/a.txt")
+	// --create-missing-directories: sub/ is not there, and a destination whose
+	// directory does not exist is refused unless the caller elects the creation.
+	// The election is incidental here -- what this pins is the move, the record
+	// and the commit arriving together.
+	stdout, stderr, code := runSafegit(t, dir, "mv", "--create-missing-directories", "-m", "move a", "a.txt -> sub/a.txt")
 	if code != 0 {
 		t.Fatalf("mv failed (code %d): %s\n%s", code, stderr, stdout)
 	}
@@ -494,21 +498,26 @@ func TestMvCaseOnlyRefusesAnOccupiedDestination(t *testing.T) {
 	}
 }
 
-// TestMvCreatesTheDestinationDirectory: a destination inside a directory that
-// does not exist yet is an ordinary move, not a refusal. The directories are
-// created through the effects handle, so a preview records them too, and a
-// rollback removes the ones this invocation created.
-func TestMvCreatesTheDestinationDirectory(t *testing.T) {
+// TestMvCreatesTheDestinationDirectoryWhenElected: a destination inside a
+// directory that does not exist yet is a refusal (see
+// TestMvRefusesAMissingDestinationDirectory), and
+// --create-missing-directories is how the operator says they meant it. The
+// election minted, the directories are created through the effects handle, so a
+// preview records them too, and a rollback removes the ones this invocation
+// created.
+func TestMvCreatesTheDestinationDirectoryWhenElected(t *testing.T) {
 	dir := mvSeed(t)
 
-	if _, stderr, code := runSafegit(t, dir, "mv", "-m", "move deep", "a.txt -> new/deeper/a.txt"); code != 0 {
-		t.Fatalf("mv into a missing directory failed (code %d): %s", code, stderr)
+	if _, stderr, code := runSafegit(t, dir, "mv", "--create-missing-directories",
+		"-m", "move deep", "a.txt -> new/deeper/a.txt"); code != 0 {
+		t.Fatalf("an elected mv into a missing directory failed (code %d): %s", code, stderr)
 	}
 	if !mvExists(t, dir, "new/deeper/a.txt") {
 		t.Error("the destination was not created")
 	}
 
-	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "mv", "-m", "move deep", "b.txt -> other/b.txt")
+	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "mv", "--create-missing-directories",
+		"-m", "move deep", "b.txt -> other/b.txt")
 	if code != 0 {
 		t.Fatalf("dry-run mv failed (code %d): %s", code, stderr)
 	}
@@ -517,5 +526,26 @@ func TestMvCreatesTheDestinationDirectory(t *testing.T) {
 	}
 	if mvExists(t, dir, "other") {
 		t.Error("a dry run created the destination directory for real")
+	}
+}
+
+// TestMvNegatedCreateMissingDirectoriesStillRefuses: the flag is negatable, and
+// saying it the long way round is the same verdict as omitting it. Pinned
+// separately because a negation that quietly elected the creation would be the
+// exact silent minting the refusal exists to stop.
+func TestMvNegatedCreateMissingDirectoriesStillRefuses(t *testing.T) {
+	dir := mvSeed(t)
+
+	_, stderr, code := runSafegit(t, dir, "mv", "--no-create-missing-directories",
+		"-m", "move a", "a.txt -> newdir/a.txt")
+	if code != exitcode.MoveNotBorneOut {
+		t.Errorf("--no-create-missing-directories exited %d, want %d (MoveNotBorneOut); stderr: %s",
+			code, exitcode.MoveNotBorneOut, stderr)
+	}
+	if !strings.Contains(stderr, "newdir") {
+		t.Errorf("the refusal does not name the missing directory: %s", stderr)
+	}
+	if mvExists(t, dir, "newdir") {
+		t.Error("the directory was created despite the refusal")
 	}
 }
