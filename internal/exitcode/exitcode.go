@@ -392,6 +392,25 @@ const (
 	// match, scrub run and author rewrite.
 	RewriteIncomplete = 31
 
+	// MoveWitnessChanged means a concurrent session moved the branch while a
+	// commit was being built and changed the moves that commit's own delta
+	// witnesses. The message was already composed -- with the records minted on
+	// the first attempt on it, past the repository's commit-msg hook -- so
+	// committing it would record moves the new delta no longer bears out, and
+	// safegit refuses instead. Nothing was written; the abort names the pair
+	// whose witness changed.
+	//
+	// It is the one purely TRANSIENT refusal safegit produces: nothing is wrong
+	// with the command, the repository or the caller's intent, and running the
+	// same command again is the whole remedy. General would put it beside the
+	// failures that will happen again no matter how often they are retried,
+	// which in a tool built for concurrent sessions is the difference between an
+	// automatic re-run and a human being paged. It is NOT CASExhausted either:
+	// that one means the ref would not hold still long enough to converge, while
+	// this one converged and found a different world. Produced by commit,
+	// including its --amend form.
+	MoveWitnessChanged = 32
+
 	// PushFailed means the push did not get through. It covers `git push`
 	// itself failing after safegit's retry policy was exhausted, and the three
 	// ways the window around a push can defeat it:
@@ -485,6 +504,7 @@ func All() []Entry {
 		{EscapingSymlinkTarget, "EscapingSymlinkTarget", "A named symlink's target leaves the repository (`--allow-escaping-targets` records it anyway)"},
 		{RewriteRefused, "RewriteRefused", "A history rewrite was refused before any ref moved (nothing changed)"},
 		{RewriteIncomplete, "RewriteIncomplete", "A history rewrite stands, but post-rewrite verification found residue or skipped the working-tree sync"},
+		{MoveWitnessChanged, "MoveWitnessChanged", "A concurrent change altered the moves this commit's delta witnesses; nothing was committed, so run the command again"},
 		{PushFailed, "PushFailed", "The push did not get through: git push failed, or the refs could not be safely re-read around it"},
 		{PushLeaseRejected, "PushLeaseRejected", "The remote ref moved after safegit observed it, so the --force-with-lease expectation no longer matched"},
 		{DoctorFindings, "DoctorFindings", "doctor found at least one error-severity problem (warnings alone exit 0)"},
