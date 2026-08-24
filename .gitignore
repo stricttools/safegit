@@ -42,3 +42,8 @@ docs/_build/
 
 build/
 target/
+
+# Scratch space for git-behavior probes; guards skip it, contents are
+# disposable (see experiments/README.md, the one committed file there)
+/experiments/*
+!/experiments/README.md
