@@ -1415,9 +1415,9 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   first-ever run. Where an honest preview is impossible the flag is **refused
   with its reason** rather than quietly ignored: `hook run` refuses at
   registration time because a hook is an operator-supplied script whose effects
-  cannot be known, and a queued conclusion refuses per invocation because
-  concluding a queue means running git's `--continue`, which commits. Hooks are
-  never run under a preview, and the preview says so in three places — the help
+  cannot be known. (The other refusal this used to name — a queued conclusion —
+  is gone with the delegation it stood in front of: a queue is refused outright
+  now, preview or not.) Hooks are never run under a preview, and the preview says so in three places — the help
   text, its own stderr, and the payload — because a preview that silently omitted
   them would read exactly like one whose hooks passed.
 - **Ruling:** ours — deliberate
@@ -1642,9 +1642,9 @@ safegit's pre-pre-push hooks, which are its own subsystem.
 - **safegit:** `undo` computes its target from its own operation log, then checks
   the branch: every commit the branch would **lose** — the first-parent walk from
   the rollback target to where the ref actually stands — must be one the log says
-  this undo is reversing. A plain `git commit`, a passthrough cherry-pick or a
-  git-authored queued conclusion in the way is a hard error naming it, not a
-  commit quietly dropped out of history. The compare-and-swap alone could not
+  this undo is reversing. A plain `git commit`, a commit a rebase replayed, or a
+  fast-forward safegit recorded but did not author is a hard error naming it,
+  not a commit quietly dropped out of history. The compare-and-swap alone could not
   answer this: it pins the newest recorded tip and therefore sees only a foreign
   commit sitting on top. The refusal also reaches `--dry-run`, so a preview
   cannot announce a rollback the real run would refuse. Undo is session-scoped by
