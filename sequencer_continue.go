@@ -1039,13 +1039,17 @@ func (op continueOp) refuseRawGitShape(state sequencer.State) int {
 // a commit would be authored from. Reading the parked state answers the
 // question that the commit depends on.
 //
-// The way out is not git's here, and that is the difference from
-// refuseRawGitShape: the operator asked for a merge, not for a repository left
-// mid-merge, and the state in front of them is one safegit created moments ago
-// out of a working tree the coordination check had just found clean. So it is
-// removed rather than handed over -- the state files through the same cleanup
-// the conclusion owns, and the index and working tree back onto HEAD through
-// the same primitive the fast-forward path uses to put them in step with a ref.
+// The way out differs from refuseRawGitShape's, and only for the OCTOPUS: the
+// operator asked for a merge, not for a repository left mid-merge, and the
+// state in front of them is one safegit created moments ago out of a working
+// tree the coordination check had just found clean. So it is removed rather
+// than handed over -- the state files through the same cleanup the conclusion
+// owns, and the index and working tree back onto HEAD through the same
+// primitive the fast-forward path uses to put them in step with a ref.
+//
+// A QUEUE is handed over instead, because removing it is the very thing that
+// refusal exists to prevent: the queue holds git's remaining commands, and they
+// belong to nobody else to throw away.
 func refuseParkedRawGitShape(flags globalFlags, gitDir string, state sequencer.State, req parkedConclusion) (int, bool) {
 	what, why, refused := req.op.rawGitShape(state)
 	if !refused {
@@ -1054,6 +1058,13 @@ func refuseParkedRawGitShape(flags globalFlags, gitDir string, state sequencer.S
 
 	fmt.Fprintf(os.Stderr, "error: safegit %s does not author %s\n", req.oplogOp, what)
 	fmt.Fprintf(os.Stderr, "  %s\n", why)
+
+	if state.Queued {
+		fmt.Fprintf(os.Stderr, "  Nothing was committed. Finish what git started, with git:\n")
+		renderWayOut(coord.WayOutOf(state))
+		fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+		return exitcode.CoordinationBusy, true
+	}
 
 	// The unpark. Both halves are attempted whatever the first one answers: a
 	// state file that survives and an index that was not restored are separate
@@ -1065,11 +1076,11 @@ func refuseParkedRawGitShape(flags globalFlags, gitDir string, state sequencer.S
 	}
 	if _, err := git.SyncMainIndexWithWorktree(flags.ctx(), "HEAD"); err != nil {
 		fmt.Fprintf(os.Stderr, "  the index and the working tree could not be put back onto HEAD: %v\n", err)
-		fmt.Fprintf(os.Stderr, "  until that is done they carry the merge that was computed, staged and uncommitted.\n")
+		fmt.Fprintf(os.Stderr, "  until that is done they carry the %s that was computed, staged and uncommitted.\n", state.Kind)
 		code = exitcode.General
 	}
 	if code == exitcode.CoordinationBusy {
-		fmt.Fprintf(os.Stderr, "  Nothing was committed, and the merge git computed has been undone: the branch, the index\n")
+		fmt.Fprintf(os.Stderr, "  Nothing was committed, and the %s git computed has been undone: the branch, the index\n", state.Kind)
 		fmt.Fprintf(os.Stderr, "  and the working tree stand where they did.\n")
 	}
 	fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
