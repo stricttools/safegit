@@ -25,6 +25,14 @@ set -euo pipefail
 root="$(git rev-parse --show-toplevel)"
 cd "$root"
 
+# jq distills `go test -json` below. Without it the distill pipeline dies with
+# a "jq: command not found" buried behind minutes of test output, so name the
+# missing dependency up front and before anything expensive runs.
+if ! command -v jq >/dev/null 2>&1; then
+	echo "test-baseline: jq is required but was not found on PATH; install jq and re-run" >&2
+	exit 1
+fi
+
 check_mode=0
 out=""
 case "${1:-}" in
