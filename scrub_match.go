@@ -239,46 +239,49 @@ func scrubMatchDryRun(ctx context.Context, flags globalFlags, cmd string, compil
 	}
 	var subResults []subScanResult
 
+	// A failure here is fatal. It used to warn and continue with parent-only
+	// results, which narrows the SCOPE of the preview: the submodules are part
+	// of what the rewrite covers, and a preview that silently leaves them out is
+	// the document the operator consents from. A warning does not cure that.
 	subs, err := submodule.Enumerate(ctx, gitDir)
 	if err != nil {
-		// Non-fatal: warn and continue with parent-only results.
-		fmt.Fprintf(os.Stderr, "warning: enumerating submodules: %v\n", err)
-	} else {
-		for _, sub := range subs {
-			if !sub.Initialized {
-				continue
-			}
-			subOpts := scan.ScanOpts{GitDir: sub.GitDir, WorkTree: sub.WorkTreePath, SubmodulePath: sub.RelativePath, EntireHistory: true}
-			subScan, err := scan.ScanObjects(ctx, compiledPattern, subOpts)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "warning: scanning submodule %s: %v\n", sub.RelativePath, err)
-				continue
-			}
-			if err := scan.AddAttribution(ctx, subScan, subOpts); err != nil {
-				fmt.Fprintf(os.Stderr, "warning: adding attribution for submodule %s: %v\n", sub.RelativePath, err)
-			}
-			if len(subScan.Matches) > 0 {
-				sr := subScanResult{sub: sub, results: subScan}
-				for _, m := range subScan.Matches {
-					switch m.ObjectType {
-					case "blob":
-						// Scope patterns are written against parent-repo paths:
-						// strip the submodule prefix before matching.
-						if scope != nil {
-							subScope := scopeForSubmodule(*scope, sub.RelativePath)
-							if subScope == "" || !matchScope(subScope, m.Path) {
-								continue
-							}
+		die(exitcode.General, fmt.Sprintf("enumerating submodules: %v\n"+
+			"A preview cannot state what a scrub would rewrite without this.", err))
+	}
+	for _, sub := range subs {
+		if !sub.Initialized {
+			continue
+		}
+		subOpts := scan.ScanOpts{GitDir: sub.GitDir, WorkTree: sub.WorkTreePath, SubmodulePath: sub.RelativePath, EntireHistory: true}
+		subScan, err := scan.ScanObjects(ctx, compiledPattern, subOpts)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warning: scanning submodule %s: %v\n", sub.RelativePath, err)
+			continue
+		}
+		if err := scan.AddAttribution(ctx, subScan, subOpts); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: adding attribution for submodule %s: %v\n", sub.RelativePath, err)
+		}
+		if len(subScan.Matches) > 0 {
+			sr := subScanResult{sub: sub, results: subScan}
+			for _, m := range subScan.Matches {
+				switch m.ObjectType {
+				case "blob":
+					// Scope patterns are written against parent-repo paths:
+					// strip the submodule prefix before matching.
+					if scope != nil {
+						subScope := scopeForSubmodule(*scope, sub.RelativePath)
+						if subScope == "" || !matchScope(subScope, m.Path) {
+							continue
 						}
-						sr.blobs = append(sr.blobs, m)
-					case "commit":
-						sr.commits = append(sr.commits, m)
-					case "tag":
-						sr.tags = append(sr.tags, m)
 					}
+					sr.blobs = append(sr.blobs, m)
+				case "commit":
+					sr.commits = append(sr.commits, m)
+				case "tag":
+					sr.tags = append(sr.tags, m)
 				}
-				subResults = append(subResults, sr)
 			}
+			subResults = append(subResults, sr)
 		}
 	}
 
@@ -531,11 +534,14 @@ func scrubMatchExecute(
 		die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
 	}
 
-	// Enumerate submodules (4.4)
+	// Enumerate submodules. A failure is fatal for the same reason it is in the
+	// preview: the submodules are part of what this rewrite covers, so an empty
+	// list is not a smaller rewrite but a rewrite that leaves the matched
+	// content where it is while reporting success. Nothing has moved yet.
 	subs, subErr := submodule.Enumerate(ctx, gitDir)
 	if subErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: enumerating submodules: %v\n", subErr)
-		subs = nil
+		die(exitcode.General, fmt.Sprintf("enumerating submodules: %v\n"+
+			"A scrub cannot decide what it rewrites without this. Nothing was changed.", subErr))
 	}
 	// Ensure safegit dir exists for each initialized submodule.
 	for _, sub := range subs {
