@@ -3,12 +3,15 @@
 // cherry-pick or revert (single or queued), a rebase, or a mailbox
 // application.
 //
-// The package does two things and nothing else: it REPORTS the state, and it
-// CLEARS the state of the operations safegit owns. It holds no policy. It does
-// not decide whether an in-flight operation should block a commit, which
-// command an operator ought to run next, or whether a conclusion is legal --
-// those decisions belong to the refusal checks and the conclusion engine that
-// call it.
+// The package does three things and nothing else: it REPORTS the state, it
+// CLEARS the state of the operations safegit owns, and it writes the ONE state
+// file git declines to write for a cherry-pick computed with `--no-commit` (see
+// MarkCherryPick, and the file it lives in for why that write belongs beside
+// the reader of the same format). It holds no policy. It does not decide
+// whether an in-flight operation should block a commit, which command an
+// operator ought to run next, or whether a conclusion is legal -- those
+// decisions belong to the refusal checks and the conclusion engine that call
+// it.
 //
 // Read is deliberately filesystem-only: it never starts a git subprocess, so
 // the refusal checks on safegit's hot paths pay a handful of stat calls rather

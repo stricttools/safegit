@@ -29,6 +29,9 @@ var undoableOps = map[string]string{
 	"amend":                "oldSha",
 	"reword":               "oldSha",
 	"merge":                "parent",
+	"pull":                 "parent",
+	"cherry-pick":          "parent",
+	"revert":               "parent",
 	"merge-continue":       "parent",
 	"cherry-pick-continue": "parent",
 	"revert-continue":      "parent",
@@ -66,6 +69,9 @@ func authoredByPipeline(e oplog.Entry) bool {
 // the whole point of these ops being distinguishable from a plain commit.
 var conclusionOps = map[string]string{
 	"merge":                "merge",
+	"pull":                 "merge",
+	"cherry-pick":          "cherry-pick",
+	"revert":               "revert",
 	"merge-continue":       "merge",
 	"cherry-pick-continue": "cherry-pick",
 	"revert-continue":      "revert",

@@ -53,8 +53,9 @@ func newQueuedSubmodulePick(t *testing.T) (parentDir, subDir string) {
 	testutil.Git(t, parentDir, "commit", "-m", "point at the submodule fixture")
 	enableAutoBump(t, parentDir)
 
-	if _, stderr, code := runSafegitEnv(t, subDir, conclusionSession, "cherry-pick", first, second, third); code == 0 {
-		t.Fatalf("the fixture needs the queue to stop on its first command: %s", stderr)
+	// Raw git: a multi-command queue is a state only git can create now.
+	if out, code := testutil.GitTry(t, subDir, "cherry-pick", first, second, third); code == 0 {
+		t.Fatalf("the fixture needs the queue to stop on its first command: %s", out)
 	}
 	return parentDir, subDir
 }

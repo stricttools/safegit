@@ -54,6 +54,12 @@ type queuedFixture struct {
 // `side two` adds d.txt cleanly on top. For the revert, two commits on main are
 // reverted newest-first; the older one conflicts because a later edit sits over
 // it, and the newer one reverts cleanly.
+//
+// RAW GIT creates the queue, deliberately. `safegit cherry-pick` and `safegit
+// revert` each take exactly one commit and author the result themselves, so a
+// multi-command sequence is a state only git can now put a repository in --
+// which is precisely the state the delegated conclusion exists to finish, and
+// it is unaffected by which tool wrote the queue.
 func newQueuedPickRepo(t *testing.T, verb string) queuedFixture {
 	t.Helper()
 	dir := newRepo(t)
@@ -92,8 +98,8 @@ func newQueuedPickRepo(t *testing.T, verb string) queuedFixture {
 	}
 
 	tip := testutil.Rev(t, dir, "HEAD")
-	if _, stderr, code := runSafegitEnv(t, dir, conclusionSession, argv...); code == 0 {
-		t.Fatalf("the fixture needs a mid-queue conflict from `safegit %s`: %s", strings.Join(argv, " "), stderr)
+	if out, code := testutil.GitTry(t, dir, argv...); code == 0 {
+		t.Fatalf("the fixture needs a mid-queue conflict from `git %s`: %s", strings.Join(argv, " "), out)
 	}
 	if !testutil.FileExists(filepath.Join(dir, ".git", "sequencer")) {
 		t.Fatalf("the fixture must leave a sequencer queue behind (%s)", strings.Join(argv, " "))
@@ -293,8 +299,9 @@ func TestDelegatedConclusionStopsAtTheNextConflict(t *testing.T) {
 	second := safegitCommitEnv(t, dir, conclusionSession, "side d", "d.txt")
 	testutil.Git(t, dir, "switch", "main")
 
-	if _, stderr, code := runSafegitEnv(t, dir, conclusionSession, "cherry-pick", first, second); code == 0 {
-		t.Fatalf("the fixture needs a first conflict: %s", stderr)
+	// Raw git: a multi-command queue is a state only git can create now.
+	if out, code := testutil.GitTry(t, dir, "cherry-pick", first, second); code == 0 {
+		t.Fatalf("the fixture needs a first conflict: %s", out)
 	}
 
 	_, stderr, code := runSafegitEnv(t, dir, conclusionSession,
@@ -364,8 +371,9 @@ func newThreeStepQueue(t *testing.T) string {
 	third := safegitCommitEnv(t, dir, conclusionSession, "side e", "e.txt")
 	testutil.Git(t, dir, "switch", "main")
 
-	if _, stderr, code := runSafegitEnv(t, dir, conclusionSession, "cherry-pick", first, second, third); code == 0 {
-		t.Fatalf("the fixture needs the queue to stop on its first command: %s", stderr)
+	// Raw git: a multi-command queue is a state only git can create now.
+	if out, code := testutil.GitTry(t, dir, "cherry-pick", first, second, third); code == 0 {
+		t.Fatalf("the fixture needs the queue to stop on its first command: %s", out)
 	}
 	return dir
 }

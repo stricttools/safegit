@@ -644,9 +644,10 @@ func TestAmendRefusedWhileMerging(t *testing.T) {
 //
 //	fatal: You are in the middle of a cherry-pick -- cannot amend.
 //
-// safegit's cherry-pick is a guarded passthrough, so CHERRY_PICK_HEAD is left
-// behind on a conflict exactly as git leaves it, and the amend pipeline never
-// reads it.
+// safegit's cherry-pick computes with `git cherry-pick --no-commit` and writes
+// CHERRY_PICK_HEAD itself, so a conflicted pick parks in exactly the state
+// git's own conflicted pick leaves -- which is what the amend pipeline reads
+// when it refuses.
 func TestAmendRefusedWhileCherryPicking(t *testing.T) {
 	dir := newRepo(t)
 

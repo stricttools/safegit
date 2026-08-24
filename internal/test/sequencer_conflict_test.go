@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
@@ -294,16 +295,34 @@ func TestSeqConflictRevertNoCommitPreservesStagedResult(t *testing.T) {
 	seqConflictAssertSameState(t, "revert --no-commit", gitState, sgState)
 }
 
-// A multi-commit cherry-pick that applies one commit and conflicts on the next
-// leaves .git/sequencer plus the conflict. Both must survive.
+// A multi-commit cherry-pick used to be a state safegit could put a repository
+// in, and the property pinned here was that safegit left git's partial progress
+// -- .git/sequencer plus the conflict -- exactly as git left it.
 //
-// RED: unmerged entries are wiped while .git/sequencer and CHERRY_PICK_HEAD
-// remain, so the remaining picks are queued on top of a conflict git can no
-// longer see.
-func TestSeqConflictMultiPickPartialProgressPreserved(t *testing.T) {
-	_, _, gitState, sgState := seqConflictTwins(t, nil, "cherry-pick", "side~1", "side")
+// safegit's cherry-pick now applies ONE commit and authors the result itself,
+// so this command line is refused before any git runs and there is no partial
+// progress to preserve. What the twins pin instead is the difference itself:
+// plain git queues the picks and stops mid-sequence, safegit refuses and leaves
+// the repository untouched.
+func TestSeqConflictMultiPickIsRefusedWhileGitQueuesIt(t *testing.T) {
+	gitDir, sgDir, gitState, sgState := seqConflictTwins(t, nil, "cherry-pick", "side~1", "side")
+
+	// Plain git does what it always did.
 	seqConflictAssertMidSequence(t, gitState, "CHERRY_PICK_HEAD")
-	seqConflictAssertSameState(t, "multi-commit cherry-pick stopped at a conflict", gitState, sgState)
+	if !testutil.FileExists(filepath.Join(gitDir, ".git", "sequencer")) {
+		t.Fatalf("fixture is wrong: plain git left no queue (%s)", gitState)
+	}
+
+	// safegit refuses the command line, and nothing in the repository moved.
+	if sgState.exitCode != exitcode.Usage {
+		t.Fatalf("safegit exited %d, want %d (Usage): %s", sgState.exitCode, exitcode.Usage, sgState)
+	}
+	if len(sgState.unmerged) != 0 || len(sgState.porcelain) != 0 || len(sgState.markers) != 0 {
+		t.Errorf("the refused cherry-pick left state behind: %s", sgState)
+	}
+	if testutil.Rev(t, sgDir, "HEAD") == "" {
+		t.Error("the refusal left no readable HEAD")
+	}
 }
 
 // `merge --no-commit` succeeds, stages the merge result and leaves MERGE_HEAD
