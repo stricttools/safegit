@@ -297,6 +297,83 @@ func TestDeclinedDeliberateConfirmationExitsNonzero(t *testing.T) {
 	})
 }
 
+// TestDryRunNeverPromptsForConsent is the rule stated uniformly: a preview
+// changes nothing, so there is nothing to consent to, and no confirmDeliberate
+// site asks under --dry-run. It used to be one site's private habit -- push
+// checked the flag itself before asking about a force -- while `doctor --action
+// uninstall` asked anyway and, with no terminal to answer at, refused a preview
+// that would have removed nothing. The same run under --json refused twice over,
+// because --json is not consent either.
+//
+// A dry run therefore proceeds past every one of these seams, and what it
+// proceeds INTO is the recording preview: the effects are logged instead of
+// performed. Consent is about the act, and a preview does not perform the act.
+//
+// The backup site is deliberately absent here: its own dry-run return comes
+// BEFORE the exposure classification, so a preview never probes the remote at
+// all and there is no confirmation to reach. TestBackupDryRunMakesNoNetworkContact
+// pins that, and this rule is no license to change it.
+func TestDryRunNeverPromptsForConsent(t *testing.T) {
+	t.Run("doctor uninstall previews and enumerates", func(t *testing.T) {
+		dir := newRepo(t)
+		commitFileEnv(t, dir, confirmEnv, "file.txt", "content\n", "add file")
+		safegitDir := filepath.Join(dir, ".git", "safegit")
+
+		stdout, stderr, code := runSafegitEnv(t, dir, confirmEnv, "--dry-run", "doctor", "--action", "uninstall")
+		if code != 0 {
+			t.Fatalf("a dry-run uninstall must preview without consent, got %d:\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		}
+		if strings.Contains(stderr, "[y/N]") {
+			t.Errorf("the preview asked for consent; stderr was:\n%s", stderr)
+		}
+		if strings.Contains(stderr, "--approve-consequential") {
+			t.Errorf("the preview refused for want of consent; stderr was:\n%s", stderr)
+		}
+		// The enumeration is the whole of what a preview does, so it has to be
+		// there: a preview that says nothing about what it would remove is worth
+		// less than the prompt it replaced.
+		if !strings.Contains(stdout, "would remove") || !strings.Contains(stdout, safegitDir) {
+			t.Errorf("the preview did not enumerate what it would remove; stdout was:\n%s", stdout)
+		}
+		if _, err := os.Stat(safegitDir); err != nil {
+			t.Errorf("the preview removed %s: %v", safegitDir, err)
+		}
+	})
+
+	t.Run("doctor uninstall in machine mode emits the envelope", func(t *testing.T) {
+		dir := newRepo(t)
+		commitFileEnv(t, dir, confirmEnv, "file.txt", "content\n", "add file")
+		safegitDir := filepath.Join(dir, ".git", "safegit")
+
+		stdout, stderr, code := runSafegitEnv(t, dir, confirmEnv, "--json", "--dry-run", "doctor", "--action", "uninstall")
+		if code != 0 {
+			t.Fatalf("a --json dry run must preview without consent, got %d:\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		}
+		env := decodeEnvelope(t, stdout)
+		if !env.DryRun {
+			t.Errorf("expected a dry-run envelope on stdout, got: %s", stdout)
+		}
+		if _, err := os.Stat(safegitDir); err != nil {
+			t.Errorf("the preview removed %s: %v", safegitDir, err)
+		}
+	})
+
+	t.Run("push force-with-lease previews", func(t *testing.T) {
+		dir, remoteDir := newRepoWithRemote(t)
+
+		stdout, stderr, code := runSafegitEnv(t, dir, confirmEnv, "--dry-run", "push", "--refs", "head", "--force-with-lease", "origin")
+		if code != 0 {
+			t.Fatalf("a dry-run force-push must preview without consent, got %d:\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		}
+		if strings.Contains(stderr, "[y/N]") {
+			t.Errorf("the preview asked for consent; stderr was:\n%s", stderr)
+		}
+		if branches := remoteBranches(t, remoteDir); len(branches) != 0 {
+			t.Errorf("the preview pushed: remote branches %v", branches)
+		}
+	})
+}
+
 // TestDeliberateConfirmationPromptGoesToStderr pins the CHANNEL of the prompt
 // at all three confirmDeliberate sites.
 //
