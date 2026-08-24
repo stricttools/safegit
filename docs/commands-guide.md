@@ -575,7 +575,7 @@ safegit push --refs both
 
 ### Safety Guarantees
 
-- **Pre-pre-push hooks**: Hooks in the live store under the repository's common `.git/safegit/hooks/`, and hooks the checkout provides in `.safegit/hooks/`, run before any network I/O. A failing hook aborts the push (exit code 20). A timed-out hook aborts with exit code 21. Hooks still sitting in the pre-migration location, `.git/hooks/pre-pre-push` and `.git/hooks/pre-pre-push.d/`, do **not** run at all: every push and every `hook run` refuses with exit code 24 until `safegit hook migrate` moves them.
+- **Pre-pre-push hooks**: Hooks in the live store under the repository's common `.git/safegit/hooks/`, and hooks the checkout provides in `.safegit/hooks/`, run before any network I/O. A failing hook aborts the push (exit code 20). A timed-out hook aborts with exit code 21. A hook without its execute bit is a refusal (exit code 25) in BOTH stores: a hook is disabled by removing it, never by dropping its mode, and a lost mode bit -- a filesystem without modes, a patch tool that dropped it -- would otherwise turn into checks that quietly stopped running. Hooks still sitting in the pre-migration location, `.git/hooks/pre-pre-push` and `.git/hooks/pre-pre-push.d/`, do **not** run at all: every push and every `hook run` refuses with exit code 24 until `safegit hook migrate` moves them.
 - **Where hooks run from, and who can put one there**: the live store is keyed on the **common** git dir, so a hook installed from a linked worktree is the hook every worktree of the repository runs -- the same anchor the ref locks use. The checkout-provided store is per-worktree, because it is checkout content: a file is in it because it sits in `.safegit/hooks/`, whether or not git tracks it, so an uncommitted script there runs on the next push. That means **cloning a repository and pushing from that checkout runs the repository's committed scripts**. Execution happens only on `safegit push` and `safegit hook run` -- an operator action with push intent -- never on clone, fetch, checkout or any inspection command, and `safegit hook list` names every location with its origin so the set can be read before anything is pushed.
 - **Submodule hook cascading**: When pushing from inside a submodule, hooks from the parent repo are discovered and run first, then the submodule's own hooks.
 - **Automatic retry**: Transport errors (connection refused, DNS failure, TLS errors, broken pipe) are classified from git's own stderr and trigger automatic retries with exponential backoff (1s, 2s, 4s). Every retry re-reads the remote and re-pins the leases, so an expectation is never carried over from a failed attempt. Non-transport errors (non-fast-forward, permission denied, a stale lease) are not retried. Default: 3 attempts, configurable via `push.retryAttempts`.
@@ -584,7 +584,7 @@ safegit push --refs both
 - **Terminal lease rejection**: when the remote moved between safegit reading it and the push reaching it, git refuses and safegit exits 41 without retrying. Retrying would re-read the other session's ref, pin the lease to it, and perform exactly the overwrite the lease prevented. Fetch, look at what arrived, and decide again.
 - **Consent for forcing**: an ordinary push prompts for nothing. `--force-with-lease` overwrites remote refs, so it is confirmed at the terminal before any network contact; the prompt goes to stderr and `--quiet` does not suppress it. `--approve-consequential` answers the confirmation in advance, `--json` answers nothing and refuses, and a declined confirmation exits nonzero.
 - **A dry run still reads the remote**: `--dry-run` records the push instead of performing it, but it resolves the refs first, which means an `ls-remote`. The preview would otherwise be unable to say which refs it would publish or what each lease would pin to. Hook EXECUTION is the part a preview never runs.
-- **A dry run still discovers the hooks**: discovery and execution are separate, and only execution is skipped under `--dry-run`. Finding which scripts a push would run reads the filesystem and mutates nothing, and its two refusals -- exit **24** for hooks still in the pre-migration `.git/hooks` location, exit **25** for a checkout-provided hook without its execute bit -- are verdicts about the checkout that hold whether or not anything is pushed. A preview that skipped discovery reported success for a push that could only ever exit 24 or 25, which is the one thing a preview may never do. `--no-pre-push-hook` skips discovery along with execution, since there is then nothing to discover for.
+- **A dry run still discovers the hooks**: discovery and execution are separate, and only execution is skipped under `--dry-run`. Finding which scripts a push would run reads the filesystem and mutates nothing, and its two refusals -- exit **24** for hooks still in the pre-migration `.git/hooks` location, exit **25** for a discovered hook without its execute bit, in either store -- are verdicts about the checkout that hold whether or not anything is pushed. A preview that skipped discovery reported success for a push that could only ever exit 24 or 25, which is the one thing a preview may never do. `--no-pre-push-hook` skips discovery along with execution, since there is then nothing to discover for.
 - **Order of operations**: the force-push confirmation comes first, before any network contact, so a declined force reaches nothing. Then the refs are resolved -- which reads the remote with `ls-remote` -- and only then do the pre-pre-push hooks run, on the ref set that read produced. The hooks' input and the push set are decided once: a retry that finds a LOCAL ref has moved since refuses (exit **40**) rather than publishing on the strength of a hook run that never saw it.
 - **Oplog recording**: one `push` entry is appended after the push succeeds, recording the remote, the pushed refs and how many hooks ran. Failed attempts and retries are not separate entries, and a hook timeout writes none.
 - **git's push output arrives at the end**: safegit captures git's stdout and stderr rather than streaming them, because classifying a transport error from a verdict needs git's stderr as data. Progress therefore appears when the attempt finishes instead of live. Under `--json` git's stdout is re-routed to stderr, so the envelope stays the only document on stdout.
@@ -598,7 +598,7 @@ safegit push --refs both
 | 20 | Pre-pre-push hook failed |
 | 21 | Pre-pre-push hook timed out |
 | 24 | Hooks are still in the pre-migration `.git/hooks` location; run `safegit hook migrate` |
-| 25 | A hook the checkout provides in `.safegit/hooks` is not executable |
+| 25 | A discovered hook is not executable, in either store |
 | 40 | The push did not get through: `git push` failed after the retry policy was exhausted, the remote could not be observed, or a local ref moved since the hooks saw it |
 | 41 | A `--force-with-lease` expectation no longer matched: the remote ref moved after safegit observed it |
 
@@ -1576,8 +1576,8 @@ List every pre-pre-push hook location safegit knows about, showing each hook's s
 
 | Origin | Where | Runs when |
 |--------|-------|-----------|
-| `local` | The tool-owned live store under the repository's **common** `.git/safegit/hooks/`, which `hook install` writes to and every worktree shares | Every `safegit push` and `safegit hook run`. A non-executable one is skipped with a warning |
-| `tracked` | The hooks the **checkout** provides, in `.safegit/hooks/` in the work tree | Every `safegit push` and `safegit hook run`, before the local ones. A non-executable one is a refusal (exit code 25), never a silent skip |
+| `local` | The tool-owned live store under the repository's **common** `.git/safegit/hooks/`, which `hook install` writes to and every worktree shares | Every `safegit push` and `safegit hook run`. A non-executable one is a refusal (exit code 25), never a silent skip |
+| `tracked` | The hooks the **checkout** provides, in `.safegit/hooks/` in the work tree | Every `safegit push` and `safegit hook run`, before the local ones. A non-executable one is a refusal (exit code 25) too |
 | `legacy` | The pre-migration location in git's own `.git/hooks/` (`pre-pre-push` and `pre-pre-push.d/`) | Never. Their presence makes every push and `hook run` refuse with exit code 24 until `safegit hook migrate` relocates them |
 
 Membership of the checkout-provided store is the directory, not git: an uncommitted -- even gitignored -- executable file in `.safegit/hooks/` runs on the next push exactly like a committed one. So cloning a repository and pushing from that checkout runs the repository's scripts; that execution happens only on push and `hook run`, never on clone or inspection, and this listing is how the set is read beforehand.
@@ -1611,6 +1611,15 @@ safegit hook run
 # Run a specific hook
 safegit hook run my-check.sh
 ```
+
+### Discovery's refusals reach here too
+
+`hook run` runs the same discovery a push does, so it produces the same two
+verdicts about the checkout: exit **24** while a hook is still in the
+pre-migration `.git/hooks` location, and exit **25** when a discovered hook is
+not executable, in either store. Neither is a quiet skip and neither reports "no
+hooks to run": a command whose whole purpose is to say whether the checks pass
+must not exit 0 because a check was passed over.
 
 ### `--dry-run` is refused
 

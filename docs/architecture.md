@@ -332,7 +332,7 @@ safegit discovers pre-pre-push hooks by walking both stores in full, at any dept
 
 Within each store the traditional two shapes are just names: `pre-pre-push` is the single-file hook and `pre-pre-push.d/*` the directory of them, and anything else in the store is a hook too. Files starting with `.` or ending in `~` are not hooks by name and are never run.
 
-A hook must be executable (`chmod +x`). A non-executable hook in the LIVE store is skipped with a warning (`safegit doctor` reports it, and git takes the same stance for its own hooks). A non-executable hook in the CHECKOUT-PROVIDED store is a refusal instead (exit 25): such a hook is disabled by deleting it and committing that, so a lost mode bit -- a checkout on a filesystem without modes, a patch tool that dropped it -- must not silently stop the repository's checks.
+A hook must be executable (`chmod +x`). A non-executable hook is a REFUSAL (exit 25) in BOTH stores, and `safegit hook run` refuses identically rather than reporting that there was nothing to run. A hook is disabled by removing it -- deleting the file in the live store, deleting it and committing that in the checkout-provided one -- never by dropping its mode, so a lost mode bit (a checkout on a filesystem without modes, a patch tool that dropped it) must not silently stop the repository's checks. `safegit hook list` still LISTS such a hook, marked `NOT EXECUTABLE`: the listing is the diagnostic, and the hook an operator is asking about is usually the one that is not running. `safegit doctor`'s `hook_perms` check reports the same condition at error severity, in either store.
 
 Standard git hooks live in `.git/hooks/` as usual -- resolved through `git rev-parse --git-path hooks`, so `core.hooksPath` and linked worktrees are honored. safegit builds commits from git plumbing rather than by invoking `git commit`, so it runs the commit family itself: `pre-commit` against the per-invocation index, `commit-msg` on the composed message before safegit's own session trailer is added (a rewrite by the hook is adopted), and `post-commit` after the ref has moved. Each runs once per commit, amend or reword, whatever the compare-and-swap loop does, and a `--dry-run` runs none of them and says so. A refusal from either of the first two exits **16**. `prepare-commit-msg` never runs: safegit never opens an editor, so there is no message-preparation step for it to act on.
 
@@ -402,9 +402,9 @@ If both phases are needed, the user splits expensive checks (smoke tests) into `
 ### Timeout policy
 
 - Default: 1800s (30 min) per hook.
-- Configurable globally: `hooks.preprepush.timeoutSeconds`.
-- Per-hook override: a hook may print `# safegit: timeout=NNN` on its first stdout line (parsed before forwarding to user).
-- On timeout: `SIGTERM` then 5s grace then `SIGKILL`. Exit code 21 ("hook timed out").
+- Configurable globally: `hooks.preprepush.timeoutSeconds`, and handed to the hook in `SAFEGIT_HOOK_TIMEOUT_S` so a script can monitor itself against it.
+- There is NO per-hook override. A hook cannot raise or lower its own limit: a configured limit the limited script can rewrite for itself is a limit that is not one, and the repository's configuration is the single authority. A hook that genuinely needs longer says so by having `hooks.preprepush.timeoutSeconds` raised.
+- On timeout: `SIGTERM` to the hook's whole process group, then 5s grace, then `SIGKILL`. Exit code 21 ("hook timed out").
 
 ### Bypass
 
