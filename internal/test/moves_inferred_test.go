@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
@@ -411,4 +412,112 @@ func TestRewordMintsNothingAndKeepsEveryRecord(t *testing.T) {
 		t.Errorf("the reword changed the records: %v, want %v; message:\n%s", got, before, after)
 	}
 	assertOrigins(t, after, "observed")
+}
+
+// FENCE: an --untrack target never pairs.
+//
+// `--untrack a.txt` removes the path from the index and LEAVES IT ON DISK, so
+// the commit's delta shows a deletion of a.txt beside the addition of b.txt and
+// the blobs match. About the TREE that reads like a move -- and safegit's own
+// declared spelling refuses to say it: `--moved 'a.txt -> b.txt'` exits
+// MoveNotBorneOut precisely because a.txt is still there. Inference may not
+// state what a declaration is refused for stating, so the untrack targets
+// suppress exactly as declared paths do, and the candidate is reported as
+// refused.
+func TestInferenceRefusesAnUntrackTarget(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
+	safegitCommitEnv(t, dir, inferredSession, "seed", "a.txt")
+
+	testutil.WriteFile(t, dir, "b.txt", "content nothing else holds\n")
+	_, stderr, code := runSafegitEnv(t, dir, inferredSession, "commit", "-m", "untrack a, add b",
+		"--untrack", "a.txt", "--", "b.txt")
+	if code != 0 {
+		t.Fatalf("commit failed (code %d): %s", code, stderr)
+	}
+
+	assertInferredPairs(t, dir)
+	if _, err := os.Stat(filepath.Join(dir, "a.txt")); err != nil {
+		t.Fatalf("the fixture's untrack target left the working tree: %v", err)
+	}
+	// The same claim through the declared spelling, which is the rule inference
+	// is being held to: still on disk, still refused.
+	testutil.WriteFile(t, dir, "c.txt", "second content nothing else holds\n")
+	safegitCommitEnv(t, dir, inferredSession, "seed c", "c.txt")
+	testutil.WriteFile(t, dir, "d.txt", "second content nothing else holds\n")
+	_, stderr, code = runSafegitEnv(t, dir, inferredSession, "commit", "-m", "declare it",
+		"--untrack", "c.txt", "--moved", "c.txt -> d.txt", "--", "d.txt")
+	if code != exitcode.MoveNotBorneOut {
+		t.Fatalf("the declared spelling exited %d, want MoveNotBorneOut (%d): %s",
+			code, exitcode.MoveNotBorneOut, stderr)
+	}
+}
+
+// The refusal is REPORTED, not silent: the payload names the candidate and its
+// reason names the flag that turned it down, so a caller who meant a move
+// learns why nothing was recorded.
+func TestUntrackRefusalIsReportedAndNamesTheFlag(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
+	safegitCommit(t, dir, "seed", "a.txt")
+
+	testutil.WriteFile(t, dir, "b.txt", "content nothing else holds\n")
+	doc := commitPayloadOf(t, dir, "commit", "-m", "untrack a, add b",
+		"--untrack", "a.txt", "--", "b.txt")
+
+	if len(doc.MovedRecords) != 0 {
+		t.Errorf("moved_records = %+v; an --untrack target is recorded nowhere", doc.MovedRecords)
+	}
+	if len(doc.RefusedMoves) != 1 {
+		t.Fatalf("refused_moves = %+v, want the one untracked candidate", doc.RefusedMoves)
+	}
+	r := doc.RefusedMoves[0]
+	if strings.Join(r.Old, ",") != "a.txt" || strings.Join(r.New, ",") != "b.txt" {
+		t.Errorf("refused_moves[0] names %v -> %v, want a.txt -> b.txt", r.Old, r.New)
+	}
+	if !strings.Contains(r.Reason, "--untrack") {
+		t.Errorf("refused_moves[0] reason %q does not name --untrack", r.Reason)
+	}
+}
+
+// The amend arm takes --untrack too, and its inference reads the authoring
+// event's own delta -- so the same fence has to stand there.
+func TestAmendInferenceRefusesAnUntrackTarget(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
+	safegitCommitEnv(t, dir, inferredSession, "seed", "a.txt")
+	testutil.WriteFile(t, dir, "other.txt", "unrelated\n")
+	safegitCommitEnv(t, dir, inferredSession, "second", "other.txt")
+
+	testutil.WriteFile(t, dir, "b.txt", "content nothing else holds\n")
+	_, stderr, code := runSafegitEnv(t, dir, inferredSession, "commit", "--amend",
+		"--untrack", "a.txt", "--", "b.txt")
+	if code != 0 {
+		t.Fatalf("amend failed (code %d): %s", code, stderr)
+	}
+
+	assertInferredPairs(t, dir)
+	if _, err := os.Stat(filepath.Join(dir, "a.txt")); err != nil {
+		t.Fatalf("the fixture's untrack target left the working tree: %v", err)
+	}
+}
+
+// The suppression is scoped to the paths --untrack NAMES, and nothing else: a
+// move elsewhere in the same commit is recorded exactly as it would be without
+// the flag.
+func TestUntrackSuppressionIsScopedToItsOwnPaths(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
+	testutil.WriteFile(t, dir, "c.txt", "other content nothing else holds\n")
+	safegitCommitEnv(t, dir, inferredSession, "seed", "a.txt", "c.txt")
+
+	testutil.WriteFile(t, dir, "b.txt", "content nothing else holds\n")
+	moveOnDisk(t, dir, "c.txt", "d.txt")
+	_, stderr, code := runSafegitEnv(t, dir, inferredSession, "commit", "-m", "untrack a, move c",
+		"--untrack", "a.txt", "--", "b.txt", "c.txt", "d.txt")
+	if code != 0 {
+		t.Fatalf("commit failed (code %d): %s", code, stderr)
+	}
+
+	assertInferredPairs(t, dir, "c.txt -> d.txt")
 }

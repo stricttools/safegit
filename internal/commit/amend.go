@@ -326,7 +326,7 @@ func (p *Pipeline) tryAmend(
 	}
 	existingMoved := trailer.MovedLines(tip.Message)
 	inferred, err := inference.records(ctx, authored, authoringTree, treeSHA,
-		declaredPairs(append(append([]string{}, existingMoved...), movedTrailers...)))
+		declaredPairs(append(append([]string{}, existingMoved...), movedTrailers...)), files.untracked())
 	if err != nil {
 		return nil, false, err
 	}
