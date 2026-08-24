@@ -83,6 +83,58 @@ func TestFlagConditionalEffects(t *testing.T) {
 	}
 }
 
+// TestWritesWorktreeView is the view the guarded passthroughs' uncommitted-work
+// check reads. The reset and bisect rows are the reason it exists: both used to
+// be re-derived by hand in the handlers, and both hand-written versions were
+// wrong.
+func TestWritesWorktreeView(t *testing.T) {
+	writes := [][]string{
+		{"reset", "--hard", "HEAD"},
+		{"reset", "--merge", "HEAD~1"},
+		{"reset", "--keep", "HEAD~1"},
+		{"bisect", "start", "HEAD", "HEAD~5"},
+		{"bisect", "good"},
+		{"bisect", "bad"},
+		{"bisect", "old"},
+		{"bisect", "new"},
+		{"bisect", "skip"},
+		{"bisect", "run", "make", "test"},
+		{"bisect", "replay", "log.txt"},
+		{"bisect", "reset"},
+		{"checkout", "other"},
+		{"merge", "topic"},
+		{"rebase", "main"},
+		{"cherry-pick", "abc1234"},
+		{"revert", "abc1234"},
+		{"read-tree", "--reset", "-u", "HEAD"},
+	}
+	for _, argv := range writes {
+		if !WritesWorktree(argv) {
+			t.Errorf("WritesWorktree(%v) = false, want true", argv)
+		}
+	}
+	observes := [][]string{
+		{"reset", "--soft", "HEAD~1"},
+		{"reset", "HEAD~1"},
+		{"bisect", "log"},
+		{"bisect", "terms"},
+		{"bisect", "view"},
+		{"status", "--porcelain"},
+		{"commit-tree", "abc", "-m", "x"},
+		{"update-ref", "refs/heads/x", "abc", "def"},
+	}
+	for _, argv := range observes {
+		if WritesWorktree(argv) {
+			t.Errorf("WritesWorktree(%v) = true, want false", argv)
+		}
+	}
+	// Default-deny, the WritesObjects precedent: an argv the table does not
+	// declare is never assumed harmless.
+	if !WritesWorktree([]string{"filter-branch", "--all"}) {
+		t.Error("an undeclared argv must be treated as writing the working tree")
+	}
+}
+
 // TestConditionalTokenNeverMatchesTheVerbItself pins the reason argvHas skips
 // everything up to and including the subcommand: `git prune` and `git push`
 // are verbs in their own right AND conditional tokens of other verbs.

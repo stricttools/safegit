@@ -1360,15 +1360,15 @@ safegit rebase --interactive HEAD~5
 
 ## reset
 
-Reset HEAD with selective guards that activate only for `--hard` resets to prevent accidental data loss from tree-mutating operations, while allowing soft and mixed resets to pass through without coordination checks.
+Reset HEAD with selective guards that activate for the reset modes that write working-tree files -- `--hard`, `--merge` and `--keep` -- to prevent accidental data loss, while allowing soft and mixed resets to pass through without coordination checks.
 
 ### When to Use
 
-Use `safegit reset` instead of `git reset` to get selective coordination guards. The guard only activates for `--hard` resets because those are tree-mutating operations that can destroy uncommitted work from other sessions. Soft and mixed resets pass through without the coordination guard since they do not modify the working tree.
+Use `safegit reset` instead of `git reset` to get selective coordination guards. The guard activates for the modes that overwrite working-tree files, because those can destroy uncommitted work from other sessions. Soft and mixed resets pass through without the coordination guard since they do not modify the working tree.
 
 ### Arguments
 
-All arguments are passed through to `git reset` after the coordination guard passes (for `--hard` only). Any flag or positional argument that `git reset` accepts can be used, including `--soft`, `--mixed`, `--hard`, commit refs, and path specs.
+All arguments are passed through to `git reset` after the coordination guard passes (for the working-tree-writing modes only). Any flag or positional argument that `git reset` accepts can be used, including `--soft`, `--mixed`, `--hard`, `--merge`, `--keep`, commit refs, and path specs.
 
 ### Examples
 
@@ -1378,26 +1378,30 @@ safegit reset --soft HEAD~1
 
 # Hard reset (guarded)
 safegit reset --hard HEAD~3
+
+# --merge and --keep write working-tree files too, so they are guarded as well
+safegit reset --merge HEAD~1
+safegit reset --keep HEAD~1
 ```
 
 ### Safety Guarantees
 
-- **Selective guard**: the worktree operation lock is taken for every reset; only `--hard` additionally goes through the dirty-tree check, because only `--hard` mutates the working tree.
+- **Selective guard**: the worktree operation lock is taken for every reset, because every reset moves HEAD; the modes that write working-tree files -- `--hard`, `--merge`, `--keep` -- additionally go through the dirty-tree check. Which modes those are is DERIVED from internal/gitexec's classification table rather than re-read here, so the vocabulary is declared in one place.
 - **git's own exit code**: When `git reset` fails, safegit exits with the code git returned.
 - **The index is git's**: safegit does not touch the index after the reset, so a `--soft` or `--mixed` reset leaves exactly what git staged.
 - **Oplog recording**: Logs the reset with all arguments.
 
 ## bisect
 
-Binary search through commits to find the commit that introduced a bug, with selective coordination guards that activate only for tree-moving subcommands like good, bad, reset, and start to protect the working tree from concurrent modification.
+Binary search through commits to find the commit that introduced a bug, with selective coordination guards that activate for the stepping subcommands -- the ones that check another commit out -- to protect the working tree from concurrent modification.
 
 ### When to Use
 
-Use `safegit bisect` instead of `git bisect` for coordination-guarded bisecting that protects the working tree from concurrent modification by other sessions sharing the same worktree, with selective guards that only activate for tree-moving subcommands.
+Use `safegit bisect` instead of `git bisect` for coordination-guarded bisecting that protects the working tree from concurrent modification by other sessions sharing the same worktree, with selective guards that activate for the stepping subcommands.
 
 ### Arguments
 
-All arguments are passed through to `git bisect` after the coordination guard passes (for tree-moving subcommands only). Any subcommand that `git bisect` accepts can be used, including start, good, bad, old, new, reset, skip, log, and replay.
+All arguments are passed through to `git bisect` after the coordination guard passes (for the stepping subcommands only). Any subcommand that `git bisect` accepts can be used, including start, good, bad, old, new, reset, skip, run, log, replay and view.
 
 ### Examples
 
@@ -1410,7 +1414,8 @@ safegit bisect reset
 
 ### Safety Guarantees
 
-- **Selective guard**: the worktree operation lock is taken for every `bisect` invocation; only the tree-moving subcommands (`good`, `bad`, `old`, `new`, `reset`, `start`) additionally go through the dirty-tree check.
+- **Selective guard**: the worktree operation lock is taken for every `bisect` invocation; the STEPPING subcommands (`start`, `good`, `bad`, `old`, `new`, `skip`, `run`, `replay`, `reset`) additionally go through the dirty-tree check, because each of them checks another commit out. The reporting forms (`terms`, `log`, `view`) do not. Which is which is DERIVED from internal/gitexec's classification table rather than kept as a list here.
+- **`bisect run` and build artifacts**: `git bisect run` steps by itself, so the dirty-tree check applies to the invocation and not to each step -- but a build the script performs between steps leaves whatever it wrote in the working tree. Anything the repository IGNORES never counts as dirt; a build artifact that is NOT gitignored does, and the next guarded `bisect` invocation in that worktree is refused at exit 5 until it is cleaned up or ignored.
 - **git's own exit code**: When `git bisect` fails, safegit exits with the code git returned.
 - **The index is git's**: safegit does not touch the index after the bisect step.
 
