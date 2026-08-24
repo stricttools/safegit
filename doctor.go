@@ -813,14 +813,15 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 	// through the reclamation authority, which re-judges each lock under its own
 	// flock and can only remove the exact stale file it judged.
 	locks := plan.locks
+	removeLock := mintedRemover(flags, "lock:")
 	if flags.dryRun {
 		for _, path := range append(append([]string{}, locks.StalePaths...), locks.TempPaths...) {
-			if rmErr := remove(path); rmErr != nil {
+			if rmErr := removeLock(path); rmErr != nil {
 				fmt.Fprintf(os.Stderr, "warning: recording the removal of %s: %v\n", path, rmErr)
 			}
 		}
 	} else {
-		locks = cleanLocks(lockDirs, mintedRemover(flags, "lock:"))
+		locks = cleanLocks(lockDirs, removeLock)
 	}
 
 	if !flags.silent() {
@@ -894,14 +895,15 @@ func doctorFixSubmodule(flags globalFlags, name, sgDir string) {
 	// Same split as the parent's sweep: a preview records what the scan found,
 	// an executing run goes through the reclamation authority.
 	locks := scanLocks(dirs)
+	removeLock := mintedRemover(flags, "lock:")
 	if flags.dryRun {
 		for _, path := range append(append([]string{}, locks.StalePaths...), locks.TempPaths...) {
-			if rmErr := remove(path); rmErr != nil && !flags.silent() {
+			if rmErr := removeLock(path); rmErr != nil && !flags.silent() {
 				fmt.Fprintf(os.Stderr, "warning: [%s] recording the removal of %s: %v\n", name, path, rmErr)
 			}
 		}
 	} else {
-		locks = cleanLocks(dirs, mintedRemover(flags, "lock:"))
+		locks = cleanLocks(dirs, removeLock)
 	}
 
 	if !flags.silent() {
