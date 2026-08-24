@@ -103,10 +103,19 @@ func resolveFinding(c doctorCheck, f doctorFinding) (string, bool) {
 // RequiresInit skips the check entirely when .git/safegit/ has not been
 // created yet -- for those checks there is nothing to diagnose, not a passing
 // state to report.
+//
+// Question is the one-line question the check answers, in the operator's terms.
+// It is DOCUMENTATION held in the registry rather than beside it: the health-check
+// table in docs/commands-guide.md is generated from these entries
+// (scripts/gen-doctor-table), so the name, the severity and the question a reader
+// sees are the ones the code declares. The table was hand-typed before, and it had
+// drifted -- a severity that said `warn` where the registry said `error`, and a
+// registered check with no row at all.
 type doctorCheck struct {
 	Name         string
 	Severity     string
 	RequiresInit bool
+	Question     string
 	Fn           func(env doctorEnv) doctorFinding
 }
 
@@ -114,32 +123,47 @@ type doctorCheck struct {
 // Adding a diagnostic is one entry plus one function, never an edit to the
 // reporting loop.
 var doctorChecks = []doctorCheck{
-	{Name: "initialized", Severity: "error", Fn: checkInitialized},
-	{Name: "tmp_dirs", Severity: "warn", RequiresInit: true, Fn: checkTmpDirs},
-	{Name: "stale_locks", Severity: "warn", RequiresInit: true, Fn: checkStaleLocks},
-	{Name: "config", Severity: "warn", RequiresInit: true, Fn: checkConfig},
-	{Name: "oplog", Severity: "error", RequiresInit: true, Fn: checkOplog},
-	{Name: "bypass_detect", Severity: "warn", RequiresInit: true, Fn: checkBypassDetect},
-	{Name: "filesystem", Severity: "warn", Fn: checkFilesystemRegistered},
+	{Name: "initialized", Severity: "error", Fn: checkInitialized,
+		Question: "Is safegit initialized in this repository?"},
+	{Name: "tmp_dirs", Severity: "warn", RequiresInit: true, Fn: checkTmpDirs,
+		Question: "Are there orphan temporary index directories?"},
+	{Name: "stale_locks", Severity: "warn", RequiresInit: true, Fn: checkStaleLocks,
+		Question: "Are there lock files whose holder is gone -- and orphaned lock-publication temporaries?"},
+	{Name: "config", Severity: "warn", RequiresInit: true, Fn: checkConfig,
+		Question: "Is the config file readable with a valid schema version?"},
+	{Name: "oplog", Severity: "error", RequiresInit: true, Fn: checkOplog,
+		Question: "Does the oplog read completely, with no unparseable lines?"},
+	{Name: "bypass_detect", Severity: "warn", RequiresInit: true, Fn: checkBypassDetect,
+		Question: "Does the branch tip match the last oplog entry? (Detects a raw `git commit` bypassing safegit.)"},
+	{Name: "filesystem", Severity: "warn", Fn: checkFilesystemRegistered,
+		Question: "Is the repository on a network filesystem (NFS/SMB) that may not support atomic operations?"},
 	// Not RequiresInit: what a repository CONTAINS is readable whether or not
 	// safegit has state here yet, and an unreadable answer is the same problem
 	// either way.
-	{Name: "submodules", Severity: "error", Fn: checkSubmodules},
-	{Name: "hook_perms", Severity: "error", RequiresInit: true, Fn: checkHookPerms},
+	{Name: "submodules", Severity: "error", Fn: checkSubmodules,
+		Question: "Can safegit enumerate this repository's submodules? (`--action fix` cleans each submodule's state with that enumeration and a scrub decides what it rewrites with it, so a failure is answered by a repair, never by a quietly smaller scope.)"},
+	{Name: "hook_perms", Severity: "error", RequiresInit: true, Fn: checkHookPerms,
+		Question: "Are all hook scripts executable, in both stores? (Every push refuses while one is not.)"},
 	// Not RequiresInit: hooks can sit in the pre-migration location in a
 	// repository whose .git/safegit was later removed, and a push there
 	// re-creates the state directory and then refuses on exactly this.
-	{Name: "hooks_migrated", Severity: "error", Fn: checkHooksMigrated},
-	{Name: "native_hooks", Severity: "warn", Fn: checkUnusedNativeHooks},
-	{Name: "git_version", Severity: "warn", Fn: checkGitVersion},
+	{Name: "hooks_migrated", Severity: "error", Fn: checkHooksMigrated,
+		Question: "Are safegit's pre-pre-push hooks out of the pre-migration `.git/hooks` location? (While they are not, every push refuses with exit 24.)"},
+	{Name: "native_hooks", Severity: "warn", Fn: checkUnusedNativeHooks,
+		Question: "Are there git hooks in `.git/hooks` that safegit's own commit path does not run?"},
+	{Name: "git_version", Severity: "warn", Fn: checkGitVersion,
+		Question: "Is the installed git new enough for the features safegit uses?"},
 	// Not RequiresInit: MERGE_AUTOSTASH is git's own file, and the work it names
 	// is unreachable whether or not safegit has state in this repository.
-	{Name: "merge_autostash", Severity: "warn", Fn: checkOrphanedAutostash},
+	{Name: "merge_autostash", Severity: "warn", Fn: checkOrphanedAutostash,
+		Question: "Is `MERGE_AUTOSTASH` present with no merge in flight? (It names a stash-shaped commit holding uncommitted work no ref reaches; the check reports it and removes nothing.)"},
 	// Not RequiresInit, and ERROR severity: the entries are git's own, and while
 	// they are there every commit in this repository refuses -- with git's
 	// refusal or safegit's exit 28 -- whether or not safegit has state here.
-	{Name: "unmerged_index", Severity: "error", Fn: checkOrphanedUnmergedIndex},
-	{Name: "legacy_scrub_policies", Severity: "error", RequiresInit: true, Fn: checkLegacyScrubPolicies},
+	{Name: "unmerged_index", Severity: "error", Fn: checkOrphanedUnmergedIndex,
+		Question: "Does the index carry unmerged entries with no merge, cherry-pick or revert in flight to resolve them? (git refuses every commit in that state and so does safegit, at exit 28; `--action fix` stages each path's own working-tree content. An unmerged index the operation in flight owns is reported as such and is not a fault.)"},
+	{Name: "legacy_scrub_policies", Severity: "error", RequiresInit: true, Fn: checkLegacyScrubPolicies,
+		Question: "Is the pre-0.2 scrub-policy file -- which stored scrubbed patterns in plaintext inside the repository -- gone?"},
 }
 
 // legacyScrubPolicyFile is the JSONL policy log older published safegit

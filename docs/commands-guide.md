@@ -1063,6 +1063,10 @@ Exactly one value, and there is no default: a doctor invocation that does not sa
 
 ### Health Checks
 
+This table is generated from the check registry in `doctor.go` by `scripts/gen-doctor-table`; edit the registry, not the table.
+
+<!-- BEGIN generated doctor health-check table (scripts/gen-doctor-table) -->
+
 | Check | Severity | Question |
 |-------|----------|----------|
 | `initialized` | error | Is safegit initialized in this repository? |
@@ -1072,13 +1076,16 @@ Exactly one value, and there is no default: a doctor invocation that does not sa
 | `oplog` | error | Does the oplog read completely, with no unparseable lines? |
 | `bypass_detect` | warn | Does the branch tip match the last oplog entry? (Detects a raw `git commit` bypassing safegit.) |
 | `filesystem` | warn | Is the repository on a network filesystem (NFS/SMB) that may not support atomic operations? |
-| `hook_perms` | warn | Are all hook scripts executable? |
+| `submodules` | error | Can safegit enumerate this repository's submodules? (`--action fix` cleans each submodule's state with that enumeration and a scrub decides what it rewrites with it, so a failure is answered by a repair, never by a quietly smaller scope.) |
+| `hook_perms` | error | Are all hook scripts executable, in both stores? (Every push refuses while one is not.) |
 | `hooks_migrated` | error | Are safegit's pre-pre-push hooks out of the pre-migration `.git/hooks` location? (While they are not, every push refuses with exit 24.) |
 | `native_hooks` | warn | Are there git hooks in `.git/hooks` that safegit's own commit path does not run? |
 | `git_version` | warn | Is the installed git new enough for the features safegit uses? |
 | `merge_autostash` | warn | Is `MERGE_AUTOSTASH` present with no merge in flight? (It names a stash-shaped commit holding uncommitted work no ref reaches; the check reports it and removes nothing.) |
 | `unmerged_index` | error | Does the index carry unmerged entries with no merge, cherry-pick or revert in flight to resolve them? (git refuses every commit in that state and so does safegit, at exit 28; `--action fix` stages each path's own working-tree content. An unmerged index the operation in flight owns is reported as such and is not a fault.) |
 | `legacy_scrub_policies` | error | Is the pre-0.2 scrub-policy file -- which stored scrubbed patterns in plaintext inside the repository -- gone? |
+
+<!-- END generated doctor health-check table -->
 
 **Exit code 50.** `diagnose` exits `50` when at least one **error**-severity check fails; warnings alone exit `0`. After `--action fix` the code reflects what the fix LEFT: an error-severity finding that is still there keeps the exit nonzero.
 
