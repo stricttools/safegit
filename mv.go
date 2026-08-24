@@ -765,7 +765,7 @@ func commitMvMoves(flags globalFlags, gitDir, message string, pairs []mvPair) in
 	var records []string
 	var moves []mvMove
 	for _, p := range pairs {
-		record, err := trailer.NewRecord(p.old, p.new)
+		record, err := trailer.NewRecord(p.old, p.new, trailer.OriginDeclared)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %s: %v\n", p.arg, err)
 			return exitcode.Usage

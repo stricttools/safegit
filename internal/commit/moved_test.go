@@ -32,16 +32,18 @@ func TestCommitTrailersOrdering(t *testing.T) {
 
 // The collision a re-declaration makes is a collision of PAIRS, not of trailer
 // lines: a declared record is freshly minted, so its id differs from every
-// preserved record's even when the two say the same thing. The refusal reads
-// the pairs, folds the message's own retractions, and names the id that already
-// carries the pair.
-func TestRefuseRedeclaredPairs(t *testing.T) {
+// preserved record's even when the two say the same thing. The check reads the
+// pairs and folds the message's own retractions -- and then the ORIGIN of the
+// record already carrying the pair decides the outcome: a declared one is
+// refused naming its id, an observed one is superseded by a retraction the
+// caller's new record joins.
+func TestSupersedeRedeclaredPairs(t *testing.T) {
 	const id = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 	const otherID = "01BX5ZZKBKACTAV9WEVGEMMVRZ"
 	declaring := []movedDeclaration{{arg: "a.txt -> b.txt", old: "a.txt", new: "b.txt"}}
 
 	message := "subject\n\nMoved: " + id + " a.txt -> b.txt\n"
-	err := refuseRedeclaredPairs(message, declaring)
+	_, err := supersedeRedeclaredPairs(message, declaring)
 	if err == nil {
 		t.Fatal("a pair the message already declares was accepted")
 	}
@@ -53,33 +55,44 @@ func TestRefuseRedeclaredPairs(t *testing.T) {
 		t.Errorf("refusal %q does not name the existing record's id", ce.Message)
 	}
 
+	// The same pair carried by an OBSERVED record is superseded instead: the
+	// record safegit minted is retracted, and the caller's declaration stands.
+	observed := "subject\n\nMoved: " + id + " observed a.txt -> b.txt\n"
+	lines, err := supersedeRedeclaredPairs(observed, declaring)
+	if err != nil {
+		t.Fatalf("re-declaring an observed pair was refused: %v", err)
+	}
+	if len(lines) != 1 || lines[0] != "Moved-Retract: "+id {
+		t.Errorf("the supersede produced %q, want a retraction of %s", lines, id)
+	}
+
 	// A retraction on the same message frees the pair.
 	retracted := message + "Moved-Retract: " + id + "\n"
-	if err := refuseRedeclaredPairs(retracted, declaring); err != nil {
-		t.Errorf("a retracted pair could not be re-declared: %v", err)
+	if lines, err := supersedeRedeclaredPairs(retracted, declaring); err != nil || len(lines) != 0 {
+		t.Errorf("a retracted pair could not be re-declared cleanly: %v / %q", err, lines)
 	}
 
 	// A retraction naming some other record does not free it.
-	if err := refuseRedeclaredPairs(message+"Moved-Retract: "+otherID+"\n", declaring); err == nil {
+	if _, err := supersedeRedeclaredPairs(message+"Moved-Retract: "+otherID+"\n", declaring); err == nil {
 		t.Error("an unrelated retraction freed the pair")
 	}
 
 	// A different pair, and a subtree record whose slashes are part of the pair,
 	// are not the same statement.
 	other := []movedDeclaration{{arg: "a.txt -> c.txt", old: "a.txt", new: "c.txt"}}
-	if err := refuseRedeclaredPairs(message, other); err != nil {
+	if _, err := supersedeRedeclaredPairs(message, other); err != nil {
 		t.Errorf("a different pair was refused: %v", err)
 	}
 	subtree := []movedDeclaration{{arg: "src/ -> lib/", old: "src/", new: "lib/"}}
-	if err := refuseRedeclaredPairs("subject\n\nMoved: "+id+" src/ -> lib/\n", subtree); err == nil {
+	if _, err := supersedeRedeclaredPairs("subject\n\nMoved: "+id+" src/ -> lib/\n", subtree); err == nil {
 		t.Error("a re-declared subtree pair was accepted")
 	}
 
 	// Nothing to collide with.
-	if err := refuseRedeclaredPairs("", declaring); err != nil {
+	if _, err := supersedeRedeclaredPairs("", declaring); err != nil {
 		t.Errorf("a commit replacing no message was refused: %v", err)
 	}
-	if err := refuseRedeclaredPairs(message, nil); err != nil {
+	if _, err := supersedeRedeclaredPairs(message, nil); err != nil {
 		t.Errorf("an operation declaring nothing was refused: %v", err)
 	}
 }

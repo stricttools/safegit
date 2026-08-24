@@ -43,7 +43,42 @@ const (
 	MovedRetractKey = "Moved-Retract"
 )
 
-// Record is one declared move.
+// Origin says how a record's claim was established.
+//
+// It is written as the token immediately after the id, in the slot the grammar
+// reserves for it (cquote.go), and ABSENCE IS A VALUE: a record with no token
+// is a DECLARED one -- a person stating a move, which is what every record
+// written before the token existed is and what every `--moved`, `safegit mv`
+// and revert-inverse record still is.
+//
+// `observed` is the one token written today. It means safegit DERIVED the claim
+// from what a commit's own delta witnesses -- objects it read, not intent
+// anybody stated -- so a reader who wants to know whether a person vouched for
+// the move has the answer without asking anyone. The remaining reserved words
+// (`declared`, `derived`) stay refused in that slot until something gives them
+// a meaning.
+type Origin string
+
+const (
+	// OriginDeclared is a claim a person made. It is the zero value and it is
+	// written as NO token at all, which is what makes every record ever written
+	// a declared one without anything being migrated.
+	OriginDeclared Origin = ""
+	// OriginObserved is a claim safegit derived from a commit's delta.
+	OriginObserved Origin = "observed"
+)
+
+// Name is the origin's word, for a reader or a payload that needs one where the
+// encoding writes nothing. An absent token is still an answer, and its answer
+// is "declared".
+func (o Origin) Name() string {
+	if o == OriginDeclared {
+		return "declared"
+	}
+	return string(o)
+}
+
+// Record is one move record.
 //
 // Old and New are canonical repo-relative paths. A trailing slash on both marks
 // the SUBTREE form, which claims a move of everything under the prefix rather
@@ -51,10 +86,15 @@ const (
 // and validated against the trees then, so a record written for a directory
 // stays one line however many files the directory holds and however many of
 // them a later reader finds.
+//
+// Origin says who established the claim; see Origin. It changes nothing about
+// what the record CLAIMS -- the trees remain the arbiter of every record,
+// whatever its origin (project.go).
 type Record struct {
-	ID  string
-	Old string
-	New string
+	ID     string
+	Old    string
+	New    string
+	Origin Origin
 }
 
 // Subtree reports whether this record claims a whole prefix rather than one
@@ -188,10 +228,18 @@ func splitOnArrow(s string) (left, right string, err error) {
 	}
 }
 
-// EncodeRecord renders the VALUE of one Moved: trailer -- the id, then the
-// pair.
+// EncodeRecord renders the VALUE of one Moved: trailer -- the id, the origin
+// token where there is one, then the pair.
+//
+// A declared record writes no token, which is exactly the shape records had
+// before the token existed: nothing in a repository has to be rewritten, and a
+// reader that has never heard of origins reads every one of them the way it
+// always did.
 func EncodeRecord(r Record) string {
-	return r.ID + " " + EncodePair(r.Old, r.New)
+	if r.Origin == OriginDeclared {
+		return r.ID + " " + EncodePair(r.Old, r.New)
+	}
+	return r.ID + " " + string(r.Origin) + " " + EncodePair(r.Old, r.New)
 }
 
 // RecordLine renders a whole Moved: trailer line, without its newline.
@@ -216,22 +264,30 @@ func ParseRecord(value string) (Record, error) {
 			value, id, idLength)
 	}
 	rest := value[space+1:]
-	// The slot right after the id is the one the grammar reserves for an origin
-	// word (cquote.go). A BARE keyword standing there is refused rather than
-	// read as a path: the encoder never writes one (it quotes the keyword), so
-	// a line carrying it was hand-written, and the two readings -- an origin, or
-	// a path whose name is the keyword -- cannot both be honored. Refusing is
-	// what keeps the choice from being made by guess. The quoted spelling is
-	// untouched and still means the path.
+	// The slot right after the id is the ORIGIN SLOT (cquote.go). One word in it
+	// is meaningful today -- `observed` -- and it is consumed here, leaving the
+	// pair behind it.
+	//
+	// Every OTHER reserved word standing there bare is refused rather than read
+	// as a path: the encoder never writes one (it quotes the keyword), so a line
+	// carrying it was hand-written, and the two readings -- an origin, or a path
+	// whose name is the keyword -- cannot both be honored. Refusing is what
+	// keeps the choice from being made by guess. The quoted spelling is
+	// untouched and still means the path, origin token or not.
+	origin := OriginDeclared
 	if first := firstToken(rest); isReservedOriginKeyword(first) {
-		return Record{}, fmt.Errorf("move record %q puts the reserved word %q where a path is expected; "+
-			"write %q to name a path with that spelling", value, first, `"`+first+`"`)
+		if Origin(first) != OriginObserved {
+			return Record{}, fmt.Errorf("move record %q puts the reserved word %q where a path is expected; "+
+				"write %q to name a path with that spelling", value, first, `"`+first+`"`)
+		}
+		origin = OriginObserved
+		rest = strings.TrimLeft(rest, " ")[len(first):]
 	}
 	old, new, err := ParsePair(rest)
 	if err != nil {
 		return Record{}, err
 	}
-	return Record{ID: id, Old: old, New: new}, nil
+	return Record{ID: id, Old: old, New: new, Origin: origin}, nil
 }
 
 // firstToken returns the leading whitespace-delimited token of s, verbatim --
@@ -245,9 +301,14 @@ func firstToken(s string) string {
 	return s
 }
 
-// NewRecord mints an id and returns the record for one declared pair. The pair
-// is validated first, so a record never exists for a pair the grammar refuses.
-func NewRecord(old, new string) (Record, error) {
+// NewRecord mints an id and returns the record for one pair. The pair is
+// validated first, so a record never exists for a pair the grammar refuses.
+//
+// The origin is a PARAMETER rather than a default: every mint site knows
+// whether it is writing down what a person said or what safegit read off a
+// delta, and a default would let a site that never thought about it write the
+// wrong answer in silence.
+func NewRecord(old, new string, origin Origin) (Record, error) {
 	if err := ValidatePair(old, new); err != nil {
 		return Record{}, err
 	}
@@ -255,7 +316,7 @@ func NewRecord(old, new string) (Record, error) {
 	if err != nil {
 		return Record{}, err
 	}
-	return Record{ID: id, Old: old, New: new}, nil
+	return Record{ID: id, Old: old, New: new, Origin: origin}, nil
 }
 
 // Moves is everything one commit message declares about moves.

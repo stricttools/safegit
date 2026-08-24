@@ -395,7 +395,12 @@ func (op continueOp) conclusionMovedRecords(ctx context.Context, state sequencer
 	}
 	var lines []string
 	for _, r := range trailer.ReadMoves(info.Message).Records {
-		inverse, err := trailer.NewRecord(r.New, r.Old)
+		// OBSERVED, unconditionally, whatever the reverted record's own origin
+		// was. Nobody stated this move: safegit derived it by turning another
+		// commit's record around, and a person who wants to vouch for it says so
+		// with --moved. The reverted record's origin is a fact about THAT commit
+		// and does not transfer to a claim about this one.
+		inverse, err := trailer.NewRecord(r.New, r.Old, trailer.OriginObserved)
 		if err != nil {
 			return nil, fmt.Errorf("inverting the move record %s on %s: %w", r.ID, shortSHA(state.Source), err)
 		}

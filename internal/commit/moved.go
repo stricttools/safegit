@@ -84,23 +84,28 @@ func resolveMoved(ctx context.Context, repoRoot, parentRev, replacedMessage stri
 	if err := refuseOverlappingDeclarations(declarations); err != nil {
 		return nil, err
 	}
-	if err := refuseRedeclaredPairs(replacedMessage, declarations); err != nil {
+	superseded, err := supersedeRedeclaredPairs(replacedMessage, declarations)
+	if err != nil {
 		return nil, err
 	}
 
 	tree := newTreeIndex(ctx, parentRev)
-	lines := make([]string, 0, len(declarations))
+	lines := make([]string, 0, len(declarations)+len(superseded))
 	for _, d := range declarations {
 		if err := validateMoved(ctx, repoRoot, parentRev, tree, d); err != nil {
 			return nil, err
 		}
-		record, err := trailer.NewRecord(d.old, d.new)
+		record, err := trailer.NewRecord(d.old, d.new, trailer.OriginDeclared)
 		if err != nil {
 			return nil, &CommitError{Code: exitcode.Usage, Message: fmt.Sprintf("--moved %s: %v", d.arg, err)}
 		}
 		lines = append(lines, trailer.RecordLine(record))
 	}
-	return lines, nil
+	// The retractions of the observed records these declarations supersede, after
+	// the records themselves: a replacement is a retraction plus a new record in
+	// one commit, and this is the same order every other replacement is written
+	// in.
+	return append(lines, superseded...), nil
 }
 
 // resolveMovedRetract turns the caller's --moved-retract ids into the
@@ -133,6 +138,13 @@ func resolveMoved(ctx context.Context, repoRoot, parentRev, replacedMessage stri
 // record declared by the very commit being amended is therefore not retractable
 // in the same breath -- an amend that wants the record gone drops it by not
 // declaring it, which is what an amend is for.
+//
+// ONE EXCEPTION, and it is not reachable from here: an amend that DECLARES a
+// pair the replaced commit's own OBSERVED record already carries supersedes
+// that record, and the retraction is synthesized inside supersedeRedeclaredPairs
+// rather than resolved here. The base this resolver reads cannot see a record on
+// the tip being replaced, so a supersede routed through it would be refused with
+// "names no move record" every time. Nothing else bypasses this check.
 func resolveMovedRetract(ctx context.Context, parentRev string, ids []string) ([]string, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -261,57 +273,76 @@ func refuseOverlappingDeclarations(declarations []movedDeclaration) error {
 	return nil
 }
 
-// refuseRedeclaredPairs rejects a declaration whose pair the commit being
-// amended or reworded ALREADY carries an un-retracted record for.
+// supersedeRedeclaredPairs decides what happens when a declaration names a pair
+// the commit being amended or reworded ALREADY carries an un-retracted record
+// for. The answer depends on who made that record, and it is one of two:
 //
-// An amend keeps its own message, and a reword's -m carries the replaced
-// message's records forward, so in both cases the record is still on the commit
-// when the new one would go on. Minting a second one produces two records with
-// two ids saying one thing, and nothing downstream can tell they are the same
-// statement -- the ids are what a reader and a retraction address a record by,
-// and there is no rule that says which of two claims about one move is the
-// live one.
+//   - a DECLARED record is refused, naming its id. The caller already said this,
+//     and saying it twice produces two records with two ids for one statement,
+//     which nothing downstream can resolve -- the ids are what a reader and a
+//     retraction address a record by, and there is no rule saying which of two
+//     claims about one move is the live one.
+//   - an OBSERVED record is SUPERSEDED. safegit read that move off the commit's
+//     delta and nobody vouched for it; a caller declaring the same pair is
+//     stating it themselves, which is a different claim about the same move and
+//     the one the operator wants standing. So this returns a RETRACTION of the
+//     observed record, which the caller's freshly minted record joins in the
+//     same commit -- the ordinary replacement shape, never an edit of the record
+//     already written.
 //
-// Retractions fold in, and they are read off the SAME message: a record the
-// commit declares and then retracts claims nothing, so the pair is free again
-// and declaring it is a caller stating it afresh. (Retractions elsewhere in
-// history cannot reach a record on this commit -- a retraction only ever
-// follows the record it names.)
+// SCOPE: this is a SAME-COMMIT operation, an amend or a reword and nothing
+// else. A pair declared by an EARLIER commit cannot be re-declared at all --
+// validateMoved asks whether the old path is tracked in the base and gone from
+// disk, and after that earlier commit it is neither -- so there is no
+// later-commit case for this to handle and none is written.
 //
-// The refusal names the existing record's id, because that id is what the
-// caller needs either to see that the statement is already made or to retract
-// it and state a different one.
-func refuseRedeclaredPairs(replacedMessage string, declarations []movedDeclaration) error {
+// The retraction is synthesized HERE rather than routed through
+// resolveMovedRetract, which is the only exception to that resolver's
+// same-breath rule and is stated at the resolver too: its base is the reachable
+// history the commit is built on, and the record being retracted is on the tip
+// that history does not include -- the very commit this operation replaces. It
+// would refuse every supersede with "names no move record".
+//
+// Retractions on the replaced message fold in, and they are read off the SAME
+// message: a record the commit declares and then retracts claims nothing, so
+// the pair is free again and declaring it is a caller stating it afresh.
+// (Retractions elsewhere in history cannot reach a record on this commit -- a
+// retraction only ever follows the record it names.)
+func supersedeRedeclaredPairs(replacedMessage string, declarations []movedDeclaration) ([]string, error) {
 	if replacedMessage == "" || len(declarations) == 0 {
-		return nil
+		return nil, nil
 	}
 	moves := trailer.ReadMoves(replacedMessage)
 	retracted := make(map[string]bool, len(moves.Retractions))
 	for _, id := range moves.Retractions {
 		retracted[id] = true
 	}
-	byPair := make(map[trailer.Pair]string, len(moves.Records))
+	byPair := make(map[trailer.Pair]trailer.Record, len(moves.Records))
 	for _, r := range moves.Records {
 		if retracted[r.ID] {
 			continue
 		}
 		p := trailer.Pair{Old: r.Old, New: r.New}
 		if _, ok := byPair[p]; !ok {
-			byPair[p] = r.ID
+			byPair[p] = r
 		}
 	}
+	var retractions []string
 	for _, d := range declarations {
-		id, ok := byPair[d.pair()]
+		existing, ok := byPair[d.pair()]
 		if !ok {
 			continue
 		}
-		return &CommitError{
-			Code: exitcode.Usage,
-			Message: fmt.Sprintf("--moved %s is already declared by record %s on the commit being replaced; "+
-				"drop the flag, or retract that record first if the move needs restating", d.arg, id),
+		if existing.Origin != trailer.OriginObserved {
+			return nil, &CommitError{
+				Code: exitcode.Usage,
+				Message: fmt.Sprintf("--moved %s is already declared by record %s on the commit being replaced; "+
+					"drop the flag, or retract that record first if the move needs restating", d.arg, existing.ID),
+			}
 		}
+		retractions = append(retractions, trailer.RetractLine(existing.ID))
 	}
-	return nil
+	return retractions, nil
 }
 
 // overlapSideName is how a nesting verdict is spelled in a --moved refusal.

@@ -34,19 +34,57 @@ func commitMessageOf(t *testing.T, dir, rev string) string {
 	return raw[blank+2:]
 }
 
-// movedRecordPattern matches one Moved: trailer and captures its id and its
-// pair, so a test can assert both halves without hard-coding an id nothing can
-// predict.
-var movedRecordPattern = regexp.MustCompile(`(?m)^Moved: ([0-9A-HJKMNP-TV-Z]{26}) (.*)$`)
+// movedRecordPattern matches one Moved: trailer and captures its id, its
+// ORIGIN TOKEN where it carries one, and its pair -- so a test can assert each
+// part without hard-coding an id nothing can predict.
+//
+// The token is optional because ABSENCE IS THE DECLARED ORIGIN: a record a
+// person stated carries no token at all, which is the shape every record had
+// before safegit minted any of its own.
+var movedRecordPattern = regexp.MustCompile(`(?m)^Moved: ([0-9A-HJKMNP-TV-Z]{26})(?: (observed))? (.*)$`)
 
 // movedRecordsIn returns the (id, pair) of every Moved: trailer in a message.
+// The origin token, where there is one, is not part of the pair; ask
+// movedOriginsIn for it.
 func movedRecordsIn(t *testing.T, message string) [][2]string {
 	t.Helper()
 	var out [][2]string
 	for _, m := range movedRecordPattern.FindAllStringSubmatch(message, -1) {
-		out = append(out, [2]string{m[1], m[2]})
+		out = append(out, [2]string{m[1], m[3]})
 	}
 	return out
+}
+
+// movedOriginsIn returns the origin of every Moved: trailer in a message, in
+// the same order movedRecordsIn returns them, naming an absent token
+// "declared" -- which is what an absent token means.
+func movedOriginsIn(t *testing.T, message string) []string {
+	t.Helper()
+	var out []string
+	for _, m := range movedRecordPattern.FindAllStringSubmatch(message, -1) {
+		if m[2] == "" {
+			out = append(out, "declared")
+			continue
+		}
+		out = append(out, m[2])
+	}
+	return out
+}
+
+// assertOrigins fails unless the message's records carry exactly these origins,
+// in order.
+func assertOrigins(t *testing.T, message string, want ...string) {
+	t.Helper()
+	got := movedOriginsIn(t, message)
+	if len(got) != len(want) {
+		t.Fatalf("the message carries %d record(s) with origins %v, want %d %v; message:\n%s",
+			len(got), got, len(want), want, message)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("record %d has origin %q, want %q; message:\n%s", i, got[i], want[i], message)
+		}
+	}
 }
 
 // seedMove builds the state a declaration acts on: one committed file, moved on
