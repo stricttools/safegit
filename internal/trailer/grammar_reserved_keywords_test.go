@@ -34,6 +34,12 @@ import (
 // RULED TARGET: reservedOriginKeywords is the grammar's own list; quoting is
 // triggered by membership in it, and the parser refuses a bare member where a
 // path token is expected.
+//
+// SANCTIONED LATER (plan subphase 6.4): the origin-token work makes `observed`
+// VALID in the post-id slot. When that ships, the `keyword before a pair`
+// subtests below are sanctioned to be rewritten (observed becomes legal there;
+// declared/derived stay reserved and refused). That rewrite is not a break of
+// this specification -- it is the planned second half of the reservation.
 
 // reservedOriginKeywords is the set the origin slot will draw from. It is
 // spelled out here rather than imported from the production code on purpose:
