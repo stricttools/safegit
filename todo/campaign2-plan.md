@@ -1098,7 +1098,17 @@ PHASE-4 AUDIT FINDINGS (remediated post-audit) `[plan]`:
   reach their pipeline conclusions (the compute is recorded, not
   performed — no park, no conclusion, no bump), so 4.4's caller list
   covers them only structurally; their previews record the compute or
-  fetch argv and stop. Audit-noted, no action: the doctorFix dry
+  fetch argv and stop.
+- POST-REMEDIATION riders `[plan]`: the dry-run doctor fix over an
+  orphaned state exits 50 like diagnose (ratified — a dry run repaired
+  nothing, so its answer is diagnose's; the sibling checks already
+  behave so); the crash re-stand preview passes the STOOD commit's
+  real SHA as Triggered-by (the D2 doctrine shape — the value is
+  known, placeholders are for unknowable values); the health-check
+  table in the commands guide becomes GENERATED from the doctor check
+  registry with a freshness test (the exit-table mechanism — the
+  hand-typed table had live severity/row drift; generation kills the
+  class). Audit-noted, no action: the doctorFix dry
   path's post-record reads are benign (different repositories/paths;
   the git-state repairs reuse the plan's answers); conclusion
   execute-path worktree writes stay unminted (outside the ruled
