@@ -28,8 +28,8 @@ type continueResolution struct {
 //
 // Nothing here is counted from the arguments. `files` is the changed-path list
 // the pipeline read off the objects, and `parents` is the commit's real parent
-// list -- which for a merge conclusion is HEAD plus every MERGE_HEAD line, an
-// octopus included.
+// list -- which for a merge conclusion is HEAD plus the MERGE_HEAD line, since
+// an octopus is refused rather than concluded.
 type continuePayload struct {
 	// Operation is the git operation that was concluded: "merge",
 	// "cherry-pick" or "revert".

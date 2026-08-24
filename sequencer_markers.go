@@ -465,9 +465,9 @@ func (op continueOp) reconstructionLabels(ctx context.Context, state sequencer.S
 // The incoming side is spelled differently per operation, which is why this is
 // not one list:
 //
-//   - a MERGE records its incoming side as a parent (every MERGE_HEAD line, an
-//     octopus included), so a file that arrived wholesale from it carries
-//     whatever that side committed;
+//   - a MERGE records its incoming side as a parent (the MERGE_HEAD line; an
+//     octopus is refused rather than concluded), so a file that arrived
+//     wholesale from it carries whatever that side committed;
 //   - a CHERRY-PICK produces a single-parent commit, so its incoming side is
 //     nowhere in the parent list: it is the commit being applied, which the
 //     state file names;
