@@ -735,10 +735,10 @@ func TestOpLogIntegrity(t *testing.T) {
 }
 
 // T15: Dirty working tree, checkout refused with code 5.
-func TestCheckoutRefusedDirty(t *testing.T) {
+func TestSwitchRefusedDirty(t *testing.T) {
 	dir := newRepo(t)
 
-	// Create a branch to checkout to
+	// Create a branch to switch to
 	cmd := exec.Command("git", "branch", "other")
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -752,13 +752,13 @@ func TestCheckoutRefusedDirty(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// safegit checkout should refuse
-	stdout, stderr, code := runSafegit(t, dir, "checkout", "other")
+	// safegit switch should refuse
+	stdout, stderr, code := runSafegit(t, dir, "switch", "other")
 	if code != 5 {
 		t.Errorf("expected exit code 5 (dirty tree), got %d: stdout=%s stderr=%s", code, stdout, stderr)
 	}
 
-	// Verify we're still on main (checkout didn't happen)
+	// Verify we're still on main (the switch didn't happen)
 	headCmd := exec.Command("git", "symbolic-ref", "--short", "HEAD")
 	headCmd.Dir = dir
 	headOut, _ := headCmd.Output()

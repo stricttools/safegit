@@ -103,9 +103,9 @@ func coordSubdirIgnoreRepo(t *testing.T) (string, string) {
 // A. Coordination guard (internal/coord/coord.go)
 // ---------------------------------------------------------------------------
 
-// TestCoordSubdirCheckoutRefusesUntrackedFromRoot is the control: from the repo
-// root the guard sees an untracked file and refuses the checkout.
-func TestCoordSubdirCheckoutRefusesUntrackedFromRoot(t *testing.T) {
+// TestCoordSubdirSwitchRefusesUntrackedFromRoot is the control: from the repo
+// root the guard sees an untracked file and refuses the switch.
+func TestCoordSubdirSwitchRefusesUntrackedFromRoot(t *testing.T) {
 	dir, _ := coordSubdirRepo(t)
 	testutil.GitRaw(t, dir, "branch", "other")
 
@@ -113,9 +113,9 @@ func TestCoordSubdirCheckoutRefusesUntrackedFromRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, code := runSafegit(t, dir, "checkout", "other")
+	stdout, stderr, code := runSafegit(t, dir, "switch", "other")
 	if code != 5 {
-		t.Fatalf("checkout from root with an untracked file: exit %d, want 5\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		t.Fatalf("switch from root with an untracked file: exit %d, want 5\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 	if !strings.Contains(stderr, "stray.txt") {
 		t.Errorf("refusal should name stray.txt; stderr: %s", stderr)
@@ -125,15 +125,15 @@ func TestCoordSubdirCheckoutRefusesUntrackedFromRoot(t *testing.T) {
 	}
 }
 
-// TestCoordSubdirCheckoutRefusesUntrackedFromSubdir asserts the guard is
-// repo-wide: an untracked file at the repo root must block a checkout invoked
+// TestCoordSubdirSwitchRefusesUntrackedFromSubdir asserts the guard is
+// repo-wide: an untracked file at the repo root must block a switch invoked
 // from a subdirectory exactly as it blocks one invoked from the root.
 //
 // coord.Check runs `git ls-files --others --exclude-standard`, whose listing is
 // scoped to the process working directory. The repository-root pin is what
 // makes it repository-wide: without it the call ran in sub/, the root-level
 // untracked file was invisible, and the guard reported a clean tree.
-func TestCoordSubdirCheckoutRefusesUntrackedFromSubdir(t *testing.T) {
+func TestCoordSubdirSwitchRefusesUntrackedFromSubdir(t *testing.T) {
 	dir, sub := coordSubdirRepo(t)
 	testutil.GitRaw(t, dir, "branch", "other")
 
@@ -141,23 +141,23 @@ func TestCoordSubdirCheckoutRefusesUntrackedFromSubdir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, code := runSafegit(t, sub, "checkout", "other")
+	stdout, stderr, code := runSafegit(t, sub, "switch", "other")
 	if code != 5 {
-		t.Errorf("checkout from sub/ with an untracked file at the repo root: exit %d, want 5 (guard must refuse)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		t.Errorf("switch from sub/ with an untracked file at the repo root: exit %d, want 5 (guard must refuse)\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 	if !strings.Contains(stderr, "stray.txt") {
 		t.Errorf("refusal should name stray.txt; stderr: %s", stderr)
 	}
 	if b := coordSubdirBranch(t, dir); b != "main" {
-		t.Errorf("branch moved to %q: the guard let a tree-mutating checkout through from a subdirectory", b)
+		t.Errorf("branch moved to %q: the guard let a tree-mutating switch through from a subdirectory", b)
 	}
 }
 
-// TestCoordSubdirCheckoutRefusesModifiedFromSubdir is the control for the other
+// TestCoordSubdirSwitchRefusesModifiedFromSubdir is the control for the other
 // half of coord.Check: `git diff HEAD --name-status` is repo-wide on its own,
 // so a modified tracked file outside the subtree is seen from sub/ whether or
 // not the working directory is pinned.
-func TestCoordSubdirCheckoutRefusesModifiedFromSubdir(t *testing.T) {
+func TestCoordSubdirSwitchRefusesModifiedFromSubdir(t *testing.T) {
 	dir, sub := coordSubdirRepo(t)
 	testutil.GitRaw(t, dir, "branch", "other")
 
@@ -165,9 +165,9 @@ func TestCoordSubdirCheckoutRefusesModifiedFromSubdir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, code := runSafegit(t, sub, "checkout", "other")
+	stdout, stderr, code := runSafegit(t, sub, "switch", "other")
 	if code != 5 {
-		t.Fatalf("checkout from sub/ with a modified file at the repo root: exit %d, want 5\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		t.Fatalf("switch from sub/ with a modified file at the repo root: exit %d, want 5\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 	if !strings.Contains(stderr, "seed.txt") {
 		t.Errorf("refusal should name seed.txt; stderr: %s", stderr)

@@ -188,7 +188,7 @@ func LastRefUpdate(safegitDir, ref string) (*Entry, error) {
 }
 
 // hasTipSHA returns true if extra contains a new-tip SHA under any of
-// the known keys: "sha" (commit/amend/reword), "to" (checkout),
+// the known keys: "sha" (commit/amend/reword), "to" (a navigation),
 // "result" (merge).
 func hasTipSHA(extra map[string]interface{}) bool {
 	for _, key := range []string{"sha", "to", "result"} {

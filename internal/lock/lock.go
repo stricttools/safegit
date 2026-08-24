@@ -32,7 +32,7 @@ const (
 	// WORKTREE-LOCAL safegit directory, so two worktrees of the same repository
 	// operate independently while two processes in one worktree serialize.
 	// Taken by every command that mutates this worktree: the guarded
-	// passthroughs (checkout, pull, merge, rebase, reset, bisect, cherry-pick,
+	// passthroughs (switch, pull, merge, rebase, reset, bisect, cherry-pick,
 	// revert) and the commit pipeline's three entry points plus undo.
 	//
 	// It is what makes a commit's in-flight-operation check meaningful. Without
@@ -81,7 +81,7 @@ const (
 //
 // That editor does run -- verified, not assumed, by
 // testdata/experiments/exp-passthrough-editor-stdin.sh. The passthroughs that go
-// through the effects handle (checkout, pull, merge, rebase, reset, bisect) give
+// through the effects handle (switch, pull, merge, rebase, reset, bisect) give
 // their git child /dev/null on stdin, so an editor that opens /dev/tty -- vim,
 // nano, emacs -nw, every terminal editor -- works, while anything reading stdin
 // sees EOF at once. The passthroughs that exec git directly (cherry-pick,

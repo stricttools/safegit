@@ -138,7 +138,7 @@ func TestOperationLockIsSharedByCommitAndPassthroughs(t *testing.T) {
 		{"reword", []string{"commit", "--amend", "-m", "blocked"}},
 		{"undo", []string{"undo", "--bypass-session"}},
 		{"cherry-pick", []string{"cherry-pick", "HEAD"}},
-		{"checkout", []string{"checkout", "main"}},
+		{"switch", []string{"switch", "main"}},
 		{"merge", []string{"merge", "main"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

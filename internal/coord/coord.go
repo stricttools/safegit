@@ -1,5 +1,5 @@
 // Package coord implements the coordination layer that prevents concurrent agents from corrupting the working tree by guarding tree-mutating operations.
-// It checks whether the working tree is clean before allowing checkout, merge, rebase, reset, and pull to proceed.
+// It checks whether the working tree is clean before allowing switch, merge, rebase, reset, and pull to proceed.
 //
 // It also owns the other half of that coordination: what safegit does when git
 // itself has an operation in flight. sequencer.Read reports the state and holds

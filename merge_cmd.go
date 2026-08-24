@@ -48,7 +48,7 @@ import (
 //     merge-continue` concludes it.
 //
 // The command line is narrower than git's, under the subset law -- see
-// mergeRefusedOptions and refuseUnsupportedMerge.
+// mergeSubset (subset_allowlist.go) and refuseUnsupportedMerge.
 
 // The oplog outcomes a merge records, beyond the shared ok/failed pair. Each
 // says what happened to the branch, because "ok" alone cannot tell a merge
@@ -70,43 +70,6 @@ const (
 	mergeOutcomeCommit = "merge-commit"
 )
 
-// mergeRefusedOptions are the `git merge` options safegit's merge does not
-// implement, each with the reason it is absent.
-//
-// It is a refusal list rather than an allowlist because an option safegit has
-// not considered still reaches git's compute step, where it can change how the
-// merge is COMPUTED but never who authors the commit -- the compute step is
-// pinned to `--no-ff --no-commit`, so git cannot commit whatever else is on the
-// command line.
-//
-// DIVERGENCE: every entry here is one git capability safegit deliberately does
-// not have, and each needs its row in docs/divergences.md.
-var mergeRefusedOptions = []struct {
-	names []string
-	why   string
-}{
-	{
-		[]string{"-s", "--strategy"},
-		"safegit's merge does not select a merge strategy: the conclusion's completeness and conflict-marker checks are written against what the default strategy stages, and a strategy they cannot read would be protected by nothing",
-	},
-	{
-		[]string{"-X", "--strategy-option"},
-		"safegit's merge does not forward strategy options, for the same reason it does not select a strategy: they change what is staged, and the checks over the staged result cannot see the change",
-	},
-	{
-		[]string{"--squash"},
-		"--squash stages a merge's result without recording its parents, which is a commit with a merge's content and none of its history; safegit's merge records a merge commit or nothing",
-	},
-	{
-		[]string{"-e", "--edit"},
-		"--edit opens an editor, and safegit's commit surface has none; pass -m to give the merge commit its message",
-	},
-	{
-		[]string{"--autostash"},
-		"--autostash is a dead flag through safegit: the coordination check refuses a dirty working tree before git runs, so a merge never reaches git with anything to stash -- and in a shared worktree those changes may be another session's work. Commit your changes first",
-	},
-}
-
 // mergeSelectorOptions are the operator's fast-forward and commit selections.
 // safegit answers both questions itself, so they are removed from the argv the
 // compute step forwards -- which carries `--no-ff --no-commit` of its own and
@@ -127,6 +90,12 @@ var mergeSelectorOptions = map[string]bool{
 // merge is safegit's own job.
 func runMerge(flags globalFlags, args []string) int {
 	parsed := parseGitArgs("merge", args)
+
+	// The allowlist covers EVERY route, the state-control forms included: an
+	// option safegit does not implement is refused whichever verb it accompanies.
+	if code := mergeSubset.refuseUnsupportedOptions(parsed); code != 0 {
+		return code
+	}
 	if parsed.Has("--continue", "--abort", "--quit") {
 		return runGuardedPassthrough(flags, "merge", args)
 	}
@@ -141,15 +110,6 @@ func runMerge(flags globalFlags, args []string) int {
 // failed" and an operator has to be able to tell them apart. Each needs its
 // entry in the divergences catalog.
 func refuseUnsupportedMerge(parsed gitArgs) int {
-	for _, refused := range mergeRefusedOptions {
-		if o, ok := parsed.Find(refused.names...); ok {
-			fmt.Fprintf(os.Stderr, "error: safegit merge does not support %s\n", o.Name)
-			fmt.Fprintf(os.Stderr, "  %s.\n", refused.why)
-			fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
-			return exitcode.Usage
-		}
-	}
-
 	if len(parsed.AfterDoubleDash) > 0 {
 		fmt.Fprintf(os.Stderr, "error: safegit merge takes no pathspec\n")
 		fmt.Fprintf(os.Stderr, "  a pathspec limits a merge to part of the tree, and the result is a commit whose\n")
@@ -229,14 +189,14 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 
 	other := parsed.Revisions[0]
 	payload, ok, exit := performMerge(flags, gitDir, sgDir, readOplogPosition(flags), mergeRequest{
-		other:       other,
-		computeArgs: withoutMergeSelectors(args),
-		noFF:        parsed.Has("--no-ff"),
-		ffOnly:      parsed.Has("--ff-only"),
-		park:        parsed.Has("--no-commit"),
-		op:          "merge",
-		extraBase:   map[string]interface{}{"branch": other},
-		ffOnlyFlag:  "--ff-only",
+		other:        other,
+		computeArgs:  withoutMergeSelectors(args),
+		noFF:         parsed.Has("--no-ff"),
+		ffOnly:       parsed.Has("--ff-only"),
+		park:         parsed.Has("--no-commit"),
+		op:           "merge",
+		extraBase:    map[string]interface{}{"branch": other},
+		ffOnlyFlag:   "--ff-only",
 		ffOnlyWayOut: fmt.Sprintf("  Re-run without --ff-only to make one, or rebase this branch onto %s instead.\n", other),
 		headline: func(out conclusionResult) string {
 			return "merged " + short(other, secondParentOf(out))

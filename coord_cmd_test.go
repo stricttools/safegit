@@ -52,10 +52,10 @@ func TestObserveAllowlistCannotAdmitAMutation(t *testing.T) {
 	}
 
 	// End two: the argv runGitMutation actually builds. The verbs are the ones
-	// its callers pass -- checkout, pull's fetch and merge, merge, rebase,
+	// its callers pass -- switch, pull's fetch and merge, merge, rebase,
 	// reset, bisect, and the recorded dry runs of cherry-pick and revert.
 	for _, args := range [][]string{
-		{"checkout", "other"},
+		{"switch", "other"},
 		{"fetch", "origin", "main"},
 		{"merge", "--ff-only", "FETCH_HEAD"},
 		{"merge", "topic"},

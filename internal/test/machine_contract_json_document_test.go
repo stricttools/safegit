@@ -98,7 +98,7 @@ func newBehindRemoteRepo(t *testing.T) string {
 // Which cases actually exercise the leak is fixture-dependent, and that is
 // stated per case below rather than assumed: merge and rebase on a conflict,
 // reset --hard, bisect start and a fast-forwarding pull all put git text on
-// stdout today. checkout is the one whose ordinary narration ("Switched to
+// stdout today. switch is the one whose ordinary narration ("Switched to
 // branch") git writes to stderr, so its case pins the parse on the same path
 // without necessarily being red by itself -- it belongs in the table because
 // the routing fix is one seam for all six and a later git version that moves a
@@ -132,13 +132,13 @@ func TestGuardedCommandsEmitExactlyOneJSONDocument(t *testing.T) {
 			leaks: true,
 		},
 		{
-			name: "checkout branch",
+			name: "switch branch",
 			setup: func(t *testing.T) string {
 				dir := newRepo(t)
 				testutil.Git(t, dir, "branch", "other")
 				return dir
 			},
-			args:  []string{"--json", "checkout", "other"},
+			args:  []string{"--json", "switch", "other"},
 			leaks: false,
 		},
 		{

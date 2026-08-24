@@ -31,7 +31,7 @@ import (
 // commit, and everything else fell through to a passthrough where git authored
 // the commits. That arm is deleted: a command line safegit cannot author is now
 // refused, by name, rather than quietly handed to git -- see
-// revertRefusedOptions and refuseUnsupportedRevert.
+// revertSubset (subset_allowlist.go) and refuseUnsupportedRevert.
 //
 // The state cleanup is not a nicety of that split but a requirement of it. A
 // plumbing conclusion of `revert --no-commit` leaves REVERT_HEAD, MERGE_MSG and
@@ -49,50 +49,6 @@ import (
 // `safegit revert-continue` concludes it -- the same engine reached by the
 // other door.
 
-// revertRefusedOptions are the `git revert` options safegit's revert does not
-// implement, each with the reason it is absent.
-//
-// It is a refusal list rather than an allowlist for the reason merge's and
-// cherry-pick's are: an option safegit has not considered still reaches the
-// compute step, where it can change how the inverse patch is COMPUTED but never
-// who authors the commit -- the compute step is pinned to `--no-commit`, so git
-// cannot commit whatever else is on the command line. `--commit`, the one
-// option that would break that promise, is refused here for exactly that
-// reason.
-//
-// The options that stay ALLOWED are the ones whose whole effect happens in the
-// compute step or in the message draft git writes there: `--no-edit`,
-// `-s/--signoff` (git writes the trailer into MERGE_MSG, probe-verified),
-// `-m/--mainline`, `--strategy` and `-X`, `--rerere-autoupdate`, `--reference`.
-//
-// DIVERGENCE: every entry here is one git capability safegit deliberately does
-// not have, and each needs its row in docs/divergences.md.
-var revertRefusedOptions = []struct {
-	names []string
-	why   string
-}{
-	{
-		[]string{"--skip"},
-		"--skip moves past one commit of a SEQUENCE and keeps the rest going, and safegit's revert has no sequence to keep going: it reverts one commit. Conclude the revert you are in with 'safegit revert-continue', or drop it with 'git revert --abort', and then revert the commits you do want, one invocation each",
-	},
-	{
-		[]string{"-e", "--edit"},
-		"--edit opens an editor, and safegit's commit surface has none; conclude with 'safegit revert-continue -m' to give the commit a message of your own",
-	},
-	{
-		[]string{"-S", "--gpg-sign"},
-		"safegit's commit pipeline does not sign commits, so a signature asked for here would simply not be on the result; nothing is silently dropped, so the request is refused instead",
-	},
-	{
-		[]string{"--commit"},
-		"--commit is the opposite of the --no-commit the compute step is pinned to, and passing it would hand the commit back to git -- authored by git, with none of safegit's trailers, and moving the ref outside safegit's compare-and-swap",
-	},
-	{
-		[]string{"--cleanup"},
-		"--cleanup governs how git strips a message at ITS commit time, and safegit's pipeline is what commits here; the message it takes is git's draft with its comment block stripped, or the text you pass to 'safegit revert-continue -m'",
-	},
-}
-
 // runRevert dispatches `safegit revert`.
 //
 // Two routes stay guarded passthroughs, and both for the same reason: they
@@ -102,6 +58,12 @@ var revertRefusedOptions = []struct {
 // safegit's own job.
 func runRevert(flags globalFlags, args []string) int {
 	parsed := parseGitArgs("revert", args)
+
+	// The allowlist covers EVERY route, the state-control forms included: an
+	// option safegit does not implement is refused whichever verb it accompanies.
+	if code := revertSubset.refuseUnsupportedOptions(parsed); code != 0 {
+		return code
+	}
 	if parsed.Has("--continue", "--abort", "--quit") {
 		return runGuardedPassthrough(flags, "revert", args)
 	}
@@ -119,15 +81,6 @@ func runRevert(flags globalFlags, args []string) int {
 // failed" and an operator has to be able to tell them apart. Each needs its
 // entry in the divergences catalog.
 func refuseUnsupportedRevert(parsed gitArgs) int {
-	for _, refused := range revertRefusedOptions {
-		if o, ok := parsed.Find(refused.names...); ok {
-			fmt.Fprintf(os.Stderr, "error: safegit revert does not support %s\n", o.Name)
-			fmt.Fprintf(os.Stderr, "  %s.\n", refused.why)
-			fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
-			return exitcode.Usage
-		}
-	}
-
 	if len(parsed.AfterDoubleDash) > 0 {
 		fmt.Fprintf(os.Stderr, "error: safegit revert takes no pathspec\n")
 		fmt.Fprintf(os.Stderr, "  a pathspec undoes part of a commit and records a message claiming the whole of it.\n")

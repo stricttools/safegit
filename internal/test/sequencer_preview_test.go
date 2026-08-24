@@ -278,17 +278,20 @@ func previewTree(t *testing.T, stdout string) string {
 	return ""
 }
 
-// TestPreviewRefusesWhatItCannotCompute: the criterion in action. An option
-// that changes how the TREE is computed and that safegit's merge-tree
-// invocation does not carry is refused with its reason, rather than previewed
-// under rules the real run would not use.
+// TestPreviewRefusesWhatItCannotCompute: the criterion in action. A command
+// line whose outcome safegit's merge-tree computation cannot REPRODUCE is
+// refused with its reason, rather than previewed under rules the real run would
+// not use.
 //
-// The merge rows this table used to carry (-s, -X, --squash) moved to
-// TestMergeSubsetRefusalsApplyToAPreviewToo: safegit's merge does not implement
-// those options at ALL any more, so the refusal an operator meets is the
-// command's rather than the preview's, and it applies to the real run too. The
-// criterion still governs every verb that does accept them, which is what the
-// surviving row exercises.
+// The strategy and --squash rows this table used to carry moved to the
+// commands' own subset refusals: safegit's merge, cherry-pick and revert do not
+// implement those options at ALL any more, so the refusal an operator meets is
+// the command's rather than the preview's, and it applies to the real run too
+// (see TestMergeSubsetRefusalsApplyToAPreviewToo and
+// TestPickAndRevertSubsetRefusalsApplyToAPreviewToo). What is left to the
+// criterion is the command line that names no operation to compute at all: a
+// state-control form acts on what git already has in flight, which is a
+// different question from what this command line would do.
 func TestPreviewRefusesWhatItCannotCompute(t *testing.T) {
 	cases := []struct {
 		name string
@@ -296,9 +299,9 @@ func TestPreviewRefusesWhatItCannotCompute(t *testing.T) {
 		want string
 	}{
 		{
-			name: "an attached strategy option",
-			args: []string{"--dry-run", "cherry-pick", "-Xtheirs", "side"},
-			want: "changes how the merge resolves",
+			name: "a state-control form",
+			args: []string{"--dry-run", "merge", "--abort"},
+			want: "operates on an operation git already has in flight",
 		},
 	}
 
@@ -370,6 +373,7 @@ func TestPreviewLeavesObjectStoreUntouched(t *testing.T) {
 		})
 	}
 }
+
 // TestMultiCommitAndRangePreviewsAreRefusedLikeTheRun: a preview of a command
 // line safegit does not implement is not a preview of anything.
 //

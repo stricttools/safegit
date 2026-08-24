@@ -80,7 +80,7 @@ func runGitMutation(flags globalFlags, args ...string) int {
 		// and returns a settled Completed. safegit's proc-observe allowlist is
 		// generated from the classification table's read view and admits only
 		// verbs the table declares observe-only UNCONDITIONALLY; every verb this
-		// function builds an argv for (checkout, fetch, merge, rebase, reset,
+		// function builds an argv for (switch, fetch, merge, rebase, reset,
 		// bisect, cherry-pick, revert) either declares mutating effects in its
 		// base or carries conditional ones, and a verb with any conditional
 		// effect is excluded from the allowlist however read-only its base is.
@@ -178,7 +178,7 @@ func announceWayOut(flags globalFlags, gitDir string) {
 //     records the baseline in the commit-entry spelling, so the fail-closed
 //     readers -- oplog.LastRefUpdate, doctor's bypass check, undo's per-ref
 //     filter -- see the position safegit left the branch at;
-//   - a HEAD-MOVING operation (checkout, bisect) records the same facts under
+//   - a HEAD-MOVING operation (switch, bisect) records the same facts under
 //     `observed_*` names those readers do not consume. See navigationExtra.
 const (
 	oplogOutcomeOK     = "ok"
@@ -283,75 +283,14 @@ func navigationExtra(ref, oldTip, newTip string, ok bool, more map[string]interf
 	return extra
 }
 
-// createsBranch reports whether a checkout argv creates the ref it moves onto,
-// in which case the position it came from is the zero SHA rather than a commit:
-// the ref did not exist.
-func createsBranch(args []string) bool {
-	for _, a := range args {
-		switch a {
-		case "-b", "-B", "--orphan":
-			return true
-		}
-	}
-	return false
-}
-
-func runCheckout(flags globalFlags, args []string) int {
-	gitDir := mustGitDir()
-	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return exitcode.NotInitialized
-	}
-	sgDir := repo.SafegitDir(gitDir)
-
-	release, code := acquireOperationLock(flags, gitDir, "checkout")
-	if code != 0 {
-		return code
-	}
-	defer release()
-
-	if code := coordGuard(flags, gitDir, "checkout"); code != 0 {
-		return code
-	}
-
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: safegit checkout <ref>")
-		return exitcode.Usage
-	}
-
-	// Where HEAD stands before the navigation. A branch CREATION comes from
-	// nowhere: the ref did not exist, and the zero SHA is git's own name for
-	// that.
-	ctx := flags.ctx()
-	oldHead, _ := git.RevParse(ctx, "HEAD")
-	if createsBranch(args) {
-		// git.ZeroSHA is the one spelling of the all-zero object name, and it says
-		// exactly the right thing here: the ref did not exist.
-		oldHead = git.ZeroSHA
-	}
-
-	if code := runGitMutation(flags, append([]string{"checkout"}, args...)...); code != 0 {
-		// The ref name is the one HEAD still points at: the navigation did not
-		// happen, so the operator's argument names nowhere this repository went.
-		failedRef, _ := git.HeadRef(ctx)
-		appendNavigationEntry(flags, sgDir, "checkout", failedRef, oldHead, "", false, nil)
-		return code
-	}
-	if flags.dryRun {
-		return 0
-	}
-
-	// The RESOLVED full ref name, not the operator's argument. That argument was
-	// whatever they typed -- for a `-b` form, the literal flag string -- and an
-	// audit trail naming a flag as the ref it moved onto is worse than one naming
-	// nothing.
-	newRef, _ := git.HeadRef(ctx)
-	newHead, _ := git.RevParse(ctx, "HEAD")
-	appendNavigationEntry(flags, sgDir, "checkout", newRef, oldHead, newHead, true, nil)
-	return 0
-}
-
 func runRebase(flags globalFlags, args []string) int {
+	// FIRST, and before the repository is touched at all: a command line safegit
+	// itself refuses is refused without a lock and without a git call.
+	parsed := parseGitArgs("rebase", args)
+	if code := refuseUnsupportedRebase(parsed); code != 0 {
+		return code
+	}
+
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -369,13 +308,11 @@ func runRebase(flags globalFlags, args []string) int {
 		return code
 	}
 
-	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: safegit rebase <upstream>")
-		return exitcode.Usage
-	}
-
 	pos := readOplogPosition(flags)
-	where := map[string]interface{}{"upstream": args[0]}
+	// The upstream as the operator NAMED it, read off the parsed command line
+	// rather than off argv[0], which for `--onto <base> <upstream>` and for the
+	// state-control forms is an option rather than a revision.
+	where := map[string]interface{}{"upstream": rebaseUpstream(parsed)}
 	if code := runGitMutation(flags, append([]string{"rebase"}, args...)...); code != 0 {
 		appendOperationEntry(flags, sgDir, "rebase", pos, false, where)
 		return code
@@ -389,6 +326,10 @@ func runRebase(flags globalFlags, args []string) int {
 }
 
 func runReset(flags globalFlags, args []string) int {
+	if code := refuseUnsupportedReset(flags, parseGitArgs("reset", args)); code != 0 {
+		return code
+	}
+
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -432,6 +373,10 @@ func runReset(flags globalFlags, args []string) int {
 }
 
 func runBisect(flags globalFlags, args []string) int {
+	if code := refuseUnsupportedBisect(parseGitArgs("bisect", args)); code != 0 {
+		return code
+	}
+
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

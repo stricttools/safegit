@@ -123,11 +123,11 @@ func TestBypassDetectStillFlagsAnOutOfBandCommitMadeBeforeASwitch(t *testing.T) 
 	}
 
 	// Navigate away and back. Neither move touches refs/heads/main.
-	if _, stderr, code := runSafegit(t, dir, "checkout", "other"); code != 0 {
-		t.Fatalf("checkout other failed (code %d): %s", code, stderr)
+	if _, stderr, code := runSafegit(t, dir, "switch", "other"); code != 0 {
+		t.Fatalf("switch other failed (code %d): %s", code, stderr)
 	}
-	if _, stderr, code := runSafegit(t, dir, "checkout", "main"); code != 0 {
-		t.Fatalf("checkout main failed (code %d): %s", code, stderr)
+	if _, stderr, code := runSafegit(t, dir, "switch", "main"); code != 0 {
+		t.Fatalf("switch main failed (code %d): %s", code, stderr)
 	}
 
 	stdout, _, _ := runSafegit(t, dir, "doctor", "--action", "diagnose")
@@ -155,7 +155,7 @@ func TestDryRunGuardedOperationsAppendNoOplogEntry(t *testing.T) {
 		{"merge", []string{"--dry-run", "merge", "feature"}},
 		{"rebase", []string{"--dry-run", "rebase", "feature"}},
 		{"reset", []string{"--dry-run", "reset", "--hard", "HEAD~1"}},
-		{"checkout", []string{"--dry-run", "checkout", "feature"}},
+		{"switch", []string{"--dry-run", "switch", "feature"}},
 		{"bisect", []string{"--dry-run", "bisect", "start"}},
 		{"cherry-pick", []string{"--dry-run", "cherry-pick", "feature"}},
 	} {

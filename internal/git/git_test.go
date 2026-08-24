@@ -242,9 +242,9 @@ func TestParseCommitMerge(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a branch from the initial commit, make commits on each, merge
-	Run(ctx, "checkout", "-b", "feature")
+	Run(ctx, "switch", "-c", "feature")
 	Run(ctx, "commit", "--allow-empty", "-m", "feature commit")
-	Run(ctx, "checkout", "main")
+	Run(ctx, "switch", "main")
 	Run(ctx, "commit", "--allow-empty", "-m", "main commit")
 	Run(ctx, "merge", "feature", "--no-ff", "-m", "merge")
 
@@ -444,7 +444,7 @@ func TestIsAncestorOfFalse(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a branch from the initial commit and commit on it.
-	Run(ctx, "checkout", "-b", "feature")
+	Run(ctx, "switch", "-c", "feature")
 	Run(ctx, "commit", "--allow-empty", "-m", "feature commit")
 	featureSHA, err := RevParse(ctx, "HEAD")
 	if err != nil {
@@ -452,7 +452,7 @@ func TestIsAncestorOfFalse(t *testing.T) {
 	}
 
 	// Switch back to main and commit there.
-	Run(ctx, "checkout", "main")
+	Run(ctx, "switch", "main")
 	Run(ctx, "commit", "--allow-empty", "-m", "main commit")
 	mainSHA, err := RevParse(ctx, "HEAD")
 	if err != nil {
