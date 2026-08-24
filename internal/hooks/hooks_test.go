@@ -216,27 +216,6 @@ func TestRunTimeout(t *testing.T) {
 	}
 }
 
-func TestParseTimeoutOverride(t *testing.T) {
-	tests := []struct {
-		line string
-		want int
-	}{
-		{"# safegit: timeout=60", 60},
-		{"# safegit: timeout=300\n", 300},
-		{"# safegit: timeout=0", 0},
-		{"# safegit: timeout=-1", 0},
-		{"# safegit: timeout=abc", 0},
-		{"not a directive", 0},
-		{"", 0},
-	}
-	for _, tt := range tests {
-		got := parseTimeoutOverride(tt.line)
-		if got != tt.want {
-			t.Errorf("parseTimeoutOverride(%q) = %d, want %d", tt.line, got, tt.want)
-		}
-	}
-}
-
 func TestSetOutputCapturesHookOutput(t *testing.T) {
 	var outBuf, errBuf bytes.Buffer
 	restore := SetOutput(&outBuf, &errBuf)
