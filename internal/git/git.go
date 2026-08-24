@@ -894,16 +894,33 @@ func LsTreeRecursive(ctx context.Context, treeish string) ([]TreeEntry, error) {
 //
 // An empty path list returns nothing: `ls-tree` with no pathspec lists the whole
 // tree, which is the opposite of what a caller asking about no paths means.
+//
+// Every path goes out under the `:(literal)` pathspec magic, which is not
+// optional: a path is a NAME here, never a pattern. Without it a path beginning
+// with a colon is read as pathspec magic of its own -- `:weird.txt` matches
+// NOTHING and git exits 0 -- and a caller that reads an absent answer as "the
+// tree does not carry this path" would act on a silent miss. Wildcards in a
+// name are the same class of error in the other direction.
 func LsTreePathsRecursive(ctx context.Context, treeish string, paths []string) ([]TreeEntry, error) {
 	if len(paths) == 0 {
 		return nil, nil
 	}
-	args := append([]string{"ls-tree", "--full-tree", "-r", "-z", treeish, "--"}, paths...)
+	args := append([]string{"ls-tree", "--full-tree", "-r", "-z", treeish, "--"}, literalPathspecs(paths)...)
 	out, _, err := Run(ctx, args...)
 	if err != nil {
 		return nil, fmt.Errorf("ls-tree %s: %w", treeish, err)
 	}
 	return parseLsTreeOutput(out, false), nil
+}
+
+// literalPathspecs renders repo-relative paths as pathspecs git matches by
+// NAME: no wildcard expansion, and no leading colon read as magic.
+func literalPathspecs(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		out = append(out, ":(literal)"+p)
+	}
+	return out
 }
 
 // ChangedPath is one entry of a recursive name-status diff between two trees.
