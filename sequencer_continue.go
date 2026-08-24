@@ -975,6 +975,9 @@ func (op continueOp) refuseWrongState(ctx context.Context, gitDir string, state 
 // The way out comes from the single way-out authority, which names git's own
 // conclusion for exactly these states, so the refusal and every other message
 // about them agree.
+//
+// DIVERGENCE: git concludes a queue and an octopus with its own `--continue`;
+// safegit refuses both and says so. Two rows for docs/divergences.md.
 func (op continueOp) refuseRawGitShape(state sequencer.State) int {
 	var what, why string
 	switch {
@@ -1016,6 +1019,10 @@ func (op continueOp) refuseRawGitShape(state sequencer.State) int {
 // It is scoped to CONTENT conflicts (both sides present) because those are the
 // only ones the marker check reads AUTO_MERGE for; an add/add or modify/delete
 // conflict carries no merged text to compare against.
+//
+// DIVERGENCE: git concludes a conflict computed by any strategy; safegit
+// concludes only the ones the default strategy recorded. One row for
+// docs/divergences.md.
 func (op continueOp) refuseUnreadableConflict(ctx context.Context, sides map[string]conflict.Sides) int {
 	if op.kind != sequencer.KindMerge {
 		return 0
