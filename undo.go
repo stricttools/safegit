@@ -421,7 +421,11 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 			die(exitcode.General, fmt.Sprintf("recording the ref update: %v", err))
 		}
 		if bump != nil {
-			if err := recordParentBumpPreview(flags, bump, "undo", ""); err != nil {
+			// The REAL Triggered-by value, not the placeholder: undo does not
+			// author a commit in the submodule, it rolls the branch back onto one
+			// that already exists, and targetSHA is exactly what the execute path
+			// writes into the parent's commit message.
+			if err := recordParentBumpPreview(flags, bump, targetSHA, "undo", ""); err != nil {
 				die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 			}
 		}
