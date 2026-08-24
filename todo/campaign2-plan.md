@@ -1285,7 +1285,12 @@ plan defect)
 - 1.4: TestSkipNonExecutable; TestSetOutputCapturesDiscoverWarning;
   TestHookListRendersStateAndOrigin's hook-run tail;
   TestDoctorExitCodeFollowsErrorFindings's warn fixture;
-  TestParseTimeoutOverride (deleted).
+  TestParseTimeoutOverride (deleted);
+  TestEnumerateSeesWhatDiscoverFilters (added during execution — its
+  non-executable fixture is a refusal under the ruling; the Discover
+  half adapts, the enumerator contract stays fully pinned); mechanical
+  references to the renamed exit-25 constant in test files
+  (compile-forced by the rename, no behavior change).
 - 2.2 (merge restructure): pins asserting git authors the clean merge
   commit or asserting merge's passthrough shape; merge rows in the
   guarded-passthrough registries and classification pins; the octopus
