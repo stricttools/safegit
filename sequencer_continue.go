@@ -601,6 +601,14 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 	ctx := flags.ctx()
 	op := req.op
 
+	// FIRST, and read from the state git actually wrote rather than from what
+	// the caller asked for: a shape safegit does not author is refused before
+	// anything else is looked at, exactly as it is behind the -continue
+	// commands. See refuseParkedRawGitShape, which also undoes the park.
+	if code, refused := refuseParkedRawGitShape(flags, gitDir, state, req); refused {
+		return out, code, false
+	}
+
 	if _, err := git.HeadRef(ctx); err != nil {
 		return out, op.refuseDetachedHead(state), false
 	}
@@ -956,8 +964,8 @@ func (op continueOp) refuseWrongState(ctx context.Context, gitDir string, state 
 	return exitcode.CoordinationBusy
 }
 
-// refuseRawGitShape refuses the states safegit cannot have STARTED, and
-// therefore does not conclude: a sequencer queue, and an octopus merge.
+// rawGitShape names the states safegit cannot have STARTED, and therefore does
+// not conclude: a sequencer queue, and an octopus merge.
 //
 // Both are shapes only raw git can create now -- safegit's cherry-pick and
 // revert apply one commit and its merge takes one branch -- and both are
@@ -972,6 +980,34 @@ func (op continueOp) refuseWrongState(ctx context.Context, gitDir string, state 
 //     step, so the completeness and marker checks would be a verdict about part
 //     of the merge presented as a verdict about all of it.
 //
+// It is the single authority on WHICH states those are and WHY, because the
+// same verdict is reached from two directions: an operator concluding state git
+// left behind (refuseRawGitShape), and safegit concluding state it parked itself
+// a moment earlier (refuseParkedRawGitShape). The two differ only in the way out
+// they can honestly offer.
+func (op continueOp) rawGitShape(state sequencer.State) (what, why string, refused bool) {
+	switch {
+	case state.Queued:
+		return "a " + state.Kind.String() + " sequence",
+			"git's sequencer holds a QUEUE of commands here, and safegit did not start it: safegit's " +
+				state.Kind.String() + " applies one commit and authors the result itself.\n" +
+				"  Concluding one step of a queue would throw the rest of it away, because the queue is part of\n" +
+				"  the state a conclusion removes.",
+			true
+	case op.kind == sequencer.KindMerge && len(state.MergeHeads) > 1:
+		return "an octopus merge",
+			"safegit's merge brings in ONE branch, so an octopus is a merge only raw git can start.\n" +
+				"  Every check safegit makes over a merge is written against two sides, and an octopus's index\n" +
+				"  stages describe only its last pairwise step: a verdict over them would be a verdict about\n" +
+				"  part of the merge, reported as one about all of it.",
+			true
+	}
+	return "", "", false
+}
+
+// refuseRawGitShape refuses a raw-git shape an operator asked safegit to
+// conclude.
+//
 // The way out comes from the single way-out authority, which names git's own
 // conclusion for exactly these states, so the refusal and every other message
 // about them agree.
@@ -979,21 +1015,8 @@ func (op continueOp) refuseWrongState(ctx context.Context, gitDir string, state 
 // DIVERGENCE: git concludes a queue and an octopus with its own `--continue`;
 // safegit refuses both and says so. Two rows for docs/divergences.md.
 func (op continueOp) refuseRawGitShape(state sequencer.State) int {
-	var what, why string
-	switch {
-	case state.Queued:
-		what = "a " + state.Kind.String() + " sequence"
-		why = "git's sequencer holds a QUEUE of commands here, and safegit did not start it: safegit's " +
-			state.Kind.String() + " applies one commit and authors the result itself.\n" +
-			"  Concluding one step of a queue would throw the rest of it away, because the queue is part of\n" +
-			"  the state a conclusion removes."
-	case op.kind == sequencer.KindMerge && len(state.MergeHeads) > 1:
-		what = "an octopus merge"
-		why = "safegit's merge brings in ONE branch, so an octopus is a merge only raw git can start.\n" +
-			"  Every check safegit makes over a merge is written against two sides, and an octopus's index\n" +
-			"  stages describe only its last pairwise step: a verdict over them would be a verdict about\n" +
-			"  part of the merge, reported as one about all of it."
-	default:
+	what, why, refused := op.rawGitShape(state)
+	if !refused {
 		return 0
 	}
 
@@ -1003,6 +1026,54 @@ func (op continueOp) refuseRawGitShape(state sequencer.State) int {
 	renderWayOut(coord.WayOutOf(state))
 	fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
 	return exitcode.CoordinationBusy
+}
+
+// refuseParkedRawGitShape refuses a raw-git shape safegit itself parked, and
+// UNDOES the park.
+//
+// It is the second line of the same defence, and what it protects is
+// structural rather than argument-shaped. `safegit merge` counts the sides on
+// the command line and refuses an octopus there, FETCH_HEAD included (see
+// refuseFetchHeadOctopus); but what safegit believed it was computing and what
+// git actually parked are two different facts, and only the second one is what
+// a commit would be authored from. Reading the parked state answers the
+// question that the commit depends on.
+//
+// The way out is not git's here, and that is the difference from
+// refuseRawGitShape: the operator asked for a merge, not for a repository left
+// mid-merge, and the state in front of them is one safegit created moments ago
+// out of a working tree the coordination check had just found clean. So it is
+// removed rather than handed over -- the state files through the same cleanup
+// the conclusion owns, and the index and working tree back onto HEAD through
+// the same primitive the fast-forward path uses to put them in step with a ref.
+func refuseParkedRawGitShape(flags globalFlags, gitDir string, state sequencer.State, req parkedConclusion) (int, bool) {
+	what, why, refused := req.op.rawGitShape(state)
+	if !refused {
+		return 0, false
+	}
+
+	fmt.Fprintf(os.Stderr, "error: safegit %s does not author %s\n", req.oplogOp, what)
+	fmt.Fprintf(os.Stderr, "  %s\n", why)
+
+	// The unpark. Both halves are attempted whatever the first one answers: a
+	// state file that survives and an index that was not restored are separate
+	// pieces of residue, and an operator has to be told about each.
+	code := exitcode.CoordinationBusy
+	if err := sequencer.Cleanup(gitDir, state.Kind); err != nil {
+		fmt.Fprintf(os.Stderr, "  the %s state git parked could not be removed: %v\n", state.Kind, err)
+		code = exitcode.General
+	}
+	if _, err := git.SyncMainIndexWithWorktree(flags.ctx(), "HEAD"); err != nil {
+		fmt.Fprintf(os.Stderr, "  the index and the working tree could not be put back onto HEAD: %v\n", err)
+		fmt.Fprintf(os.Stderr, "  until that is done they carry the merge that was computed, staged and uncommitted.\n")
+		code = exitcode.General
+	}
+	if code == exitcode.CoordinationBusy {
+		fmt.Fprintf(os.Stderr, "  Nothing was committed, and the merge git computed has been undone: the branch, the index\n")
+		fmt.Fprintf(os.Stderr, "  and the working tree stand where they did.\n")
+	}
+	fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+	return code, true
 }
 
 // refuseUnreadableConflict refuses a merge whose CONTENT CONFLICT git recorded
