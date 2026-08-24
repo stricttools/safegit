@@ -49,10 +49,27 @@ type WayOut struct {
 func WayOutOf(s sequencer.State) WayOut {
 	switch s.Kind {
 	case sequencer.KindMerge:
+		// An OCTOPUS is a merge safegit cannot start -- its merge takes one
+		// branch -- and therefore one its conclusion refuses, so the way out of
+		// one is git's own. Naming safegit's command here would send an operator
+		// to a command that then refuses.
+		if len(s.MergeHeads) > 1 {
+			return WayOut{Conclude: "git merge --continue", Abandon: "git merge --abort"}
+		}
 		return WayOut{Conclude: "safegit merge-continue", Abandon: "git merge --abort"}
 	case sequencer.KindCherryPick:
+		// A QUEUE is git's sequencer holding a list of commands, which safegit's
+		// single-commit cherry-pick cannot create and its conclusion refuses:
+		// the queue is part of the state a conclusion removes, so finishing one
+		// step would throw the rest away.
+		if s.Queued {
+			return WayOut{Conclude: "git cherry-pick --continue", Abandon: "git cherry-pick --abort"}
+		}
 		return WayOut{Conclude: "safegit cherry-pick-continue", Abandon: "git cherry-pick --abort"}
 	case sequencer.KindRevert:
+		if s.Queued {
+			return WayOut{Conclude: "git revert --continue", Abandon: "git revert --abort"}
+		}
 		return WayOut{Conclude: "safegit revert-continue", Abandon: "git revert --abort"}
 	case sequencer.KindRebase:
 		// Rebase conclusion stays git's own: safegit classifies the state and

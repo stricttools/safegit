@@ -184,7 +184,14 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 	if flags.dryRun {
 		// No git merge runs: the invocation is recorded, and the outcome it
 		// would have is COMPUTED with git's own merge engine instead of guessed.
-		return previewSequencerOperation(flags, "merge", args, append([]string{"merge"}, args...))
+		//
+		// What is RECORDED is the compute step's argv, which is what the execute
+		// path runs: --no-ff and --no-commit are safegit's and always present,
+		// and the caller's own fast-forward and commit selections never reach
+		// git. A would-do log saying `git merge feature` would describe a
+		// mutation nothing performs.
+		recorded := append([]string{"merge", "--no-ff", "--no-commit"}, withoutMergeSelectors(args)...)
+		return previewSequencerOperation(flags, "merge", args, recorded)
 	}
 
 	other := parsed.Revisions[0]

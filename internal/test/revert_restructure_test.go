@@ -411,12 +411,16 @@ func TestMergeContinuePassthroughNamesMergeContinue(t *testing.T) {
 }
 
 // TestPickAndRevertContinuePassthroughsNameSafegitsCommand: the same refusal
-// for the other two operations safegit concludes, including a QUEUED sequence,
-// which safegit now concludes too (by delegation).
+// for the other two operations safegit concludes.
+//
+// The fixture is a SINGLE conflicted pick or revert, which is the shape safegit
+// owns the conclusion of. A queued sequence is not (see the subtest below): it
+// is git's from end to end, and pointing an operator at safegit's command there
+// would name a command that itself refuses.
 func TestPickAndRevertContinuePassthroughsNameSafegitsCommand(t *testing.T) {
 	for _, verb := range []string{"cherry-pick", "revert"} {
 		t.Run(verb, func(t *testing.T) {
-			fx := newQueuedPickRepo(t, verb)
+			fx := newConflictedPickRepo(t, verb)
 			_, stderr, code := runSafegitEnv(t, fx.dir, revertSession, verb, "--continue")
 			if code != exitcode.CoordinationBusy {
 				t.Fatalf("exit %d, want %d (CoordinationBusy): %s", code, exitcode.CoordinationBusy, stderr)
@@ -429,6 +433,32 @@ func TestPickAndRevertContinuePassthroughsNameSafegitsCommand(t *testing.T) {
 			}
 			if !strings.Contains(stderr, "safegit "+verb+"-continue") {
 				t.Errorf("the refusal does not name safegit %s-continue:\n%s", verb, stderr)
+			}
+		})
+	}
+}
+
+// TestQueuedContinuePassthroughNamesGitInstead is the boundary of the refusal
+// above: a raw-git QUEUE is git's operation, so `safegit cherry-pick --continue`
+// must not claim safegit concludes it -- and no refusal issued in that state may
+// name safegit's own conclusion, which would send an operator to a command that
+// refuses them again.
+func TestQueuedContinuePassthroughNamesGitInstead(t *testing.T) {
+	for _, verb := range []string{"cherry-pick", "revert"} {
+		t.Run(verb, func(t *testing.T) {
+			fx := newQueuedPickRepo(t, verb)
+			_, stderr, code := runSafegitEnv(t, fx.dir, revertSession, verb, "--continue")
+			if code != exitcode.CoordinationBusy {
+				t.Fatalf("exit %d, want %d (CoordinationBusy): %s", code, exitcode.CoordinationBusy, stderr)
+			}
+			if strings.Contains(stderr, "safegit "+verb+"-continue") {
+				t.Errorf("the refusal names safegit's own conclusion for a queue safegit refuses:\n%s", stderr)
+			}
+			if !strings.Contains(stderr, "git "+verb+" --continue") {
+				t.Errorf("the refusal does not name git's own conclusion:\n%s", stderr)
+			}
+			if head := testutil.Rev(t, fx.dir, "HEAD"); head != fx.tip {
+				t.Errorf("HEAD moved to %s despite the refusal (was %s)", head, fx.tip)
 			}
 		})
 	}

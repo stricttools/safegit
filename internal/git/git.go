@@ -541,11 +541,9 @@ func RunPassthrough(ctx context.Context, args ...string) error {
 }
 
 // RunPassthroughWithEnv is RunPassthrough with extra environment entries, which
-// is what lets safegit hand git an operation to finish while keeping its
-// promise never to write the shared index: the conclusion flows delegate
-// `cherry-pick --continue` / `revert --continue` to git with GIT_INDEX_FILE
-// pointing at safegit's own per-invocation index copy, so git commits the
-// resolution staged there and the repository's .git/index is only ever read.
+// is what lets a caller point git at an index file of safegit's own choosing
+// (GIT_INDEX_FILE) while keeping safegit's promise never to write the shared
+// one.
 //
 // GIT_INDEX_FILE is deliberately NOT among the environment entries the boundary
 // refuses (that list is GIT_DIR, GIT_WORK_TREE, GIT_COMMON_DIR and

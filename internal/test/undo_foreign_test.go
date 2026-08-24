@@ -102,37 +102,41 @@ func TestUndoCountRefusesRatherThanDestroyingAnInterleavedGitCommit(t *testing.T
 	}
 }
 
-// TestUndoCountRefusesRatherThanDestroyingADelegatedConclusion is the second
-// flavor of the same destruction, and the one an operator meets by accident:
-// concluding a QUEUED cherry-pick hands the commits to git, so they are
-// git-authored and carry no oplog entry undo can see. One safegit commit on top
-// of them puts the compare-and-swap's pin back in agreement with the branch,
-// and `--count 2` then rolls the ref back over the whole delegation.
-func TestUndoCountRefusesRatherThanDestroyingADelegatedConclusion(t *testing.T) {
+// TestUndoCountRefusesRatherThanDestroyingAQueueGitFinished is the second
+// flavor of the same destruction, and the one an operator meets by accident: a
+// cherry-pick SEQUENCE is git's from end to end -- safegit's own cherry-pick
+// applies one commit, and its conclusion refuses a queue -- so the commits it
+// makes are git-authored and carry no oplog entry undo can see. One safegit
+// commit on top of them puts the compare-and-swap's pin back in agreement with
+// the branch, and `--count 2` then rolls the ref back over the whole sequence.
+func TestUndoCountRefusesRatherThanDestroyingAQueueGitFinished(t *testing.T) {
 	fx := newQueuedPickRepo(t, "cherry-pick")
 
-	if _, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession,
-		"cherry-pick-continue", "--resolve", fx.conflicted+"=theirs"); code != 0 {
-		t.Fatalf("the delegated conclusion failed (code %d): %s", code, stderr)
+	// git's own conclusion, because a queue is git's: resolve the conflict and
+	// hand the rest of the sequence back to git.
+	testutil.WriteFile(t, fx.dir, fx.conflicted, "resolved by hand\n")
+	testutil.Git(t, fx.dir, "add", fx.conflicted)
+	if out, code := testutil.GitTry(t, fx.dir, "-c", "core.editor=true", "cherry-pick", "--continue"); code != 0 {
+		t.Fatalf("git's own cherry-pick --continue failed: %s", out)
 	}
-	delegated := testutil.Rev(t, fx.dir, "HEAD")
-	if delegated == fx.tip {
-		t.Fatal("the delegation created nothing, so there is nothing to protect")
+	queued := testutil.Rev(t, fx.dir, "HEAD")
+	if queued == fx.tip {
+		t.Fatal("the queue created nothing, so there is nothing to protect")
 	}
 
 	testutil.WriteFile(t, fx.dir, "after.txt", "after\n")
-	tip := safegitCommitEnv(t, fx.dir, conclusionSession, "after the delegation", "after.txt")
+	tip := safegitCommitEnv(t, fx.dir, conclusionSession, "after the queue", "after.txt")
 
 	_, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession, "undo", "--count", "2")
 	if code == 0 {
 		t.Fatalf("undo --count 2 destroyed the commits git authored: %s", stderr)
 	}
-	assertNamedForeignRefusal(t, stderr, delegated)
+	assertNamedForeignRefusal(t, stderr, queued)
 	if head := testutil.Rev(t, fx.dir, "HEAD"); head != tip {
 		t.Fatalf("HEAD moved to %s despite the refusal (was %s)", head, tip)
 	}
 	if !testutil.Contains(testutil.TreePaths(t, fx.dir, "HEAD"), fx.clean) {
-		t.Errorf("the delegated commits' content is gone from the branch")
+		t.Errorf("the queue's commits' content is gone from the branch")
 	}
 }
 

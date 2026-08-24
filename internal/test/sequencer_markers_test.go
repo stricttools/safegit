@@ -506,15 +506,23 @@ func TestReconstructionSuppliesTheEmittedBlocksWhenAutoMergeIsGone(t *testing.T)
 	}
 }
 
-// TestVerificationHoldsWithoutAnAutoMergeToReadFrom: a merge run with a
-// non-default strategy records NO AUTO_MERGE, and a merge's marker labels are
-// the name the operator typed, which git stores nowhere -- so safegit can
-// neither read nor reproduce the file git wrote for it.
+// TestAMergeWithNoAutoMergeIsRefusedBeforeTheVerification: a merge computed
+// with a NON-DEFAULT strategy records no AUTO_MERGE, and merge-continue no
+// longer verifies such a conflict -- it refuses the state outright.
 //
-// The verdict is unaffected, which is the property this test exists to pin: a
-// complete block no side of the conflict carried is refused whether or not
-// safegit can name who wrote it, and a resolved file concludes normally.
-func TestVerificationHoldsWithoutAnAutoMergeToReadFrom(t *testing.T) {
+// This test used to pin the opposite: that the marker verdict held with nothing
+// recorded to read from. What changed is not the verification but the SHAPE's
+// admissibility. safegit's merge does not select a strategy, so a conflict with
+// no AUTO_MERGE beside it was computed by something safegit did not run and
+// cannot check the staged result of; concluding it would commit content the
+// marker verification could only guess about. The whole state is git's, and the
+// refusal says so.
+//
+// The cherry-pick half of the no-AUTO_MERGE story is unchanged and still pinned
+// by TestReconstructionSuppliesTheEmittedBlocksWhenAutoMergeIsGone: a pick's
+// labels come from its state file, so its conflicted file can be REPRODUCED,
+// and the verification runs on the reproduction.
+func TestAMergeWithNoAutoMergeIsRefusedBeforeTheVerification(t *testing.T) {
 	opts := markerRepoOpts{
 		base:     map[string]string{"f.txt": "line1\nbase\nline3\n"},
 		ours:     map[string]string{"f.txt": "line1\nmain\nline3\n"},
@@ -522,40 +530,39 @@ func TestVerificationHoldsWithoutAnAutoMergeToReadFrom(t *testing.T) {
 		strategy: "resolve",
 	}
 
-	t.Run("the surviving block is still refused", func(t *testing.T) {
-		fx := newMarkerRepo(t, opts)
-		if _, ok := testutil.GitTryOut(t, fx.dir, "rev-parse", "--verify", "--quiet", "AUTO_MERGE"); ok {
-			t.Skip("this git records an AUTO_MERGE for the resolve strategy, so the fixture no longer produces the state under test")
-		}
+	for _, tc := range []struct {
+		name string
+		// resolved is the content the working-tree file carries when the
+		// conclusion is attempted: the refusal is about the STATE, so it does
+		// not depend on whether the operator resolved anything.
+		resolved string
+	}{
+		{"with the conflict still in the file", ""},
+		{"with the file resolved", "line1\nmain and feature\nline3\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fx := newMarkerRepo(t, opts)
+			if _, ok := testutil.GitTryOut(t, fx.dir, "rev-parse", "--verify", "--quiet", "AUTO_MERGE"); ok {
+				t.Skip("this git records an AUTO_MERGE for the resolve strategy, so the fixture no longer produces the state under test")
+			}
+			if tc.resolved != "" {
+				testutil.WriteFile(t, fx.dir, "f.txt", tc.resolved)
+			}
 
-		_, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession,
-			"merge-continue", "--resolve", "f.txt=worktree")
-		if code != exitcode.ConclusionMarkerSurvived {
-			t.Fatalf("exit = %d, want %d:\n%s", code, exitcode.ConclusionMarkerSurvived, stderr)
-		}
-		if !strings.Contains(stderr, "f.txt:2") {
-			t.Errorf("the refusal does not name the path and line:\n%s", stderr)
-		}
-		// The message is the structural one: with nothing recorded to compare
-		// against, safegit says what it knows and not more.
-		if !strings.Contains(stderr, "no side of this conflict already carried") {
-			t.Errorf("the refusal claims knowledge it cannot have here:\n%s", stderr)
-		}
-		fx.assertRefusedNothingMoved(t)
-	})
-
-	t.Run("a resolved file still concludes", func(t *testing.T) {
-		fx := newMarkerRepo(t, opts)
-		testutil.WriteFile(t, fx.dir, "f.txt", "line1\nmain and feature\nline3\n")
-
-		if _, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession,
-			"merge-continue", "--resolve", "f.txt=worktree"); code != 0 {
-			t.Fatalf("a resolved file must conclude even with no AUTO_MERGE (code %d): %s", code, stderr)
-		}
-		if blob := testutil.MustShow(t, fx.dir, "HEAD", "f.txt"); strings.Contains(blob, "<<<<<<<") {
-			t.Errorf("the concluded commit carries conflict markers:\n%s", blob)
-		}
-	})
+			_, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession,
+				"merge-continue", "--resolve", "f.txt=worktree")
+			if code != exitcode.CoordinationBusy {
+				t.Fatalf("exit = %d, want %d (CoordinationBusy):\n%s", code, exitcode.CoordinationBusy, stderr)
+			}
+			if !strings.Contains(stderr, "AUTO_MERGE") {
+				t.Errorf("the refusal does not name what is missing:\n%s", stderr)
+			}
+			if !strings.Contains(stderr, "git merge --continue") {
+				t.Errorf("the refusal does not name git's own conclusion:\n%s", stderr)
+			}
+			fx.assertRefusedNothingMoved(t)
+		})
+	}
 }
 
 // TestRevertRestoringMarkerShapedContentIsNotRefused is the revert half of the
