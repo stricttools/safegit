@@ -1077,6 +1077,35 @@ preview); if the gitlink already matches, the preview records nothing
 (the already-current case); the recorded argv's Triggered-by trailer
 carries previewCommitPlaceholder.
 **Verify (red to green):** the parent-bump preview test.
+PHASE-4 AUDIT FINDINGS (remediated post-audit) `[plan]`:
+- D1: the conclusion commands' dry path skipped concludeAftercare
+  wholesale, so a conclusion preview in a submodule recorded no parent
+  bump (the -continue door and the crash re-stand path; the
+  immediate-conclusion site is latent — unreachable in a preview).
+  Fixed red-first: the dry path reaches the parent-bump record per the
+  doctrine.
+- D2: undo's parent-bump preview hardcoded previewCommitPlaceholder
+  where the real value (the rollback target) was in hand — violating
+  the doctrine's own placeholder rule. recordParentBumpPreview takes
+  the Triggered-by value; authoring callers pass the placeholder, undo
+  passes the target.
+- COHERENCE COMPLETION: doctor gains an ERROR-severity check row for
+  the orphaned unmerged index (the repair existed with no diagnose
+  visibility — a repair whose state diagnose cannot see is the
+  silently-disabled-check shape; the state refuses every commit, hence
+  error severity like the sibling escalations).
+- RATIFIED AS FORCED: merge/cherry-pick/revert/pull previews cannot
+  reach their pipeline conclusions (the compute is recorded, not
+  performed — no park, no conclusion, no bump), so 4.4's caller list
+  covers them only structurally; their previews record the compute or
+  fetch argv and stop. Audit-noted, no action: the doctorFix dry
+  path's post-record reads are benign (different repositories/paths;
+  the git-state repairs reuse the plan's answers); conclusion
+  execute-path worktree writes stay unminted (outside the ruled
+  six-command list; reported in prose by 3.x); backup restore's
+  no-slot die() emits no envelope (pre-existing seam); the four
+  command previews carry payload null (Phase 2's shape — Phase 7's
+  machine-contract paragraph states it).
 
 ---
 
