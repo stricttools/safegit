@@ -286,6 +286,62 @@ const (
 	// run either. Produced by push and `hook run`.
 	HookNotExecutable = 25
 
+	// CommitStands is the family code for every outcome in which safegit's own
+	// commit is REAL -- the ref moved, the object is the branch's tip, `safegit
+	// undo` can reverse it -- and a step that runs after the ref update did not
+	// finish.
+	//
+	// It exists because the two halves of such a run answer opposite questions,
+	// and a single General (1) answers neither. "Did the operation happen?" is
+	// yes; "did everything it owes finish?" is no. A caller that reads 1 has to
+	// guess which, and the guess that costs the most is the one a script makes by
+	// default -- retrying an operation that already succeeded.
+	//
+	// The members of the family are the steps that can only run once a commit
+	// exists: reconciling the shared index with the new tip, removing the
+	// concluded operation's state files, writing the declared resolutions into
+	// the working tree, bumping a parent repository's gitlink, and putting back
+	// the autostash git set aside before a merge. Every one of them leaves the
+	// commit standing, and every one of them names in its own message what was
+	// left behind.
+	//
+	// The whole family emits its report: under --json the envelope is emitted
+	// with the payload the run would have carried, so a machine consumer is never
+	// told nothing about a ref that moved. Produced by commit (including its
+	// --amend and reword forms), mv, undo, the three conclusion commands --
+	// merge-continue, cherry-pick-continue and revert-continue -- and the
+	// commands that conclude an operation they started themselves: merge, pull,
+	// cherry-pick and revert.
+	CommitStands = 26
+
+	// ConclusionWouldOverwrite means a conclusion's working-tree write would
+	// destroy content on disk that no side of the conflict accounts for.
+	//
+	// Resolving a path to a stage REPLACES the file on disk (git's own `checkout
+	// --ours`) and resolving it to `delete` removes it, so a file an operator
+	// hand-edited between the conflict and the conclusion would be overwritten
+	// with content they never chose. safegit refuses instead: the accepted set
+	// for a path is the three index stages plus the blob git itself emitted into
+	// the working tree, and a file matching none of them is a hand edit.
+	//
+	// Nothing is committed and the operation is still in flight, so the edit can
+	// be inspected, kept (by resolving that path to `worktree`) or thrown away.
+	// `--discard-unmatched-worktree` is the election that destroys it anyway.
+	// Produced by merge-continue, cherry-pick-continue and revert-continue.
+	ConclusionWouldOverwrite = 27
+
+	// UnmergedIndex means the repository's shared index carries an unmerged
+	// entry, so the commit safegit was asked to make would be built beside a
+	// conflict nobody resolved. git refuses every commit in that state and so
+	// does safegit, naming the paths and `safegit doctor --action fix`, which
+	// re-stages the working tree's own content when no operation is in flight.
+	//
+	// The conclusion commands are exempt by construction: an unmerged index is
+	// the state they exist to conclude, and their declared resolutions are what
+	// resolve it. Produced by commit (including its --amend and reword forms)
+	// and by mv, which reaches the same pipeline.
+	UnmergedIndex = 28
+
 	// EscapingSymlinkTarget means a commit named a symlink whose target leaves
 	// the repository, and the caller did not elect to record it.
 	//
@@ -418,6 +474,9 @@ func All() []Entry {
 		{BackupNoSlot, "BackupNoSlot", "The branch has no backup slot on the remote"},
 		{HooksNotMigrated, "HooksNotMigrated", "Hooks are still in the pre-migration .git/hooks location (run `safegit hook migrate`)"},
 		{HookNotExecutable, "HookNotExecutable", "A discovered hook is not executable, in either store"},
+		{CommitStands, "CommitStands", "The commit was created and the ref moved, but a step after the ref update did not finish"},
+		{ConclusionWouldOverwrite, "ConclusionWouldOverwrite", "A conclusion's working-tree write would destroy a hand edit no side of the conflict accounts for"},
+		{UnmergedIndex, "UnmergedIndex", "The shared index carries an unmerged entry, so no commit can be built beside it"},
 		{EscapingSymlinkTarget, "EscapingSymlinkTarget", "A named symlink's target leaves the repository (`--allow-escaping-targets` records it anyway)"},
 		{RewriteRefused, "RewriteRefused", "A history rewrite was refused before any ref moved (nothing changed)"},
 		{RewriteIncomplete, "RewriteIncomplete", "A history rewrite stands, but post-rewrite verification found residue or skipped the working-tree sync"},

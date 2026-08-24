@@ -1763,6 +1763,9 @@ would commit still holds a complete conflict region) after git has already run.
 | 23 | The branch has no backup slot on the remote |
 | 24 | Hooks are still in the pre-migration .git/hooks location (run `safegit hook migrate`) |
 | 25 | A discovered hook is not executable, in either store |
+| 26 | The commit was created and the ref moved, but a step after the ref update did not finish |
+| 27 | A conclusion's working-tree write would destroy a hand edit no side of the conflict accounts for |
+| 28 | The shared index carries an unmerged entry, so no commit can be built beside it |
 | 29 | A named symlink's target leaves the repository (`--allow-escaping-targets` records it anyway) |
 | 30 | A history rewrite was refused before any ref moved (nothing changed) |
 | 31 | A history rewrite stands, but post-rewrite verification found residue or skipped the working-tree sync |
