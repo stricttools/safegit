@@ -78,6 +78,12 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	if err := guardSequencer(ctx, req.Sequencer, "amend"); err != nil {
 		return nil, err
 	}
+	// An amend builds on the parent tree, always, so the shared index's unmerged
+	// entries can only be a conflict nobody resolved -- never this commit's own
+	// content.
+	if err := guardUnmergedIndex(ctx, req.Sequencer, IndexBaseParentTree); err != nil {
+		return nil, err
+	}
 
 	// The preview area, opened before any object-writing call -- see
 	// BeginPreview.
@@ -419,6 +425,12 @@ type RewordResult struct {
 // Tree and parent remain unchanged. Retries on CAS miss.
 func (p *Pipeline) Reword(ctx context.Context, req RewordRequest) (*RewordResult, error) {
 	if err := guardSequencer(ctx, req.Sequencer, "reword"); err != nil {
+		return nil, err
+	}
+	// A reword rewrites a message and keeps the tip's tree, so it commits nothing
+	// of the index -- but it is a commit built beside an unresolved conflict all
+	// the same, and git refuses it for that reason too.
+	if err := guardUnmergedIndex(ctx, req.Sequencer, IndexBaseParentTree); err != nil {
 		return nil, err
 	}
 

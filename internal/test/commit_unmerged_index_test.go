@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
@@ -85,6 +86,70 @@ func TestCommitRefusesAnUnmergedIndex(t *testing.T) {
 	// The consequence, asserted independently of the exit code: no commit
 	// anywhere in this repository carries the conflict markers.
 	assertNoCommittedMarkers(t, fx.dir, "conflicted.txt")
+}
+
+// TestUnmergedIndexRefusalExitsTwentyEightOnEveryAuthoringForm: the refusal is
+// the pipeline's, so every route into it -- the plain commit, the amend and the
+// reword -- reports the same registered code rather than a generic failure.
+func TestUnmergedIndexRefusalExitsTwentyEightOnEveryAuthoringForm(t *testing.T) {
+	forms := []struct {
+		name string
+		args []string
+	}{
+		{"commit", []string{"commit", "-m", "a commit", "--", "conflicted.txt"}},
+		{"amend", []string{"commit", "--amend", "-m", "an amend", "--", "conflicted.txt"}},
+		{"reword", []string{"commit", "--amend", "-m", "a reword"}},
+	}
+	for _, form := range forms {
+		t.Run(form.name, func(t *testing.T) {
+			fx := newOrphanedUnmergedRepo(t)
+			before := testutil.Rev(t, fx.dir, "HEAD")
+
+			stdout, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession, form.args...)
+			if code != exitcode.UnmergedIndex {
+				t.Fatalf("%s over an unmerged index exited %d, want %d (UnmergedIndex)\nstdout=%s\nstderr=%s",
+					form.name, code, exitcode.UnmergedIndex, stdout, stderr)
+			}
+			if !strings.Contains(stderr, "unmerged") {
+				t.Errorf("the refusal does not name git's own fact:\n%s", stderr)
+			}
+			if !strings.Contains(stderr, "safegit doctor --action fix") {
+				t.Errorf("the refusal does not name the doctor repair as the way out:\n%s", stderr)
+			}
+			if head := testutil.Rev(t, fx.dir, "HEAD"); head != before {
+				t.Errorf("HEAD moved to %s (was %s); the refusal must come before any ref update", head, before)
+			}
+		})
+	}
+}
+
+// TestConclusionsCommitWhileTheIndexIsUnmerged: the refusal above must not reach
+// the commands whose whole job is to resolve that index. A conclusion declares
+// itself as one -- it carries the sequencer context and seeds its commit from the
+// shared index -- and that declaration is the exemption.
+func TestConclusionsCommitWhileTheIndexIsUnmerged(t *testing.T) {
+	fx := newConflictedMergeRepo(t, conflictedMergeOpts{env: conclusionSession})
+	if n := unmergedCount(t, fx.dir); n == 0 {
+		t.Fatal("the fixture must be parked with an unmerged index")
+	}
+
+	stdout, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession,
+		"merge-continue", "--resolve", "conflicted.txt=ours")
+	if code != 0 {
+		t.Fatalf("merge-continue exited %d over the unmerged index it exists to conclude\nstdout=%s\nstderr=%s",
+			code, stdout, stderr)
+	}
+	head := testutil.Rev(t, fx.dir, "HEAD")
+	if head == fx.mainSHA {
+		t.Fatalf("HEAD is still %s; the conclusion committed nothing", head)
+	}
+	parents := testutil.GitOut(t, fx.dir, "rev-list", "--parents", "-n", "1", "HEAD")
+	if !strings.Contains(parents, fx.featureSHA) {
+		t.Errorf("the merge commit does not carry the side it merged (%s):\n%s", fx.featureSHA, parents)
+	}
+	if n := unmergedCount(t, fx.dir); n != 0 {
+		t.Errorf("the conclusion left %d unmerged index entries behind", n)
+	}
 }
 
 // assertNoCommittedMarkers fails when any commit reachable from any ref holds a

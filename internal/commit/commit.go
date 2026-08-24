@@ -291,6 +291,11 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	if err := guardSequencer(ctx, req.Sequencer, "commit"); err != nil {
 		return nil, err
 	}
+	// The same reasoning covers the conflict git left in the shared index, which
+	// its state files no longer mention.
+	if err := guardUnmergedIndex(ctx, req.Sequencer, req.IndexBase); err != nil {
+		return nil, err
+	}
 
 	// The preview area, opened before any object-writing call: from here on
 	// every git subprocess this operation builds writes its objects into the
