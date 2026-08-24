@@ -61,11 +61,11 @@ const (
 	ExemptCommitRefUpdate ExemptionID = "main.effectsRefUpdate"
 	// ExemptHistoryRewriteRecord covers main.recordHistoryRewrite.
 	ExemptHistoryRewriteRecord ExemptionID = "main.recordHistoryRewrite"
-	// ExemptUndoRefUpdate covers main.effectsUndoRefUpdate, undo's own ref
+	// ExemptUndoRefUpdate covers main.recordUndoRefUpdate, undo's own ref
 	// move. It is a row of its own rather than the commit pipeline's: the two
 	// argv shapes differ (undo also deletes a ref), and reusing the commit row
 	// would make its identifier name a site it does not cover.
-	ExemptUndoRefUpdate ExemptionID = "main.effectsUndoRefUpdate"
+	ExemptUndoRefUpdate ExemptionID = "main.recordUndoRefUpdate"
 	// ExemptBackupRestoreGit covers main.runBackupGit, the invocations
 	// `backup restore` mints.
 	ExemptBackupRestoreGit ExemptionID = "main.runBackupGit"
