@@ -1491,6 +1491,20 @@ rename, the allowlist refusals, the mv dirty-move refusal, the
 non-executable-hook refusal, and the timeout-override removal. Phase
 9's own commits are covered by a FINAL top-up pass at the end of
 Phase 9 `[plan]`.
+PHASE-8 EXECUTION notes: coverage complete to `f3b881a` (601/601);
+ratified — five additional refusals typed breaking (each refuses
+previously-working input); the docs sweep as a user-facing fix
+(campaign-1 precedent); exit 32 and subtree collapse folded into the
+auto-record-moves entry. THE TOP-UP additionally executes three entry
+fixups: the old delegation entry (`18ce41339affe…` "Queued
+cherry-picks and reverts conclude through git's own --continue")
+becomes NO-USER-FACING (the mechanism was built and deleted within
+one unreleased span — presenting then retracting it is noise); the
+move-detection-removal entry (entry 1) and the auto-record-moves
+entry get a distinguishing wording pass (staging inference vs record
+minting — a reader must not read them as a reversal); the
+preview-outcomes entry (`18ce41337cc96…`) drops the now-command-level
+refusal emphasis.
 **Verify:** `rlsbl check --tag changelog` fully green (re-verified
 after Phase 9's top-up).
 
