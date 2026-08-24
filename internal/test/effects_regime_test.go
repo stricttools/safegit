@@ -430,23 +430,23 @@ func TestHookRunRefusesDryRun(t *testing.T) {
 // invocation in safegit carries. The argv now comes from internal/gitexec, so
 // what a dry run records is exactly what the execute path would run.
 //
-// checkout is the whole family's representative: every one of them --
-// checkout, merge, rebase, reset, bisect, pull, cherry-pick and revert -- goes
+// switch is the whole family's representative: every one of them --
+// switch, merge, rebase, reset, bisect, pull, cherry-pick and revert -- goes
 // through the same single argv builder.
 func TestPassthroughDryRunArgvCarriesTheGlobalPrefix(t *testing.T) {
 	dir := newRepo(t)
 	testutil.GitRaw(t, dir, "branch", "other")
 
-	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "checkout", "other")
+	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "switch", "other")
 	if code != 0 {
-		t.Fatalf("checkout --dry-run failed (%d): %s", code, stderr)
+		t.Fatalf("switch --dry-run failed (%d): %s", code, stderr)
 	}
 	log := wouldDoLog(stdout)
-	if !strings.Contains(log, "run: git "+noOptionalLocks+" checkout other") {
+	if !strings.Contains(log, "run: git "+noOptionalLocks+" switch other") {
 		t.Errorf("the recorded passthrough argv must carry the global prefix, got: %s", log)
 	}
 	if branch := strings.TrimSpace(testutil.GitRaw(t, dir, "rev-parse", "--abbrev-ref", "HEAD")); branch != "main" {
-		t.Errorf("a dry-run checkout moved the branch to %q", branch)
+		t.Errorf("a dry-run switch moved the branch to %q", branch)
 	}
 }
 
@@ -657,7 +657,7 @@ func TestDumpSchemaPublishesTheObserveAllowlist(t *testing.T) {
 	}
 	// Nothing that changes anything, and nothing whose reading depends on what
 	// follows it.
-	for _, mutating := range []string{"update-ref", "checkout", "merge", "rebase", "reset", "push", "commit-tree", "write-tree", "add", "reflog", "tag"} {
+	for _, mutating := range []string{"update-ref", "switch", "merge", "rebase", "reset", "push", "commit-tree", "write-tree", "add", "reflog", "tag"} {
 		if verbs[mutating] {
 			t.Errorf("the published allowlist admits %q, which would execute during a --dry-run", mutating)
 		}

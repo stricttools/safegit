@@ -43,7 +43,7 @@ import (
 //     (and says what it cannot restore), and every one of them refuses unless
 //     the state it names is the state actually on disk -- so there is nothing
 //     here to interrupt someone for that commit does not also have.
-//   - checkout, rebase, reset, bisect -- guarded passthroughs. Each moves HEAD,
+//   - switch, rebase, reset, bisect -- guarded passthroughs. Each moves HEAD,
 //     refs or the working tree and then hands off to git; git itself does not
 //     interrupt for any of them, and safegit's coordination guard runs first.
 //   - merge, cherry-pick, revert -- passthrough REGISTRATIONS (the operator's
@@ -101,7 +101,7 @@ var classification = map[string]struct {
 	"merge-continue":       {strictcli.EffectMutating, false, true, false},
 	"cherry-pick-continue": {strictcli.EffectMutating, false, true, false},
 	"revert-continue":      {strictcli.EffectMutating, false, true, false},
-	"checkout":             {strictcli.EffectMutating, false, true, true},
+	"switch":               {strictcli.EffectMutating, false, true, true},
 	"merge":                {strictcli.EffectMutating, false, true, true},
 	"rebase":               {strictcli.EffectMutating, false, true, true},
 	"reset":                {strictcli.EffectMutating, false, true, true},

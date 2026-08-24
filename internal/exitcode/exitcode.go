@@ -10,7 +10,7 @@
 // There are two carve-outs, both deliberate.
 //
 // The first: the guarded passthroughs --
-// checkout, pull, merge, rebase, reset, bisect, cherry-pick and revert -- exit
+// switch, pull, merge, rebase, reset, bisect, cherry-pick and revert -- exit
 // with the wrapped git command's OWN exit code once git has run. Those codes
 // are git's (1 for a conflicted merge, 128 or 129 for a fatal error), they are
 // foreign to safegit, and they are deliberately NOT registered here: safegit
@@ -75,7 +75,7 @@ const (
 	// malformed glob or --target value, a `mv` pair that does not parse or that
 	// speaks for a path another pair already claims. Produced by commit, mv,
 	// undo, scan, scrub file/match/run, author check, and the three guarded
-	// passthroughs that take a bare positional argument (checkout, merge,
+	// passthroughs that take a bare positional argument (switch, merge,
 	// rebase). Note that a
 	// refusal by the framework's own parser exits General (1) instead -- see
 	// the package comment.
@@ -96,7 +96,7 @@ const (
 
 	// CoordinationBusy means the coordination guard refused: another safegit
 	// operation, or an in-progress git sequencer state, owns the working tree.
-	// Produced by checkout, pull, merge, rebase, reset, bisect, cherry-pick,
+	// Produced by switch, pull, merge, rebase, reset, bisect, cherry-pick,
 	// revert and backup restore, and by commit (including its --amend and
 	// reword forms), mv and undo, which refuse outright while git has a merge,
 	// cherry-pick, revert, rebase or mailbox application in flight -- naming
@@ -125,7 +125,7 @@ const (
 	//
 	//   - the repo-wide rewrite lock: scrub file, scrub match, scrub run,
 	//     author rewrite;
-	//   - the worktree operation lock: checkout, pull, merge, rebase, reset,
+	//   - the worktree operation lock: switch, pull, merge, rebase, reset,
 	//     bisect, cherry-pick, revert, commit, commit --amend, reword, mv, undo,
 	//     and the three conclusion commands -- merge-continue,
 	//     cherry-pick-continue and revert-continue;

@@ -47,53 +47,7 @@ import (
 // write is the pick's own addition, not a shared step.)
 //
 // The command line is narrower than git's, under the subset law -- see
-// cherryPickRefusedOptions and refuseUnsupportedCherryPick.
-
-// cherryPickRefusedOptions are the `git cherry-pick` options safegit's
-// cherry-pick does not implement, each with the reason it is absent.
-//
-// It is a refusal list rather than an allowlist for the reason merge's is: an
-// option safegit has not considered still reaches the compute step, where it
-// can change how the pick is COMPUTED but never who authors the commit -- the
-// compute step is pinned to `--no-commit`, so git cannot commit whatever else
-// is on the command line. The two entries that would break that promise, `--ff`
-// and `--commit`, are refused here for exactly that reason.
-//
-// DIVERGENCE: every entry here is one git capability safegit deliberately does
-// not have, and each needs its row in docs/divergences.md.
-var cherryPickRefusedOptions = []struct {
-	names []string
-	why   string
-}{
-	{
-		[]string{"--skip"},
-		"--skip moves past one commit of a SEQUENCE and keeps the rest going, and safegit's cherry-pick has no sequence to keep going: it picks one commit. Abandon the pick with 'git cherry-pick --abort' and pick the commits you do want, one invocation each",
-	},
-	{
-		[]string{"-e", "--edit"},
-		"--edit opens an editor, and safegit's commit surface has none; conclude with 'safegit cherry-pick-continue -m' to give the commit a message of your own",
-	},
-	{
-		[]string{"-S", "--gpg-sign"},
-		"safegit's commit pipeline does not sign commits, so a signature asked for here would simply not be on the result; nothing is silently dropped, so the request is refused instead",
-	},
-	{
-		[]string{"--ff"},
-		"--ff lets git move the branch onto the picked commit outright, which is a ref move outside safegit's compare-and-swap and a commit safegit did not author. safegit's cherry-pick always makes a commit of its own",
-	},
-	{
-		[]string{"--commit"},
-		"--commit is the opposite of the --no-commit the compute step is pinned to, and passing it would hand the commit back to git -- authored by git, with none of safegit's trailers, and moving the ref outside safegit's compare-and-swap",
-	},
-	{
-		[]string{"--cleanup"},
-		"--cleanup governs how git strips a message at ITS commit time, and safegit's pipeline is what commits here; the message it takes is git's draft with its comment block stripped, or the text you pass to 'safegit cherry-pick-continue -m'",
-	},
-	{
-		[]string{"--allow-empty", "--allow-empty-message", "--keep-redundant-commits", "--empty"},
-		"these govern what git commits when a pick produces nothing, and safegit's pipeline refuses a commit that changes nothing outright; there is no flag here that turns that refusal off",
-	},
-}
+// cherryPickSubset (subset_allowlist.go) and refuseUnsupportedCherryPick.
 
 // runCherryPick dispatches `safegit cherry-pick`.
 //
@@ -105,6 +59,12 @@ var cherryPickRefusedOptions = []struct {
 // because concluding a cherry-pick is safegit's own job.
 func runCherryPick(flags globalFlags, args []string) int {
 	parsed := parseGitArgs("cherry-pick", args)
+
+	// The allowlist covers EVERY route, the state-control forms included: an
+	// option safegit does not implement is refused whichever verb it accompanies.
+	if code := cherryPickSubset.refuseUnsupportedOptions(parsed); code != 0 {
+		return code
+	}
 	if parsed.Has("--continue", "--abort", "--quit") {
 		return runGuardedPassthrough(flags, "cherry-pick", args)
 	}
@@ -122,15 +82,6 @@ func runCherryPick(flags globalFlags, args []string) int {
 // failed" and an operator has to be able to tell them apart. Each needs its
 // entry in the divergences catalog.
 func refuseUnsupportedCherryPick(parsed gitArgs) int {
-	for _, refused := range cherryPickRefusedOptions {
-		if o, ok := parsed.Find(refused.names...); ok {
-			fmt.Fprintf(os.Stderr, "error: safegit cherry-pick does not support %s\n", o.Name)
-			fmt.Fprintf(os.Stderr, "  %s.\n", refused.why)
-			fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
-			return exitcode.Usage
-		}
-	}
-
 	if len(parsed.AfterDoubleDash) > 0 {
 		fmt.Fprintf(os.Stderr, "error: safegit cherry-pick takes no pathspec\n")
 		fmt.Fprintf(os.Stderr, "  a pathspec applies part of a commit and records a message claiming the whole of it.\n")

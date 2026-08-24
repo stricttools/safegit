@@ -4,19 +4,22 @@ import (
 	"strings"
 )
 
-// Reading the operator's own argv for merge, cherry-pick and revert.
+// Reading the operator's own argv for the commands that take git's own
+// vocabulary: switch, merge, cherry-pick, revert, rebase, reset and bisect.
 //
-// Two features need to know what an operator typed rather than just forwarding
-// it: the restructured single-commit revert, which safegit only authors itself
-// when every flag present is one it can honor, and the honest --dry-run
-// preview, which replays the operation with `git merge-tree` and must refuse
-// rather than preview when a flag changes how the merge is computed.
+// Three features need to know what an operator typed rather than just
+// forwarding it: the SUBSET ALLOWLISTS, which refuse an option outside what the
+// command can honor; the restructured single-commit revert and cherry-pick,
+// which act only on a command line safegit can author the result of; and the
+// honest --dry-run preview, which replays the operation with `git merge-tree`
+// and must refuse rather than preview when a flag changes how the merge is
+// computed.
 //
-// The grammar here is git's own for these three verbs, spelled out because it
-// is closed and stable: what is needed is only which flags CONSUME THE NEXT
+// The grammar here is git's own for those verbs, spelled out because it is
+// closed and stable: what is needed is only which flags CONSUME THE NEXT
 // ARGUMENT, so that `git revert -m 2 <sha>` is read as one option and one
 // revision instead of two revisions. Nothing here interprets a flag's meaning;
-// the two callers do that against their own criteria.
+// the callers do that against their own criteria.
 
 // valueFlags lists, per verb, the options that take their value as the NEXT
 // argv element. The attached forms (`--strategy=ort`, `-m2`) need no entry:
@@ -44,6 +47,23 @@ var valueFlags = map[string]map[string]bool{
 		"-X": true, "--strategy-option": true,
 		"--strategy": true, "--cleanup": true,
 	},
+	"switch": {
+		"-c": true, "--create": true,
+		"-C": true, "--force-create": true,
+		"--orphan": true,
+		"-t":       true, "--track": true,
+	},
+	"rebase": {
+		"--onto": true,
+		"-x":     true, "--exec": true,
+		"--whitespace": true, "-C": true,
+		"-s": true, "--strategy": true,
+		"-X": true, "--strategy-option": true,
+		"--gpg-sign": true,
+	},
+	// reset and bisect declare none: reset's argument is a commit and bisect's
+	// vocabulary is subcommands and revisions, so nothing there consumes the
+	// element after it.
 }
 
 // gitOption is one option as the operator wrote it.
@@ -64,9 +84,9 @@ type gitOption struct {
 type gitArgs struct {
 	Options   []gitOption
 	Revisions []string
-	// AfterDoubleDash holds everything past a bare `--`. For these three verbs
-	// that is a pathspec, which none of safegit's readings can interpret, so a
-	// command line carrying one is simply not one they act on.
+	// AfterDoubleDash holds everything past a bare `--`. For every verb read
+	// here that is a pathspec, which none of safegit's readings can interpret, so
+	// a command line carrying one is simply not one they act on.
 	AfterDoubleDash []string
 }
 
@@ -98,12 +118,11 @@ func (a gitArgs) Find(names ...string) (gitOption, bool) {
 // parseGitArgs splits one verb's operator argv into options and revisions.
 //
 // It is deliberately permissive about options it does not know: an unrecognized
-// long or short option is recorded as a flag taking no value. Both callers then
-// decide from the RECORDED set, and both of their decisions fail safe -- the
-// revert restructure only acts on an allowlist of options it can honor, and the
-// preview refuses anything outside the set it can represent -- so an option git
-// grows tomorrow makes safegit forward the command line unchanged rather than
-// misread it.
+// long or short option is recorded as a flag taking no value. The callers then
+// decide from the RECORDED set, and every one of those decisions fails safe --
+// the subset allowlists refuse an option that is not on them, and the preview
+// refuses anything outside the set it can represent -- so an option git grows
+// tomorrow is refused rather than misread.
 func parseGitArgs(verb string, args []string) gitArgs {
 	takesValue := valueFlags[verb]
 	var out gitArgs

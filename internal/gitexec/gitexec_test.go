@@ -212,11 +212,11 @@ func TestExemptSpecStillGetsTheCommonEnvironmentTail(t *testing.T) {
 }
 
 func TestArgvAnyCarriesBinaryAndPrefix(t *testing.T) {
-	argv, err := ArgvAny(ExemptGitMutation, "checkout", "other")
+	argv, err := ArgvAny(ExemptGitMutation, "switch", "other")
 	if err != nil {
 		t.Fatalf("ArgvAny: %v", err)
 	}
-	want := []interface{}{Binary, "--no-optional-locks", "checkout", "other"}
+	want := []interface{}{Binary, "--no-optional-locks", "switch", "other"}
 	if len(argv) != len(want) {
 		t.Fatalf("argv = %v, want %v", argv, want)
 	}
@@ -228,7 +228,7 @@ func TestArgvAnyCarriesBinaryAndPrefix(t *testing.T) {
 }
 
 func TestArgvAnyRefusesUndeclaredExemptionAndSubcommand(t *testing.T) {
-	if _, err := ArgvAny(ExemptionID("main.invented"), "checkout"); err == nil {
+	if _, err := ArgvAny(ExemptionID("main.invented"), "switch"); err == nil {
 		t.Error("ArgvAny accepted an undeclared exemption")
 	}
 	if _, err := ArgvAny(ExemptGitMutation, "filter-branch"); err == nil {

@@ -16,7 +16,7 @@ import (
 // the exit code the caller must return.
 //
 // Every command that mutates THIS worktree goes through here: the guarded
-// passthroughs (checkout, pull, merge, rebase, reset, bisect, cherry-pick,
+// passthroughs (switch, pull, merge, rebase, reset, bisect, cherry-pick,
 // revert), the commit pipeline's three entry points, and undo. Two safegit
 // processes in one worktree therefore never run tree-mutating work at the same
 // time, and -- the reason the commit family takes it too -- a passthrough

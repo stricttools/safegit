@@ -101,7 +101,7 @@ func TestWritesWorktreeView(t *testing.T) {
 		{"bisect", "run", "make", "test"},
 		{"bisect", "replay", "log.txt"},
 		{"bisect", "reset"},
-		{"checkout", "other"},
+		{"switch", "other"},
 		{"merge", "topic"},
 		{"rebase", "main"},
 		{"cherry-pick", "abc1234"},

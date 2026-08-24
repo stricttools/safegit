@@ -84,6 +84,16 @@ type Verb struct {
 	Name        string
 	Base        Effect
 	Conditional []ConditionalEffect
+	// Subcommands is the complete subcommand vocabulary safegit admits for this
+	// verb, where the verb HAS one and safegit forwards an operator's own choice
+	// of it. It is empty for every verb safegit calls with argv it builds itself,
+	// because there the vocabulary is the call site rather than a declaration.
+	//
+	// It exists so that "which subcommands may be typed" and "which of them
+	// change the working tree" are two views of ONE declaration: the conditional
+	// tokens are the mutating half of this list, and a subcommand that is in
+	// neither is refused before git is started.
+	Subcommands []string
 	Note        string
 }
 
@@ -122,7 +132,13 @@ var verbs = []Verb{
 				Why:     "the STEPPING vocabulary moves HEAD and checks another commit out (and writes refs/bisect/*); `bisect terms`, `bisect log` and `bisect view` only report on a bisect already in progress",
 			},
 		},
-		Note: "guarded passthrough; the operator's own argv",
+		Subcommands: []string{
+			// The stepping half, which is the conditional tokens above.
+			"start", "good", "bad", "old", "new", "skip", "run", "replay", "reset",
+			// The reporting half: these read a bisect already in progress.
+			"terms", "log", "view",
+		},
+		Note: "guarded passthrough; the operator's own argv, whose subcommand must be one of Subcommands",
 	},
 	{Name: "cat-file", Base: ObserveOnly},
 	{
@@ -135,11 +151,6 @@ var verbs = []Verb{
 		Name: "config",
 		Base: MutatesConfig,
 		Note: "safegit only ever reads, with `config --get`, but the SET form is two bare positionals (`git config merge.conflictStyle diff3`) and no single token tells it apart from a read; the base set is therefore the wider one",
-	},
-	{
-		Name: "checkout",
-		Base: MutatesRefs | MutatesIndex | MutatesWorktree,
-		Note: "guarded passthrough; the operator's own argv",
 	},
 	{
 		Name: "cherry-pick",
@@ -283,6 +294,11 @@ var verbs = []Verb{
 				Why:     "safegit only enumerates with `submodule foreach`",
 			},
 		},
+	},
+	{
+		Name: "switch",
+		Base: MutatesRefs | MutatesIndex | MutatesWorktree,
+		Note: "branch navigation, and the ONLY spelling of it safegit invokes: `git checkout` is absent from this table because safegit's own checkout is gone, and with it the file-restoration form that made checkout two commands under one name",
 	},
 	{
 		Name: "symbolic-ref",

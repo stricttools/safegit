@@ -193,8 +193,8 @@ func TestRawGitBypassDetection(t *testing.T) {
 	}
 }
 
-// T17: Checkout succeeds when working tree is clean and no wips.
-func TestCheckoutCleanProceeds(t *testing.T) {
+// T17: A branch switch succeeds when the working tree is clean and no wips.
+func TestSwitchCleanProceeds(t *testing.T) {
 	dir := newRepo(t)
 
 	// Create another branch
@@ -204,10 +204,10 @@ func TestCheckoutCleanProceeds(t *testing.T) {
 		t.Fatalf("git branch: %v\n%s", err, out)
 	}
 
-	// Working tree is clean, no wips -- checkout should succeed
-	_, stderr, code := runSafegit(t, dir, "checkout", "other")
+	// Working tree is clean, no wips -- the switch should succeed
+	_, stderr, code := runSafegit(t, dir, "switch", "other")
 	if code != 0 {
-		t.Fatalf("checkout failed (code %d): %s", code, stderr)
+		t.Fatalf("switch failed (code %d): %s", code, stderr)
 	}
 
 	// Verify HEAD moved
@@ -718,13 +718,13 @@ func TestCoordinationGuardRejectsDirtyTree(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create a branch to checkout to
+	// Create a branch to switch to
 	cmd := exec.Command("git", "branch", "other")
 	cmd.Dir = dir
 	cmd.CombinedOutput()
 
-	// Checkout without --force should be refused with exit code 5
-	_, stderr, code := runSafegit(t, dir, "checkout", "other")
+	// The switch over a dirty tree should be refused with exit code 5
+	_, stderr, code := runSafegit(t, dir, "switch", "other")
 	if code != 5 {
 		t.Fatalf("expected exit code 5 for dirty tree, got %d", code)
 	}

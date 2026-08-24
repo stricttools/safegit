@@ -12,7 +12,7 @@ import (
 // code in between is git's verdict, and safegit passes it on unchanged.
 //
 // This used to be false for every command routed through runGitMutation
-// (checkout, pull, merge, rebase, reset, bisect): a nonzero child was collapsed
+// (switch, pull, merge, rebase, reset, bisect): a nonzero child was collapsed
 // into a single hardcoded 1, so a caller could not tell git's "these refs do
 // not merge" (1) from git's "that argument is not a ref at all" (128). Scripts
 // that branch on git's codes read the wrong answer.
@@ -31,7 +31,7 @@ func TestPassthroughExitCodeIsGits(t *testing.T) {
 		wantFailure bool
 	}{
 		// runGitMutation seam: the six commands whose exit code was hardcoded.
-		{"checkout of a ref that does not exist", []string{"checkout", "no-such-ref"}, true},
+		{"switch to a branch that does not exist", []string{"switch", "no-such-ref"}, true},
 		{"merge of a ref that does not exist", []string{"merge", "no-such-ref"}, true},
 		{"rebase onto an upstream that does not exist", []string{"rebase", "no-such-upstream"}, true},
 		{"hard reset to a ref that does not exist", []string{"reset", "--hard", "no-such-ref"}, true},
@@ -41,7 +41,7 @@ func TestPassthroughExitCodeIsGits(t *testing.T) {
 		{"cherry-pick of a commit that does not exist", []string{"cherry-pick", "no-such-commit"}, true},
 		// A command that succeeds must still agree: propagation is not "always
 		// nonzero".
-		{"checkout of the branch already checked out", []string{"checkout", "main"}, false},
+		{"switch to the branch already switched to", []string{"switch", "main"}, false},
 	}
 
 	var failingCodes []int

@@ -239,8 +239,8 @@ func newApp() *strictcli.App {
 	pt := func(ctx *strictcli.Context, name string, args []string, globals map[string]interface{}) int {
 		gf := globalsToFlags(ctx, globals)
 		switch name {
-		case "checkout":
-			return runCheckout(gf, args)
+		case "switch":
+			return runSwitch(gf, args)
 		case "merge":
 			return runMerge(gf, args)
 		case "rebase":
@@ -373,7 +373,7 @@ func newApp() *strictcli.App {
 		"the result of UNDOING the reverted commit, which is what its parent held -- not the reverted commit's own content",
 		"conclude a revert git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file). For a SINGLE revert safegit writes the commit itself: one parent, YOU as both author and committer -- a revert is your own new change, not the reverted commit author's, which is git's own division and the opposite of what a cherry-pick does -- git's own message draft with its comment block stripped or -m, the repository's commit-msg hook run, and the revert's state files removed afterwards. Note the stage keywords: a revert applies an INVERSE patch, so theirs is what the reverted commit's parent held -- resolving to theirs keeps the revert, resolving to ours keeps the commit being reverted. A QUEUED sequence -- git revert with more than one commit -- is DELEGATED to git's own 'revert --continue' with safegit's index copy as its index, after the same completeness and conflict-marker checks; git authors those commits, so they carry no safegit trailers and 'safegit undo' does not reverse them, and -m, --trailer and --dry-run are refused for a queued sequence rather than silently ignored")
 
-	app.Passthrough("checkout", "checkout a branch or ref, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work", pt, strictcli.WithEffect(strictcli.EffectMutating))
+	app.Passthrough("switch", switchHelp, pt, strictcli.WithEffect(strictcli.EffectMutating))
 	// merge is a passthrough REGISTRATION -- the operator's argv is git's own
 	// vocabulary and reaches the handler verbatim -- but it is no longer a
 	// guarded passthrough in behavior: safegit authors the commit. It declares
@@ -388,9 +388,9 @@ func newApp() *strictcli.App {
 			Reason: "merging in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
 			Kind:   strictcli.ProcMutate,
 		}))
-	app.Passthrough("rebase", "rebase the current branch onto upstream, guarded twice before git runs: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- and then a check for uncommitted work. A rebase's own --continue and --abort stay git's: safegit has no verb that finishes one", pt, strictcli.WithEffect(strictcli.EffectMutating))
-	app.Passthrough("reset", "reset HEAD with guards that prevent accidental data loss. The worktree operation lock is taken for EVERY reset, because every reset moves HEAD; the uncommitted-work check applies to the modes that WRITE working-tree files -- --hard, --merge and --keep -- while --soft and --mixed move only the ref and the index. Which is which is derived from safegit's git classification table, never re-read from the argument list here", pt, strictcli.WithEffect(strictcli.EffectMutating))
-	app.Passthrough("bisect", "binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the STEPPING subcommands (start, good, bad, old, new, skip, run, replay, reset), each of which checks another commit out, and not to the reporting ones (terms, log, view). Which is which is derived from safegit's git classification table, never kept as a list here", pt, strictcli.WithEffect(strictcli.EffectMutating))
+	app.Passthrough("rebase", "rebase the current branch onto upstream, guarded twice before git runs: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- and then a check for uncommitted work. A rebase's own --continue, --abort and --skip stay git's: safegit has no verb that finishes one. The command line is a deliberate subset of git's: exactly one upstream, --onto, -i and --autostash. The apply backend and its patch options, --exec, --rebase-merges and --root are refused, each naming why", pt, strictcli.WithEffect(strictcli.EffectMutating))
+	app.Passthrough("reset", "reset HEAD with guards that prevent accidental data loss. The worktree operation lock is taken for EVERY reset, because every reset moves HEAD; the uncommitted-work check applies to the modes that WRITE working-tree files -- --hard, --merge and --keep -- while --soft and --mixed move only the ref and the index. Which is which is derived from safegit's git classification table, never re-read from the argument list here. The command line is a deliberate subset of git's: one of the five modes with a commit. The PATHSPEC form is refused -- it writes the shared index entry by entry, which is the one file safegit's design keeps out of -- and so is --patch", pt, strictcli.WithEffect(strictcli.EffectMutating))
+	app.Passthrough("bisect", "binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the STEPPING subcommands (start, good, bad, old, new, skip, run, replay, reset), each of which checks another commit out, and not to the reporting ones (terms, log, view). Which is which is derived from safegit's git classification table, never kept as a list here -- and so is which subcommands may be typed at all: a word outside that vocabulary is refused before git runs, as is every option", pt, strictcli.WithEffect(strictcli.EffectMutating))
 	app.Command("push", "push refs to remote with pre-pre-push hooks and automatic retry", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		gf := globalsToFlags(ctx, kwargs)
 		prePushHook := optBool(kwargs["pre_push_hook"], true)
