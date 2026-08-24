@@ -55,6 +55,8 @@ entry, whatever its direction says.
 >   cap](#a-pre-pre-push-hook-can-raise-its-own-timeout-without-a-cap)
 > - [An autostash is applied only when it belongs to the merge being
 >   concluded](#an-autostash-is-applied-only-when-it-belongs-to-the-merge-being-concluded)
+> - [A conclusion whose commit already stands finishes the cleanup, and commits
+>   nothing](#a-conclusion-whose-commit-already-stands-finishes-the-cleanup-and-commits-nothing)
 
 Every future change that introduces a decision of this kind adds its entry here.
 
@@ -446,6 +448,28 @@ Every future change that introduces a decision of this kind adds its entry here.
   is a partial outcome, and a script that reads `0` will not look at the
   message. The exit code is the only channel a caller cannot ignore.
 - **Ruling:** ours — deliberate
+
+### A conclusion whose commit already stands finishes the cleanup, and commits nothing
+
+- **git's idiom:** the state files ARE the operation. `git merge --continue`
+  reads `MERGE_HEAD` and the index and concludes the merge they describe;
+  nothing ties either to a commit that may already exist on the branch. A
+  conclusion moves the ref before it removes the state files, so a process
+  killed between the two leaves both — and the next `--continue` conclusion
+  builds a second commit out of the same state, whose incoming parent is
+  already an ancestor of its first.
+- **safegit:** the re-run recognizes its own work. The op log's last entry for
+  the branch names one of the ops that conclude this kind of operation and
+  records the commit HEAD stands at — and for a merge, HEAD's parents are the
+  branch tip plus every `MERGE_HEAD` line, which is exactly the commit this
+  conclusion would build. When both agree, nothing is committed: the state
+  files, the index and the working tree are put in step with the commit that is
+  already there, the report names it, and the run exits on the aftercare's own
+  terms. The window is not closed everywhere — the op-log entry is written just
+  after the ref update, so a cherry-pick or revert killed between those two
+  lines is not recognized, and a crash after the state files were removed is
+  `safegit doctor`'s to report.
+- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
 
 ### An autostash is applied only when it belongs to the merge being concluded
 

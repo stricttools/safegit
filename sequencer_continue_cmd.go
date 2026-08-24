@@ -185,7 +185,7 @@ func (op continueOp) reportPayload(flags globalFlags, out conclusionResult) {
 	base := continuePayload{
 		Operation:      op.kind.String(),
 		Ref:            out.commit.Ref,
-		SHA:            realSHA(flags, out.commit.SHA),
+		SHA:            out.reportedSHA(flags),
 		Parents:        orEmpty(out.commit.Parents),
 		Tree:           out.commit.Tree,
 		Files:          orEmpty(out.commit.Files),
@@ -213,6 +213,44 @@ func (op continueOp) reportPayload(flags globalFlags, out conclusionResult) {
 		continuePayload: base,
 		Author:          author,
 	})
+}
+
+// reportedSHA renders the payload's sha member.
+//
+// A preview names no commit -- it builds an object to compute the tree honestly,
+// but nothing exists at that name for anyone to fetch. The one exception is a
+// conclusion whose commit ALREADY STOOD when the run started: that commit is
+// real whether or not this invocation was a dry run, and reporting null for it
+// would say the opposite of what the repository holds.
+func (out conclusionResult) reportedSHA(flags globalFlags) *string {
+	if out.stood {
+		sha := out.commit.SHA
+		return &sha
+	}
+	return realSHA(flags, out.commit.SHA)
+}
+
+// renderStood prints the human answer for a conclusion whose commit was already
+// there: the crash-window case, where this run authored nothing and finished
+// what an earlier one left.
+//
+// It is a renderer of its own rather than a branch of renderHuman because every
+// line renderHuman prints would be wrong here -- it says what was committed, and
+// a dry run of it says what WOULD be committed, when the answer is that nothing
+// was and nothing would be.
+func (op continueOp) renderStood(flags globalFlags, out conclusionResult) {
+	if flags.silent() {
+		return
+	}
+	fmt.Printf("[%s %s] the %s was already concluded; nothing was committed\n",
+		refShortName(out.commit.Ref), shortSHA(out.commit.SHA), op.kind)
+	if flags.dryRun {
+		fmt.Printf(" the %s state files would be removed and the index and working tree put in step with the commit\n", op.kind)
+		return
+	}
+	if out.cleared {
+		fmt.Printf(" the %s state files are removed and the index and working tree are in step with the commit\n", op.kind)
+	}
 }
 
 // renderHuman prints what a conclusion did (or would do), headed by the caller's
