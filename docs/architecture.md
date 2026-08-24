@@ -198,7 +198,7 @@ A waiter that observes a DIFFERENT lock file at the path than it saw on its prev
 
 ### Stale lock reclamation
 
-A lock whose holder is genuinely gone is reclaimed automatically -- but the judgement that a lock is stale is not what authorizes removing it, because two contenders can reach that judgement about the same file and the second would then delete the fresh lock the first had already published. Reclamation therefore happens under the lock file's own exclusive `flock(2)`, with the path re-stat'd and compared against the held descriptor's inode before anything is unlinked, and staleness re-judged from the descriptor's own contents rather than a fresh read of the path. Any condition other than a clean verdict -- another contender mid-reclaim, a filesystem without flock, a permission error -- leaves the lock alone, which is the fail-closed direction.
+A lock whose holder is genuinely gone is reclaimed automatically -- but the judgement that a lock is stale is not what authorizes removing it, because two contenders can reach that judgement about the same file and the second would then delete the fresh lock the first had already published. Reclamation therefore happens under the lock file's own exclusive `flock(2)`, with the path inspected again through `stat(2)` and compared against the held descriptor's inode before anything is unlinked, and staleness re-judged from the descriptor's own contents rather than a fresh read of the path. Any condition other than a clean verdict -- another contender mid-reclaim, a filesystem without flock, a permission error -- leaves the lock alone, which is the fail-closed direction.
 
 Staleness itself needs positive evidence:
 
@@ -291,11 +291,11 @@ Hunk-level staging lives in ONE flag, `--hunks`, and a positional path is always
 
 The split inside a `--hunks` element is on its LAST colon, so `--hunks 'sprint:1:2,3'` selects hunks 2 and 3 of the file named `sprint:1`. Naming one path both as a positional and in `--hunks`, or twice in `--hunks`, is a hard error decided on the canonical paths rather than on how they were spelled.
 
-It used to be the other way round: a positional argument was split into a path and a hunk selection when its tail looked numeric AND `os.Stat` could not see the whole string as a file. That made the grammar of a command line a function of disk state -- `notes:1` was a hunk selection from one directory and a filename from another -- and made a file whose name really ends in a colon plus digits impossible to delete, because once it was gone from disk the probe reparsed its own name. Nothing on disk is consulted to decide how to read a command line any more.
+It used to be the other way round: a positional argument was split into a path and a hunk selection when its tail looked numeric AND `os.Stat` could not see the whole string as a file. That made the grammar of a command line a function of disk state -- `notes:1` was a hunk selection from one directory and a filename from another -- and made a file whose name really ends in a colon plus digits impossible to delete, because once it was gone from disk the probe read its own name as a hunk selection. Nothing on disk is consulted to decide how to read a command line any more.
 
 ### Synthetic patch mechanism
 
-When a commit specifies individual hunks rather than whole files, safegit constructs a synthetic patch containing only the selected hunks and applies it to the temporary index via `git apply`. This reuses git's patch application logic, including three-way merge fallback, rather than implementing custom index manipulation. Line-number shifts from skipped hunks are handled via the `--recount` flag.
+When a commit specifies individual hunks rather than whole files, safegit constructs a synthetic patch containing only the selected hunks and applies it to the temporary index via `git apply`. This reuses git's patch application logic rather than implementing custom index manipulation. Line-number shifts from skipped hunks are handled via the `--recount` flag.
 
 1. Extract hunks as described above.
 2. Compute the selected-hunk subset.
@@ -303,13 +303,13 @@ When a commit specifies individual hunks rather than whole files, safegit constr
 4. `git apply --cached --recount --whitespace=nowarn` against `GIT_INDEX_FILE`, with the patch fed on stdin.
     - `--cached` means apply to the index, not the working tree.
     - `--recount` makes `git apply` tolerant of slightly off line counts (caused by skipping intermediate hunks).
-5. On failure, retry once with `--3way` (which uses the blob SHAs from the patch's `index` line). A second failure is reported with git's own stderr surfaced.
+5. On failure, that is the answer: there is exactly ONE apply, and a patch that does not apply is a hard error carrying git's own stderr, with the repo-relative path of the file it failed on attached. There used to be a silent retry with `--3way`, and it was deleted because it is not the same staging action -- the direct apply stages exactly the hunks the caller selected, while a three-way retry MERGES the patch into whatever the index holds, so a caller who asked for one hunk could be handed a merge result nobody named and nothing in the output would say a retry had happened.
 
 ### Edge cases
 
 | Case | Behavior |
 |---|---|
-| Hunk depends on an earlier unselected hunk (line-number mismatch) | `--recount` handles most cases; on failure the apply is retried with `--3way`, and a second failure reports git's stderr. |
+| Hunk depends on an earlier unselected hunk (line-number mismatch) | `--recount` handles most cases; anything it cannot handle is a hard error naming the file, with git's own stderr surfaced. |
 | File is binary | Whole-file only; a hunk selection is refused with exit 14. |
 | Symlink | Whole-file only; a hunk selection is refused with exit 15 -- a symlink has nothing to split. |
 | File is untracked | Staged whole, as an addition. |
