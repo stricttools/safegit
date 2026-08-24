@@ -239,6 +239,30 @@ func TestDeclaredMoveSuppressesTheInferredOne(t *testing.T) {
 	assertInferredPairs(t, dir, "a.txt -> b.txt")
 }
 
+// SUPPRESSION UN-BLOCKS. The same blob leaves two paths and arrives at two
+// others, which on its own witnesses nothing -- but the caller DECLARED one of
+// the two moves, and a declaration is the human answering that question. The
+// declared paths are out of the candidate sets AND out of the listings the
+// uniqueness fences read, so what is left is one deletion and one addition of a
+// blob that now sits at exactly one path on each side: x2's fate is judged on
+// its own, and it is recorded.
+func TestDeclarationUnblocksTheOtherHalfOfAnAmbiguousBlob(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "x1.txt", "identical\n")
+	testutil.WriteFile(t, dir, "x2.txt", "identical\n")
+	safegitCommitEnv(t, dir, inferredSession, "seed", "x1.txt", "x2.txt")
+
+	moveOnDisk(t, dir, "x1.txt", "y.txt")
+	moveOnDisk(t, dir, "x2.txt", "z.txt")
+	_, stderr, code := runSafegitEnv(t, dir, inferredSession, "commit", "-m", "move both",
+		"--moved", "x1.txt -> y.txt", "--", "x1.txt", "x2.txt", "y.txt", "z.txt")
+	if code != 0 {
+		t.Fatalf("commit failed (code %d): %s", code, stderr)
+	}
+
+	assertInferredPairs(t, dir, "x1.txt -> y.txt", "x2.txt -> z.txt")
+}
+
 // `safegit mv` mints its own records, and they arrive at the pipeline the same
 // way a declaration does. So the commit it writes carries ONE record per move,
 // never a declared one and an inferred duplicate beside it.
