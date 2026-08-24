@@ -43,6 +43,24 @@ import (
 //   - a shell wrapper (exec.Command("sh", "-c", "git ...")), because the git
 //     invocation is inside an opaque string the shell parses, not in the argv.
 //
+// A FIFTH shape is refused for a different reason: a LITERAL authoring verb in
+// a git argv construction -- `"commit"`, or `"merge"`/`"cherry-pick"`/`"revert"`
+// with none of that verb's suppressing tokens in the same construction. That is
+// the source half of the single-authorship boundary, whose enforcing half is the
+// runtime check in Validate (see authoring.go). The two halves read the SAME
+// declaration -- the verb table's Authors and SuppressedBy fields -- so they
+// cannot disagree about what authors a commit.
+//
+// The division of labour between them is deliberate:
+//
+//   - the RUNTIME check is the enforcement. It sees every argv safegit builds,
+//     including the ones whose verb comes from a variable (the guarded
+//     passthroughs), and it needs no list of anything;
+//   - this SOURCE scan is the earlier answer, and it is deliberately narrow. It
+//     recognizes two construction shapes and refuses a literal inside them; it
+//     never guesses. A construction it does not recognize is not a hole, because
+//     the runtime check is behind it.
+//
 // Scope rule: _test.go files anywhere and the whole internal/testutil package
 // are exempt. Tests exercise git directly by design -- that is how a test builds
 // the fixture the production code is then measured against. Production packages
@@ -84,6 +102,82 @@ var skipDirs = map[string]bool{
 type violation struct {
 	pos  string
 	what string
+}
+
+// staticAuthoringVerbs are the authoring verbs this SOURCE scan refuses when it
+// finds one spelled as a literal. It is the verb table's Authors set minus the
+// entries in staticAuthoringExcluded, and
+// TestStaticAuthoringVerbsCoverTheTableExactly holds the two halves together.
+var staticAuthoringVerbs = map[string]bool{
+	"commit":      true,
+	"merge":       true,
+	"cherry-pick": true,
+	"revert":      true,
+}
+
+// staticAuthoringExcluded names the authoring verbs the source scan deliberately
+// does NOT refuse, each with the reason.
+var staticAuthoringExcluded = map[string]string{
+	"rebase": "the one declared door is a rebase, and whether a call site holds it is a RUN-TIME fact this scan cannot read; refusing the literal would mean a second file-and-line exemption table restating the door table, so the runtime check carries rebase alone",
+}
+
+// argvTakingCalls are the functions whose string-literal arguments form a git
+// argv. The match is on the FUNCTION NAME (`git.Run`, `runGitMutation`), not on
+// a resolved package, for the same reason the rest of this guard parses per file
+// rather than type-checking the module.
+//
+// The list being incomplete is not a hole: it is the source scan's reach, and
+// the runtime check behind it needs no list at all. What the list buys is the
+// earlier answer on the shapes safegit actually writes.
+var argvTakingCalls = map[string]string{
+	"Run":                   "internal/git.Run and its kin: the variadic tail IS the git argv",
+	"RunWithEnv":            "internal/git.RunWithEnv",
+	"RunWithEnvStdin":       "internal/git.RunWithEnvStdin",
+	"RunWithGitDir":         "internal/git.RunWithGitDir",
+	"RunPassthrough":        "internal/git.RunPassthrough",
+	"RunPassthroughWithEnv": "internal/git.RunPassthroughWithEnv",
+	"RunPassthroughTo":      "internal/git.RunPassthroughTo",
+	"runGit":                "internal/submodule.runGit",
+	"runGitMutation":        "main.runGitMutation, the effects-handle route for the guarded commands",
+	"runPassthrough":        "main.runPassthrough",
+	"ArgvAny":               "the boundary's own effects-handle argv builder",
+}
+
+// authoringViolation reports the refused authoring shape for one argv
+// construction: the verb literal, and every string literal the construction
+// carries after it.
+//
+// suppressors come from the verb's own SuppressedBy list, so this scan and the
+// runtime check answer "does this authorize git to commit" from one declaration.
+func authoringViolation(verb string, rest []string) (string, bool) {
+	if !staticAuthoringVerbs[verb] {
+		return "", false
+	}
+	v, ok := Lookup(verb)
+	if !ok {
+		return "", false
+	}
+	for _, tok := range v.SuppressedBy {
+		for _, r := range rest {
+			if r == tok {
+				return "", false
+			}
+		}
+	}
+	return "a `git " + verb + "` argv built with no suppressing token on it (" +
+		strings.Join(v.SuppressedBy, ", ") + "): git would AUTHOR the commit, and every commit safegit makes is its own pipeline's", true
+}
+
+// stringLits returns the values of the string-literal elements of a list, in
+// order, skipping everything that is not one.
+func stringLits(list []ast.Expr) []string {
+	var out []string
+	for _, e := range list {
+		if s, ok := stringLit(e); ok {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func TestGitExecutionBoundaryIsTheOnlyOne(t *testing.T) {
@@ -177,6 +271,16 @@ func scanFile(fset *token.FileSet, file *ast.File, rel string) []violation {
 	ast.Inspect(file, func(n ast.Node) bool {
 		switch node := n.(type) {
 		case *ast.CallExpr:
+			// The single-authorship rule's CALL shape, checked before the
+			// os/exec one because it matches on the function name alone and
+			// applies to a plain identifier as well as a selector.
+			if name := calleeName(node.Fun); argvTakingCalls[name] != "" {
+				if lits := stringLits(node.Args); len(lits) > 0 {
+					if what, bad := authoringViolation(lits[0], lits[1:]); bad {
+						out = append(out, violation{at(node.Pos()), what})
+					}
+				}
+			}
 			sel, ok := node.Fun.(*ast.SelectorExpr)
 			if !ok {
 				return true
@@ -202,6 +306,20 @@ func scanFile(fset *token.FileSet, file *ast.File, rel string) []violation {
 				out = append(out, violation{at(node.Pos()), pkg.Name + "." + sel.Sel.Name + " (" + execImportPath + ") of the git binary outside the execution boundary"})
 			}
 		case *ast.CompositeLit:
+			// The single-authorship rule's SLICE shape. A []string argv carries
+			// the verb at element 0: the binary and the global prefix are the
+			// boundary's to add. A first element that is not a string literal --
+			// the `[]string{gitCmd}` the guarded passthroughs build -- is left
+			// to the runtime check, which can see what the variable holds.
+			if isStringSlice(node.Type) && len(node.Elts) > 0 {
+				if lits := stringLits(node.Elts); len(lits) > 0 {
+					if first, ok := stringLit(node.Elts[0]); ok {
+						if what, bad := authoringViolation(first, lits[1:]); bad {
+							out = append(out, violation{at(node.Pos()), what})
+						}
+					}
+				}
+			}
 			if !isInterfaceSlice(node.Type) || len(node.Elts) == 0 {
 				return true
 			}
@@ -236,6 +354,32 @@ func stringLit(e ast.Expr) (string, bool) {
 		return "", false
 	}
 	return s, true
+}
+
+// calleeName renders the name a call expression invokes: the bare identifier for
+// a package-local function, and the selector's own name for a qualified one
+// (`git.Run` reports "Run"). It is a NAME match by design -- resolving it to a
+// package would mean type-checking the module, and the shapes this guard is
+// written against are the ones safegit itself writes.
+func calleeName(fun ast.Expr) string {
+	switch f := fun.(type) {
+	case *ast.Ident:
+		return f.Name
+	case *ast.SelectorExpr:
+		return f.Sel.Name
+	}
+	return ""
+}
+
+// isStringSlice reports whether a composite-literal type is []string, the shape
+// every git argv safegit builds for the boundary takes.
+func isStringSlice(t ast.Expr) bool {
+	arr, ok := t.(*ast.ArrayType)
+	if !ok || arr.Len != nil {
+		return false
+	}
+	id, ok := arr.Elt.(*ast.Ident)
+	return ok && id.Name == "string"
 }
 
 // isInterfaceSlice reports whether a composite-literal type is []interface{} or
@@ -341,6 +485,110 @@ func TestBoundaryGuardCatchesItsRefusedShapes(t *testing.T) {
 			src:  "package git\nconst ZeroSHA = \"" + zeroSHALiteral + "\"\n",
 			want: false,
 		},
+
+		// The single-authorship rule. Each planted violation is the shape a
+		// production site would really take.
+		{
+			name: "an argv slice literal that lets git author a merge",
+			rel:  "somepkg/a.go",
+			src:  "package p\nvar argv = []string{\"merge\", \"topic\"}\n",
+			want: true,
+		},
+		{
+			name: "the same construction with the suppressor on it",
+			rel:  "somepkg/a.go",
+			src:  "package p\nvar argv = []string{\"merge\", \"--no-ff\", \"--no-commit\", \"topic\"}\n",
+			want: false,
+		},
+		{
+			name: "an argv slice literal naming git's own commit verb",
+			rel:  "somepkg/a.go",
+			src:  "package p\nfunc f() { _ = append([]string{\"commit\", \"-m\", \"x\"}, nil...) }\n",
+			want: true,
+		},
+		{
+			name: "a cherry-pick argv built as a call to an argv-taking runner",
+			rel:  "somepkg/a.go",
+			src:  "package p\nfunc f() { _, _, _ = git.Run(ctx, \"cherry-pick\", \"abc1234\") }\n",
+			want: true,
+		},
+		{
+			name: "the same runner call with cherry-pick's own -n",
+			rel:  "somepkg/a.go",
+			src:  "package p\nfunc f() { _, _, _ = git.Run(ctx, \"cherry-pick\", \"-n\", \"abc1234\") }\n",
+			want: false,
+		},
+		{
+			// backup restore's real argv: a fast-forward moves a ref onto a
+			// commit that already exists.
+			name: "a merge argv suppressed by --ff-only",
+			rel:  "somepkg/a.go",
+			src:  "package p\nfunc f() { _, _, _ = git.Run(ctx, \"merge\", \"--ff-only\", \"FETCH_HEAD\") }\n",
+			want: false,
+		},
+		{
+			// `-n` is --no-stat on merge, not --no-commit: the suppressor sets
+			// are per verb precisely so this stays a violation.
+			name: "a merge argv carrying -n, which on merge means --no-stat",
+			rel:  "somepkg/a.go",
+			src:  "package p\nfunc f() { _, _, _ = git.Run(ctx, \"merge\", \"-n\", \"topic\") }\n",
+			want: true,
+		},
+		{
+			name: "a forwarded --continue, which authors the commit",
+			rel:  "somepkg/a.go",
+			src:  "package p\nfunc f() { _ = git.RunPassthrough(ctx, \"revert\", \"--continue\") }\n",
+			want: true,
+		},
+		{
+			// The effects-handle shape, whose first element is the BINARY. It is
+			// already refused by the argv-literal rule above whatever verb
+			// follows, and the row is here to state that an authoring one is
+			// covered too rather than falling between the two rules.
+			name: "an effects-handle git argv literal that authors",
+			rel:  "somepkg/a.go",
+			src:  "package p\nvar argv = []interface{}{\"git\", \"revert\", \"abc1234\"}\n",
+			want: true,
+		},
+		{
+			// autobump's safegit self-spawn: the binary is not the literal
+			// "git", so the construction is not a git argv at all.
+			name: "a safegit self-spawn through the effects handle",
+			rel:  "somepkg/a.go",
+			src:  "package p\nvar argv = []interface{}{safegitBin, \"commit\", \"-m\", msg}\n",
+			want: false,
+		},
+		{
+			// The verb is a variable, which is the shape the guarded
+			// passthroughs take. The runtime check is what covers those; the
+			// source scan cannot and must not guess.
+			name: "an argv whose verb comes from a variable",
+			rel:  "somepkg/a.go",
+			src:  "package p\nfunc f() { _ = append([]string{gitCmd}, args...) }\n",
+			want: false,
+		},
+		{
+			// An operation NAME, not an argv: these are everywhere (oplog op
+			// names, lock names, map keys) and none of them is a git argv.
+			name: "an operation name passed to a non-argv function",
+			rel:  "somepkg/a.go",
+			src:  "package p\nfunc f() { _, _ = acquireOperationLock(flags, gitDir, \"cherry-pick\") }\n",
+			want: false,
+		},
+		{
+			name: "a map keyed by operation name",
+			rel:  "somepkg/a.go",
+			src:  "package p\nvar undoable = map[string]string{\"commit\": \"parent\", \"revert\": \"revert\"}\n",
+			want: false,
+		},
+		{
+			// rebase is deliberately outside the SOURCE rule: see
+			// staticAuthoringExcluded. The runtime check covers it.
+			name: "the rebase passthrough's own argv construction",
+			rel:  "somepkg/a.go",
+			src:  "package p\nfunc f() { _ = append([]string{\"rebase\"}, args...) }\n",
+			want: false,
+		},
 	}
 
 	for _, tc := range cases {
@@ -377,6 +625,103 @@ func TestBoundaryGuardSkipsOnlyRootDirectories(t *testing.T) {
 	nested := filepath.Join("internal", "somepkg", "scripts")
 	if skipDirs[filepath.ToSlash(nested)] {
 		t.Errorf("%q must not be skipped: only the repository-root directory is", nested)
+	}
+}
+
+// TestStaticAuthoringVerbsCoverTheTableExactly binds the source scan's verb set
+// to the classification table's own Authors set. A verb that becomes able to
+// author must land in one of the two maps deliberately -- refused by the scan,
+// or excluded from it with the reason written down -- rather than quietly
+// falling outside both.
+func TestStaticAuthoringVerbsCoverTheTableExactly(t *testing.T) {
+	for _, v := range Verbs() {
+		scanned := staticAuthoringVerbs[v.Name]
+		reason, excluded := staticAuthoringExcluded[v.Name]
+		switch {
+		case v.Authors && !scanned && !excluded:
+			t.Errorf("verb %q can author a commit but the source scan neither refuses nor excludes it", v.Name)
+		case v.Authors && scanned && excluded:
+			t.Errorf("verb %q is both refused and excluded by the source scan", v.Name)
+		case !v.Authors && (scanned || excluded):
+			t.Errorf("verb %q cannot author a commit, so the source scan has nothing to say about it", v.Name)
+		}
+		if excluded && strings.TrimSpace(reason) == "" {
+			t.Errorf("verb %q is excluded from the source scan with no reason", v.Name)
+		}
+	}
+	declared := map[string]bool{}
+	for _, v := range Verbs() {
+		declared[v.Name] = true
+	}
+	for name := range staticAuthoringVerbs {
+		if !declared[name] {
+			t.Errorf("the source scan refuses %q, which the classification table does not declare", name)
+		}
+	}
+	for name := range staticAuthoringExcluded {
+		if !declared[name] {
+			t.Errorf("the source scan excludes %q, which the classification table does not declare", name)
+		}
+	}
+}
+
+// TestArgvTakingCallsNamesEveryVariadicGitRunner is the source scan's own
+// freshness check: a new function that takes a git argv as a variadic string
+// tail must be named in argvTakingCalls, or the scan stops seeing the argv built
+// through it.
+//
+// One direction only. The list may legitimately carry MORE than the scan finds
+// -- main.runPassthrough takes a []string rather than a variadic tail, and
+// gitexec.ArgvAny lives in the package the walk skips -- but it may never carry
+// less.
+func TestArgvTakingCallsNamesEveryVariadicGitRunner(t *testing.T) {
+	root := repoRoot(t)
+	// The packages that speak git argv. internal/testutil is not among them: it
+	// drives raw git for fixtures and never reaches the boundary.
+	dirs := []string{".", "internal/git", "internal/submodule"}
+	fset := token.NewFileSet()
+	found := 0
+
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(dir)))
+		if err != nil {
+			t.Fatalf("reading %s: %v", dir, err)
+		}
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") || strings.HasSuffix(e.Name(), "_test.go") {
+				continue
+			}
+			path := filepath.Join(root, filepath.FromSlash(dir), e.Name())
+			file, err := parser.ParseFile(fset, path, nil, 0)
+			if err != nil {
+				t.Fatalf("parsing %s: %v", path, err)
+			}
+			for _, decl := range file.Decls {
+				fn, ok := decl.(*ast.FuncDecl)
+				if !ok || fn.Type.Params == nil || len(fn.Type.Params.List) == 0 {
+					continue
+				}
+				last := fn.Type.Params.List[len(fn.Type.Params.List)-1]
+				ell, ok := last.Type.(*ast.Ellipsis)
+				if !ok {
+					continue
+				}
+				if id, ok := ell.Elt.(*ast.Ident); !ok || id.Name != "string" {
+					continue
+				}
+				if len(last.Names) != 1 || last.Names[0].Name != "args" {
+					continue
+				}
+				found++
+				if argvTakingCalls[fn.Name.Name] == "" {
+					t.Errorf("%s/%s: %s takes a variadic git argv but is not named in argvTakingCalls, so the source scan cannot see argv built through it",
+						dir, e.Name(), fn.Name.Name)
+				}
+			}
+		}
+	}
+	if found == 0 {
+		t.Error("no variadic git runner was found at all; this check is measuring nothing")
 	}
 }
 
