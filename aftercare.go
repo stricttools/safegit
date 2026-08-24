@@ -13,10 +13,11 @@ import (
 // vocabulary every command that runs them reports them in.
 //
 // What makes them a family is not what they do but what a failure in any of
-// them means. The commit is REAL -- the object exists, the ref points at it,
-// `safegit undo` can reverse it -- and something safegit owed afterwards did
-// not finish. That is neither a success nor a refusal, and reporting it as
-// either is what this file exists to stop:
+// them means. The REF MOVE IS REAL -- for the commit-authoring routes, the
+// object exists, the ref points at it and `safegit undo` can reverse it; for a
+// fast-forward, the branch stands on the incoming tip -- and something safegit
+// owed afterwards did not finish. That is neither a success nor a refusal, and
+// reporting it as either is what this file exists to stop:
 //
 //   - as a success (exit 0), because a caller would never look at the message
 //     saying their work is parked in a stash or their index is out of step;
@@ -46,6 +47,11 @@ const (
 	// stepWorktreeResolution is writing the resolved content into the working
 	// tree, which is what git's own `checkout --ours` and `rm` do.
 	stepWorktreeResolution = "writing the resolved content into the working tree"
+	// stepFastForwardSync is putting the index and the working tree in step with
+	// the tip a fast-forward moved the branch onto. It is the one member of the
+	// family whose ref move created no commit: the branch moved onto commits
+	// that already existed, and the step after that move is owed just the same.
+	stepFastForwardSync = "putting the index and the working tree in step with the fast-forwarded tip"
 	// stepParentBump is committing a parent repository's moved gitlink. The
 	// wording keeps the config key's own vocabulary (commit.autoBumpParent), so
 	// an operator reading the message and an operator reading the config are
