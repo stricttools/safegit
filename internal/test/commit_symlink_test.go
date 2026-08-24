@@ -398,3 +398,117 @@ func TestCommitSymlink_MixedWithRegularFile(t *testing.T) {
 			changed, strings.Fields(introduced), stdout)
 	}
 }
+
+// TestCommitEscapingSymlinkFoundByDirectoryExpansionIsRefused pins the OTHER
+// route a symlink reaches the escaping-target verdict by: not named on the
+// command line at all, but swept up by a directory argument's expansion. The
+// expansion collects every link it walks over and hands them to the same
+// end-of-intake judgement, so a link nobody typed is refused exactly like one
+// that was.
+//
+// Pinned because the refusal is easy to read as a property of NAMED arguments
+// only, and a future intake change that stopped collecting the expansion's
+// links would leave the whole directory-argument route unguarded with every
+// named-argument test still green.
+func TestCommitEscapingSymlinkFoundByDirectoryExpansionIsRefused(t *testing.T) {
+	dir := newRepo(t)
+
+	testutil.WriteFile(t, dir, "sub/ordinary.txt", "ordinary\n")
+	const target = "../../elsewhere/secret.txt"
+	if err := os.Symlink(target, filepath.Join(dir, "sub", "escapes")); err != nil {
+		t.Fatalf("creating symlink: %v", err)
+	}
+	before := testutil.Rev(t, dir, "HEAD")
+
+	// The argument names the DIRECTORY. sub/escapes is reached only by the
+	// expansion.
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "commit the directory", "--", "sub")
+	if code != exitcode.EscapingSymlinkTarget {
+		t.Errorf("a directory holding an escaping symlink exited %d, want %d (EscapingSymlinkTarget); stderr: %s",
+			code, exitcode.EscapingSymlinkTarget, stderr)
+	}
+	if !strings.Contains(stderr, target) {
+		t.Errorf("the refusal must name the escaping target %q; stderr:\n%s", target, stderr)
+	}
+	if !strings.Contains(stderr, "sub/escapes") {
+		t.Errorf("the refusal must name the expanded path sub/escapes; stderr:\n%s", stderr)
+	}
+
+	// The refusal is made before anything is staged, so the ordinary file the
+	// same argument would have committed is not committed either.
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("HEAD moved despite the refusal: %s -> %s", before, after)
+	}
+	if _, ok := testutil.Show(t, dir, "HEAD", "sub/ordinary.txt"); ok {
+		t.Error("the refused commit staged the directory's other members")
+	}
+}
+
+// TestCommitAbsoluteSymlinkTargetInsideTheRepositoryIsCommitted pins the
+// CURRENT definition of escape: a target that resolves OUTSIDE the repository.
+// An ABSOLUTE target that resolves back inside it is therefore not an escape and
+// is committed, notice-free -- even though the recorded text is a machine
+// specific path that resolves to nothing in a checkout at any other location.
+//
+// This is a record of behavior as built, not a ruling: whether an absolute
+// in-repository target should share the escaping verdict is listed for the
+// user's pre-release review. If that review changes the definition, this test
+// is the one to rewrite, and it exists so the change cannot happen silently.
+func TestCommitAbsoluteSymlinkTargetInsideTheRepositoryIsCommitted(t *testing.T) {
+	dir := newRepo(t)
+
+	// newRepo's directory is already symlink-resolved, so the absolute target
+	// really is inside the repository by path comparison.
+	target := filepath.Join(dir, "seed.txt")
+	if err := os.Symlink(target, filepath.Join(dir, "abslink")); err != nil {
+		t.Fatalf("creating symlink: %v", err)
+	}
+
+	stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "add absolute link", "--", "abslink")
+	if code != 0 {
+		t.Fatalf("an absolute in-repository symlink was refused (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	if mode := treeEntryMode(t, dir, "abslink"); mode != "120000" {
+		t.Errorf("expected HEAD entry %q with mode 120000, got mode %q; tree:\n%s", "abslink", mode, lsTreeHEAD(t, dir))
+	}
+	if got := catFileBlob(t, dir, "abslink"); got != target {
+		t.Errorf("symlink blob = %q, want the absolute link text %q", got, target)
+	}
+	if strings.Contains(stderr, "outside the repository") {
+		t.Errorf("a target that resolves inside the repository must produce no escaping notice, got:\n%s", stderr)
+	}
+}
+
+// TestCommitTraversingSymlinkTargetLandingInsideIsCommitted pins that the
+// verdict is about where a target RESOLVES, never about how it is spelled: a
+// relative target that climbs out of its own directory with `..` and comes back
+// down inside the repository is an ordinary in-repository link.
+//
+// Pinned because the cheap implementation of the check -- looking for a leading
+// `..` in the link text -- would refuse this one, and every existing escaping
+// test would still pass.
+func TestCommitTraversingSymlinkTargetLandingInsideIsCommitted(t *testing.T) {
+	dir := newRepo(t)
+
+	testutil.WriteFile(t, dir, "sub/holder.txt", "holder\n")
+	// From sub/, `../seed.txt` climbs to the repository root and lands on a
+	// tracked file: traversal that never leaves.
+	const target = "../seed.txt"
+	if err := os.Symlink(target, filepath.Join(dir, "sub", "climber")); err != nil {
+		t.Fatalf("creating symlink: %v", err)
+	}
+
+	stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "add climbing link", "--", "sub/climber")
+	if code != 0 {
+		t.Fatalf("a traversing but in-repository symlink was refused (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	if mode := treeEntryMode(t, dir, "sub/climber"); mode != "120000" {
+		t.Errorf("expected HEAD entry %q with mode 120000, got mode %q; tree:\n%s", "sub/climber", mode, lsTreeHEAD(t, dir))
+	}
+	if got := catFileBlob(t, dir, "sub/climber"); got != target {
+		t.Errorf("symlink blob = %q, want the link text %q", got, target)
+	}
+	if strings.Contains(stderr, "outside the repository") {
+		t.Errorf("a target that resolves inside the repository must produce no escaping notice, got:\n%s", stderr)
+	}
+}

@@ -383,6 +383,11 @@ func noticeEscapingLinks(repoRoot string, paths []string) {
 // It runs at the END of intake, before anything is staged and before the CAS
 // loop, so nothing is written when it fires and commit and --amend inherit it
 // from the one place both of them resolve their files.
+//
+// docs/divergences.md carries this as an entry of its own, rewritten when the
+// notice became a refusal plus the election flag; the entry that still
+// described a plain commit-with-a-notice is the one being replaced, not a
+// second one to add beside it.
 func refuseEscapingLinks(repoRoot string, paths []string, allow bool) error {
 	if allow {
 		noticeEscapingLinks(repoRoot, paths)

@@ -629,3 +629,54 @@ func TestMvElectedCreationCannotCureAParentThatIsAFile(t *testing.T) {
 		})
 	}
 }
+
+// TestMvOfATrackedEscapingSymlinkProceeds pins the SCOPE carve-out of the
+// escaping-target refusal: that refusal is about ADDING or STAGING escaping
+// link content, and `safegit mv` does neither. A move carries the parent's blob
+// across through index edits -- the link text is never re-read from disk and
+// never re-staged -- so a link already tracked with an escaping target is moved
+// like any other tracked path, with no election flag and no notice.
+//
+// Pinned because the carve-out is invisible in the code: mv simply never calls
+// the intake that judges links. A future change that routed mv through that
+// intake, or that added a link check to mv's own validation, would close the
+// carve-out silently and turn every move of an already-committed escaping link
+// into a refusal for content the repository has carried all along.
+func TestMvOfATrackedEscapingSymlinkProceeds(t *testing.T) {
+	dir := mvSeed(t)
+
+	const target = "../elsewhere/secret.txt"
+	if err := os.Symlink(target, filepath.Join(dir, "escapes")); err != nil {
+		t.Fatalf("creating symlink: %v", err)
+	}
+	// Getting it INTO the tree needs the election -- that is the staging half
+	// the refusal governs. Moving it afterwards is the half that does not.
+	if _, stderr, code := runSafegit(t, dir, "commit", "--allow-escaping-targets",
+		"-m", "add escaping link", "--", "escapes"); code != 0 {
+		t.Fatalf("seeding the tracked escaping link failed (code %d): %s", code, stderr)
+	}
+
+	_, stderr, code := runSafegit(t, dir, "mv", "-m", "move the link", "escapes -> renamed")
+	if code != 0 {
+		t.Fatalf("mv of a tracked escaping symlink was refused (code %d): %s", code, stderr)
+	}
+	if strings.Contains(stderr, "--allow-escaping-targets") {
+		t.Errorf("mv must not ask for the staging election; stderr:\n%s", stderr)
+	}
+
+	// The link travelled as the exact object the parent held: same mode, same
+	// text, and it is still a symlink on disk.
+	if mode := treeEntryMode(t, dir, "renamed"); mode != "120000" {
+		t.Errorf("expected HEAD entry %q with mode 120000, got mode %q; tree:\n%s", "renamed", mode, lsTreeHEAD(t, dir))
+	}
+	if got := catFileBlob(t, dir, "renamed"); got != target {
+		t.Errorf("moved symlink blob = %q, want the unchanged link text %q", got, target)
+	}
+	if mvExists(t, dir, "escapes") {
+		t.Error("the source link is still at its original path")
+	}
+	info, err := os.Lstat(filepath.Join(dir, "renamed"))
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("the moved path is not a symlink on disk (err %v, mode %v)", err, info)
+	}
+}
