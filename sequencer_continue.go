@@ -610,13 +610,28 @@ func (out *conclusionResult) concludeAftercare(
 		fmt.Fprintf(os.Stderr, "error: %s\n", r.Detail)
 		out.residue = append(out.residue, *r)
 		if state.Kind == sequencer.KindMerge && state.Autostash != "" {
-			// Said explicitly, because the alternative is silence about work
-			// that exists nowhere else: the autostash was never reached, so
-			// MERGE_AUTOSTASH still holds it exactly as git left it.
+			// Said explicitly, because the alternative is silence about work that
+			// may exist nowhere else: the autostash was never reached, so the file
+			// still holds exactly what git left in it.
+			//
+			// WHOSE work it holds is asked here rather than assumed. The ownership
+			// key needs the tip this conclusion committed onto, which is in hand,
+			// so the same question consumeAutostash asks is cheap here -- and the
+			// answer is the difference between telling an operator where their own
+			// work is and telling them a stash from some other operation is theirs.
+			// The STATE stays `pending` either way: the consuming step was not
+			// reached, which is what that value means, and `foreign` is the verdict
+			// of the step that did run.
 			stash := state.Autostash
 			out.autostash = autostashOutcome{State: autostashPending, Stash: &stash}
-			fmt.Fprintf(os.Stderr, "  the autostash was not reached: %s still holds your uncommitted work (commit %s)\n",
-				sequencer.FileMergeAutostash, stash)
+			if why, ours := autostashIsThisMerges(ctx, stash, firstParentOf(result)); ours {
+				fmt.Fprintf(os.Stderr, "  the autostash was not reached: %s still holds your uncommitted work (commit %s)\n",
+					sequencer.FileMergeAutostash, stash)
+			} else {
+				fmt.Fprintf(os.Stderr, "  the autostash was not reached: %s is untouched (commit %s)\n",
+					sequencer.FileMergeAutostash, stash)
+				fmt.Fprintf(os.Stderr, "    it names a commit this merge did not set aside, so whose work it holds is not safegit's to say: %s\n", why)
+			}
 		}
 		return
 	}

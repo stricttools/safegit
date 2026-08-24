@@ -1,6 +1,7 @@
 package test
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -131,5 +132,81 @@ func TestConclusionDoesNotConsumeAnAbandonedMergesAutostash(t *testing.T) {
 	}
 	if code == 0 {
 		t.Errorf("the conclusion exited 0 while leaving an unconsumed autostash behind:\n%s", combined)
+	}
+}
+
+// blockTheWorktreeWrite makes the working-tree write a conclusion owes fail, by
+// putting a non-empty DIRECTORY where the resolved file has to be written.
+//
+// It is the one way to stop the aftercare BEFORE the autostash step without
+// touching the autostash itself: the commit is made, the state files go, and
+// the chain stops at the last step of finishConclusion.
+func blockTheWorktreeWrite(t *testing.T, dir, rel string) {
+	t.Helper()
+	abs := filepath.Join(dir, rel)
+	if err := os.Remove(abs); err != nil {
+		t.Fatalf("removing %s: %v", rel, err)
+	}
+	if err := os.MkdirAll(abs, 0o755); err != nil {
+		t.Fatalf("putting a directory in place of %s: %v", rel, err)
+	}
+	testutil.WriteFileAt(t, filepath.Join(abs, "occupant.txt"), "this directory is not empty\n")
+}
+
+// TestUnreachedAutostashDoesNotClaimWorkItNeverChecked: when the aftercare
+// stops before the autostash step, the line about MERGE_AUTOSTASH must not call
+// what it names "your uncommitted work" without having asked whose it is.
+//
+// The ownership question is answerable right there -- the tip the conclusion
+// committed onto is in hand -- and a foreign stash is exactly the file this
+// arm is most likely to be looking at, since a merge whose aftercare failed is
+// a repository something else already went wrong in.
+func TestUnreachedAutostashDoesNotClaimWorkItNeverChecked(t *testing.T) {
+	fx := newAbandonedAutostashRepo(t)
+	blockTheWorktreeWrite(t, fx.dir, "conflicted.txt")
+
+	stdout, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession,
+		"merge-continue", "--resolve", "conflicted.txt=ours")
+	combined := stdout + stderr
+	if code == 0 {
+		t.Fatalf("the blocked working-tree write must make the run exit nonzero:\n%s", combined)
+	}
+	if !strings.Contains(combined, "MERGE_AUTOSTASH") {
+		t.Fatalf("the run says nothing about the autostash it did not reach; the fixture no longer produces the arm:\n%s", combined)
+	}
+	if strings.Contains(combined, "your uncommitted work") {
+		t.Errorf("the run calls a stash this merge did not set aside 'your uncommitted work'; it names %s, whose first parent is not the tip this merge was built on:\n%s",
+			fx.stale, combined)
+	}
+	if !strings.Contains(combined, "untouched") {
+		t.Errorf("the run does not say the file was left untouched:\n%s", combined)
+	}
+	// Untouched means untouched: nothing was applied and nothing removed.
+	if !testutil.FileExists(filepath.Join(fx.dir, ".git", "MERGE_AUTOSTASH")) {
+		t.Error("MERGE_AUTOSTASH is gone; an unreached autostash is neither applied nor removed")
+	}
+	if got := readWorktree(t, fx.dir, fx.stashed); got != fx.committed {
+		t.Errorf("%s = %q, want the committed content %q: the stale stash was applied", fx.stashed, got, fx.committed)
+	}
+}
+
+// TestUnreachedAutostashStillClaimsTheMergesOwn is the other half of the same
+// wording: where the ownership key PASSES, the line says whose work it is,
+// because that is the fact an operator needs to go and get it back.
+func TestUnreachedAutostashStillClaimsTheMergesOwn(t *testing.T) {
+	fx := newAutostashMergeRepo(t, false)
+	blockTheWorktreeWrite(t, fx.dir, "conflicted.txt")
+
+	stdout, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession,
+		"merge-continue", "--resolve", "conflicted.txt=ours")
+	combined := stdout + stderr
+	if code == 0 {
+		t.Fatalf("the blocked working-tree write must make the run exit nonzero:\n%s", combined)
+	}
+	if !strings.Contains(combined, "your uncommitted work") {
+		t.Errorf("the autostash here IS this merge's own, and the run does not say so:\n%s", combined)
+	}
+	if !testutil.FileExists(filepath.Join(fx.dir, ".git", "MERGE_AUTOSTASH")) {
+		t.Error("MERGE_AUTOSTASH is gone; the aftercare stopped before the step that consumes it")
 	}
 }
