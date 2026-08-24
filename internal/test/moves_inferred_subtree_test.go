@@ -2,6 +2,8 @@ package test
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -136,4 +138,33 @@ func TestScatteredMovesAtTheCapAreRecorded(t *testing.T) {
 	if got := len(movePairsIn(t, commitMessageOf(t, dir, "HEAD"))); got != count {
 		t.Errorf("HEAD carries %d records, want %d", got, count)
 	}
+}
+
+// A subtree is witnessed against EVERY entry the trees hold under the prefix,
+// not only the regular files that can be one side of a pair. A symlink left
+// behind means the directory did not move -- and because a symlink never pairs,
+// it can never be part of the group either, so the collapse must not happen.
+//
+// Reading the witness over regular files alone would mint `dir/ -> other/` for
+// a directory that still exists with the link inside it: a record claiming a
+// move that did not happen.
+func TestSubtreeCollapseCountsEveryEntryUnderThePrefix(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "dir/x.txt", "x content\n")
+	testutil.WriteFile(t, dir, "dir/y.txt", "y content\n")
+	if err := os.Symlink("x.txt", filepath.Join(dir, "dir", "link")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	safegitCommitEnv(t, dir, inferredSession, "seed", "dir/x.txt", "dir/y.txt", "dir/link")
+
+	// The two files move; the link stays behind, so the directory did not move.
+	moveOnDisk(t, dir, "dir/x.txt", "other/x.txt")
+	moveOnDisk(t, dir, "dir/y.txt", "other/y.txt")
+	_, stderr, code := runSafegitEnv(t, dir, inferredSession, "commit", "-m", "move the files, keep the link",
+		"--", "dir/x.txt", "dir/y.txt", "other/x.txt", "other/y.txt")
+	if code != 0 {
+		t.Fatalf("commit failed (code %d): %s", code, stderr)
+	}
+
+	assertInferredPairs(t, dir, "dir/x.txt -> other/x.txt", "dir/y.txt -> other/y.txt")
 }
