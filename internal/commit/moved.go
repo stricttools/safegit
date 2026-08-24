@@ -523,6 +523,46 @@ func mintedRecords(lines []string) []trailer.Record {
 	return out
 }
 
+// committedRecords narrows the records one operation MINTED to the ones the
+// message it actually committed carries.
+//
+// The two can differ, and there is exactly one thing that makes them: a
+// commit-msg hook. The records go on the message BEFORE the hook runs, like
+// every other piece of caller content, and a hook is free to rewrite the message
+// it is handed -- a policy hook that keeps only the lines it recognizes strips
+// them all. What the commit then carries is the hook's text, so a payload built
+// from the pre-hook lines would name records no reader can find on the commit.
+//
+// The narrowing is by ID, which is what a record is addressed by: a line the
+// hook reordered, re-wrapped or re-indented is still the same record, while a
+// line it removed is gone.
+//
+// committedMessage is the message as it stands after the hook and before
+// trailer.Inject, which adds safegit's own session trailer and touches no
+// record. Under --dry-run no hook runs at all, so the message is the one this
+// operation composed and every minted record survives -- which is the honest
+// preview answer, since that is what the real run would write.
+func committedRecords(lines []string, committedMessage string) []trailer.Record {
+	minted := mintedRecords(lines)
+	if len(minted) == 0 {
+		return nil
+	}
+	survived := make(map[string]bool)
+	for _, r := range trailer.ReadMoves(committedMessage).Records {
+		survived[r.ID] = true
+	}
+	out := make([]trailer.Record, 0, len(minted))
+	for _, r := range minted {
+		if survived[r.ID] {
+			out = append(out, r)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // preservedMovedLines are the move records a REPLACEMENT message must carry
 // forward.
 //

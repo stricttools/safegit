@@ -110,6 +110,10 @@ type commitPayload struct {
 	// them -- it was reported by the run that wrote it, and repeating it here
 	// would make an amend look like it minted a record it only preserved.
 	//
+	// It answers for the message the commit ended up with: a record the
+	// repository's own commit-msg hook rewrote away is not reported, because a
+	// consumer reading this list must be able to find every entry on the commit.
+	//
 	// It is never null: a run that recorded no move reports an empty list, which
 	// is what tells a consumer the question was answered.
 	MovedRecords []movedRecordEntry `json:"moved_records"`

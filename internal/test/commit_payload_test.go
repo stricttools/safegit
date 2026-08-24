@@ -45,7 +45,8 @@ type commitPayloadDoc struct {
 	// MovedRecords is every move record THIS operation put on the commit: the
 	// caller's declarations and the records safegit minted from the commit's own
 	// delta, each naming which of the two it is. A record carried across from a
-	// message being replaced is not one of them.
+	// message being replaced is not one of them, and neither is one a rewriting
+	// commit-msg hook removed -- the list answers for the committed message.
 	MovedRecords []struct {
 		ID     string `json:"id"`
 		Old    string `json:"old"`

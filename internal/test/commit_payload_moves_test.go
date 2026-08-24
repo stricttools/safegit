@@ -213,3 +213,88 @@ func TestEveryCommitFormCarriesTheMoveMembers(t *testing.T) {
 		})
 	}
 }
+
+// A commit-msg hook may rewrite the message, and a rewriting hook that strips
+// the record lines leaves a commit that carries no records at all. The payload
+// answers for the COMMITTED message: what this run minted, narrowed to what
+// survived the hook, so a consumer is never told about a record it cannot find
+// on the commit.
+//
+// The hook runs on both origins alike -- it is text, and the declared record is
+// as strippable as the observed one -- so the whole member empties.
+func TestCommitPayloadReportsOnlyTheRecordsTheCommittedMessageCarries(t *testing.T) {
+	dir := newRepo(t)
+	installHook(t, dir, "commit-msg", stripMovedLinesHook)
+
+	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
+	testutil.WriteFile(t, dir, "c.txt", "other content nothing else holds\n")
+	safegitCommit(t, dir, "seed", "a.txt", "c.txt")
+
+	moveOnDisk(t, dir, "a.txt", "b.txt")
+	moveOnDisk(t, dir, "c.txt", "d.txt")
+	doc := commitPayloadOf(t, dir, "commit", "-m", "move both",
+		"--moved", "a.txt -> b.txt", "--", "a.txt", "b.txt", "c.txt", "d.txt")
+
+	msg := commitMessageOf(t, dir, "HEAD")
+	if strings.Contains(msg, "Moved: ") {
+		t.Fatalf("the fixture's hook did not strip the records; message:\n%s", msg)
+	}
+	if len(doc.MovedRecords) != 0 {
+		t.Errorf("moved_records = %+v, but the committed message carries no record at all:\n%s",
+			doc.MovedRecords, msg)
+	}
+}
+
+// The same, on the amend arm: its payload answers for the message the amended
+// commit ended up with.
+func TestAmendPayloadReportsOnlyTheRecordsTheCommittedMessageCarries(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
+	safegitCommit(t, dir, "seed", "a.txt")
+	// The amend judges its declaration against the tip's FIRST PARENT, so the
+	// tip being replaced has to be a commit above the one that tracks a.txt.
+	testutil.WriteFile(t, dir, "other.txt", "unrelated\n")
+	safegitCommit(t, dir, "second", "other.txt")
+
+	installHook(t, dir, "commit-msg", stripMovedLinesHook)
+
+	moveOnDisk(t, dir, "a.txt", "b.txt")
+	doc := commitPayloadOf(t, dir, "commit", "--amend", "--moved", "a.txt -> b.txt",
+		"--", "a.txt", "b.txt")
+
+	msg := commitMessageOf(t, dir, "HEAD")
+	if strings.Contains(msg, "Moved: ") {
+		t.Fatalf("the fixture's hook did not strip the records; message:\n%s", msg)
+	}
+	if len(doc.MovedRecords) != 0 {
+		t.Errorf("moved_records = %+v, but the amended commit's message carries no record at all:\n%s",
+			doc.MovedRecords, msg)
+	}
+}
+
+// A DRY RUN runs no hook at all, so nothing strips anything and the preview
+// reports exactly what the real run would have written before the hook saw it.
+// The narrowing is against the message this run composed, never against the
+// commit that would come out of some other run.
+func TestCommitPreviewStillReportsTheRecordsItWouldMint(t *testing.T) {
+	dir := newRepo(t)
+	installHook(t, dir, "commit-msg", stripMovedLinesHook)
+
+	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
+	safegitCommit(t, dir, "seed", "a.txt")
+
+	moveOnDisk(t, dir, "a.txt", "b.txt")
+	doc := commitPayloadOf(t, dir, "commit", "-m", "move a", "--dry-run", "--", "a.txt", "b.txt")
+
+	if len(doc.MovedRecords) != 1 {
+		t.Fatalf("moved_records = %+v, want the record the preview would have written", doc.MovedRecords)
+	}
+	if got := doc.MovedRecords[0]; got.Old != "a.txt" || got.New != "b.txt" || got.Origin != "observed" {
+		t.Errorf("moved_records[0] = %+v, want a.txt -> b.txt (observed)", got)
+	}
+}
+
+// stripMovedLinesHook is a commit-msg hook that removes every record line, the
+// way a real message-policy hook rewrites a message it does not like. It exits
+// zero whatever it finds, so the commit itself is never refused.
+const stripMovedLinesHook = "#!/bin/sh\ngrep -v '^Moved: ' \"$1\" > \"$1.kept\"\nmv \"$1.kept\" \"$1\"\nexit 0\n"

@@ -307,6 +307,10 @@ type CommitResult struct {
 	//
 	// A record carried across from a message being replaced is NOT here -- see
 	// AmendResult, where the distinction has something to be distinguished from.
+	//
+	// It answers for the COMMITTED message: a record a rewriting commit-msg hook
+	// removed is not reported, because it is not on the commit (see
+	// committedRecords).
 	MovedRecords []trailer.Record `json:"movedRecords,omitempty"`
 
 	// RefusedMoves lists the moves this commit's delta suggested and the
@@ -747,7 +751,7 @@ func (p *Pipeline) tryCommit(
 			Attempts:       attempt,
 			Files:          changedPaths(changed),
 			SkippedIgnored: files.skipped,
-			MovedRecords:   mintedRecords(allMoved),
+			MovedRecords:   committedRecords(allMoved, message),
 			RefusedMoves:   inference.refused,
 			MovesOverCap:   inference.capped,
 		}, false, nil
@@ -798,7 +802,7 @@ func (p *Pipeline) tryCommit(
 		Attempts:       attempt,
 		Files:          changedPaths(changed),
 		SkippedIgnored: files.skipped,
-		MovedRecords:   mintedRecords(allMoved),
+		MovedRecords:   committedRecords(allMoved, message),
 		RefusedMoves:   inference.refused,
 		MovesOverCap:   inference.capped,
 	}

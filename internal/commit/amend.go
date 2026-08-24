@@ -75,6 +75,9 @@ type AmendResult struct {
 	// event's own delta. The records PRESERVED from the message being replaced
 	// are not among them -- they were reported by the operation that wrote them,
 	// and an amend that repeated them would look like an amend that minted them.
+	//
+	// Like CommitResult's, it answers for the COMMITTED message: a record a
+	// rewriting commit-msg hook removed is not reported (see committedRecords).
 	MovedRecords []trailer.Record `json:"movedRecords,omitempty"`
 
 	// RefusedMoves and MovesOverCap are the same facts CommitResult carries, for
@@ -389,7 +392,7 @@ func (p *Pipeline) tryAmend(
 			Attempts:       attempt,
 			Files:          changedPaths(changed),
 			SkippedIgnored: files.skipped,
-			MovedRecords:   mintedRecords(amendMoved),
+			MovedRecords:   committedRecords(amendMoved, msg),
 			RefusedMoves:   inference.refused,
 			MovesOverCap:   inference.capped,
 		}, false, nil
@@ -421,7 +424,7 @@ func (p *Pipeline) tryAmend(
 		Attempts:       attempt,
 		Files:          changedPaths(changed),
 		SkippedIgnored: files.skipped,
-		MovedRecords:   mintedRecords(amendMoved),
+		MovedRecords:   committedRecords(amendMoved, msg),
 		RefusedMoves:   inference.refused,
 		MovesOverCap:   inference.capped,
 	}
