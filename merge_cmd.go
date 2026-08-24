@@ -149,7 +149,8 @@ func refuseUnsupportedMerge(parsed gitArgs) int {
 // same thing.
 //
 // DIVERGENCE: git merges any number of branches in one commit; safegit merges
-// one. Needs its row in docs/divergences.md.
+// one. Cataloged in docs/divergences.md as "A merge has exactly one other
+// side".
 const octopusReason = "a conclusion has one staged result to check and one message to write, however many sides went into it, and every check safegit makes over a merge is written against two"
 
 // fetchHeadName is the one merge argument that does not name one side.
@@ -207,7 +208,8 @@ func forMergeHeads(gitDir string) (int, error) {
 // safegit invented.
 //
 // DIVERGENCE: git merges every head FETCH_HEAD names, in one octopus commit;
-// safegit refuses. Needs its row in docs/divergences.md.
+// safegit refuses. Cataloged in docs/divergences.md as "A fetch that marked
+// several branches is not a merge safegit will make".
 func refuseFetchHeadOctopus(gitDir, other, command string) int {
 	if other != fetchHeadName {
 		return 0
@@ -403,9 +405,9 @@ func performMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition, re
 	// DIVERGENCE: git's own --ff-only refusal is git's; this one is safegit's,
 	// and it exists because letting git decide would let git move the ref --
 	// outside safegit's compare-and-swap -- in the race where the branches stop
-	// being diverged between the check and the run. Needs its row in
-	// docs/divergences.md, including the exit code, which is safegit's General
-	// rather than git's 128.
+	// being diverged between the check and the run. Cataloged in
+	// docs/divergences.md as "The fast-forward-only refusal is safegit's, not
+	// git's", exit code included: safegit's General rather than git's 128.
 	if req.ffOnly && resolveErr == nil && !upToDate && !fastForward {
 		fmt.Fprintf(os.Stderr, "error: %s is not a fast-forward of %s, and %s was given\n",
 			other, refShortName(pos.ref), req.ffOnlyFlag)
@@ -430,7 +432,8 @@ func performMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition, re
 	// DIVERGENCE: `git merge --no-commit` fast-forwards anyway, because git
 	// takes the fast-forward before the flag is consulted. safegit parks a
 	// merge instead, so `--no-commit` means the same thing in every case an
-	// operator can reach. Needs its row in docs/divergences.md.
+	// operator can reach. Cataloged in docs/divergences.md as "A parked merge
+	// stays parked, even when it could have fast-forwarded".
 	if fastForward && !req.noFF && !req.park && pos.ref != "" {
 		return fastForwardMerge(flags, gitDir, sgDir, pos, req, otherSHA)
 	}

@@ -35,8 +35,10 @@ import (
 //     decision rather than a step between branches.
 //
 // DIVERGENCE: git has `checkout` and `switch`; safegit has `switch`, takes a
-// branch name, and has no file-restoration mode at all. Both halves need their
-// row in docs/divergences.md.
+// branch name, and has no file-restoration mode at all. Cataloged in
+// docs/divergences.md as "Navigation is `safegit switch`, and there is no
+// `safegit checkout`", "File restoration is absent, not refused" and "`switch`
+// takes a branch name, and only a branch name".
 
 // switchSubset is `safegit switch`'s slice of `git switch`.
 var switchSubset = argvSubset{
