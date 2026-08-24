@@ -403,8 +403,8 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 // Everything above it is oplog arithmetic: count back N recorded operations,
 // take what the Nth one was built on top of, and that is the rollback target.
 // Nothing in it looks at the branch, so a commit safegit did not record --
-// a plain `git commit`, a passthrough cherry-pick, a conclusion git authored
-// for a queued sequence -- is simply in the way, and moving the ref past it
+// a plain `git commit`, a rebase's replayed commits, the commits git's own
+// sequencer makes for a queue -- is simply in the way, and moving the ref past it
 // takes it out of the branch's history.
 //
 // The compare-and-swap alone cannot answer this. It pins the NEWEST recorded

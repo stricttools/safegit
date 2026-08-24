@@ -311,10 +311,12 @@ type conclusionResult struct {
 // revert authors it as the operator, and so does this.
 func (op continueOp) preservesSourceAuthor() bool { return op.kind == sequencer.KindCherryPick }
 
-// queueable reports the two commands whose operation git can put in a QUEUE,
-// and which therefore carry the delegation members in their payload and can
-// reach delegateQueuedSequence. A merge is never queued.
-func (op continueOp) queueable() bool {
+// reportsAuthor reports the two conclusions whose commit RECORDS an identity of
+// its own, and which therefore carry the author member in their payload: a
+// cherry-pick preserves the picked commit's author, a revert records the
+// operator. A merge conclusion records neither, which is why its schema has no
+// such member rather than a null one.
+func (op continueOp) reportsAuthor() bool {
 	return op.kind == sequencer.KindCherryPick || op.kind == sequencer.KindRevert
 }
 
@@ -435,6 +437,12 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	if code := op.refuseWrongState(ctx, gitDir, state); code != 0 {
 		return code
 	}
+	// The shapes safegit cannot have started, refused before anything about the
+	// operator's own command line is looked at: whose operation this is does not
+	// depend on what they declared.
+	if code := op.refuseRawGitShape(state); code != 0 {
+		return code
+	}
 	if _, err := git.HeadRef(ctx); err != nil {
 		return op.refuseDetachedHead(state)
 	}
@@ -445,6 +453,11 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: reading the conflicted paths from the index: %v\n", err)
 		return exitcode.General
+	}
+	// The other raw-git shape, which needs the conflict read first: a content
+	// conflict git recorded without the tree the marker verification reads.
+	if code := op.refuseUnreadableConflict(ctx, sides); code != 0 {
+		return code
 	}
 	if code := op.checkCompleteness(ctx, state, sides, declared); code != 0 {
 		return code
@@ -460,16 +473,6 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
-	}
-
-	// A QUEUED cherry-pick or revert is concluded by git, not by the pipeline:
-	// the resolutions and the checks above are safegit's, the authorship of
-	// every commit the queue still has to make is git's. Everything before this
-	// point is shared with the native path on purpose -- the operator declares
-	// the same resolutions, and they are checked for completeness and for
-	// surviving markers the same way, whoever ends up writing the commit.
-	if state.Queued {
-		return delegateQueuedSequence(flags, op, gitDir, sgDir, state, sides, declared, declines, edits, messages, trailers)
 	}
 
 	message, err := op.conclusionMessage(ctx, state, messages)
@@ -705,9 +708,9 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 // conclusion that could not restore the operator's work is not a clean outcome.
 //
 // Everything it prints goes to stderr, unconditionally: this is the same class
-// of fact as the delegation notice, --quiet is a request for less chatter rather
-// than for the whereabouts of one's own work to be withheld, and in machine mode
-// stdout belongs to the envelope.
+// of fact as undo's "the merge state is NOT restored" note, --quiet is a request
+// for less chatter rather than for the whereabouts of one's own work to be
+// withheld, and in machine mode stdout belongs to the envelope.
 func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State) int {
 	if state.Kind != sequencer.KindMerge || state.Autostash == "" {
 		return exitcode.OK
@@ -951,6 +954,114 @@ func (op continueOp) refuseWrongState(ctx context.Context, gitDir string, state 
 		fmt.Fprintf(os.Stderr, "   only an operation's own state files say one is in flight, and there are none)\n")
 	}
 	return exitcode.CoordinationBusy
+}
+
+// refuseRawGitShape refuses the states safegit cannot have STARTED, and
+// therefore does not conclude: a sequencer queue, and an octopus merge.
+//
+// Both are shapes only raw git can create now -- safegit's cherry-pick and
+// revert apply one commit and its merge takes one branch -- and both are
+// refused rather than attempted, because concluding either would do something
+// the operator did not ask for:
+//
+//   - a QUEUE holds git's remaining commands, and the queue directory is part of
+//     the state a conclusion REMOVES, so finishing the current step natively
+//     would throw the rest of the sequence away;
+//   - an OCTOPUS has more sides than every check safegit makes over a merge is
+//     written against, and its index stages describe only the last pairwise
+//     step, so the completeness and marker checks would be a verdict about part
+//     of the merge presented as a verdict about all of it.
+//
+// The way out comes from the single way-out authority, which names git's own
+// conclusion for exactly these states, so the refusal and every other message
+// about them agree.
+func (op continueOp) refuseRawGitShape(state sequencer.State) int {
+	var what, why string
+	switch {
+	case state.Queued:
+		what = "a " + state.Kind.String() + " sequence"
+		why = "git's sequencer holds a QUEUE of commands here, and safegit did not start it: safegit's " +
+			state.Kind.String() + " applies one commit and authors the result itself.\n" +
+			"  Concluding one step of a queue would throw the rest of it away, because the queue is part of\n" +
+			"  the state a conclusion removes."
+	case op.kind == sequencer.KindMerge && len(state.MergeHeads) > 1:
+		what = "an octopus merge"
+		why = "safegit's merge brings in ONE branch, so an octopus is a merge only raw git can start.\n" +
+			"  Every check safegit makes over a merge is written against two sides, and an octopus's index\n" +
+			"  stages describe only its last pairwise step: a verdict over them would be a verdict about\n" +
+			"  part of the merge, reported as one about all of it."
+	default:
+		return 0
+	}
+
+	fmt.Fprintf(os.Stderr, "error: safegit %s does not conclude %s\n", op.command, what)
+	fmt.Fprintf(os.Stderr, "  %s\n", why)
+	fmt.Fprintf(os.Stderr, "  Finish what git started, with git:\n")
+	renderWayOut(coord.WayOutOf(state))
+	fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+	return exitcode.CoordinationBusy
+}
+
+// refuseUnreadableConflict refuses a merge whose CONTENT CONFLICT git recorded
+// without an AUTO_MERGE tree.
+//
+// On the git version safegit requires, the default merge strategy always writes
+// AUTO_MERGE beside a conflict: it is the tree holding what git put in the
+// working tree, and it is what the marker verification reads to tell a conflict
+// block GIT wrote from one that was already in the file before the merge began.
+// A content conflict without it was computed by another strategy -- one safegit
+// does not select and whose staged result it cannot check -- so the conclusion
+// refuses instead of committing content nothing verified.
+//
+// It is scoped to CONTENT conflicts (both sides present) because those are the
+// only ones the marker check reads AUTO_MERGE for; an add/add or modify/delete
+// conflict carries no merged text to compare against.
+func (op continueOp) refuseUnreadableConflict(ctx context.Context, sides map[string]conflict.Sides) int {
+	if op.kind != sequencer.KindMerge {
+		return 0
+	}
+	var contentConflicts []string
+	for path, s := range sides {
+		if s.ContentConflict() {
+			contentConflicts = append(contentConflicts, path)
+		}
+	}
+	if len(contentConflicts) == 0 {
+		return 0
+	}
+	if _, present, err := conflict.AutoMergeTree(ctx); err != nil || present {
+		return 0
+	}
+	sort.Strings(contentConflicts)
+
+	fmt.Fprintf(os.Stderr, "error: safegit %s cannot conclude this merge: git recorded no AUTO_MERGE for it\n", op.command)
+	fmt.Fprintf(os.Stderr, "  %s carries a content conflict, and on the git version safegit requires the default merge\n", contentConflicts[0])
+	fmt.Fprintf(os.Stderr, "  strategy always records AUTO_MERGE beside one -- the tree safegit reads to tell a conflict\n")
+	fmt.Fprintf(os.Stderr, "  block git wrote from one that was already in the file. A conflict without it was computed\n")
+	fmt.Fprintf(os.Stderr, "  by another strategy, which safegit's merge does not select and cannot check the result of.\n")
+	fmt.Fprintf(os.Stderr, "  Finish what git started, with git:\n")
+	// git's commands, named here rather than read from the way-out authority.
+	// That authority answers from the STATE FILES, and the fact this refusal
+	// turns on is not among them: AUTO_MERGE is a ref, so telling its presence
+	// apart from its absence takes a git call the filesystem-only state reader
+	// deliberately does not make. Every other message about this repository
+	// still names safegit's own conclusion, which is what an operator should
+	// reach for -- and reaching for it produces exactly this refusal.
+	fmt.Fprintf(os.Stderr, "    conclude it:  git merge --continue\n")
+	fmt.Fprintf(os.Stderr, "    abandon it:   git merge --abort\n")
+	fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+	return exitcode.CoordinationBusy
+}
+
+// renderWayOut prints the two commands that end a state, from the single
+// way-out authority.
+func renderWayOut(w coord.WayOut) {
+	if w.Conclude != "" {
+		fmt.Fprintf(os.Stderr, "    conclude it:  %s\n", w.Conclude)
+	}
+	if w.Abandon != "" {
+		fmt.Fprintf(os.Stderr, "    abandon it:   %s\n", w.Abandon)
+	}
 }
 
 // article names the operation the way the refusal sentence needs it.

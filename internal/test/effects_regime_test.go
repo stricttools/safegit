@@ -450,6 +450,45 @@ func TestPassthroughDryRunArgvCarriesTheGlobalPrefix(t *testing.T) {
 	}
 }
 
+// TestComputeStepDryRunRecordsTheArgvTheExecutePathRuns: what a preview records
+// is what the real run would perform, and for the restructured merge and
+// cherry-pick that is the COMPUTE step's argv rather than the operator's.
+//
+// The execute path never runs `git merge <branch>` or `git cherry-pick <sha>`:
+// it runs them with the flags that stop git before the commit -- `--no-ff
+// --no-commit` for a merge, always, whatever the operator passed, and
+// `--no-commit` for a pick -- and safegit's own pipeline makes the commit. A
+// would-do log naming the bare form would describe git authoring a commit,
+// which is exactly the mutation the restructure removed.
+func TestComputeStepDryRunRecordsTheArgvTheExecutePathRuns(t *testing.T) {
+	t.Run("merge", func(t *testing.T) {
+		dir := newDivergedBranchRepo(t)
+
+		stdout, stderr, code := runSafegit(t, dir, "--dry-run", "merge", "feature")
+		if code != 0 {
+			t.Fatalf("merge --dry-run failed (%d): %s", code, stderr)
+		}
+		log := wouldDoLog(stdout)
+		if !strings.Contains(log, "run: git "+noOptionalLocks+" merge --no-ff --no-commit feature") {
+			t.Errorf("the recorded argv is not the compute step's, got: %s", log)
+		}
+	})
+
+	t.Run("cherry-pick", func(t *testing.T) {
+		dir := newDivergedBranchRepo(t)
+		sha := testutil.Rev(t, dir, "feature")
+
+		stdout, stderr, code := runSafegit(t, dir, "--dry-run", "cherry-pick", sha)
+		if code != 0 {
+			t.Fatalf("cherry-pick --dry-run failed (%d): %s", code, stderr)
+		}
+		log := wouldDoLog(stdout)
+		if !strings.Contains(log, "run: git "+noOptionalLocks+" cherry-pick --no-commit "+sha) {
+			t.Errorf("the recorded argv is not the compute step's, got: %s", log)
+		}
+	})
+}
+
 // TestHistoryRewriteDryRunRecordsNoInventedSHA is the same honesty on the
 // history-rewrite side, which mints four effects: the ref move onto the
 // rewritten history, then the reflog expire, repack and prune that make the

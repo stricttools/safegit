@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/smm-h/safegit/internal/commit"
 	"github.com/smm-h/safegit/internal/conflict"
@@ -202,22 +201,25 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs) int {
 	return exitcode.OK
 }
 
-// previewReplay computes what a cherry-pick or a revert would do, one queued
-// commit at a time.
+// previewReplay computes what a cherry-pick or a revert would do.
 //
-// A queue is replayed the way git replays it: each step is computed on top of
-// the previous step's result, so the preview stops exactly where git would stop
-// and names the commit it stopped on. Building the intermediate commit object
-// is what makes the chain possible, and it costs nothing outside the preview --
-// the object goes into the quarantine with everything else merge-tree writes.
+// ONE commit, because that is all either command takes: a multi-commit argv and
+// every range spelling are refused before a preview is ever reached, so there is
+// no queue to replay here and no intermediate commit to build. What the
+// computation needs is the two sides that express the operation as a merge --
+// see replaySides.
 func previewReplay(flags globalFlags, ctx context.Context, verb string, parsed gitArgs) int {
-	commits, err := replayOrder(ctx, verb, parsed.Revisions)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: resolving the commits to %s: %v\n", verb, err)
+	if len(parsed.Revisions) != 1 {
+		// Unreachable through the commands, which refuse any other count before
+		// the preview: stated rather than assumed, so a future caller that gets
+		// here is told what it did instead of silently previewing the first one.
+		fmt.Fprintf(os.Stderr, "error: safegit %s previews exactly one commit, and this names %d\n", verb, len(parsed.Revisions))
 		return exitcode.General
 	}
-	if len(commits) == 0 {
-		fmt.Fprintf(os.Stderr, "error: %s names no commit\n", strings.Join(parsed.Revisions, " "))
+
+	c, err := git.RevParse(ctx, parsed.Revisions[0]+"^{commit}")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: resolving the commit to %s: %v\n", verb, err)
 		return exitcode.General
 	}
 
@@ -232,46 +234,19 @@ func previewReplay(flags globalFlags, ctx context.Context, verb string, parsed g
 		return exitcode.General
 	}
 
-	for i, c := range commits {
-		base, theirs, err := replaySides(ctx, verb, c, mainline)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			return exitcode.General
-		}
-
-		result, err := git.MergeTree(ctx, base, ours, theirs)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			return exitcode.General
-		}
-
-		described := describeCommit(ctx, c)
-		if result.Conflicted {
-			if i > 0 {
-				infof(flags, "would %s %d commit(s), then stop at %s\n", verb, i, described)
-			}
-			reportPreviewOutcome(flags, verb, described, result)
-			return exitcode.OK
-		}
-		if i == len(commits)-1 {
-			if len(commits) > 1 {
-				infof(flags, "would %s %d commit(s) cleanly, ending at %s\n", verb, len(commits), described)
-				infof(flags, " resulting tree: %s\n", result.Tree)
-				return exitcode.OK
-			}
-			reportPreviewOutcome(flags, verb, described, result)
-			return exitcode.OK
-		}
-
-		// Not the last step: the next one is computed on top of this result, so
-		// it needs a commit to stand on. It is built in the quarantine and
-		// never referenced by anything.
-		ours, err = git.CommitTree(ctx, result.Tree, []string{ours}, "preview of "+verb+" "+shortSHA(c), nil)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: building the intermediate commit for the preview: %v\n", err)
-			return exitcode.General
-		}
+	base, theirs, err := replaySides(ctx, verb, c, mainline)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return exitcode.General
 	}
+
+	result, err := git.MergeTree(ctx, base, ours, theirs)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return exitcode.General
+	}
+
+	reportPreviewOutcome(flags, verb, describeCommit(ctx, c), result)
 	return exitcode.OK
 }
 
@@ -324,47 +299,6 @@ func describeCommit(ctx context.Context, sha string) string {
 		return shortSHA(sha)
 	}
 	return described
-}
-
-// replayOrder resolves the commits an operation would process, IN THE ORDER it
-// would process them.
-//
-// The order is not incidental: a preview that replays a queue backwards names
-// the wrong commit as the one the operation would stop on, and computes every
-// step on the wrong predecessor. git's own rule was probed rather than assumed
-// (the probes are in this package's tests), and it has two halves:
-//
-//   - Individual revisions are processed in the order they were typed, for both
-//     verbs. `rev-list --no-walk=unsorted` reproduces exactly that; the sorted
-//     default does NOT -- it is reverse-chronological, which silently agrees
-//     with the typed order only when the commits happen to be listed
-//     newest-first.
-//   - A RANGE is walked, and a walk yields newest-first. That is already
-//     revert's order (`git revert A..C` undoes C, then B), and it is the
-//     reverse of cherry-pick's (`git cherry-pick A..C` applies B, then C).
-//
-// Which of the two happened is asked of git rather than of the argument
-// strings: a walk is what produced MORE commits than there were revision
-// arguments. Matching them by counting means a future range spelling safegit
-// has never seen is still classified correctly.
-func replayOrder(ctx context.Context, verb string, revisions []string) ([]string, error) {
-	out, _, err := git.Run(ctx, append([]string{"rev-list", "--no-walk=unsorted"}, revisions...)...)
-	if err != nil {
-		return nil, err
-	}
-	var commits []string
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			commits = append(commits, line)
-		}
-	}
-
-	if verb == "cherry-pick" && len(commits) > len(revisions) {
-		for i, j := 0, len(commits)-1; i < j; i, j = i+1, j-1 {
-			commits[i], commits[j] = commits[j], commits[i]
-		}
-	}
-	return commits, nil
 }
 
 // short renders a revision the operator typed alongside what it resolved to,

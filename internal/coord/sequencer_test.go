@@ -49,6 +49,48 @@ func TestWayOutNamesTheCommandThatEndsEachState(t *testing.T) {
 	}
 }
 
+// The three shapes safegit can no longer START are shapes it does not conclude
+// either, so the way out of one is GIT's own command. This is the same
+// authority the conclusions' own refusals render from: advice naming a command
+// that would then refuse is worse than no advice.
+func TestWayOutNamesGitForTheShapesSafegitDoesNotConclude(t *testing.T) {
+	for _, tc := range []struct {
+		what     string
+		state    sequencer.State
+		conclude string
+	}{
+		{
+			"an octopus merge",
+			sequencer.State{Kind: sequencer.KindMerge, MergeHeads: []string{strings.Repeat("a", 40), strings.Repeat("b", 40)}},
+			"git merge --continue",
+		},
+		{
+			"a cherry-pick queue",
+			sequencer.State{Kind: sequencer.KindCherryPick, Queued: true},
+			"git cherry-pick --continue",
+		},
+		{
+			"a revert queue",
+			sequencer.State{Kind: sequencer.KindRevert, Queued: true},
+			"git revert --continue",
+		},
+	} {
+		if w := WayOutOf(tc.state); w.Conclude != tc.conclude {
+			t.Errorf("%s: Conclude = %q, want %q", tc.what, w.Conclude, tc.conclude)
+		}
+	}
+
+	// The control: one head and no queue are the shapes safegit does conclude.
+	single := WayOutOf(sequencer.State{Kind: sequencer.KindMerge, MergeHeads: []string{strings.Repeat("a", 40)}})
+	if single.Conclude != "safegit merge-continue" {
+		t.Errorf("an ordinary merge's way out is %q, want safegit's own conclusion", single.Conclude)
+	}
+	unqueued := WayOutOf(sequencer.State{Kind: sequencer.KindCherryPick})
+	if unqueued.Conclude != "safegit cherry-pick-continue" {
+		t.Errorf("an unqueued cherry-pick's way out is %q, want safegit's own conclusion", unqueued.Conclude)
+	}
+}
+
 // A refusal states what is in flight and how to end it. Both halves are
 // required: naming the state without the way out leaves an operator stuck, and
 // the way out without the state leaves them guessing which operation it is

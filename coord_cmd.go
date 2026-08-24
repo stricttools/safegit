@@ -500,8 +500,8 @@ func passthroughStdout(flags globalFlags) io.Writer {
 // process exit code safegit propagates: git's own code when git ran and said
 // no, and exitcode.General when the failure happened before git could speak.
 //
-// It is shared by the guarded passthroughs and by the delegated conclusion, so
-// "what does safegit exit when git exits N" has one answer for both.
+// Every guarded passthrough renders its exit code through it, so "what does
+// safegit exit when git exits N" has one answer wherever git is forwarded to.
 func passthroughExitCode(err error) int {
 	if err == nil {
 		return 0

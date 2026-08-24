@@ -194,7 +194,13 @@ func runRestructuredCherryPick(flags globalFlags, args []string, parsed gitArgs)
 		// No git cherry-pick runs: the invocation is recorded, and the outcome
 		// it would have is COMPUTED with git's own merge engine instead of
 		// guessed.
-		return previewSequencerOperation(flags, "cherry-pick", args, append([]string{"cherry-pick"}, args...))
+		//
+		// The RECORDED argv is the compute step's, which is what the execute
+		// path runs: a would-do log saying `git cherry-pick <sha>` would
+		// describe a mutation -- git authoring the commit -- that nothing here
+		// performs.
+		recorded := append([]string{"cherry-pick", "--no-commit"}, args...)
+		return previewSequencerOperation(flags, "cherry-pick", args, recorded)
 	}
 
 	ctx := flags.ctx()
@@ -337,9 +343,8 @@ func reportedAuthor(info *git.AuthorInfo) continueAuthor {
 //
 // It follows the conclusion payload -- the members cherry-pick-continue reports
 // -- minus the resolution members, which a pick safegit itself started never
-// has (it concludes a clean result; a conflicted one is not concluded here at
-// all), and minus the queue members, which a single-form command cannot
-// produce. What it adds is `source`: the commit that was picked is the one fact
+// has: it concludes a clean result, and a conflicted one is not concluded here
+// at all. What it adds is `source`: the commit that was picked is the one fact
 // about this operation the other members cannot express, because a pick's
 // parents name the branch it went onto and not the change it brought.
 type cherryPickPayload struct {

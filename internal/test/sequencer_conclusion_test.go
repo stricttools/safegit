@@ -141,22 +141,24 @@ func assertNoSequencerResidue(t *testing.T, dir, context string) {
 	}
 }
 
-// TestOctopusConclusionCarriesEveryMergeHead pins the multi-parent rule that is
-// merge-continue's alone: the parents are HEAD followed by EVERY line of
-// MERGE_HEAD, so an octopus merge concludes as an octopus rather than losing
-// every side but the first.
+// The octopus conclusion is GONE, and these two tests are what is left of it.
 //
-// The fixture is a CLEAN octopus stopped with --no-commit, which is the
-// simplest way to park one. A conflicted octopus is also a state a conclusion
-// can meet -- see TestConflictedOctopusOnALaterHeadConcludesAsAnOctopus below,
-// which builds one -- so this test is about the parent list rather than about
-// the only octopus that exists.
+// merge-continue used to build an octopus commit: HEAD plus every line of
+// MERGE_HEAD as parents, for a clean octopus and a conflicted one alike. It was
+// a real capability, and it went with the restructure that made safegit's own
+// merge take exactly one branch -- because every check the conclusion makes over
+// the staged result is written against two sides, and an octopus's index stages
+// describe only its last pairwise step. Concluding one would have been a verdict
+// about part of the merge reported as a verdict about all of it.
 //
-// RAW GIT parks it, deliberately. `safegit merge` takes exactly one branch, so
-// an octopus is a state only git can now create; the conclusion's ability to
-// carry every MERGE_HEAD line is what this test is about, and it is unaffected
-// by which tool wrote the file.
-func TestOctopusConclusionCarriesEveryMergeHead(t *testing.T) {
+// So both fixtures survive, and both now pin the refusal. The multi-parent
+// machinery itself is not dead: a merge state's parents are still HEAD plus
+// every MERGE_HEAD line, and the reader still carries them all -- which is what
+// the refusal reads to recognize the shape.
+
+// TestOctopusConclusionIsRefusedWithEveryMergeHeadIntact: the clean octopus,
+// parked with raw git because safegit's merge takes one branch.
+func TestOctopusConclusionIsRefusedWithEveryMergeHeadIntact(t *testing.T) {
 	dir := newRepo(t)
 
 	testutil.WriteFile(t, dir, "a.txt", "base\n")
@@ -189,47 +191,39 @@ func TestOctopusConclusionCarriesEveryMergeHead(t *testing.T) {
 	}
 
 	stdout, stderr, code := runSafegitEnv(t, dir, conclusionSession, "merge-continue")
-	if code != 0 {
-		t.Fatalf("merge-continue failed (code %d): %s\n%s", code, stderr, stdout)
+	if code != exitcode.CoordinationBusy {
+		t.Fatalf("merge-continue on an octopus exited %d, want %d (CoordinationBusy)\nstdout=%s\nstderr=%s",
+			code, exitcode.CoordinationBusy, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "git merge --continue") {
+		t.Errorf("the refusal does not name git's own conclusion:\n%s", stderr)
 	}
 
-	head := testutil.Git(t, dir, "rev-parse", "HEAD")
-	parents := testutil.Parents(t, dir, head)
-	want := append([]string{mainSHA}, sides...)
-	if len(parents) != len(want) {
-		t.Fatalf("octopus conclusion has %d parent(s), want %d: %v", len(parents), len(want), parents)
+	// Nothing was concluded and nothing was destroyed: the branch stands where
+	// it did and the parked octopus is still there, every head of it.
+	if head := testutil.Rev(t, dir, "HEAD"); head != mainSHA {
+		t.Errorf("HEAD moved to %s despite the refusal (was %s)", head, mainSHA)
 	}
-	for i := range want {
-		if parents[i] != want[i] {
-			t.Errorf("parent %d = %s, want %s", i, parents[i], want[i])
-		}
+	after, err := os.ReadFile(filepath.Join(dir, ".git", "MERGE_HEAD"))
+	if err != nil || string(after) != string(mergeHead) {
+		t.Errorf("the refusal changed the merge state it declined to conclude: %v / %q", err, after)
 	}
-
-	// Every side's file has to be in the tree: the conclusion commits the
-	// merge's whole staged result, not a rebuild from HEAD.
-	paths := testutil.TreePaths(t, dir, head)
-	for _, want := range []string{"a.txt", "m.txt", "b1.txt", "b2.txt"} {
-		if !testutil.Contains(paths, want) {
-			t.Errorf("octopus conclusion dropped %s (tree: %v)", want, paths)
-		}
-	}
-	assertNoSequencerResidue(t, dir, "octopus merge")
 }
 
-// A conflicted octopus IS a state a conclusion can meet, and this is it.
+// TestConflictedOctopusOnALaterHeadIsRefusedToo: the OTHER octopus a conclusion
+// can meet, and the refusal is the same.
 //
 // git's octopus strategy merges the heads one at a time. A conflict against the
 // FIRST head makes it give up before it has written any state ("Should not be
 // doing an octopus"), so that one never parks -- but once it is past the first
 // head it has a merge in progress, and a conflict against a LATER head parks
-// like any other: MERGE_HEAD holds every head, the index holds unmerged stages,
-// and the conclusion is a merge-continue.
+// like any other: MERGE_HEAD holds every head, the index holds unmerged stages.
 //
 // The fixture arranges exactly that: b1 touches the first line, main touches the
 // third, so the first pairwise step merges cleanly; b2 then touches the first
 // line again and collides with b1's result. RAW GIT starts it, for the same
-// reason as the clean octopus above: `safegit merge` takes exactly one branch.
-func TestConflictedOctopusOnALaterHeadConcludesAsAnOctopus(t *testing.T) {
+// reason as the clean octopus above.
+func TestConflictedOctopusOnALaterHeadIsRefusedToo(t *testing.T) {
 	dir := newRepo(t)
 
 	testutil.WriteFile(t, dir, "f.txt", "l1\nl2\nl3\n")
@@ -271,29 +265,21 @@ func TestConflictedOctopusOnALaterHeadConcludesAsAnOctopus(t *testing.T) {
 		t.Fatal("the parked octopus holds no unmerged index entries")
 	}
 
-	// Resolve in the tree and conclude. The result is an octopus commit: HEAD
-	// plus every MERGE_HEAD line, in order.
+	// A declared resolution does not change the answer: the refusal is about
+	// whose merge this is, not about what the operator said.
 	testutil.WriteFile(t, dir, "f.txt", "resolved\nl2\nl3\n")
-	if _, stderr, code := runSafegitEnv(t, dir, conclusionSession,
-		"merge-continue", "--resolve", "f.txt=worktree"); code != 0 {
-		t.Fatalf("merge-continue on a conflicted octopus failed (code %d): %s", code, stderr)
+	stdout, stderr, code := runSafegitEnv(t, dir, conclusionSession,
+		"merge-continue", "--resolve", "f.txt=worktree")
+	if code != exitcode.CoordinationBusy {
+		t.Fatalf("merge-continue on a conflicted octopus exited %d, want %d (CoordinationBusy)\nstdout=%s\nstderr=%s",
+			code, exitcode.CoordinationBusy, stdout, stderr)
 	}
-
-	head := testutil.Rev(t, dir, "HEAD")
-	parents := testutil.Parents(t, dir, head)
-	want := []string{mainSHA, b1, b2}
-	if len(parents) != len(want) {
-		t.Fatalf("the concluded octopus has %d parent(s), want %d: %v", len(parents), len(want), parents)
+	if !strings.Contains(stderr, "git merge --continue") {
+		t.Errorf("the refusal does not name git's own conclusion:\n%s", stderr)
 	}
-	for i := range want {
-		if parents[i] != want[i] {
-			t.Errorf("parent %d = %s, want %s", i, parents[i], want[i])
-		}
+	if head := testutil.Rev(t, dir, "HEAD"); head != mainSHA {
+		t.Errorf("HEAD moved to %s despite the refusal (was %s)", head, mainSHA)
 	}
-	if got := testutil.MustShow(t, dir, "HEAD", "f.txt"); got != "resolved\nl2\nl3\n" {
-		t.Errorf("the concluded tree holds %q, want the resolution from the working tree", got)
-	}
-	assertNoSequencerResidue(t, dir, "conflicted octopus")
 }
 
 // TestCherryPickConclusionPreservesTheSourceAuthor: a conclusion records the

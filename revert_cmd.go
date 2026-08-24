@@ -244,12 +244,11 @@ func concludeComputedRevert(flags globalFlags, gitDir, sgDir, reverted string) i
 // revertPayload is what `safegit revert` puts in the envelope's payload.
 //
 // It follows the conclusion payload -- the members revert-continue reports --
-// minus the resolution members, which a revert safegit itself started never has
-// (it concludes a clean result; a conflicted one is not concluded here at all),
-// and minus the queue members, which a single-form command cannot produce.
-// Reusing revert-continue's schema was not an option: it requires the queue
-// members, and a document that filled them in would state something false about
-// every run.
+// minus the resolution members, which a revert safegit itself started never has:
+// it concludes a clean result, and a conflicted one is not concluded here at
+// all. Reusing revert-continue's schema was not an option: it requires members
+// this command has nothing to fill in, and a document that filled them anyway
+// would state something false about every run.
 //
 // What it adds is `source`: the commit that was reverted is the one fact about
 // this operation the other members cannot express, because a revert's parents
