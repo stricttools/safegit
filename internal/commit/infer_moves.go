@@ -43,6 +43,10 @@ import (
 //     never the identity of a path, so its disappearance from one and
 //     appearance at another says nothing.
 //
+// What clears all four is collapsed where a whole subtree moved, and then faces
+// the CAP: a commit carrying more inferred moves than moveInferenceCap records
+// none of them and says so. Both live in infer_subtrees.go.
+//
 // The refusals are not silent. One aggregate line goes to stderr naming how
 // many candidates were declined and pointing at --moved, because the answer to
 // "safegit did not record my move" is always the same: declare it.
@@ -129,6 +133,10 @@ type moveInference struct {
 	pairs   []trailer.Pair
 	lines   []string
 	refused []RefusedMove
+
+	// capped is how many records the commit would have carried when the cap
+	// turned them all down, and zero otherwise.
+	capped int
 }
 
 // newMoveInference prepares inference for one commit operation.
@@ -192,7 +200,7 @@ func (m *moveInference) records(ctx context.Context, changed []git.ChangedPath, 
 		return nil, nil
 	}
 
-	pairs, refused, err := inferMoves(ctx, changed, m.declared, parentTreeSHA, newTreeSHA)
+	pairs, refused, capped, err := inferMoves(ctx, changed, m.declared, parentTreeSHA, newTreeSHA)
 	if err != nil {
 		return nil, err
 	}
@@ -201,6 +209,7 @@ func (m *moveInference) records(ctx context.Context, changed []git.ChangedPath, 
 		m.done = true
 		m.pairs = pairs
 		m.refused = refused
+		m.capped = capped
 		lines := make([]string, 0, len(pairs))
 		for _, p := range pairs {
 			record, err := trailer.NewRecord(p.Old, p.New)
@@ -238,6 +247,10 @@ func (m *moveInference) records(ctx context.Context, changed []git.ChangedPath, 
 // suppressed: a caller whose move went unrecorded learns it here or not at all.
 func (m *moveInference) notice() {
 	switch {
+	case m.capped > 0:
+		fmt.Fprintf(os.Stderr, "notice: this commit's delta witnesses %d moves, more than the %d safegit "+
+			"records on its own; none were recorded -- declare the ones you mean with --moved 'old -> new'\n",
+			m.capped, moveInferenceCap)
 	case len(m.refused) > 0:
 		fmt.Fprintf(os.Stderr, "notice: %d possible move(s) in this commit were not recorded, because the "+
 			"repository does not single them out; declare the ones you mean with --moved 'old -> new'\n",
@@ -264,7 +277,7 @@ func samePairs(a, b []trailer.Pair) bool {
 //
 // capped is the number of records the commit would have carried when the cap
 // turned them all down, and zero otherwise.
-func inferMoves(ctx context.Context, changed []git.ChangedPath, declared []trailer.Pair, parentTreeSHA, newTreeSHA string) (pairs []trailer.Pair, refused []RefusedMove, err error) {
+func inferMoves(ctx context.Context, changed []git.ChangedPath, declared []trailer.Pair, parentTreeSHA, newTreeSHA string) (pairs []trailer.Pair, refused []RefusedMove, capped int, err error) {
 	suppressed := suppressedPaths(declared)
 
 	// Fence 1 and 2, applied while the candidate sets are built: a declared
@@ -296,7 +309,7 @@ func inferMoves(ctx context.Context, changed []git.ChangedPath, declared []trail
 		}
 	}
 	if len(blobs) == 0 {
-		return nil, nil, nil
+		return nil, nil, 0, nil
 	}
 	sort.Strings(blobs)
 
@@ -315,7 +328,7 @@ func inferMoves(ctx context.Context, changed []git.ChangedPath, declared []trail
 		candidates = append(candidates, candidate{old: dels[0], new: adds[0]})
 	}
 	if len(candidates) == 0 {
-		return nil, refused, nil
+		return nil, refused, 0, nil
 	}
 
 	// Fence 4 needs both trees seen whole. The listings are per ATTEMPT: the
@@ -324,11 +337,11 @@ func inferMoves(ctx context.Context, changed []git.ChangedPath, declared []trail
 	// before the loop against a tip that has since moved.
 	parentTree, err := newBlobIndex(ctx, parentTreeSHA)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 	newTree, err := newBlobIndex(ctx, newTreeSHA)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, 0, err
 	}
 
 	for _, c := range candidates {
@@ -344,14 +357,25 @@ func inferMoves(ctx context.Context, changed []git.ChangedPath, declared []trail
 	}
 	sort.Slice(pairs, func(i, j int) bool { return pairs[i].Old < pairs[j].Old })
 
+	// A delta that fully witnesses a uniform prefix mapping says one thing, so
+	// it is written as one record -- before the cap counts, which is why moving
+	// a large directory never reaches it.
+	pairs = collapseSubtrees(pairs, parentTree, newTree)
+
 	// Nothing safegit mints may contradict what the commit already states, or
 	// another minted record. trailer.Overlap is the one authority for that
 	// question, shared with the --moved and `safegit mv` spellings.
 	pairs, overlapRefusals := dropOverlapping(pairs, declared)
 	refused = append(refused, overlapRefusals...)
 
+	if len(pairs) > moveInferenceCap {
+		refused = append(refused, capRefusals(pairs)...)
+		sortRefusals(refused)
+		return nil, refused, len(pairs), nil
+	}
+
 	sortRefusals(refused)
-	return pairs, refused, nil
+	return pairs, refused, 0, nil
 }
 
 // sortRefusals puts the refusals in a stable order, so two runs of the same
