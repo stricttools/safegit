@@ -85,7 +85,7 @@ safegit does not promise full git support and never will. It deliberately implem
 
 - `go build -o safegit .` to build
 - `go test ./... -race` runs every ordinary test with race detection. It does NOT run the long-running stress scenarios: those are opt-in behind `--stress`, a flag registered on the integration test binary (`internal/test`), so a bare run stays fast and CI needs no `-short` to dodge them
-- `go test ./internal/test/ -race -count=5 -timeout=15m --stress` for the stress scenarios
+- `go test ./internal/test/ -race -count=5 -timeout=40m --stress` for the stress scenarios (the suite grew past the old 15m budget; a `count=5` run takes ~25 minutes)
 - `testdata/stress [count]` runs the same thing (it passes `--stress` for you)
 
 ## Release workflow
