@@ -51,13 +51,22 @@ func stateFilePresent(t *testing.T, dir, name string) bool {
 // commit stopped with nothing to do and PARKED git's revert state over a clean
 // working tree.
 //
-// It returns the repository and the commit that was reverted twice.
+// It returns the repository and the commit that was reverted twice. A `side`
+// branch diverges from before the reverted commit, so a merge run against this
+// state has real work to compute.
 func newParkedRevertRepo(t *testing.T) (dir, reverted string) {
 	t.Helper()
 	dir = newRepo(t)
 
 	testutil.WriteFile(t, dir, "f.txt", "one\n")
 	safegitCommitEnv(t, dir, inflightSession, "the first change", "f.txt")
+
+	testutil.Git(t, dir, "branch", "side")
+	testutil.Git(t, dir, "switch", "-q", "side")
+	testutil.WriteFile(t, dir, "s.txt", "side\n")
+	safegitCommitEnv(t, dir, inflightSession, "the side change", "s.txt")
+	testutil.Git(t, dir, "switch", "-q", "main")
+
 	testutil.WriteFile(t, dir, "f.txt", "one\ntwo\n")
 	reverted = safegitCommitEnv(t, dir, inflightSession, "the second change", "f.txt")
 
@@ -280,6 +289,88 @@ func TestMergeRefusesOverAParkedPick(t *testing.T) {
 	}
 	if stateFilePresent(t, dir, "MERGE_HEAD") {
 		t.Errorf("the refused merge parked a merge of its own over somebody else's cherry-pick")
+	}
+}
+
+// TestMergeRefusesOverAParkedRevert is the merge arm's REAL reproduction, and
+// the reason merge could not be left to git's own refusal.
+//
+// git's merge does refuse over a parked CHERRY-PICK -- "You have not concluded
+// your cherry-pick (CHERRY_PICK_HEAD exists)", exit 128 -- which is why the
+// parked-pick case above was never the dangerous one. It does NOT refuse over a
+// parked REVERT: `git merge --no-ff --no-commit <branch>` there reports
+// "Automatic merge went well; stopped before committing as requested" and exits
+// 0 (probed). Without an entry check of its own, safegit's merge then concluded
+// that staged result into a commit and left REVERT_HEAD orphaned -- the same
+// damage the pick arm did, through a different door.
+func TestMergeRefusesOverAParkedRevert(t *testing.T) {
+	dir, _ := newParkedRevertRepo(t)
+	tip := testutil.Rev(t, dir, "HEAD")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, inflightSession, "merge", "side")
+	if code != exitcode.CoordinationBusy {
+		t.Fatalf("a merge over a parked revert exited %d, want %d (CoordinationBusy)\nstdout=%s\nstderr=%s",
+			code, exitcode.CoordinationBusy, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "safegit revert-continue") {
+		t.Errorf("the refusal does not name the command that concludes the revert:\n%s", stderr)
+	}
+	if head := testutil.Rev(t, dir, "HEAD"); head != tip {
+		t.Errorf("the refused merge moved HEAD to %s (was %s)", head, tip)
+	}
+	if status := testutil.Git(t, dir, "status", "--porcelain"); strings.TrimSpace(status) != "" {
+		t.Errorf("the refused merge left something staged:\n%s", status)
+	}
+	if stateFilePresent(t, dir, "MERGE_HEAD") {
+		t.Errorf("the refused merge parked a merge of its own over somebody else's revert")
+	}
+	if !stateFilePresent(t, dir, "REVERT_HEAD") {
+		t.Errorf("the refused merge removed the revert state it refused over")
+	}
+}
+
+// TestPullRefusesOverAParkedRevert covers the FOURTH compute door.
+//
+// `safegit pull` is a fetch followed by the same merge step `safegit merge`
+// performs, and it reaches that step through its own handler rather than
+// through merge's -- so merge's entry check does not cover it. Over a parked
+// revert it had exactly the merge arm's defect: git computes the merge
+// happily, safegit's pipeline commits it, and REVERT_HEAD is orphaned.
+//
+// The refusal is placed before the FETCH, not just before the merge step: a
+// command that cannot merge should not go to the network first.
+func TestPullRefusesOverAParkedRevert(t *testing.T) {
+	dir := newDivergedFromRemoteRepo(t)
+
+	// Park a revert over a clean tree, the same way the fixtures above do:
+	// revert the local tip, then revert the same commit again, which has
+	// nothing left to undo and stops with its state parked.
+	target := testutil.Rev(t, dir, "HEAD")
+	if _, stderr, code := runSafegitEnv(t, dir, inflightSession, "revert", target); code != 0 {
+		t.Fatalf("the first revert failed (code %d): %s", code, stderr)
+	}
+	if _, _, code := runSafegitEnv(t, dir, inflightSession, "revert", target); code == 0 {
+		t.Fatalf("reverting an already-reverted commit succeeded; the fixture's premise is gone")
+	}
+	tip := testutil.Rev(t, dir, "HEAD")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, inflightSession,
+		"pull", "--merge-strategy", "ff", "origin", "main")
+	if code != exitcode.CoordinationBusy {
+		t.Fatalf("a pull over a parked revert exited %d, want %d (CoordinationBusy)\nstdout=%s\nstderr=%s",
+			code, exitcode.CoordinationBusy, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "safegit revert-continue") {
+		t.Errorf("the refusal does not name the command that concludes the revert:\n%s", stderr)
+	}
+	if head := testutil.Rev(t, dir, "HEAD"); head != tip {
+		t.Errorf("the refused pull moved HEAD to %s (was %s)", head, tip)
+	}
+	if status := testutil.Git(t, dir, "status", "--porcelain"); strings.TrimSpace(status) != "" {
+		t.Errorf("the refused pull left something staged:\n%s", status)
+	}
+	if !stateFilePresent(t, dir, "REVERT_HEAD") {
+		t.Errorf("the refused pull removed the revert state it refused over")
 	}
 }
 

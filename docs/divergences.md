@@ -249,14 +249,17 @@ Every future change that introduces a decision of this kind adds its entry here.
   holds for a stopped cherry-pick and revert.
 - **safegit:** `commit`, `--amend`, `--reword`, `safegit mv` and `undo` all
   refuse at exit 5 (`CoordinationBusy`) while git reports a merge, cherry-pick,
-  revert, rebase or `am` in progress, and so do the three restructured authors —
-  `merge`, `cherry-pick` and `revert` — before they compute anything. Those
-  three need the check made rather than inherited: raw git refuses to start one
-  operation over another, but they compute with `git <verb> --no-commit`, which
-  git does not refuse the same way, so without it a pick ran over a parked revert
-  and committed. Their state-control forms (`--abort`, `--quit`) and the three
-  conclusion commands are exempt, because they are the way out of the very state
-  being refused over. The refusal names the way out —
+  revert, rebase or `am` in progress, and so do the commands that COMPUTE an
+  operation — `merge`, `cherry-pick`, `revert` and `pull` — before they compute
+  anything, and for `pull` before its fetch. Those need the check made rather
+  than inherited: raw git refuses to start one operation over another, but they
+  compute with `git <verb> --no-commit`, and git's refusal does not reach that
+  form uniformly — `git merge --no-ff --no-commit` over a parked revert reports
+  "Automatic merge went well" and exits 0, though it does refuse over a parked
+  cherry-pick — so without it a pick ran over a parked revert and committed.
+  Their state-control forms (`--abort`, `--quit`) and the three conclusion
+  commands are exempt, because they are the way out of the very state being
+  refused over. The refusal names the way out —
   `safegit merge-continue`, `cherry-pick-continue` or `revert-continue` where
   safegit owns the conclusion, `git rebase --continue` or `git am --continue`
   where it does not, each with the abandoning command beside it, all rendered
