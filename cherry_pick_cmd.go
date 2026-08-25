@@ -193,6 +193,14 @@ func runRestructuredCherryPick(flags globalFlags, args []string, parsed gitArgs)
 		return code
 	}
 
+	// Before the compute, and inside the operation lock: a pick may not be
+	// computed over an operation git already has in flight. The compute step is
+	// `cherry-pick --no-commit`, which git does not refuse the way it refuses a
+	// plain pick, so the refusal has to be safegit's own.
+	if code := refuseComputeOverInFlight(gitDir, "cherry-pick"); code != 0 {
+		return code
+	}
+
 	if flags.dryRun {
 		// No git cherry-pick runs: the invocation is recorded, and the outcome
 		// it would have is COMPUTED with git's own merge engine instead of

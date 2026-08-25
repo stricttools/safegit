@@ -263,6 +263,16 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 		return code
 	}
 
+	// Defense in depth. A parked MERGE dirties the working tree by construction,
+	// so coordGuard above already refuses the common case with the listing of
+	// what is in it -- but a parked state of ANOTHER kind whose result equals the
+	// current tree leaves the tree clean, and merge's compute step would then run
+	// against it. The refusal is structural rather than a consequence of the
+	// dirt.
+	if code := refuseComputeOverInFlight(gitDir, "merge"); code != 0 {
+		return code
+	}
+
 	if flags.dryRun {
 		// A merge safegit refuses is refused whether or not the run was going to
 		// happen: a preview of a command that cannot run is not a preview of

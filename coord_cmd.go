@@ -131,6 +131,45 @@ func coordGuard(flags globalFlags, gitDir, operation string) int {
 	return 0
 }
 
+// refuseComputeOverInFlight is the entry check the three RESTRUCTURED commands
+// -- merge, cherry-pick and revert -- owe before they compute anything.
+//
+// Raw git refuses to start one operation over another: `git cherry-pick <c>`
+// during a parked revert exits 128 with "a revert is already in progress". The
+// restructure does not go through that door. It computes with
+// `git <verb> --no-commit`, which git does NOT guard the same way, so a
+// restructured command ran its compute over somebody else's parked operation
+// and then treated the result as its own -- a pick over a parked revert
+// committed and orphaned REVERT_HEAD, and a revert over a parked pick staged an
+// inverse patch behind a diagnosis that was not true of the state it found.
+//
+// So the check is made structurally rather than inherited from git: the same
+// coord.GuardInFlight every other author already calls, rendering the same
+// refusal `safegit commit` produces in exactly this state -- what is in flight,
+// and the way out of it from the single way-out authority.
+//
+// The dirty-tree guard does NOT subsume it. A parked operation whose result
+// equals the current tree -- a pick of an already-applied commit, a revert of an
+// already-reverted one -- leaves nothing for `git diff HEAD` to report, so the
+// repository looks idle to every check that only asks whether the tree is
+// clean. It is placed AFTER coordGuard for the ordinary case, where the tree is
+// dirty and the refusal should carry the listing of what is in it, and BEFORE
+// the dry-run branch, because a preview of a command that cannot run is not a
+// preview of anything (and the preview path computes the operation with git's
+// own merge engine, over the very state being refused over).
+//
+// It is scoped to the COMPUTE forms alone. The state-control verbs
+// (--abort/--quit) and the three -continue commands are the way out of the
+// state, and a check that refused them would strand the repository in the state
+// it was protecting.
+func refuseComputeOverInFlight(gitDir, operation string) int {
+	if err := coord.GuardInFlight(gitDir, operation, nil); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return exitcode.CoordinationBusy
+	}
+	return 0
+}
+
 // announceWayOut prints safegit's own next step when a passthrough failed and
 // left git with an operation in flight.
 //
