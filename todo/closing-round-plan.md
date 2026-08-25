@@ -10,8 +10,13 @@ claim text (file + function + a distinctive phrase), verified by four
 grounding investigations at HEAD `ef4b07e`; expect line drift, never
 claim drift.
 
-**EXECUTION starts on the user's explicit go.** This file existing is
-not that go.
+**EXECUTION starts on the user's explicit go, IN A LATER SESSION** —
+the user ruled that the session which wrote this plan does not execute
+it. This file existing is not that go. Also ruled at the same review:
+ONE release, after this round completes (main is green and could ship
+today, but the round is this release's own work — the
+release-once-at-the-end principle governs; the v0.28.0 defect exposure
+ends at that single release).
 
 **Standing discipline** (unchanged from the campaigns): commits via the
 INSTALLED safegit (single `-m`, plain paths, repo root); never raw
@@ -528,7 +533,16 @@ acceptance of any remainder).
   `todo/redesign-campaign-plan.md` (campaign 1's plan, still sitting
   in todo — its move was ruled at that campaign's close),
   `todo/move-records-for-undeclared-moves.md` (consumed), and THIS
-  plan move to `todo/.done/`. Staying active: the four strictcli-await
+  plan move to `todo/.done/`. THE DEFERRED-WORK LEDGER `[user]`: the
+  triage ALSO writes one new todo (e.g.
+  `todo/next-cycle-candidates.md`) collecting the deferred items now
+  scattered in plan text, each with its context and origin —
+  envelope-always adoption when the framework's error-payload channel
+  ships; the doctorFix uninitialized-repo notice; the doctor-fix
+  output's connective wording; the unminted conclusion execute-path
+  worktree writes; the reset-over-parked-state and empty-compute-oplog
+  observations (both ruled parked). The standing reversibility and
+  pipeline-authored-rebase todos remain their own files. Staying active: the four strictcli-await
   files, the three contingent files
   (reader-writer-operation-lock, scrub-strict-mode-selector,
   push-streaming-restoration), reversibility-gaps, and
@@ -547,8 +561,11 @@ acceptance of any remainder).
   at the same version with `rlsbl release resume` — never a new
   version, never a manual push.
 - Post-release (recorded, outside the release): the fleet sweep for
-  the six legacy placeholder pre-pre-push hooks (they will refuse at
-  the hooks-not-migrated exit once the new version installs); the
+  the six legacy placeholder pre-pre-push hooks is SCRIPTED and run in
+  ONE pass right after the new version installs `[user]` (find every
+  repo's legacy pre-pre-push file, `hook migrate` or delete the no-op
+  placeholder per repo, verify a push probe per repo) — no session
+  ever hits a surprise hooks-not-migrated refusal; the
   dependent projects' parked todos unblock on their own triage;
   `.rlsbl/config.json`'s pre-release hook and `selfdoc.json`'s version
   are release-pipeline-owned and need no hand edits.
