@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+"""Apply a spec file of counted string substitutions, dry run first.
+
+A bulk edit that reports success while having changed nothing -- or having
+changed twice what was meant -- is the failure this script exists to make
+impossible. Every substitution states how many occurrences it expects; a
+mismatch in either direction aborts the WHOLE run before a single byte is
+written, and the default mode writes nothing at all.
+
+Usage:
+  scripts/counted-edit <spec-file>            dry run: print a unified diff per
+                                              file and a summary (default)
+  scripts/counted-edit <spec-file> --apply    run the same checks, then write
+
+Exit status:
+  0  every substitution matched its expected count (and, with --apply, was
+     written)
+  1  at least one substitution did not match; nothing was written
+  2  the spec file is missing or malformed, or the command line is wrong
+
+Spec format -- a Python literal, evaluated with ast.literal_eval, so no code in
+it ever runs. The literal is a list of 4-element tuples:
+
+    (path, old, new, expected_count)
+
+  path            the file to edit, relative to the CURRENT WORKING DIRECTORY
+                  (absolute paths are taken as given)
+  old             the exact text to replace; may span lines, and Python's own
+                  string literals carry that with no escaping tricks -- write
+                  "a\\nb" or a triple-quoted block, whichever reads better
+  new             its replacement; may also span lines, and may be "" to delete
+  expected_count  how many occurrences of `old` must be present, asserted
+                  before anything is written; exactly that many are replaced
+
+A leading `SUBS = ` is tolerated so a spec can be a runnable-looking .py file,
+and `#` comments are Python's own. Example:
+
+    SUBS = [
+        ("internal/test/moves_test.go",
+         "\\tif got != want {\\n\\t\\tt.Fatal(\\"nope\\")\\n\\t}\\n",
+         "\\tif got != want {\\n\\t\\tt.Fatalf(\\"got %q, want %q\\", got, want)\\n\\t}\\n",
+         3),
+        ("docs/commands-guide.md", "the old wording", "the new wording", 1),
+    ]
+
+Substitutions are applied IN ORDER against the accumulating content of each
+file, so a later entry sees what earlier ones did to the same file. That is why
+a failure does not stop the scan: the remaining entries are still checked (a
+failed one leaves its text alone, so an entry that depended on it is reported
+too), and the complete list of mismatches is printed before the abort.
+"""
+
+import ast
+import difflib
+import os
+import sys
+
+
+def usage(stream=sys.stderr):
+    stream.write(__doc__)
+
+
+def die(message):
+    sys.stderr.write("counted-edit: %s\n" % message)
+    raise SystemExit(2)
+
+
+def load_spec(path):
+    """Read the spec file and return a list of (path, old, new, count)."""
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError as err:
+        die("cannot read spec file %s: %s" % (path, err))
+
+    # Tolerate `NAME = [...]` so a spec can double as a readable .py file.
+    stripped = text.strip()
+    if not stripped.startswith("["):
+        head, sep, tail = stripped.partition("=")
+        if sep and head.strip().isidentifier():
+            stripped = tail.strip()
+
+    try:
+        spec = ast.literal_eval(stripped)
+    except (ValueError, SyntaxError) as err:
+        die("spec file %s is not a Python literal: %s" % (path, err))
+
+    if not isinstance(spec, list):
+        die("spec file %s must hold a LIST of 4-tuples, found %s"
+            % (path, type(spec).__name__))
+    if not spec:
+        die("spec file %s holds no substitutions" % path)
+
+    out = []
+    for i, entry in enumerate(spec):
+        where = "%s entry %d" % (path, i)
+        if not isinstance(entry, (tuple, list)) or len(entry) != 4:
+            die("%s is not a 4-element (path, old, new, count) tuple" % where)
+        target, old, new, count = entry
+        if not isinstance(target, str) or not target:
+            die("%s: path must be a non-empty string" % where)
+        if not isinstance(old, str) or not old:
+            die("%s: `old` must be a non-empty string" % where)
+        if not isinstance(new, str):
+            die("%s: `new` must be a string" % where)
+        if old == new:
+            die("%s: `old` and `new` are identical, which can only be a no-op" % where)
+        if not isinstance(count, int) or isinstance(count, bool) or count < 1:
+            die("%s: expected_count must be a positive integer, found %r" % (where, count))
+        out.append((target, old, new, count))
+    return out
+
+
+def excerpt(text, limit=60):
+    """A one-line, quoted stand-in for a possibly multi-line needle."""
+    flat = text.replace("\n", "\\n").replace("\t", "\\t")
+    if len(flat) > limit:
+        flat = flat[:limit] + "..."
+    return '"%s"' % flat
+
+
+def main(argv):
+    args = argv[1:]
+    if not args:
+        usage()
+        return 2
+
+    apply_mode = False
+    spec_path = None
+    for arg in args:
+        if arg == "--apply":
+            apply_mode = True
+        elif arg in ("-h", "--help"):
+            usage(sys.stdout)
+            return 0
+        elif arg.startswith("-"):
+            die("unknown option %s" % arg)
+        elif spec_path is None:
+            spec_path = arg
+        else:
+            die("only one spec file may be named (got %s and %s)" % (spec_path, arg))
+
+    if spec_path is None:
+        die("no spec file named")
+
+    spec = load_spec(spec_path)
+
+    # Phase 1: read every file once, count every substitution, change nothing on
+    # disk. `working` accumulates each file's post-substitution content so an
+    # entry sees what earlier entries did to the same file.
+    original = {}
+    working = {}
+    failures = []
+
+    for target, old, new, want in spec:
+        if target not in original:
+            try:
+                with open(target, "r", encoding="utf-8") as fh:
+                    original[target] = fh.read()
+            except OSError as err:
+                failures.append("%s: cannot read: %s" % (target, err))
+                original[target] = None
+                working[target] = None
+                continue
+            working[target] = original[target]
+        if working[target] is None:
+            failures.append("%s: skipped, the file could not be read" % target)
+            continue
+
+        got = working[target].count(old)
+        if got != want:
+            failures.append(
+                "%s: expected %d occurrence(s) of %s, found %d"
+                % (target, want, excerpt(old), got))
+            continue
+        working[target] = working[target].replace(old, new, want)
+
+    if failures:
+        sys.stderr.write("counted-edit: ABORTING, nothing was written.\n")
+        for line in failures:
+            sys.stderr.write("  %s\n" % line)
+        sys.stderr.write(
+            "counted-edit: %d of %d substitution(s) did not match their expected count\n"
+            % (len(failures), len(spec)))
+        return 1
+
+    touched = [p for p in working if working[p] != original[p]]
+    if not touched:
+        # Every count matched yet no file changed: structurally impossible given
+        # the old != new check, so treat it as a bug rather than a success.
+        sys.stderr.write("counted-edit: every count matched but no file changed; refusing\n")
+        return 1
+
+    if not apply_mode:
+        for target in sorted(touched):
+            sys.stdout.writelines(difflib.unified_diff(
+                original[target].splitlines(True),
+                working[target].splitlines(True),
+                fromfile=target,
+                tofile=target + " (counted-edit)"))
+        print("counted-edit: dry run -- would apply %d substitution(s) across %d file(s); "
+              "re-run with --apply to write" % (len(spec), len(touched)))
+        return 0
+
+    for target in sorted(touched):
+        tmp = target + ".counted-edit.tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(working[target])
+        os.replace(tmp, target)
+    print("counted-edit: applied %d substitution(s) across %d file(s)"
+          % (len(spec), len(touched)))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
