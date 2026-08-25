@@ -41,6 +41,19 @@
 // The documentation table in docs/commands-guide.md is generated from All() by
 // `scripts/gen-exit-table`, so it cannot drift from the registry.
 //
+// # When a new code is warranted
+//
+// A new code is registered only when the CALLER'S RECOVERY differs from every
+// existing code's -- retry the same command as-is (a transient race), fix
+// something and re-run (a refusal naming its cause), or do not retry at all
+// (the operation stands and repeating it would double it). A new hard error
+// whose recovery matches an existing code's JOINS that code's family, and the
+// payload discriminates the detail; two codes for one recovery path teach a
+// consumer nothing. This is why the commit-stands family covers both a
+// standing commit and a standing fast-forward, while the transient-race abort
+// has its own code: the recoveries differ, the situations within a code need
+// not.
+//
 // # What the framework owns
 //
 // strictcli refuses a malformed command line before dispatch -- an unknown
