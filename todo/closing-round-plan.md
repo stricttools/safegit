@@ -73,11 +73,17 @@ exactly one inferred pair old-to-new with origin `observed` and no
 declare notice (probed: this is current behavior). The doc comment
 records the ruling: the fences' conditions are exact, so identical
 unique content IS the evidence; safegit records what the delta proves,
-never guesses intent, and the record is retractable. Test-only — the
-catalog's observed-record entry already states the exact conditions;
-this consequence is a pin, not a new git-facing divergence `[plan]`.
-Helpers exist (`assertInferredPairs`, `assertOrigins`,
-`commitMessageOf`); no new machinery.
+never guesses intent, and the record is retractable. ALSO `[user]`:
+one sentence is EDITED into the catalog's existing observed-record
+entry stating the consequence plainly — identical unique content, one
+file deleted and one added, mints an observed move even when the files
+are genuinely unrelated; the conditions are exact and the record
+retractable. The catalog's job is stating what a reader would not
+expect, and this is the feature's one surprising consequence. Entry
+edited, never duplicated; the sentence rides this subphase's commit
+(the standing same-commit rule). Helpers exist
+(`assertInferredPairs`, `assertOrigins`, `commitMessageOf`); no new
+machinery.
 **Verify:** the pin is green on arrival and its comment carries the
 ruling.
 
