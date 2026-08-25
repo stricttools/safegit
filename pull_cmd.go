@@ -73,6 +73,20 @@ func runPull(flags globalFlags, mode pullMode, remote, branch string, rebase boo
 		return code
 	}
 
+	// Before the FETCH, not merely before the merge step: a pull that cannot
+	// merge has no business going to the network first.
+	//
+	// A pull reaches the merge compute through this handler rather than through
+	// `safegit merge`'s, so merge's own entry check does not cover it, and the
+	// exposure is the same one. `git merge --no-ff --no-commit` over a parked
+	// REVERT is not refused by git -- it reports "Automatic merge went well" and
+	// exits 0 (probed; over a parked cherry-pick git does refuse) -- so without
+	// this a pull computed the merge, committed it through the pipeline, and left
+	// REVERT_HEAD orphaned for the next `safegit commit` to refuse over.
+	if code := refuseComputeOverInFlight(gitDir, "pull"); code != 0 {
+		return code
+	}
+
 	pos := readOplogPosition(flags)
 
 	fetchArgs := []string{"fetch", remote}
