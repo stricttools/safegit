@@ -98,6 +98,52 @@ func TestInferredFileMoveIsRecorded(t *testing.T) {
 	}
 }
 
+// THE COINCIDENCE. Two files that have nothing to do with each other, which
+// happen to hold the same unique bytes -- one deleted, one added in the same
+// commit -- are recorded as a move, and this test pins that as accepted rather
+// than as a bug awaiting a fix.
+//
+// The fences are conditions, not guesses: one-to-one pairing, the blob unique
+// in both trees, regular files, non-empty. A delta that clears all four is
+// evidence, and identical unique content IS that evidence -- there is nothing
+// further to read short of asking what the author had in mind, which is exactly
+// the inference safegit refuses to make. safegit records what the delta proves;
+// it never guesses intent, and it never scores similarity, so a coincidence
+// that looks like a move to the tree is recorded as one.
+//
+// The cost is bounded on the other side: the record is RETRACTABLE. An author
+// who knows the two files are unrelated retracts it (`--moved-retract <id>`),
+// and the retraction is itself a stated claim rather than a silent edit. A
+// probabilistic fence tuned to keep this case out would have to guess, and
+// would take real moves with it.
+func TestTwoUnrelatedFilesSharingContentAreRecordedAsAMove(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "notes.txt", "a line of prose nothing else holds\n")
+	safegitCommitEnv(t, dir, inferredSession, "seed", "notes.txt")
+
+	// No rename: one file is deleted outright and an unrelated one is written
+	// that happens to carry the same bytes.
+	if err := os.Remove(filepath.Join(dir, "notes.txt")); err != nil {
+		t.Fatalf("remove notes.txt: %v", err)
+	}
+	testutil.WriteFile(t, dir, "greeting.txt", "a line of prose nothing else holds\n")
+
+	_, stderr, code := runSafegitEnv(t, dir, inferredSession, "commit", "-m", "drop notes, add greeting",
+		"--", "notes.txt", "greeting.txt")
+	if code != 0 {
+		t.Fatalf("commit failed (code %d): %s", code, stderr)
+	}
+
+	assertInferredPairs(t, dir, "notes.txt -> greeting.txt")
+	assertOrigins(t, commitMessageOf(t, dir, "HEAD"), "observed")
+
+	// Nothing was refused, so nothing points at --moved: the fences PASSED here,
+	// which is the whole point of the pin.
+	if strings.Contains(stderr, "--moved") {
+		t.Errorf("a recorded pair produced a declare notice:\n%s", stderr)
+	}
+}
+
 // An ordinary commit witnesses nothing and records nothing. This is the fast
 // path: no blob is deleted and added, so neither tree is ever listed.
 func TestOrdinaryCommitInfersNothing(t *testing.T) {
