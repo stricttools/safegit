@@ -104,6 +104,12 @@ const (
 	// the first rename rather than leaving it to the commit pipeline, so a mv
 	// run against a sequencer state moves nothing at all.
 	//
+	// merge, cherry-pick, revert and pull refuse outright there too, in the form
+	// that COMPUTES an operation (never --abort or --quit), before the compute
+	// and for pull before its fetch. They cannot inherit git's own refusal: they
+	// compute with `git <verb> --no-commit`, and git does not refuse that form
+	// the way it refuses a plain one.
+	//
 	// The three conclusion commands -- merge-continue, cherry-pick-continue and
 	// revert-continue -- produce it from the other direction, for the two ways a
 	// conclusion can be asked for against the wrong state: run against an
