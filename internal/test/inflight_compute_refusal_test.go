@@ -46,10 +46,9 @@ func stateFilePresent(t *testing.T, dir, name string) bool {
 	return err == nil
 }
 
-// newParkedRevertRepo builds the state reproduction A starts from: a repository
-// whose HEAD commit has been reverted, and whose SECOND revert of the same
-// commit stopped with nothing to do and PARKED git's revert state over a clean
-// working tree.
+// newParkedRevertRepo builds a repository whose HEAD commit has been reverted,
+// and whose SECOND revert of the same commit stopped with nothing to do and
+// PARKED git's revert state over a clean working tree.
 //
 // It returns the repository and the commit that was reverted twice. A `side`
 // branch diverges from before the reverted commit, so a merge run against this
@@ -80,10 +79,9 @@ func newParkedRevertRepo(t *testing.T) (dir, reverted string) {
 	return dir, reverted
 }
 
-// newParkedPickRepo builds the state reproduction B starts from: a repository
-// that has picked a side commit, and whose SECOND pick of the same commit
-// stopped with nothing to do and PARKED git's cherry-pick state over a clean
-// working tree.
+// newParkedPickRepo builds a repository that has picked a side commit, and
+// whose SECOND pick of the same commit stopped with nothing to do and PARKED
+// git's cherry-pick state over a clean working tree.
 func newParkedPickRepo(t *testing.T) (dir, picked string) {
 	t.Helper()
 	dir, first, _ := newPickableRepo(t)
@@ -162,7 +160,8 @@ func TestANoChangeSecondRevertParksItsState(t *testing.T) {
 	}
 }
 
-// TestCherryPickRefusesOverAParkedRevert is REPRODUCTION A.
+// TestCherryPickRefusesOverAParkedRevert: a pick asked for while git holds a
+// parked revert.
 //
 // Before the entry check this exited 0: git's own refusal never fired (the
 // compute form is `--no-commit`, which git does not guard), safegit concluded
@@ -223,7 +222,8 @@ func TestCherryPickPreviewRefusesOverAParkedRevert(t *testing.T) {
 	}
 }
 
-// TestRevertRefusesOverAParkedPick is REPRODUCTION B.
+// TestRevertRefusesOverAParkedPick: a revert asked for while git holds a parked
+// cherry-pick.
 //
 // Before the entry check this exited 1 with a message that was not true of the
 // state it found -- "git staged the revert but left no revert state behind",
@@ -292,8 +292,8 @@ func TestMergeRefusesOverAParkedPick(t *testing.T) {
 	}
 }
 
-// TestMergeRefusesOverAParkedRevert is the merge arm's REAL reproduction, and
-// the reason merge could not be left to git's own refusal.
+// TestMergeRefusesOverAParkedRevert is the merge case that actually committed,
+// and the reason merge could not be left to git's own refusal.
 //
 // git's merge does refuse over a parked CHERRY-PICK -- "You have not concluded
 // your cherry-pick (CHERRY_PICK_HEAD exists)", exit 128 -- which is why the
