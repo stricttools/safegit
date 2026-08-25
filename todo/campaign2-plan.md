@@ -1522,6 +1522,24 @@ after Phase 9's top-up).
   the same way.
 - One fresh audit per phase (0-8), each briefed with THIS PLAN and the
   phase's red list; remediation; then the Phase-8 top-up re-check.
+PHASE-9 EXECUTION notes: the per-phase fresh audits ran DURING
+execution (every phase closed with one plus remediation); Phase 9's
+audit obligation is discharged by them plus a final two-agent
+integrative pass over the post-remediation whole. Battery outcome:
+full -race green (22 packages, zero races); stress green at
+count=5 (~22.5 min — the 15m budget in testdata/stress and the
+template was a stale clock, raised to 40m); GOWORK=off identical on
+released strictcli v0.33.0; selfdoc check 0; census regenerated
+(520 -> 593) and the release hook verified passing; reconciliation:
+all 483 differing lines classified, ZERO unexplained (49 healed + 1
+retired = the 50 baseline reds; 58 sanctioned removals; 376
+attributed new tests); the campaign-1 artifact intact, zero
+regressions. Appendix-B text correction: 2.2's preview-row note
+mis-described the survivor — the table's surviving row is
+`merge --abort` (a state-control form), and the moved rows live in
+TestMergeSubsetRefusalsApplyToAPreviewToo /
+TestPickAndRevertSubsetRefusalsApplyToAPreviewToo; the criterion
+stays pinned (the tree is right, the old note was wrong).
 
 ## Phase 10 — Release
 

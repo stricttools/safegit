@@ -14,4 +14,4 @@ COUNT="${1:-5}"
 shift || true
 
 echo "Running all integration tests including stress scenarios (race, count=$COUNT)..."
-go test ./internal/test/ -race -count="$COUNT" -timeout=15m -v --stress "$@"
+go test ./internal/test/ -race -count="$COUNT" -timeout=40m -v --stress "$@"
