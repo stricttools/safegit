@@ -294,6 +294,105 @@ func TestCommitPreviewStillReportsTheRecordsItWouldMint(t *testing.T) {
 	}
 }
 
+// The REWORD arm. A reword takes no files and changes no tree, but it still
+// mints records -- `--moved` is judged against the reworded commit's own first
+// parent -- and its message goes past the same commit-msg hook. So its payload
+// owes the same answer: what the committed message carries, not what this run
+// composed before the hook rewrote it.
+func TestRewordPayloadReportsOnlyTheRecordsTheCommittedMessageCarries(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
+	safegitCommit(t, dir, "seed", "a.txt")
+	// The reword judges its declaration against the tip's FIRST PARENT, so the
+	// tip being reworded has to be a commit above the one that tracks a.txt.
+	testutil.WriteFile(t, dir, "other.txt", "unrelated\n")
+	safegitCommit(t, dir, "second", "other.txt")
+
+	installHook(t, dir, "commit-msg", stripMovedLinesHook)
+
+	moveOnDisk(t, dir, "a.txt", "b.txt")
+	// No pathspec at all: that is what makes this a reword rather than an amend.
+	doc := commitPayloadOf(t, dir, "commit", "--amend", "-m", "reworded",
+		"--moved", "a.txt -> b.txt")
+
+	if doc.ExecutionMode == nil || *doc.ExecutionMode != "reword" {
+		t.Fatalf("execution_mode = %v, want reword; the fixture did not take the reword arm", doc.ExecutionMode)
+	}
+	msg := commitMessageOf(t, dir, "HEAD")
+	if strings.Contains(msg, "Moved: ") {
+		t.Fatalf("the fixture's hook did not strip the records; message:\n%s", msg)
+	}
+	if len(doc.MovedRecords) != 0 {
+		t.Errorf("moved_records = %+v, but the reworded commit's message carries no record at all:\n%s",
+			doc.MovedRecords, msg)
+	}
+}
+
+// The MV arm. `safegit mv` mints a record per pair and hands them to the same
+// pipeline, so the same hook strips them out of the same message -- but mv's
+// payload member is built from the PAIR LIST it was given rather than from what
+// the commit ended up with, which is the one place that answer can be wrong.
+//
+// The human line is the same claim in prose ("N move(s) recorded"), so it is
+// pinned here too.
+func TestMvPayloadReportsOnlyTheRecordsTheCommittedMessageCarries(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
+	safegitCommit(t, dir, "seed", "a.txt")
+
+	installHook(t, dir, "commit-msg", stripMovedLinesHook)
+
+	stdout, stderr, code := runSafegit(t, dir, "--json", "mv", "a.txt -> b.txt", "-m", "move a")
+	if code != 0 {
+		t.Fatalf("safegit mv failed (%d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	var doc struct {
+		Moves []struct {
+			ID  string `json:"id"`
+			Old string `json:"old"`
+			New string `json:"new"`
+		} `json:"moves"`
+	}
+	if err := json.Unmarshal(decodeEnvelope(t, stdout).Payload, &doc); err != nil {
+		t.Fatalf("mv payload does not decode: %v\nstdout: %s", err, stdout)
+	}
+
+	msg := commitMessageOf(t, dir, "HEAD")
+	if strings.Contains(msg, "Moved: ") {
+		t.Fatalf("the fixture's hook did not strip the records; message:\n%s", msg)
+	}
+	if len(doc.Moves) != 0 {
+		t.Errorf("moves = %+v, but the commit's message carries no record at all:\n%s", doc.Moves, msg)
+	}
+}
+
+// The mv preview runs no hook, so it still reports the record it would write --
+// the same honesty the commit arm's preview has.
+func TestMvPreviewStillReportsTheRecordItWouldMint(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
+	safegitCommit(t, dir, "seed", "a.txt")
+
+	installHook(t, dir, "commit-msg", stripMovedLinesHook)
+
+	stdout, stderr, code := runSafegit(t, dir, "--json", "--dry-run", "mv", "a.txt -> b.txt", "-m", "move a")
+	if code != 0 {
+		t.Fatalf("safegit mv --dry-run failed (%d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	var doc struct {
+		Moves []struct {
+			Old string `json:"old"`
+			New string `json:"new"`
+		} `json:"moves"`
+	}
+	if err := json.Unmarshal(decodeEnvelope(t, stdout).Payload, &doc); err != nil {
+		t.Fatalf("mv payload does not decode: %v\nstdout: %s", err, stdout)
+	}
+	if len(doc.Moves) != 1 || doc.Moves[0].Old != "a.txt" || doc.Moves[0].New != "b.txt" {
+		t.Errorf("moves = %+v, want the record the preview would have written", doc.Moves)
+	}
+}
+
 // stripMovedLinesHook is a commit-msg hook that removes every record line, the
 // way a real message-policy hook rewrites a message it does not like. It exits
 // zero whatever it finds, so the commit itself is never refused.
