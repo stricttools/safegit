@@ -1,16 +1,24 @@
-# The closing round: implementation plan (revision 2)
+# The closing round: implementation plan (revision 3)
 
-Self-contained: every decision this round executes is stated in full in
-THIS file. It executes the rulings from the pre-release design review
-that followed campaign 2 (whose plan, `todo/campaign2-plan.md`, is a
-completed historical record — where the two disagree about what to do
-NEXT, this file wins). A session with zero conversation context can
-implement any subphase from this file plus the cited code. Anchors are
-claim text (file + function + a distinctive phrase), verified by four
-grounding investigations at HEAD `ef4b07e` and re-verified by an
-adversarial critique at `9855c75`, whose findings — plus the design
-rulings they prompted — this revision absorbs; expect line drift,
-never claim drift.
+Self-contained in DECISIONS: every decision this round executes is
+stated in full in THIS file, and a session with zero conversation
+context can implement any subphase from this file plus the cited code.
+Ambient discipline is NOT restated here `[user — re-scoped at the
+second critique round]`: the auto-loaded rules files are the living
+authority for standing discipline (safe deletion, no raw git, scratch
+placement, red-first, permanent tests, batch-edit discipline, the
+live-tree/quiescent-tree rule), and implementor briefs cite them
+rather than this file. The plan executes the rulings from the
+pre-release design review that followed campaign 2 (whose plan,
+`todo/campaign2-plan.md`, is a completed historical record — where the
+two disagree about what to do NEXT, this file wins). Anchors are claim
+text (file + function + a distinctive phrase), grounded at HEAD
+`ef4b07e` and re-verified by two adversarial critiques (at `9855c75`
+and `3d61659f`); the Catalog actions table and the enumerations below
+were re-extracted from the tree at revision time. Expect line drift,
+never claim drift. Revision protocol: every NEW factual claim entering
+a revision is verified against the tree at write time or explicitly
+marked not-re-verified.
 
 **EXECUTION starts on the user's explicit go, IN A LATER SESSION** —
 the user ruled that the session which wrote this plan does not execute
@@ -20,37 +28,115 @@ today, but the round is this release's own work — the
 release-once-at-the-end principle governs; the v0.28.0 defect exposure
 ends at that single release).
 
-**Standing discipline** (unchanged from the campaigns): commits via the
-INSTALLED safegit (single `-m`, plain paths, repo root); never raw
-`git add`/`git commit`/any restore form; deletions via saferm with
-`--on-error abort` and a description; scratch repos via t.TempDir or
-`mktemp -d -p ~/.cache`, never /tmp, never in-repo outside
-`experiments/`; red-first for every behavior change; tests are
-permanent, in the established suites; bulk edits dry-run first with
-occurrence counts and full diff review; `internal/test`'s TestMain
-compiles the live tree, so mid-wave results are advisory and
-authoritative runs need a quiescent tree. The CAMPAIGN-ERA single-writer
-override on the divergences catalog is OVER: the repo's standing rule is
-back in force — a change that overturns a catalog entry EDITS that entry
-in the same commit, never adds a second; and the entry's
-provisional/deliberate ruling marker is PART of the entry `[plan]`, so a
-phase that rewrites a provisional entry's text also flips its marker in
-that same commit (Phase 5 sweeps only the text-unchanged remainder).
-`.rlsbl/changes/unreleased.jsonl` takes APPENDS and IN-PLACE EDITS only
-(`rlsbl changelog edit --id` preserves the line count; the
-batch-exclusion list keys entries by version+line, so inserting or
-deleting lines invalidates it — never do either). `.strictcli/schema.json` is
-regenerated ONCE, on the quiescent tree at the end of Phase 5, never
-per-phase (its embedded version member churns on every commit; build
-from a normal checkout with `GOWORK=off` — the gitignored `go.work`
-overlays a local dependency checkout, and without the switch the schema
-embeds the unreleased dependency version — or the member becomes
-"dev").
+**Plan-specific discipline** (everything else lives in the rules
+files):
+- Commits via the INSTALLED safegit (single `-m`, plain paths, repo
+  root) — the campaign rule the rules files do not carry.
+- The CAMPAIGN-ERA single-writer override on the divergences catalog
+  is OVER; the standing rule is back in force: a change that overturns
+  a catalog entry EDITS that entry in the same commit, never adds a
+  second. ALL marker actions are enumerated in the Catalog actions
+  table below — the single authority; no phase restates marker
+  mechanics in prose `[plan]`.
+- Verify style rules `[plan]`: a pin asserts the PRESENCE of a
+  distinctive phrase of the current text, never the absence of old
+  text; every grep-based Verify step uses `git grep` (tracked files
+  only — the on-disk build artifacts under `docs/_build/` would
+  otherwise produce false hits).
+- Falsified-texts sweep `[plan]`: before committing any behavior
+  change, `git grep` the changed flag/behavior names across
+  `.rlsbl/changes/unreleased.jsonl`, `docs/divergences.md`,
+  `.rlsbl/config.json`, help strings and doc comments; enumerate the
+  hits and give each a disposition (edited here / owned by a named
+  later phase / stays true). The per-phase lists in this file are the
+  revision-time enumerations; the sweep re-checks them at execution
+  time.
+- `.rlsbl/changes/unreleased.jsonl` takes APPENDS and IN-PLACE EDITS
+  only (`rlsbl changelog edit --id` preserves the line count; the
+  batch-exclusion list keys entries by version+line, so inserting or
+  deleting lines invalidates it — never do either).
+- `.strictcli/schema.json` is regenerated ONCE, on the quiescent tree
+  at the end of Phase 5, never per-phase. `--dump-schema` WRITES the
+  file (nothing goes to stdout). Its embedded version member is
+  safegit's OWN pseudo-version, which churns on every commit — hence
+  once, at the end. The schema is independent of the `go.work` overlay
+  (probed byte-identical with and without), so no GOWORK switch
+  applies to the dump; `GOWORK=off` belongs only to Phase 6's
+  released-dependency test run.
 
 **Decision-origin marks.** `[user]` = ruled by the user in the review
-(recommended-option picks weakly held per the standing convention).
-`[plan]` = orchestrator resolution of a grounding-discovered gap,
-reversible on request.
+or at a critique round (recommended-option picks weakly held per the
+standing convention). `[plan]` = orchestrator resolution of a
+grounding- or critique-discovered gap, reversible on request.
+
+---
+
+## Catalog actions — the single authority for divergences-catalog work
+
+Every catalog edit and marker action of the round, in one table.
+Entries are named by their headings (claim-text anchors; find by
+searching the heading text). "flip" = the entry's provisional ruling
+line becomes deliberate IN THE SAME COMMIT as that entry's text edit.
+The identical provisional ruling line (the `provisional, newly
+cataloged, awaiting review` spelling) appears on exactly the rows
+marked provisional below; before Phase 5's batch flip, `git grep -c`
+that spelling in `docs/divergences.md`, assert the count equals this
+table's then-remaining provisional rows, review the diff (the
+batch-edit rule).
+
+| Entry (heading) | Marker now | Action | Phase |
+|---|---|---|---|
+| `safegit commit` refuses while an operation is in flight | provisional | text edit (rebase joins the refusing commands, with its kind-scoped predicate recorded — rebase refuses only a NON-rebase in-flight kind where the others refuse any; the "before they compute anything" sentence becomes true) + flip | 1.2 |
+| An empty commit is refused; an empty merge is not | deliberate | text edit (the pick/revert refusal sentence now describes only the `-continue` door; the auto-clean fact added, counts-free: git offers its own ways out of an empty pick, safegit cleans up and the next command just works); marker stays deliberate | 1.1 |
+| A dirty working tree refuses the guarded commands, untracked files included | provisional | text edit ("Dirt is a diff of the working tree against HEAD" gains the unborn clause) + flip | 2 |
+| A parked merge stays parked, even when it could have fast-forwarded | provisional | text edit ("`--no-commit` parks in every case an operator can reach" — unborn is now reachable and refused instead) + flip | 2 |
+| NEW: the friendly unborn pre-flight refusals | — | new entry, born DELIBERATE (records a review-time ruling) | 2 |
+| The symlink-target entry (its heading names "leaves the repository") | deliberate | REWRITTEN including its heading to the portability class; its "listed for the review" sentence REMOVED; marker stays deliberate | 3 |
+| Merge strategies and strategy options are refused | provisional | REWRITTEN including its heading (selection stays refused; options now allowed) + flip | 4.1 |
+| `rebase` is one upstream and a replay, and nothing else | provisional | text edit (refusal bullet and framing; the topology row moves to allowed) + flip | 4.1 |
+| NEW: merging unrelated histories is refused (flag + pre-flight) | — | new entry, born DELIBERATE | 4.1 |
+| NEW: the rerere auto-update refusal and its open config route | — | new entry, born DELIBERATE | 4.1 |
+| The "What each guarded command allows" table | (no ruling line) | row edits for merge, cherry-pick, revert AND rebase | 4.1 |
+| An autostash is applied only when it belongs to the merge being concluded | provisional | text edit (the limit-awaits clause becomes the accepted-limit statement `[user]`) + flip | 5 |
+| A working-tree write that would destroy a hand edit is refused | provisional | flip only | 5 |
+| A conclusion whose commit already stands finishes the cleanup | provisional | flip only | 5 |
+| The forwarded command line is an allowlist, not a refusal list | provisional | flip only | 5 |
+| `switch` takes a branch name, and only a branch name | provisional | flip only | 5 |
+| `switch -c` starts the new branch where you are standing | provisional | flip only | 5 |
+| A fetch that marked several branches is not a merge safegit will make | provisional | flip only | 5 |
+| `--squash` is refused | provisional | flip only | 5 |
+| Options that would hand the commit or the ref back to git are refused | provisional | flip only | 5 |
+| Options that govern git's own commit step are refused, not ignored | provisional | flip only | 5 |
+| `--skip` is refused | provisional | flip only | 5 |
+| The fast-forward-only refusal is safegit's, not git's | provisional | flip only | 5 |
+| A fast-forward is safegit's own ref move, and undo refuses it | provisional | flip only | 5 |
+| `reset` takes a commit; the pathspec form is refused | provisional | flip only | 5 |
+| `pull --rebase` is refused, naming the two commands | provisional | flip only | 5 |
+| `bisect`'s subcommand vocabulary is its allowlist, and it takes no pathspec | provisional | flip only | 5 |
+| A path the commit stops tracking never pairs into an observed move | provisional | flip only | 5 |
+| `reset` is refused when the tree is dirty, in exactly the modes that write to it | provisional | flip only | 5 |
+| The catalog preamble | — | the roster blockquote ("The provisional entries, listed rather than counted, are these:") AND its companion clause ("every one of them is open at the review") rewritten to the end state; the blanket clause declaring every subset-boundary entry provisional corrected (five entries there are deliberate and the allowed-sets table carries no ruling line); the sentence "A behavior newly cataloged here is provisional until it has been reviewed as an entry, whatever its direction says" rewritten to permit entries born deliberate when they record a review-time ruling — this table's three born-deliberate entries are exactly that | 5 |
+
+## Phase interactions (the seams where phases meet — checked pairwise)
+
+- **1.1 and 2**: 1.1's empty-park auto-clean mirrors the unpark
+  precedent, whose index/worktree sync resolves `"HEAD"`; Phase 2
+  makes that resolution unborn-safe INSIDE the shared helper, so the
+  auto-clean inherits it with no edit in 1.1. Before Phase 2, no
+  unborn path can reach the auto-clean; after it, the unborn revert's
+  auto-clean works — Phase 2's revert Verify depends on this.
+- **2 and 4.1**: the no-merge-base pre-flight's predicate REQUIRES a
+  resolvable HEAD ("HEAD resolves AND merge-base reports no base") — a
+  bare merge-base failure must not refuse, or every unborn merge Phase
+  2 ships would refuse (probed: `merge-base` fails on an unborn HEAD
+  while the merge itself legitimately fast-forwards).
+- **2, 3, 4 and 5**: the divergences catalog and the commands guide
+  are shared by all three middle phases (see the spine note); the
+  Catalog actions table owns every marker action; Phase 5 owns the
+  roster and the flip batch.
+- **3, 4 and 6**: the in-place changelog edits ordered in Phases 3 and
+  4.1 are part of Phase 6's coverage accounting (listed there by entry
+  id).
 
 ---
 
@@ -78,10 +164,13 @@ AND (a conclusion declares BOTH the sequencer context and the
 shared-index base; a future half-configured request refuses instead of
 silently bypassing the unmerged-index guard). Grounded: both production
 construction sites (the `-continue` door and `concludeParkedOperation`)
-already set both, so no behavior changes; the doc comment currently
-ARGUES the OR and must be rewritten, not trimmed. One sanctioned test
-edit: `TestPipelineHonorsADeclaredSequencerContext`'s request literal
-gains the shared-index base. Consequence stated in code `[plan]`: the
+already set both, so no OBSERVABLE behavior changes — the amend/reword
+call sites flip from exempt-whenever-context-declared to never-exempt,
+which is unreachable today (no production caller passes a Sequencer to
+Amend or Reword; grep-verified). The doc comment currently ARGUES the
+OR and must be rewritten, not trimmed. One sanctioned test edit:
+`TestPipelineHonorsADeclaredSequencerContext`'s request literal gains
+the shared-index base. Consequence stated in code `[plan]`: the
 amend/reword call sites pass the parent-tree base hard-coded, so their
 sequencer parameter can no longer exempt the unmerged guard — correct
 (an amend is never a conclusion), and the comments near those call
@@ -96,9 +185,9 @@ green; the unmerged-guard suite green.
 ## Phase 1 — Sequencer-state behavior
 
 ONE implementor — the three items collide in `cherry_pick_cmd.go`,
-`revert_cmd.go`, `coord_cmd.go`, `sequencer_continue.go` (1.1's actual
-insertion point, also home of 1.3's revert sibling and the unpark
-precedent), and
+`revert_cmd.go` (home of 1.3's revert sibling), `coord_cmd.go`,
+`sequencer_continue.go` (1.1's actual insertion point and home of the
+unpark precedent), and
 `internal/test/inflight_compute_refusal_test.go`, and the first item
 rewrites the fixtures the second item's tests need. Internal order is
 mandatory: 1.1, then 1.2, then 1.3.
@@ -113,16 +202,24 @@ state it just parked and the refusal says so.
   signatures need no change). Mirror the unpark precedent
   (`refuseParkedRawGitShape`): `sequencer.Cleanup` for the operation's
   kind plus the index/worktree sync, both halves attempted, a cleanup
-  failure never swallowed — the residue is named in the message
-  `[plan]`. Stated acceptance `[user]`: the refusal already exits the
-  general code, so a failed cleanup is EXIT-INDISTINGUISHABLE from the
-  clean case — and refusals carry `payload:null` (recorded structural
-  fact), so the named residue on stderr is the only signal; this is
-  deliberately accepted (no new exit code) and the code comment says
-  so. The comment also states that the mirrored sync is
-  `read-tree --reset -u` — a destructive primitive that is a no-op on
-  this path (after an empty compute the tree already equals HEAD's
-  content) — so nobody later "improves" it away.
+  failure never swallowed — the residue is named `[plan]`.
+- THE MESSAGE IS TRUTHFUL PER BRANCH `[plan — the precedent's own
+  shape: its undone-state sentence prints only when both halves
+  succeeded]`: on cleanup SUCCESS the refusal says the parked state
+  was cleaned and gives no abort advice (there is nothing to abort);
+  on cleanup FAILURE the operation IS still in flight — the residue
+  files are named AND the abort advice REMAINS, because it is then
+  correct. Residue detail prints before the one-line refusal (the
+  `onEmpty` callbacks in the command files emit it; state the order in
+  code). Stated acceptance `[user]`: both branches exit the general
+  code — a failed cleanup is EXIT-INDISTINGUISHABLE from the clean
+  case, and refusals carry `payload:null` (recorded structural fact),
+  so the message is the only signal; deliberately accepted (no new
+  exit code), and the code comment says so. The comment also states
+  that the mirrored sync is `read-tree --reset -u` — a destructive
+  primitive that is a no-op on this path (after an empty compute the
+  tree already equals HEAD's content) — so nobody later "improves" it
+  away.
 - Grounded facts: the empty pick leaves CHERRY_PICK_HEAD (safegit's
   own write) + AUTO_MERGE + MERGE_MSG; the empty revert leaves
   REVERT_HEAD + AUTO_MERGE + MERGE_MSG; `sequencer.Paths` covers both
@@ -130,40 +227,31 @@ state it just parked and the refusal says so.
   construction (allow-empty; an already-merged `--no-commit` parks
   nothing — probed) and `merge --no-commit` with real work MUST keep
   parking (the operator's explicit request).
-- Interaction with Phase 2, stated for both implementors: the sync's
-  `HEAD` treeish becomes unborn-safe INSIDE the shared helper in Phase
-  2 (see the seam list there); this subphase needs no edit for it, and
-  before Phase 2 no unborn path can reach the auto-clean.
-- The refusal messages are rewritten: they currently instruct
-  `git <verb> --abort`, which after the auto-clean would name nothing
-  in progress. Keep the phrase "no change" (an existing restructure
-  test asserts it). Exit stays the general code `[plan — nothing in
-  the ruling moves it]`. The `-continue` door's OWN empty refusal
-  (`refuseEmptyConclusion`) is NOT touched — the state there is the
-  operator's, not this invocation's; state the two-door distinction in
-  code.
-- SANCTIONED FIXTURE REWRITE (the round's largest):
-  `inflight_compute_refusal_test.go`'s two fixture builders create
-  their parked state by running the exact empty second pick/revert
-  this item deletes. Re-fixture on RAW git (probed working: a raw
+- Interaction with Phase 2: see the Phase interactions section (the
+  sync helper's unborn safety arrives there; no edit here).
+- The refusal messages are rewritten; keep the phrase "no change" (an
+  existing restructure test asserts it). The `-continue` door's OWN
+  empty refusal (`refuseEmptyConclusion`) is NOT touched — the state
+  there is the operator's, not this invocation's; state the two-door
+  distinction in code. Comments this item falsifies, rewritten (not
+  trimmed) in the same commit `[plan]`:
+  `cherry_pick_cmd.go`'s "the state it left is still in flight"
+  comment, `refuseEmptyRevert`'s equivalent in `revert_cmd.go`, and
+  `cherry_pick_restructure_test.go`'s "names the way out of the state
+  git left" comment.
+- SANCTIONED FIXTURE REWRITE (the round's largest — the full list
+  lives in Appendix A): the in-flight refusal test file's two fixture
+  builders re-fixture on RAW git (probed working: a raw
   `git cherry-pick` of an already-applied commit parks
   CHERRY_PICK_HEAD on a clean tree; a raw `git revert --no-commit` of
   an already-reverted commit parks REVERT_HEAD) — a better fixture
-  anyway, since the suite's scenario is raw git beside safegit. The
-  two state-producer pins INVERT (they now assert the state is GONE
-  and the message no longer names `--abort`); the seven consumer
-  tests re-fixture in place. Appendix A lists them all.
-- Catalog, same commit: the empty-commit entry's sentence about the
-  pick/revert refusal naming `--skip`/`--abort` now describes only the
-  `-continue` door — split it; the entry gains the new fact (git's own
-  empty pick parks and offers three ways out; safegit cleans up and
-  the next command just works) `[user-ruled direction; entry edited,
-  never duplicated]`.
+  anyway, since the suite's scenario is raw git beside safegit.
+- Catalog: per the Catalog actions table (the empty-commit entry).
 **Verify (red first):** after an empty pick/revert — no sequencer
 residue (reuse `assertNoSequencerResidue`), clean status, HEAD unmoved,
-exit unchanged, message contains "no change" and does NOT contain
-"--abort", and THE POINT: the next `safegit commit` succeeds. The
-merge `--no-commit` park preserved. The pre-existing
+exit unchanged, message contains "no change" and (success path) gives
+no abort advice, and THE POINT: the next `safegit commit` succeeds.
+The merge `--no-commit` park preserved. The pre-existing
 already-applied-refusal test stays green.
 
 ### 1.2 The compute guard covers the --no-commit passthroughs `[user]`
@@ -187,22 +275,27 @@ No compute of any kind runs over parked state.
   the same in-flight entry refusal (probed: a rebase over a parked
   revert on a clean tree exits 0 and STRANDS the revert's state files
   behind it, blocking every later commit). The check inserts in
-  rebase's handler before git runs; git's own state-control forms
-  (`rebase --continue`/`--abort`/`--skip`) stay exempt — they operate
-  on the REBASE's own state. THE PREDICATE, stated outright `[plan —
-  the earlier wording was ambiguous, and one reading breaks every
-  ordinary rebase]`: refuse when `sequencer.Read` reports an in-flight
-  state whose kind is NOT the rebase kind. Never implement this by
-  declaring a rebase context through `coord.GuardInFlight` — that path
-  hard-errors when a context is declared and nothing is in flight, so
-  it would refuse every clean-repo rebase. Red-first: rebase over a
-  parked revert refuses naming the revert and the way out; an
-  ordinary rebase still runs; a conflicted rebase's own --continue
-  still reaches git.
-- Catalog, same commit: the commit-refuses-in-flight entry's claim
-  that the check covers merge/cherry-pick/revert/pull "before they
-  compute anything" is currently INACCURATE for the --no-commit route
-  — this item makes the sentence true; edit the entry to say so.
+  rebase's handler before git runs. THE PREDICATE, stated outright
+  `[plan — the earlier wording was ambiguous, and one reading breaks
+  every ordinary rebase]`: refuse when `sequencer.Read` reports an
+  in-flight state whose kind is NOT the rebase kind. Never implement
+  this by declaring a rebase context through `coord.GuardInFlight` —
+  that path hard-errors when a context is declared and nothing is in
+  flight, so it would refuse every clean-repo rebase. The
+  state-control exemption (`rebase --continue`/`--abort`/`--skip`) is
+  a CONSEQUENCE of the predicate — mid-rebase state reports the rebase
+  kind, so those forms pass by construction; no second argv-based
+  exemption list `[plan]`. Red-first: rebase over a parked revert
+  refuses naming the revert and the way out; an ordinary rebase still
+  runs; a conflicted rebase's own --continue still reaches git.
+- Catalog: per the Catalog actions table (the commit-refuses-in-flight
+  entry — rebase joins the refusing commands and the compute sentence
+  becomes true).
+- Changelog, same phase, in-place edit `[plan]`: entry id
+  `18cee9d5500c2822ba19eac36bdb4ba99c45ea0f13bb5f76` ("merge,
+  cherry-pick, revert and pull refuse to compute over an operation git
+  already has in flight") is edited to name rebase and the
+  `--no-commit` forms — the same edit makes its existing claim true.
 **Verify (red first, on the re-fixtured raw-git parked states):**
 `cherry-pick --no-commit` over a parked revert and `revert --no-commit`
 over a parked pick each exit with the coordination-busy code, name the
@@ -211,21 +304,20 @@ stage nothing, write no state file of their own, and leave the parked
 state intact; a `--dry-run` variant refuses identically; with nothing
 in flight both forms still work.
 
-### 1.3 The out-of-band refusal names its leftovers `[user-adjacent
-polish, ruled with the round]`
+### 1.3 The out-of-band refusal names its leftovers `[user]`
 `cherry_pick_cmd.go`'s state-changed-during-compute branch (the
-sibling of revert's already-fixed one) currently prints one line naming
-neither the CHERRY_PICK_HEAD safegit itself wrote nor the staged
-result. Rewrite it to the revert sibling's shape (anchored by its
-"something else started or cleared a git operation in this worktree
-while it ran" wording): name the leftover state file(s) including
-safegit's own CHERRY_PICK_HEAD, report the staged result, leave
-everything in place (an out-of-band writer is demonstrably active;
-report, never destroy — the established stance), point at `git status`.
-Grounded reproduction device for the red test: a `post-index-change`
-hook that writes MERGE_HEAD fires during the compute (probed); the test
-asserts the exit, the named file, and that the file still holds the
-picked commit.
+sibling of revert's already-fixed one, in `revert_cmd.go`) currently
+prints one line naming neither the CHERRY_PICK_HEAD safegit itself
+wrote nor the staged result. Rewrite it to the revert sibling's shape
+(anchored by its "something else started or cleared a git operation in
+this worktree while it ran" wording): name the leftover state file(s)
+including safegit's own CHERRY_PICK_HEAD, report the staged result,
+leave everything in place (an out-of-band writer is demonstrably
+active; report, never destroy — the established stance), point at
+`git status`. Grounded reproduction device for the red test: a
+`post-index-change` hook that writes MERGE_HEAD fires during the
+compute (probed); the test asserts the exit, the named file, and that
+the file still holds the picked commit.
 **Verify (red first):** the reproduction; the message names
 CHERRY_PICK_HEAD and the staged content; nothing rolled back.
 
@@ -233,8 +325,8 @@ CHERRY_PICK_HEAD and the staged content; nothing rolled back.
 
 ## Phase 2 — Unborn-branch support `[user — support now]`
 
-After Phase 1 (shared catalog file; light adjacency in the sequencer
-files). One implementor.
+After Phase 1 (catalog + commands guide; sequencer adjacency). One
+implementor.
 
 - The coordination check: when HEAD does not resolve (the cheap test is
   a quiet rev-parse verify), diff against the EMPTY TREE instead —
@@ -247,30 +339,34 @@ files). One implementor.
   identical on sha1 and sha256. The helper lives in `internal/git`
   because the seams straddle `internal/coord` and `package main` and
   all git plumbing goes through that package; it is the single home
-  every seam imports. On this cold path the invocation is the right
-  form (the hardcoded-table precedent's cost argument does not apply
-  here — stated in code).
-- The SAME substitution extends to THREE other HEAD-resolution seams
-  `[plan — forced: fixing coord alone makes unborn picks WORSE, parking
-  broken state]`: `sequencer_markers.go`'s first-parent constant (three
-  uses plus the index-changed listing); `sequencer_preview.go`'s two
-  HEAD reads; and `git.SyncMainIndexWithWorktree`'s `"HEAD"` treeish
-  (`read-tree --reset -u HEAD`, fatal on unborn — probed). That third
-  seam is substituted INSIDE the helper so every caller inherits it —
-  including `refuseParkedRawGitShape` and 1.1's empty-park auto-clean;
-  without it, 1.1's cleanup half fails on unborn ("Not a valid object
-  name HEAD") and this phase's own revert-refuses-as-empty Verify
-  cannot pass.
-  For the preview: an unborn merge preview can short-circuit (it is by
-  definition a fast-forward); the replay preview substitutes the empty
-  tree for ours, which merge-tree accepts WHEN a merge-base is given
-  (probed) — and a replay always has one.
+  every seam imports. The invocation form is right on this cold path —
+  hardcoding the two known empty-tree names per algorithm would only
+  avoid one subprocess, and the invocation self-adapts to any future
+  hash algorithm; the helper's comment states this `[plan]`.
+- The SAME substitution extends to two more HEAD-resolution seams, and
+  one seam gains a new arm instead `[plan — forced: fixing coord alone
+  makes unborn picks WORSE, parking broken state]`:
+  `sequencer_markers.go`'s first-parent constant (its uses, including
+  the index-changed listing) and `git.SyncMainIndexWithWorktree`'s
+  `"HEAD"` treeish (`read-tree --reset -u HEAD`, fatal on unborn —
+  probed) — the latter substituted INSIDE the helper so every caller
+  inherits it, including `refuseParkedRawGitShape` and 1.1's
+  empty-park auto-clean (see Phase interactions; without it, the
+  auto-clean's cleanup half fails on unborn and this phase's own
+  revert Verify cannot pass). The MERGE preview is the new-arm seam:
+  its HEAD read feeds `git.IsAncestorOf`, which needs a COMMIT (probed:
+  merge-tree without a merge-base rejects the empty tree), so an
+  unborn merge preview SHORT-CIRCUITS — it is by definition a
+  fast-forward and answers without computing; the REPLAY preview
+  substitutes the empty tree for ours, which merge-tree accepts WHEN a
+  merge-base is given (probed) — and a replay always has one.
 - What then works (all probed on a patched build): `switch -c` and
   `switch <branch>`; `merge <branch>` takes the already-built unborn
   fast-forward arm (ZeroSHA-pinned CAS, synced tree, the
   fast-forward oplog outcome); a dirty unborn tree refuses at the
   coordination-busy code with the listing; `cherry-pick <c>` works
-  end-to-end (a root commit with the source author preserved).
+  end-to-end (a root commit with the source author preserved);
+  `pull` inherits the merge path; `reset --hard` works.
 - The unborn REVERT refuses as empty `[plan]`: at HEAD today an unborn
   revert dies earlier, at the coordination check; probed on a build
   with the coord and markers seams patched, it then mints a nonsense
@@ -278,7 +374,15 @@ files). One implementor.
   parent tree (`internal/commit/commit.go`'s `!isRootCommit` arm — a
   required edit this phase owns). Compare against the empty tree on
   the root path so the standing empty-result refusal (and 1.1's
-  auto-clean) fire exactly as on a born branch.
+  auto-clean) fire exactly as on a born branch. Constraints on that
+  edit, stated `[plan]`: the `!req.AllowEmpty` guard SURVIVES (a green
+  test commits `--allow-empty` on a fresh repo — a root commit whose
+  tree IS the empty tree); `parentTree` keeps its empty-string
+  spelling on the root path for every OTHER consumer (`git.DiffTree`,
+  `refOrEmptyTree`, and the inference path key off it — only the
+  tree-unchanged comparison changes); and the arm's "Root commits are
+  never empty" comment states the premise being overturned and is
+  rewritten, not trimmed.
 - FRIENDLY PRE-FLIGHT REFUSALS `[user — the starting set of the
   adopted additive friendly-errors direction; wholesale wrapping of
   git errors is permanently ruled out]`: the unsupported unborn forms
@@ -291,23 +395,21 @@ files). One implementor.
   model (safegit always injects `--no-ff` when parking, and an unborn
   head cannot take a non-fast-forward); for unborn `rebase` and
   `bisect start`, git's own errors merely name the wrong thing.
-  Catalog, same commit, markers flipped with the edits: the
-  parked-merge entry's "`--no-commit` parks in every case an operator
-  can reach" sentence is edited (unborn is now reachable and refused
-  instead), and the friendly-refusal divergence is recorded.
 - Grounded residue: a successful `switch -c` on a still-unborn repo
-  records an ok navigation entry with an empty observed tip —
-  harmless (the observed spelling is deliberately unconsumed), noted
-  in the entry-writing comment.
-- The dead "unreachable TODAY" comment on merge's unborn arm is
-  deleted with the fix. The guide GAINS an unborn-branch section
-  (none exists today — created, not edited) covering what works, the
-  four friendly refusals, and the dirty-unborn refusal; the
-  entry-writing comment in `coord_cmd.go` gains the empty-observed-tip
-  note. Catalog, same commit, marker flipped with the edit: the
-  dirty-tree entry's
-  "Dirt is a diff of the working tree against HEAD" sentence gains the
-  unborn clause (entry EDITED). No test pins the current refusal
+  records an ok navigation entry with an empty observed tip, and a
+  `switch <branch>` FROM an unborn HEAD records an empty observed
+  parent — both harmless (the observed spelling is deliberately
+  unconsumed); the entry-writing comment in `coord_cmd.go` gains a
+  note covering BOTH spellings.
+- The FINAL PARAGRAPH of the "unreachable TODAY" comment block on
+  merge's unborn arm is deleted with the fix (the block's earlier
+  paragraphs carry live rationale for the ZeroSHA pin and stay). The
+  guide GAINS an unborn-branch section (none exists today — created,
+  not edited) covering what works, the friendly refusals, and the
+  dirty-unborn refusal.
+- Catalog: per the Catalog actions table (the dirty-tree entry's
+  unborn clause; the parked-merge entry; the NEW friendly-refusals
+  entry, born deliberate). No test pins the current unborn refusal
   (verified — pure addition).
 **Verify (red first):** integration tests on a `git init` +
 `fetch <src> side:side` fixture (the clean unborn-with-a-branch shape;
@@ -317,19 +419,25 @@ scenario's natural form): merge fast-forwards with a clean tree
 and the fast-forward outcome; switch both forms; dirty unborn refuses
 with both paths listed; commit still roots; pick roots with the
 author preserved; a CONFLICTED unborn pick parks and concludes
-end-to-end (the only path exercising three of the four substituted
-first-parent uses); unborn `pull` fast-forwards (it shares the merge
-path — the most useful unlock, pinned); unborn `reset --hard` works;
-revert refuses as empty with no residue; each of the four friendly
-refusals fires with its message and runs no git compute; previews
-work. Unit tests in `internal/coord` for the unborn clean/dirty arms.
+end-to-end — fixture stated because the shape is non-obvious `[plan,
+probed]`: an add-only pick onto unborn succeeds cleanly, so the
+conflict must be MODIFY/DELETE (source history: one commit creates the
+file, a second commit modifies it; fetch, then pick the SECOND commit
+onto the unborn head), and the resulting index holds stages 1 and 3
+ONLY — no stage 2 — which the `--resolve` assertions must expect; this
+is the only path exercising the substituted first-parent uses. Unborn
+`pull` fast-forwards (it shares the merge path — pinned); unborn
+`reset --hard` works; revert refuses as empty with no residue; each
+friendly refusal fires with its message and runs no git compute;
+previews work. Unit tests in `internal/coord` for the unborn
+clean/dirty arms.
 
 ---
 
 ## Phase 3 — Symlink portability refusal `[user]`
 
-Independent of Phases 1-2 in code; after them only for the shared
-catalog file. One implementor.
+Independent of Phases 1-2 in code; after them for the shared catalog
+and commands-guide files. One implementor.
 
 - The judgment (`internal/commit/intake.go`, the escape-judgment
   function): the refused class becomes ANY ABSOLUTE target (inside or
@@ -345,21 +453,30 @@ catalog file. One implementor.
   "non-portable", not "unportable"; each word hyphenated per the flag
   convention); the request fields, the three intake functions
   (`escapingLinkTarget`, `noticeEscapingLinks`, `refuseEscapingLinks`)
-  plus `resolveFiles`'s parameter, and the exit-29 constant — new
-  spelling `NonPortableTarget` — all rename (registry precedent: exit
-  25's rename); the registry meaning, generated
-  table, and flag help reword to the portability rationale, and every
-  prose mention writes "non-portable" hyphenated. KWARGS TRAP, stated
-  so the rename cannot ship half-done: the `optBool` lookup key is
-  derived from the flag name (`allow_escaping_targets` today) — the
-  lookup key MUST change together with the flag, or the new flag is
-  SILENTLY IGNORED (the fallback would always be returned). The eight
-  doc-comment blocks arguing the old "escaping" framing are REWRITTEN
-  to the portability rationale, not trimmed (the 0.1 precedent). The
-  seven `*Escaping*` test functions and
-  `wave2_symlink_escape_refusal_test.go` rename to the non-portable
-  vocabulary (Appendix A; Phase 6's reconciliation classifies the
-  renames as sanctioned).
+  plus `resolveFiles`'s parameter, and the exit-29 constant
+  (`EscapingSymlinkTarget` today — new spelling `NonPortableTarget`; a
+  rename, not a new code: the recovery path is unchanged, per the
+  registry's one-code-per-recovery-path policy) all rename; the
+  registry meaning, the generated table (`scripts/gen-exit-table`;
+  freshness test enforces), and the flag help reword to the
+  portability rationale, and every prose mention writes "non-portable"
+  hyphenated. KWARGS TRAP, stated so the rename cannot ship half-done:
+  the `optBool` lookup key is derived from the flag name
+  (`allow_escaping_targets` today) — the lookup key MUST change
+  together with the flag, or the new flag is SILENTLY IGNORED (the
+  fallback would always be returned). The comment sites arguing the
+  old "escaping" framing are REWRITTEN to the portability rationale,
+  not trimmed (the 0.1 precedent) — enumerated `[re-extracted at
+  revision time]`: in `internal/commit/intake.go`, the
+  `escapingLinkTarget`, `noticeEscapingLinks`, and
+  `refuseEscapingLinks` doc comments plus the refusal text, the
+  `allowEscapingTargets` parameter doc on `resolveFiles`, and the
+  expansion-members comment; the `AllowEscapingTargets` field docs in
+  `internal/commit/commit.go` and `internal/commit/amend.go`; the
+  root-package plumbing in `commit.go` (`runCommit`/`runCommitAmend`
+  parameters and call sites) and the flag help in `main.go`; the
+  registry doc comment and table row in
+  `internal/exitcode/exitcode.go`.
 - Both operator messages branch by shape `[plan — grounded: the
   current advice is actively misleading for absolute-inside]`: an
   absolute-inside target's refusal says the link is inside the
@@ -373,33 +490,25 @@ catalog file. One implementor.
   assertions follow (Appendix A).
 - MIGRATION CONSEQUENCE, stated for the changelog: a repository with a
   tracked absolute in-repo symlink starts refusing on the next commit
-  that names it or sweeps it up by directory expansion — a breaking
-  entry.
-- Sanctioned rewrites (Appendix A): the absolute-inside pin inverts
-  into the refusal test (its own comment says it is the one to
-  rewrite); the wording assertions across the suite follow the new
-  messages; the inside-target and traversing pins RETARGET to a
-  distinctive phrase of the new notice — they currently assert the
-  ABSENCE of "outside the repository" and would go silently vacuous
-  under the reword; the directory-symlink pin stays green untouched;
-  the mv carve-out pin updates only for the flag rename (mv reaches
-  `resolveFiles` but passes no file specs, so its offender set is
-  empty by construction — the carve-out is structural, verified).
-- Docs, same commit where entry-overturning: the catalog entry is
-  REWRITTEN including its heading (it names "leaves the repository"),
-  its marker flipped, and its "listed for the review" sentence REMOVED
-  — the one such sentence in the catalog; Phase 5's grep for it
-  catches a miss here; the guide's symlink section INCLUDING its
-  heading (it also says "leave the repository"), the commit flag-table
-  row, the template
-  bullet; the generated exit table regenerates (freshness test
-  enforces); cli-commit and the schema regenerate later (Phase 5).
-  CHANGELOG, same phase: the existing unreleased entry that ships
-  `--allow-escaping-targets` and the "leaves the repository" class is
-  edited IN PLACE (`rlsbl changelog edit --id`) to the new flag and
-  class — 0.29.0's notes must never name a flag that never existed.
+  that names it or sweeps it up by directory expansion — breaking
+  relative to v0.28.0, whose commit accepted all symlinks.
+- CHANGELOG, same phase, in-place edit `[plan]`: the existing breaking
+  entry id `18cee1b9909303d607c1f2850b24418980be50178da2237e` (it
+  ships `--allow-escaping-targets` and the "leaves the repository"
+  class) is edited to the new flag, the new class, and the migration
+  consequence — 0.29.0's notes must never name a flag that never
+  existed.
+- Catalog: per the Catalog actions table (the symlink entry — heading
+  rewritten, marker STAYS deliberate, the "listed for the review"
+  sentence removed; Phase 5's grep catches a miss). The guide's
+  symlink section is rewritten INCLUDING its heading (it also says
+  "leave the repository"); the commit flag-table row and the template
+  bullet update; cli-commit and the schema regenerate later (Phase 5).
+- Sanctioned rewrites: per Appendix A (the inverting pin, the two
+  retargeted pins, the enumerated test renames, the mv carve-out pin).
 **Verify (red first):** absolute-inside refuses naming the portability
-reason and the remedy; absolute-outside still refuses; the election
+reason and the remedy; absolute-outside still refuses; a mixed-shape
+commit gets one grouped refusal naming every offender; the election
 commits with the notice; relative-inside/traversing/dangling stay
 committable; directory expansion still judges swept-up links; amend
 covered; the registry and generated table current.
@@ -409,18 +518,22 @@ covered; the registry and generated table current.
 ## Phase 4 — Allowlist flips and the mv payload
 
 Two independent halves; one implementor (or two, the halves share no
-files). After Phase 1 for the catalog file only.
+files). After Phase 1 for the catalog and guide files only.
 
 ### 4.1 The allowlist changes `[user]`
 All rows live in `subset_allowlist.go`; the argv machinery already
 handles the spellings involved (attached and detached strategy-option
-values normalize to one name; the rebase flag takes its value attached
-only, and NO value-flags entry may be added for it or it would swallow
-a revision — the file's comment states this rule for optional-value
-options generally; EXTEND it to name the rebase flag. Known accepted
-limit, stated in the row comment: the short-cluster spelling
-`-rno-rebase-cousins` refuses letter-by-letter rather than as one
-token).
+values normalize to one name; the rebase topology flag takes its value
+attached only, and NO value-flags entry may be added for it or it
+would swallow a revision — that rule is stated generally in
+`sequencer_argv.go`'s value-flags comment: EXTEND it to name the
+rebase flag, and in the same edit FIX the `--gpg-sign` row that
+currently violates it (`valueFlags["rebase"]` lists `--gpg-sign`, an
+attached-only optional-value flag; no user-visible bug — it is refused
+as unlisted first — but the map contradicts its own rule) `[plan]`.
+Known accepted limit, stated in the row comment: the short-cluster
+spelling `-rno-rebase-cousins` refuses letter-by-letter rather than as
+one token.
 - Strategy OPTIONS become allowed on merge, cherry-pick, and revert
   (move the two-spelling row from refused to allowed in all three
   tables); strategy SELECTION stays refused everywhere (mind the
@@ -443,37 +556,49 @@ token).
   real work. Collect EVERY `-X`/`--strategy-option` occurrence (the
   argv reader's Find returns only the FIRST — a single-option read
   silently drops the second of `-X ours -X ignore-space-change`) and
-  forward the operator's own spellings in their order. Forwarding is
-  probed exact — the previewed tree is byte-identical to the real
-  compute's under the same option, both spellings. `previewRefusal`'s
-  doc comment ("safegit's merge-tree argv is fixed") goes false —
-  rewrite it.
+  forward each as SEPARATE argv elements, Name then Value — never the
+  space-joined `Raw` member (probed: merge-tree rejects `-X ours` as
+  one element). Forwarding is probed exact — the previewed tree is
+  byte-identical to the real compute's under the same option, both
+  spellings. `previewRefusal`'s doc comment ("safegit's merge-tree
+  argv is fixed") goes false — rewrite it. Version floor `[plan]`:
+  `internal/gitversion` covers merge-tree at 2.38 and `--attr-source`
+  at 2.40 but nothing covers merge-tree's strategy-option support —
+  the implementor confirms the git version that introduced `-X` on
+  merge-tree and adds a floor row if it exceeds 2.38, else records a
+  waiver comment.
 - Merging unrelated histories flips to REFUSED (delete its allowed row
   and the comment arguing for it; the refusal reason is the footgun,
   not a protection hole — and the way out for the legitimate
   once-per-lifetime import is stated: raw git computes with no-commit,
   safegit merge-continue concludes it). ALSO `[user — part of the
   friendly-errors starting set]`: a PRE-FLIGHT refusal when the merge
-  has NO MERGE BASE (one merge-base read before compute). Without it,
-  git's own "refusing to merge unrelated histories" message recommends
-  `--allow-unrelated-histories` — the exact flag this row refuses; the
-  pre-flight refuses first and names the documented way out instead.
-  Red-first; any existing fixture merging unrelated histories is a
-  sanctioned adjustment (Appendix A). New catalog entry (none exists),
-  written deliberate at birth, covering the flag refusal and the
-  pre-flight together.
+  has NO MERGE BASE. Predicate: HEAD RESOLVES and `merge-base` reports
+  no base (see Phase interactions — a bare merge-base failure must not
+  refuse, or Phase 2's unborn merges break). Anchor: the shared merge
+  path both merge and pull call, after the sides resolve and before
+  the compute/preview branch — so PULL INHERITS the pre-flight
+  `[user]`, and the `--dry-run` path refuses identically (probed:
+  merge-tree dies on unrelated histories with the same bare fatal, so
+  a preview could never succeed anyway). Rationale, stated correctly
+  `[corrected at the second critique]`: git's own refusal is the bare
+  `fatal: refusing to merge unrelated histories` — it names nothing
+  actionable; safegit's pre-flight refuses first and supplies the
+  documented import route. Red-first; any existing fixture merging
+  unrelated histories is a sanctioned adjustment (Appendix A).
 - The rerere auto-update flag flips to REFUSED on all THREE tables
   `[plan — the ruled rationale is verb-independent; the ruling named
   merge because the question did]`: cache-driven auto-staging is
-  remembered resolution by the back door; the refusal reason
-  cross-references the existing rerere catalog entry rather than
-  restating it. THE NEGATIVE SPELLING `--no-rerere-autoupdate` is
+  remembered resolution by the back door; the refusal reason points at
+  the NEW catalog entry below (the EXISTING rerere entry — about
+  conclusions not teaching rerere — is an adjacent subject, not the
+  reference). THE NEGATIVE SPELLING `--no-rerere-autoupdate` is
   ALLOWED on all three verbs `[user]` — it DISABLES the objected-to
   mechanism and is the operator's only per-run off-switch against the
   honored config key — and a small comment beside the rows states this
   deliberately confusing asymmetry's rationale `[user — the comment is
-  part of the ruling]`. New catalog entry, written deliberate at
-  birth: it honestly states the OPEN CONFIG ROUTE
+  part of the ruling]`. The new catalog entry (per the table, born
+  deliberate) honestly states the OPEN CONFIG ROUTE
   (`rerere.autoUpdate=true` in git config produces the same
   auto-staging and stays honored this round `[user]`), names the
   config-twin class (`merge.autostash` / `rebase.autoStash` twin the
@@ -483,40 +608,44 @@ token).
 - Preserving merge topology through a rebase flips to ALLOWED (move
   the row; the replay runs entirely inside the one git-authored door,
   which is verb-scoped and already admits it — an optional row in the
-  door-admission test is consistent). The rebase help string updates
-  (it enumerates the refusal), which regenerates four doc surfaces at
-  Phase 5's regen. Catalog, same commits, markers flipped with the
-  edits: the EXISTING "Merge strategies and strategy options are
-  refused" entry (provisional) is REWRITTEN including its heading —
-  selection stays refused, options now allowed; this is the entry the
-  flip overturns, and it must not reach Phase 5's sweep unedited; the
-  rebase entry's refusal bullet and framing update; the allowed-sets
-  table updates its rows for all three verbs AND rebase. The
-  selection-vs-options split lands in all THREE guide paragraphs that
-  state the refusal (the merge paragraph, the cherry-pick/revert
-  paragraph, and the subset-overview paragraph of the commands guide),
-  not only the merge one. CHANGELOG, same phase, in-place edits
-  (`rlsbl changelog edit --id`): the existing merge entry lists `-X`
-  among the shapes "refused by name" and the allowlist entry lists
-  `--rebase-merges` among rebase's refusals — both edited to the new
-  truth; 0.29.0's notes must not contradict their own entries.
-- Sanctioned rewrites (Appendix A): the strategy-option rows leave
-  four refusal tests; one preview-refusal test loses its only case and
-  takes a substitute unsupported option; the rebase refusal table
-  loses one row and gains a positive sibling; a new refusal test each
-  for the two flips; the pick/revert strategy-selection test's doc
-  comment rewrites to be about selection only.
-- The mergeHelp "no strategy selection" phrasing is verified still
-  literally true and left; the guide's four per-command allowed/refused
-  paragraphs update (the merge one currently names selection and
-  options in one clause — split).
+  door-admission test is consistent). The rebase help string in
+  `main.go` updates BOTH clauses (it states the allowed set AND
+  enumerates the refusals), which regenerates its doc surfaces
+  (README.md, the generated CLAUDE.md, docs/cli-rebase.md,
+  docs/cli-index.md) at Phase 5's regen.
+- Catalog: per the Catalog actions table (the strategy-options entry
+  rewritten including its heading — it must not reach Phase 5's sweep
+  unedited; the rebase entry; the two NEW entries born deliberate; the
+  allowed-sets table's row edits). The selection-vs-options split
+  lands in the three per-command refusal paragraphs of the commands
+  guide (merge's, cherry-pick's, and revert's — each has its OWN
+  paragraph) and their matching allowed paragraphs, plus rebase's
+  pair; the subset-overview paragraph illustrates with selection only,
+  stays literally true, and needs NO change (stated so nobody edits
+  it).
+- CHANGELOG, same phase, in-place edits `[plan]`: entry id
+  `18cee1b928a1515842fe491d21764db5b03a9fb79a6d2e8b` (the merge entry
+  — lists `-X` among the shapes refused by name) and entry id
+  `18cee1b958c49502e085a5615a4044ac867bd9d68475d219` (the allowlist
+  entry — lists `--rebase-merges` among rebase's refusals) are edited
+  to the new truth; the same edits ADD the newly-refused shapes
+  (unrelated-histories flag + pre-flight; rerere-autoupdate positive
+  spelling) to the entries covering the allowlist's restrictions —
+  these amend EXISTING breaking surface (v0.28.0's plain passthroughs
+  forwarded every flag; the allowlist entry is where that restriction
+  lives), which satisfies the release-relative baseline. The
+  batch-exclusion REASON in `.rlsbl/config.json` that copies the merge
+  entry's description verbatim (including the `-X` clause) is edited
+  in the same pass (rlsbl commit).
 **Verify (red first per flip):** strategy options pass end-to-end on
 all three verbs (a conflicted compute under one parks normally and
-concludes); their previews compute the identical tree; unrelated
-histories and rerere auto-update refuse naming their reasons and the
-catalog; topology-preserving rebase runs (git-authored, the door
-admits the replay); every catalog row and guide paragraph agrees with
-the code tables.
+concludes); their previews compute the identical tree, INCLUDING a
+two-option case (`-X ours -X ignore-space-change` — both forwarded);
+unrelated histories refuses pre-compute on merge AND pull, in real and
+dry-run modes, naming the import route; rerere auto-update refuses
+naming the catalog entry while the negative spelling passes; topology-
+preserving rebase runs (git-authored, the door admits the replay);
+every catalog row and guide paragraph agrees with the code tables.
 
 ### 4.2 The mv payload unifies on moved_records `[user]`
 - mv adopts the exact entry shape and member name commit uses,
@@ -527,28 +656,25 @@ the code tables.
   deleted helper's comment migrates to the emission site. Strictly
   more correct: an observed record reaching mv's payload would now
   carry its origin instead of being dropped. THE SCHEMA `[plan]`:
-  `mvPayloadSchema` declares `"moves"` with a three-member entry
-  object in its required list — the reshape renames the property to
-  `moved_records`, adds `origin`, and updates the required list (or
-  emission-time validation fails); the entry-object fragment is
-  FACTORED into ONE shared schema fragment consumed by commit's and
-  mv's schemas, never duplicated (the single-authority rule).
+  `mvPayloadSchema` declares `"moves"` with its entry object in the
+  required list — the reshape renames the property to `moved_records`,
+  adds `origin`, and updates the required list (or emission-time
+  validation fails); the entry-object fragment is FACTORED into ONE
+  shared schema fragment consumed by commit's and mv's schemas, never
+  duplicated (the single-authority rule).
 - Probed end-to-end in a scratch copy: the reshape builds and the full
   suite is green; the preview reports the declared origin.
-- Sanctioned rewrites (Appendix A), BOTH in the payload-moves test
-  file — and one is a TRAP: the hook-strip mv test asserts an
-  empty-length member, so a bare rename would leave it green while
-  testing a member that no longer exists; retarget it to the new
-  member DELIBERATELY. The preview test fails loudly and retargets
-  with the origin assertion added.
+- Sanctioned rewrites: per Appendix A — including the deliberately
+  retargeted hook-strip trap and the two false mv doc comments.
 - Changelog: mv has never shipped, so nothing breaks; the existing
   unreleased entry about reword/mv narrowing stays true (the pipeline
   still narrows — the deletion is of a reimplementation, not the
   behavior). COVERAGE `[plan]`: this subphase's commits are APPENDED
-  to the existing mv feature entry's commit list via in-place edit
-  (`rlsbl changelog edit`), the entry's batch-exclusion reason updated
-  if the commit limit is exceeded — they must not be left for Phase 6
-  to discover uncovered.
+  to the mv feature entry's commit list (entry id
+  `18ce4135d301c7c192c89bb3ae214a84a44125df51ef9dcc`) via in-place
+  edit; the entry has NO batch exclusion today, so appending past the
+  commit limit CREATES one, with a purpose-written reason — the
+  commits must not be left for Phase 6 to discover uncovered.
 **Verify (red first on the retargeted tests):** real and preview mv
 payloads carry the unified member with origin; the hook-strip case
 reports only what the committed message carries; no reference to the
@@ -560,50 +686,28 @@ old member or helpers survives.
 
 After Phases 1-4 (it closes over their doc debts). One implementor.
 
-- THE ROSTER REWRITE: the catalog preamble's provisional roster has a
-  factually wrong blanket clause (it declares every subset-boundary
-  entry provisional while five entries there are deliberate AND the
-  allowed-sets table carries no ruling line at all — six exceptions,
-  not five). Rewrite the roster to reflect the end state: after this
-  round, NO provisional entries remain. Phases 1-4 edit AND flip the
-  entries their rulings touch (the same-commit marker rule in the
-  preamble); THIS phase flips the text-unchanged remainder, FULLY
-  ENUMERATED — no "en masse" clause: the autostash entry (its
-  limit-awaits clause becomes the accepted-limit statement `[user]`),
-  the DWIM paragraph's entry, the untrack-fence entry, the
-  crash-window entry, the overwrite entry, the switch-c entry, the
-  FETCH_HEAD entry, the fast-forward trio, squash, BOTH
-  commit-step-options entries (two adjacent entries — the earlier
-  "family" wording was ambiguous; name each in the edit), skip,
-  reset-pathspec, pull-rebase, bisect-vocabulary, the dirty-tree entry
-  Phase 2 does NOT edit (the one it does flips there), and the
-  forwarded-command-line bookkeeping entry ("The forwarded command
-  line is an allowlist, not a refusal list") — previously orphaned
-  from every list. The identical provisional ruling line appears on a
-  fixed set of entries — count the occurrences before the batch edit,
-  assert the count, review the diff (the batch-edit rule). The
-  preamble's "newly cataloged here is provisional until reviewed"
-  sentence is REWRITTEN to permit entries born deliberate when they
-  record a ruling made at review time (4.1's two new entries are
-  exactly that).
-- The any-committish sentence in the merge-sides entry is already
-  deliberate and now user-ratified — no edit needed (verified).
+- THE ROSTER AND THE FLIP BATCH: execute the Phase-5 rows of the
+  Catalog actions table. The autostash entry's text edit and flip is
+  its own commit; the flip-only rows are ONE batch edit — `git grep
+  -c` the provisional-line spelling in `docs/divergences.md` first,
+  assert the count equals the table's then-remaining provisional rows,
+  review the diff. The preamble row rewrites the roster blockquote,
+  its companion clause, and the newly-cataloged sentence exactly as
+  the table states.
 - Accumulated template/guide debts from Phases 1-4 that were not
   same-commit items — including the NEW conventions bullet in the
   CLAUDE template recording the adopted friendly-errors direction
   `[user]`: safegit MAY add probe-backed pre-flight refusals where a
   known corner produces a misleading or hostile raw git failure, each
   individually cataloged; wholesale wrapping of git stderr is
-  permanently ruled out. Then `--dump-schema` from a clean build with
-  `GOWORK=off` (its own
-  commit via rlsbl commit — ONCE, here), then bare `selfdoc gen`, then
-  `selfdoc check` must be exit 0.
-**Verify:** zero provisional ruling lines remain (grep count) AND zero
-"listed for the review" phrases remain (second grep — Phase 3 removes
-the one instance; this catches a miss); the
-roster names no entry; every Phase 1-4 doc debt closed; regeneration
-clean; selfdoc check green; the generated root files carry the new
-texts.
+  permanently ruled out.
+- Then the ONE schema regeneration (`--dump-schema`, which WRITES
+  `.strictcli/schema.json`; its own commit via rlsbl commit), then
+  bare `selfdoc gen`, then `selfdoc check` must be exit 0.
+**Verify:** `git grep` finds zero provisional ruling lines and zero
+"listed for the review" phrases in `docs/divergences.md`; the roster
+names no entry; every Phase 1-4 doc debt closed; regeneration clean;
+selfdoc check green; the generated root files carry the new texts.
 
 ---
 
@@ -611,48 +715,58 @@ texts.
 
 After Phase 5.
 
-- Changelog entries for the round, APPENDED (plus the in-place edits
-  earlier phases ordered). THE TYPE BASELINE IS RELEASE-RELATIVE
-  `[user]`: an entry is breaking only if it refuses or changes input
-  that worked in the LAST RELEASED version (v0.28.0); restrictions on
-  surfaces introduced this cycle ride INSIDE those features' entries,
-  named in the entry text. Therefore: breaking — the symlink
-  portability widening ONLY (v0.28.0's commit accepted all symlinks;
-  tracked absolute in-repo links start refusing); feature — strategy
-  options allowed with forwarding previews, topology-preserving rebase
-  allowed, unborn-branch support (its entry names the friendly unborn
-  refusals), with the unrelated-histories refusal (flag + pre-flight)
-  and the rerere-autoupdate refusal (positive refused, negative
-  allowed) stated inside the merge/cherry-pick/revert feature-surface
-  entries they belong to; fix —
-  the compute-guard extension to the no-commit forms (the description
-  states the silent-staging hole it closes), the empty-park
-  auto-clean, the out-of-band leftover naming; no-user-facing — the
-  plan file and its ruling commits (`--allow-batch` with a reason —
-  they exceed the per-entry commit limit), the pins, the predicate
-  hardening,
-  the roster/doc work, and EVERY pre-round housekeeping commit sitting
-  uncovered from the planning session (the registry policy doc, the
-  coincidence pin and catalog sentence, the two promoted tools, the
-  CONTRIBUTING correction, the closing baseline).
-  Run `scripts/verify-coverage-partition` on the proposed
-  clusters BEFORE writing any entry.
+- Changelog work, by disposition. THE TYPE BASELINE IS
+  RELEASE-RELATIVE `[user]`: an entry is breaking only if it refuses
+  or changes input that worked in the LAST RELEASED version (v0.28.0);
+  restrictions on surfaces introduced this cycle ride inside the
+  entries that cover those surfaces, named in the entry text.
+  - Breaking: NO new breaking entries — the symlink widening's
+    breaking coverage IS Phase 3's in-place edit of its existing
+    breaking entry; the compute-guard/rebase coverage IS 1.2's
+    in-place edit of its existing breaking entry; the two allowlist
+    refusals ride 4.1's in-place edits of the existing
+    allowlist-restriction entries (all entry ids in those phases).
+  - Feature, APPENDED: strategy options allowed with forwarding
+    previews; topology-preserving rebase allowed; unborn-branch
+    support (its entry names the friendly unborn refusals). One
+    sentence is ADDED to the cherry-pick/revert feature entries (via
+    in-place edit) for the empty-pick auto-clean — the one
+    never-shipped fix whose final behavior an upgrading user will
+    meet `[user — the hybrid ruling]`.
+  - Fix: NONE for this round's behavior items — the empty-park
+    auto-clean and the out-of-band leftover naming fix symptoms that
+    never shipped (their commit coverage rides no-user-facing
+    clusters).
+  - No-user-facing: the plan file and its ruling commits
+    (`--allow-batch` with a reason — they exceed the per-entry commit
+    limit), the pins, the predicate hardening, the roster/doc work,
+    the 1.1/1.3 behavior commits, and EVERY pre-round housekeeping
+    commit sitting uncovered from the planning session (the registry
+    policy doc, the coincidence pin and catalog sentence, the two
+    promoted tools, the CONTRIBUTING correction, the closing baseline,
+    and the git-config-audit todo commit).
+  Run `scripts/verify-coverage-partition` on the proposed clusters
+  BEFORE writing any entry.
 - The census regenerates (`scripts/exit-inventory` into the testdata
-  file, committed with the established message) as the LAST content
-  commit — the release hook blocks on its freshness.
+  file, committed with its established message — `testdata: regenerate
+  the exit-site census`) as the LAST content commit — the release hook
+  blocks on its freshness.
 - The full battery on the quiescent tree: build, vet, gofmt; full
   race suite; the stress run at its 40-minute budget; the
   released-dependency run (`GOWORK=off go test ./... -race`); selfdoc
   check; the changelog checks (`rlsbl check --tag changelog`).
 - Reconciliation against `testdata/closing-baseline.txt`
   (`scripts/test-baseline` generates the fresh snapshot; its `--check`
-  is a strict diff and cannot serve — the classification is the
-  work): classify
-  every differing line — a red-first heal (cite the subphase), a
-  sanctioned rewrite (cite Appendix A), or a new test — zero
-  unexplained.
+  is a strict diff and cannot serve — the classification is the work):
+  classify every differing line — a red-first heal (cite the
+  subphase), a sanctioned rewrite (cite Appendix A), or a new test —
+  zero unexplained.
+- AFTER the reconciliation `[user]`: regenerate
+  `testdata/closing-baseline.txt` in place and commit it — the tree
+  carries the post-round record; git history keeps the pre-round
+  anchor.
 **Verify:** all checks green; coverage total; the classification has
-zero unexplained lines.
+zero unexplained lines; the refreshed baseline committed.
 
 ---
 
@@ -670,10 +784,10 @@ zero unexplained lines.
   (WITH the note that its "EXECUTION IS ON HOLD" header is stale —
   the campaign is complete; without the note a fresh reader reports
   the campaign unstarted); `todo/redesign-campaign-plan.md` (campaign
-  1, historical); the three baselines in testdata; the divergences
-  catalog (its own inclusion rule and direction table); the allowlist
-  code file as the single authority the catalog and guide mirror; the
-  census and its generator; the req file's historical-document marker
+  1, historical); the baselines in testdata; the divergences catalog
+  (its own inclusion rule and direction table); the allowlist code
+  file as the single authority the catalog and guide mirror; the
+  census and its generator; `docs/req.md`'s historical-document marker
   (never score against it); the experiments-directory convention; the
   build/test commands and the live-tree hazard.
 - Findings remediated red-first; the battery re-run after; a finding
@@ -693,23 +807,34 @@ acceptance of any remainder).
   `todo/move-records-for-undeclared-moves.md` (consumed), and THIS
   plan move to `todo/.done/`. THE DEFERRED-WORK LEDGER `[user]`: the
   triage ALSO writes one new todo (e.g.
-  `todo/next-cycle-candidates.md`) collecting the deferred items now
-  scattered in plan text, each SELF-CONTAINED — its context is COPIED
-  INTO the ledger from `todo/campaign2-plan.md`'s text BEFORE that
-  file moves to `.done/`; a pointer into a `.done` file is not context
-  `[plan]`. The items:
-  envelope-always adoption when the framework's error-payload channel
-  ships; the doctorFix uninitialized-repo notice; the doctor-fix
-  output's connective wording; the unminted conclusion execute-path
-  worktree writes; the reset-over-parked-state and empty-compute-oplog
-  observations (both ruled parked); and the friendly-errors
-  probe-backed INVENTORY `[user]` — force each failure corner of the
-  supported surface in scratch repos, capture git's actual message,
-  grade it; everything graded misleading or hostile is a candidate
-  pre-flight refusal, the evidence source for future additions to the
-  adopted additive direction. Staying active, each its own file: the
-  await files (conditional-consequential, dry-run-network — whose
-  now-stale doc claim the triage notes — exit-codes-registry,
+  `todo/next-cycle-candidates.md`), each item SELF-CONTAINED with its
+  context copied from its named source BEFORE any source file moves
+  `[plan — a pointer into a `.done` file is not context]`. The items
+  and their context sources:
+  - envelope-always adoption when the framework's error-payload
+    channel ships — context in `todo/campaign2-plan.md`;
+  - the doctorFix uninitialized-repo notice — context in
+    `todo/campaign2-plan.md`;
+  - the unminted conclusion execute-path worktree writes — context in
+    `todo/campaign2-plan.md`;
+  - the doctor-fix output's connective wording — context RECONSTRUCTED
+    `[user]`: doctor `--action fix`'s output reads as disconnected
+    finding/fix lines and the connective wording between them is
+    deferred polish; the original reasoning was lost with a session
+    and this sentence is its reconstruction, marked as such in the
+    ledger;
+  - the reset-over-parked-state and empty-compute-oplog observations —
+    context in THIS plan's Recorded observations section;
+  - the friendly-errors probe-backed INVENTORY `[user]` — context in
+    THIS plan's Phase 2 and 4.1 friendly-refusal items: force each
+    failure corner of the supported surface in scratch repos, capture
+    git's actual message, grade it; everything graded misleading or
+    hostile is a candidate pre-flight refusal, the evidence source for
+    future additions to the adopted additive direction;
+  - the stale doc claim inside the dry-run-network await todo — the
+    ledger is where the triage NOTES it (the todo itself is immutable).
+  Staying active, each its own file: the await files
+  (conditional-consequential, dry-run-network, exit-codes-registry,
   effects-handle-closed-method-set), the contingent files
   (reader-writer-operation-lock, scrub-strict-mode-selector,
   push-streaming-restoration), reversibility-gaps,
@@ -719,15 +844,15 @@ acceptance of any remainder).
   path from two shipped docs AND from production source —
   `internal/gitexec/authoring.go` — so it must not move). The deferred
   and obsolete subdirectories untouched.
-- `rlsbl release init`; the release file: bump MINOR (0.28.0 to
-  0.29.0), the two-campaign-plus-closing-round description and
-  context DRAFTED BY THE ORCHESTRATOR AND APPROVED BY THE USER before
-  the release file is committed.
 - Post-audit coverage `[plan]`: changelog entries for Phase 7's
   remediation commits and THIS phase's own triage commits (the todo
   moves, the ledger) are added HERE, before the release file is
   committed; the census re-runs only if remediation touched exit sites
   (the release hook's freshness check is the backstop, not the plan).
+- `rlsbl release init`; the release file: bump MINOR (0.28.0 to
+  0.29.0), the two-campaign-plus-closing-round description and
+  context DRAFTED BY THE ORCHESTRATOR AND APPROVED BY THE USER before
+  the release file is committed.
 - `actionlint` over the three workflows (installed; cheap insurance
   before their first-ever run on this history).
 - ON THE USER'S GO: `rlsbl release run --no-allow-dirty --watch
@@ -754,11 +879,11 @@ acceptance of any remainder).
 |---|---|---|
 | 0 | — | one item (the predicate); the rest was executed pre-round |
 | 1 | — (the baseline is already committed, pre-round) | ONE implementor; internal order 1.1 then 1.2 then 1.3 is mandatory (fixtures) |
-| 2 | 1 (catalog file; sequencer adjacency) | |
+| 2 | 1 (catalog + guide; sequencer adjacency) | |
 | 3 | 1-2 (catalog + guide files only) | parallelizable with 2 in code — sequence the shared docs |
 | 4 | 1 (catalog + guide serialization with 2-3) | 4.1 and 4.2 share no files |
-| 5 | 1-4 | sole roster writer; the ONE schema regen |
-| 6 | 5 | census last; battery on the quiescent tree |
+| 5 | 1-4 | executes the Catalog actions table's Phase-5 rows; the ONE schema regen |
+| 6 | 5 | census last; battery on the quiescent tree; baseline refresh after reconciliation |
 | 7 | 6 | the Fable-orchestrated audit |
 | 8 | 7 + the user's release-file approval + the user's go | |
 
@@ -781,45 +906,72 @@ sequential is simpler and the default.
 - The campaign-era plan files' internal claims are historical once
   triaged; the catalog and the code are the living authorities.
 
-## Appendix A — sanctioned rewrites (a break not listed here is a
-plan defect)
+## Appendix A — sanctioned rewrites and renames
+
+A baseline break not listed here is a plan defect. Each list below is
+THE single statement of its set — phase text points here and never
+restates. New tests are not rewrites and are not listed (Phase 6's
+reconciliation classifies them separately).
 
 - 0.1: the pipeline-honors-declared-context test gains the
   shared-index base in its request literal.
 - 1.1: BOTH fixture builders in the in-flight refusal test file
-  re-fixture on raw git; the two state-producer pins INVERT (state
-  gone, no abort advice); the seven consumer test FUNCTIONS
-  re-fixture in place — the two pick/revert-refuse-over-parked tests,
-  the pick preview variant, the two merge-over-parked tests, the
-  pull-over-parked test's inline fixture, and the way-out test, whose
-  three subtests are why an item count would mislead. The
+  re-fixture on raw git; the two state-producer pins INVERT AND RENAME
+  (`TestANoChangeSecondPickParksItsState` /
+  `TestANoChangeSecondRevertParksItsState` — their names claim
+  parking; the renamed tests assert the state is GONE and the success
+  path gives no abort advice); the consumer test functions re-fixture
+  in place — the two pick/revert-refuse-over-parked tests, the pick
+  preview variant, the two merge-over-parked tests, the
+  pull-over-parked test's inline fixture, and the way-out test (whose
+  subtests are why an item count would mislead). The
   already-applied-refusal test keeps its "no change" phrase and stays
   green.
 - 1.2: none beyond the new tests (the two no-commit-stays-passthrough
   pins run with nothing in flight and stay green — verified).
-- 2: none (no test pins the unborn refusal — verified; pure addition;
-  the friendly refusals replace raw git fatals no test asserts).
-- 3: the absolute-inside-committed pin inverts into the refusal test;
-  the wording assertions across the suite follow the new messages;
-  the inside-target and traversing pins RETARGET to a distinctive
-  phrase of the new notice (they assert the ABSENCE of "outside the
+- 1.3: none (verified — no test asserts the current one-line message).
+- 2: none (no test pins the unborn refusal — verified; the friendly
+  refusals replace raw git fatals no test asserts).
+- 3: the absolute-inside-committed pin inverts into the refusal test
+  (its own comment says it is the one to rewrite); the wording
+  assertions across the suite follow the new messages; the
+  inside-target and traversing pins RETARGET to a distinctive phrase
+  of the new notice (they assert the ABSENCE of "outside the
   repository" and would go silently vacuous under the reword — the
   same trap as the mv hook-strip test); the mv carve-out pin updates
-  for the flag rename only; the seven `*Escaping*` test functions and
-  the wave2 symlink file rename to the non-portable vocabulary; every
+  for the flag rename only, and ITS COMMENT is corrected (it claims
+  "mv simply never calls the intake that judges links" — false: mv
+  reaches `resolveFiles` with no file specs, so the offender set is
+  empty by construction); the test functions renamed to the
+  non-portable vocabulary, enumerated `[re-extracted at revision
+  time]`: `TestCommitSymlinkEscapingTargetIsCommittedWhenElected`,
+  `TestCommitEscapingSymlinkRefusalNamesTheLiteralTarget`,
+  `TestCommitEscapingSymlinkRefusalNamesEveryOffender`,
+  `TestAmendEscapingSymlinkIsRefusedAndElects`,
+  `TestCommitEscapingSymlinkFoundByDirectoryExpansionIsRefused` (all
+  `commit_symlink_test.go`), `TestMvOfATrackedEscapingSymlinkProceeds`
+  (`mv_test.go`), and `TestWave2CommitEscapingSymlinkIsRefused` +
+  `TestWave2CommitNonEscapingSymlinkStillCommits` in
+  `wave2_symlink_escape_refusal_test.go`, which itself renames; every
   test spelling the old flag or constant name updates mechanically
   with the rename.
-- 4.1: the four strategy-option refusal rows leave their tests (the
-  merge raw-shapes row, the merge preview row, the pick/revert
-  selection test's option member and its doc comment); the
-  pick/revert preview-refusal test takes `-s resolve` as its
-  substitute unsupported option (strategy selection stays refused;
-  its only case was the strategy option); the rebase refusal
-  table drops its topology row and gains a positive sibling beside
-  the allowed-form control; any existing fixture that merges
-  unrelated histories adjusts for the new pre-flight refusal.
+- 4.1: the strategy-option refusal rows leave their tests (the merge
+  raw-shapes row, the merge preview row, the pick/revert selection
+  test's option member and its doc comment); the pick/revert
+  preview-refusal test takes `--strategy resolve` as its substitute
+  unsupported option (NOT `-s resolve` — on pick/revert `-s` is the
+  allowed signoff spelling and `resolve` would parse as a second
+  revision; `-s resolve` remains valid only in merge's tests); the
+  merge preview test's doc comment ("These three cases used to be
+  preview-specific refusals") is rewritten — one of its cases leaves;
+  the rebase refusal table drops its topology row and gains a positive
+  sibling beside the allowed-form control; any existing fixture that
+  merges unrelated histories adjusts for the new pre-flight refusal.
 - 4.2: the two mv payload tests retarget to the unified member — the
-  hook-strip one DELIBERATELY (it passes silently on a bare rename);
-  the preview one gains the origin assertion.
-- 5: the batch flip of the provisional ruling lines (count asserted
-  before, diff reviewed after); the roster rewrite.
+  hook-strip one DELIBERATELY (it decodes the payload and asserts a
+  non-empty length on the OLD member, so a bare rename leaves it green
+  while testing a member that no longer exists; its comment's claim
+  that the human line "is pinned here too" is also false and is
+  rewritten); the preview one gains the origin assertion.
+- 5: the flip-only batch per the Catalog actions table (count asserted
+  before, diff reviewed after); the autostash entry's edit.
