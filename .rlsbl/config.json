@@ -25,7 +25,7 @@
   "batch_limits": {
     "exclusions": [
       {
-        "reason": "**Commit argument intake rebuilt.** Automatic move detection is gone, so a deletion is never staged unless you name it; paths are canonicalized against the repository root, a directory argument expands to the paths it holds, contradictory spellings of the same path are refused, and an argument that matches nothing is now a hard error naming every unmatched argument instead of committing whatever else was named.",
+        "reason": "**Commit argument intake rebuilt.** Move inference no longer decides what gets staged, so a deletion is never staged unless you name it; paths are canonicalized against the repository root, a directory argument expands to the paths it holds, contradictory spellings of the same path are refused, and an argument that matches nothing is now a hard error naming every unmatched argument instead of committing whatever else was named.",
         "entries": [
           {
             "version": "unreleased",
@@ -43,7 +43,7 @@
         ]
       },
       {
-        "reason": "**Queued cherry-picks and reverts conclude through git's own `--continue`.** The remaining queue is replayed by git, a stop mid-queue reports the commits that were made, the delegation's cost is stated on stderr, a concluded revert is authored by the operator rather than by the reverted commit's author, and a submodule parent is bumped whenever the branch moved.",
+        "reason": "the delegation mechanism for queued cherry-picks and reverts, built and then deleted within this same unreleased span",
         "entries": [
           {
             "version": "unreleased",
@@ -246,6 +246,15 @@
           {
             "version": "unreleased",
             "line": 77
+          }
+        ]
+      },
+      {
+        "reason": "documentation, help-text and divergences-catalog corrections against the tool as built -- the undoable set, the reserved-flag placement boundary, the true oplog shape, the in-flight refusal, the hunk apply as a hard error, the switch start-point and autostash entries, the doctor fix enumeration, the mv vocabulary sweep, and the gitversion feature floors declared one at a time so the doc extractor can see them; one documentation-correction area, kept in one entry rather than split into arbitrary halves to fit the commit batch limit",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 81
           }
         ]
       }
