@@ -143,6 +143,14 @@ func runRestructuredRevert(flags globalFlags, args []string, parsed gitArgs) int
 		return code
 	}
 
+	// Before the compute, and inside the operation lock: a revert may not be
+	// computed over an operation git already has in flight. `revert --no-commit`
+	// happily writes REVERT_HEAD beside a parked CHERRY_PICK_HEAD and stages an
+	// inverse patch nothing will commit, so the refusal has to be safegit's own.
+	if code := refuseComputeOverInFlight(gitDir, "revert"); code != 0 {
+		return code
+	}
+
 	computeArgs := append([]string{"revert", "--no-commit"}, args...)
 
 	if flags.dryRun {
@@ -201,10 +209,33 @@ func concludeComputedRevert(flags globalFlags, gitDir, sgDir, reverted string) i
 		return exitcode.General
 	}
 	if state.Kind != sequencer.KindRevert {
-		// git succeeded and left no revert in flight, which happens when the
-		// revert produced nothing to do. There is no commit to make and no
-		// state to clean up.
-		fmt.Fprintf(os.Stderr, "error: git staged the revert but left no revert state behind (%s); nothing was committed\n", state.String())
+		// What reaches this branch, now that the entry check refuses a compute
+		// over an operation already in flight: git's operation state CHANGED
+		// while the compute ran. Nothing was in flight when this command
+		// started -- it looked, inside the operation lock -- and
+		// `git revert --no-commit` writes REVERT_HEAD on every path it exits
+		// zero from, so a state that is not a revert now is one somebody else
+		// started or cleared underneath. The operation lock serializes safegit
+		// processes in this worktree and nothing else: raw git run beside
+		// safegit is exactly the situation this tool exists for.
+		//
+		// The old message here said git had "left no revert state behind", and
+		// it was said over states that were nothing of the kind -- a parked
+		// cherry-pick, with a REVERT_HEAD sitting right beside it. It is now
+		// factual about what was found.
+		//
+		// The staged result is REPORTED rather than rolled back, deliberately.
+		// Discarding it means throwing the index and the working tree back to
+		// HEAD in the one situation where another process is demonstrably
+		// operating in this worktree, and that rollback could take its work with
+		// it. safegit refuses to ship work it cannot account for; it does not
+		// destroy it.
+		fmt.Fprintf(os.Stderr, "error: git's operation state changed while the revert was being computed (%s now); nothing was committed\n", state.String())
+		fmt.Fprintf(os.Stderr, "  nothing was in flight when this command started, so something else started or cleared a\n")
+		fmt.Fprintf(os.Stderr, "  git operation in this worktree while it ran.\n")
+		fmt.Fprintf(os.Stderr, "  The computed inverse patch is still in the index and the working tree. safegit leaves it\n")
+		fmt.Fprintf(os.Stderr, "  there rather than discarding it, because something else is operating here. Inspect it with\n")
+		fmt.Fprintf(os.Stderr, "  'git status', then commit it or drop it yourself.\n")
 		return exitcode.General
 	}
 
