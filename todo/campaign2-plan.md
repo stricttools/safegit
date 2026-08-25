@@ -1522,6 +1522,43 @@ after Phase 9's top-up).
   the same way.
 - One fresh audit per phase (0-8), each briefed with THIS PLAN and the
   phase's red list; remediation; then the Phase-8 top-up re-check.
+INTEGRATIVE-AUDIT FINDINGS (remediated post-audit) `[plan]`:
+- THE CROSS-PHASE DEFECT (found by the 0-4 integrative pass; invisible
+  to any single-phase audit): the restructured cherry-pick/revert ran
+  their compute over an ALREADY-PARKED sequencer operation whenever
+  the tree was clean — the pick case silently committed and orphaned
+  REVERT_HEAD (raw git refuses this at 128; the --no-commit compute
+  door slips past git's own refusal), and the revert case left a
+  staged mutation behind a wrong-diagnosis message. Fixed red-first
+  from both reproductions: the three restructured commands refuse on
+  sequencer state.InProgress() at ENTRY, before the compute, via the
+  existing coord.RefuseInFlight/WayOutOf authority (exit 5 naming the
+  way out — the same message safegit commit already produces there);
+  the misdiagnosing branch's message made true and its staged residue
+  rolled back where still reachable.
+- Hook-intersection completed on the REWORD and MV payload arms (the
+  Phase-6 fix covered commit and amend only; both false doc claims).
+- docs/_CLAUDE.md's undoable-set line (the one stale copy) corrected;
+  regen.
+- Reserved-quartet placement boundary: the behavior is deliberate
+  (post-subcommand argv belongs to the git-shaped parser) but the
+  template claimed "anywhere" absolutely, the refusal cited the subset
+  law for flags safegit supports, and an integration-guide example
+  used the refused form — template corrected, the refusal for quartet
+  flags names the route ("write the flag before the command"), the
+  example fixed.
+- The tracked schema regenerated from a CLEAN built binary (the
+  committed copy carried a +dirty version string).
+- REVIEW NOTES added for the user: mv's payload member is `moves`
+  without origin while commit's is `moved_records` with origin
+  required — two shapes for one concept (latent only: mv declares
+  every pair; inference cannot currently reach its payload); and the
+  reserved quartet's post-subcommand refusal is a sharp edge for
+  script authors (machine mode must be spelled `safegit --json merge`,
+  not `safegit merge --json`). Plan-text nit corrected here: the
+  "-s/-X refused on pick/revert" correction means the long-only
+  strategy spellings (--strategy/-X); bare -s is --signoff there and
+  stays allowed.
 PHASE-9 EXECUTION notes: the per-phase fresh audits ran DURING
 execution (every phase closed with one plus remediation); Phase 9's
 audit obligation is discharged by them plus a final two-agent
