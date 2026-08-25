@@ -1182,7 +1182,12 @@ rather than here, because what an operator meets is a refusal.
   on either side mints nothing — there are no tie-breaks. A uniform directory
   move collapses to ONE subtree record; past the scattered-move cap the commit
   records none of them and says so on stderr, pointing at `--moved`; every
-  candidate a fence declined rides the commit payload with its reason.
+  candidate a fence declined rides the commit payload with its reason. Exactness
+  cuts both ways, and the accepted consequence is stated rather than hedged:
+  identical unique content — one file deleted, one added in the same commit —
+  mints an observed move even when the two files are genuinely unrelated,
+  because the conditions are conditions and the delta meets them, and the record
+  a coincidence produces is retractable.
 
   A declaration outranks the reading for the paths it names, so a pair is never
   stated twice — and declaring a pair that an OBSERVED record on the commit
