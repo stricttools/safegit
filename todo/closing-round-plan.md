@@ -92,7 +92,31 @@ machinery.
 **Verify:** the pin is green on arrival and its comment carries the
 ruling.
 
-### 0.4 The exemption predicate tightens to fail-closed `[plan]`
+### 0.4 The two promoted tools `[user]`
+Two patterns proven in `experiments/` get generalized into committed
+tools under `scripts/` (chmod +x, following the directory's
+conventions):
+- `scripts/counted-edit` — the batch-edit harness generalized from the
+  spent switch-rename scripts: reads a substitutions spec (path, old,
+  new, expected count), DRY-RUNS BY DEFAULT printing unified diffs,
+  asserts every expected occurrence count (any mismatch aborts before
+  a single write), applies only under an explicit flag. This is the
+  global batch-operation rule as a tool; the round's own doc sweeps
+  use it.
+- `scripts/verify-coverage-partition` — the exact-partition check
+  generalized from the spent Phase-8 assigner: given proposed
+  changelog clusters (from a file) and the live uncovered-commit list,
+  verify the assignment is an exact partition — no commit twice, none
+  missed, none already covered — BEFORE any entry is written. Phase
+  6's changelog step uses it.
+The spent originals in `experiments/` stay disposable per the
+convention (value promoted, artifacts remain artifacts).
+**Verify:** both tools exist, executable, self-documenting (usage on
+no arguments); counted-edit's dry run demonstrably refuses a
+wrong-count spec; the partition verifier demonstrably refuses a
+double-assigned and a missing commit.
+
+### 0.5 The exemption predicate tightens to fail-closed `[plan]`
 `internal/commit/sequencer.go`'s `concludesInFlightOperation` becomes
 AND (a conclusion declares BOTH the sequencer context and the
 shared-index base; a future half-configured request refuses instead of
@@ -610,7 +634,7 @@ serialized.
 ## Appendix A — sanctioned rewrites (a break not listed here is a
 plan defect)
 
-- 0.4: the pipeline-honors-declared-context test gains the
+- 0.5: the pipeline-honors-declared-context test gains the
   shared-index base in its request literal.
 - 1.1: BOTH fixture builders in the in-flight refusal test file
   re-fixture on raw git; the two state-producer pins INVERT (state
