@@ -46,77 +46,23 @@ reversible on request.
 
 ## Phase 0 — Groundwork
 
-Zero-dependency items; one implementor, any internal order.
+The round's housekeeping was EXECUTED in the planning session, before
+this plan's go (recorded here so the audit and reconciliation know the
+origin): the closing baseline is committed
+(`testdata/closing-baseline.txt`, zero failures, HEAD recorded in its
+header) — the reconciliation anchor for Phase 6 and the audit; the
+exit-code registry's package doc carries the one-code-per-recovery-path
+policy; the coincidence pin
+(`TestTwoUnrelatedFilesSharingContentAreRecordedAsAMove`) is green with
+its ruling comment and the catalog's observed-record entry carries the
+consequence sentence; the two promoted tools exist and are demonstrated
+(`scripts/counted-edit` — the batch-edit discipline as a tool, dry-run
+default, counted, abort-on-mismatch; `scripts/verify-coverage-partition`
+— the exact-partition check Phase 6's changelog step uses);
+CONTRIBUTING.md's release section states the real flow. One item
+remains, the phase's single subphase:
 
-### 0.1 The closing baseline
-Run `scripts/test-baseline testdata/closing-baseline.txt` on the
-untouched tree and commit it — the reconciliation anchor for Phase 6's
-verification and Phase 7's audit. The campaign artifacts
-(`testdata/campaign-baseline.txt`, `testdata/campaign2-baseline.txt`)
-stay untouched.
-**Verify:** committed; `--check` clean on the same tree.
-
-### 0.2 The recovery-path policy in the registry doc `[user]`
-`internal/exitcode/exitcode.go`'s package doc gains a new heading
-(sibling of "What the framework owns", NOT folded into the
-campaign-scoped standing-rule section, which is campaign-flavored and
-should not carry a permanent policy): a new exit code is registered
-only when the CALLER'S RECOVERY differs from every existing code's
-(retry-safe vs fix-and-rerun vs do-not-retry); the same recovery joins
-an existing family and the payload discriminates detail. Grounded: no
-registry test parses the package doc prose; `docs/internal-exitcode.md`
-pulls it via a selfdoc directive, so Phase 5's `selfdoc gen` picks it
-up with no committed copy to edit.
-**Verify:** registry tests green; the doc states the rule.
-
-### 0.3 The coincidence pin `[user — "we should" demonstrate it]`
-New test in `internal/test/moves_inferred_test.go`, beside
-`TestInferredFileMoveIsRecorded` (it is the same fence PASSING, not a
-refusal): seed a file with unique content, remove it, write a
-differently-named file with identical bytes, commit both paths; assert
-exactly one inferred pair old-to-new with origin `observed` and no
-declare notice (probed: this is current behavior). The doc comment
-records the ruling: the fences' conditions are exact, so identical
-unique content IS the evidence; safegit records what the delta proves,
-never guesses intent, and the record is retractable. ALSO `[user]`:
-one sentence is EDITED into the catalog's existing observed-record
-entry stating the consequence plainly — identical unique content, one
-file deleted and one added, mints an observed move even when the files
-are genuinely unrelated; the conditions are exact and the record
-retractable. The catalog's job is stating what a reader would not
-expect, and this is the feature's one surprising consequence. Entry
-edited, never duplicated; the sentence rides this subphase's commit
-(the standing same-commit rule). Helpers exist
-(`assertInferredPairs`, `assertOrigins`, `commitMessageOf`); no new
-machinery.
-**Verify:** the pin is green on arrival and its comment carries the
-ruling.
-
-### 0.4 The two promoted tools `[user]`
-Two patterns proven in `experiments/` get generalized into committed
-tools under `scripts/` (chmod +x, following the directory's
-conventions):
-- `scripts/counted-edit` — the batch-edit harness generalized from the
-  spent switch-rename scripts: reads a substitutions spec (path, old,
-  new, expected count), DRY-RUNS BY DEFAULT printing unified diffs,
-  asserts every expected occurrence count (any mismatch aborts before
-  a single write), applies only under an explicit flag. This is the
-  global batch-operation rule as a tool; the round's own doc sweeps
-  use it.
-- `scripts/verify-coverage-partition` — the exact-partition check
-  generalized from the spent Phase-8 assigner: given proposed
-  changelog clusters (from a file) and the live uncovered-commit list,
-  verify the assignment is an exact partition — no commit twice, none
-  missed, none already covered — BEFORE any entry is written. Phase
-  6's changelog step uses it.
-The spent originals in `experiments/` stay disposable per the
-convention (value promoted, artifacts remain artifacts).
-**Verify:** both tools exist, executable, self-documenting (usage on
-no arguments); counted-edit's dry run demonstrably refuses a
-wrong-count spec; the partition verifier demonstrably refuses a
-double-assigned and a missing commit.
-
-### 0.5 The exemption predicate tightens to fail-closed `[plan]`
+### 0.1 The exemption predicate tightens to fail-closed `[plan]`
 `internal/commit/sequencer.go`'s `concludesInFlightOperation` becomes
 AND (a conclusion declares BOTH the sequencer context and the
 shared-index base; a future half-configured request refuses instead of
@@ -478,8 +424,6 @@ After Phases 1-4 (it closes over their doc debts). One implementor.
   text intact (their rationales follow from explicit rulings).
 - The any-committish sentence in the merge-sides entry is already
   deliberate and now user-ratified — no edit needed (verified).
-- CONTRIBUTING.md's retired release-command form is corrected to the
-  current release flow (the one stale claim found).
 - Accumulated template/guide debts from Phases 1-4 that were not
   same-commit items; then `--dump-schema` from a clean build (its own
   commit via rlsbl commit — ONCE, here), then bare `selfdoc gen`, then
@@ -600,8 +544,8 @@ acceptance of any remainder).
 
 | Phase | Depends on | Notes |
 |---|---|---|
-| 0 | — | four independent items, one implementor |
-| 1 | 0.1 (the baseline predates behavior changes) | ONE implementor; internal order 1.1 then 1.2 then 1.3 is mandatory (fixtures) |
+| 0 | — | one item (the predicate); the rest was executed pre-round |
+| 1 | — (the baseline is already committed, pre-round) | ONE implementor; internal order 1.1 then 1.2 then 1.3 is mandatory (fixtures) |
 | 2 | 1 (catalog file; sequencer adjacency) | |
 | 3 | 1 (catalog file only) | parallelizable with 2 except the catalog — sequence them |
 | 4 | 1 (catalog file only) | 4.1 and 4.2 share no files |
@@ -634,7 +578,7 @@ serialized.
 ## Appendix A — sanctioned rewrites (a break not listed here is a
 plan defect)
 
-- 0.5: the pipeline-honors-declared-context test gains the
+- 0.1: the pipeline-honors-declared-context test gains the
   shared-index base in its request literal.
 - 1.1: BOTH fixture builders in the in-flight refusal test file
   re-fixture on raw git; the two state-producer pins INVERT (state
