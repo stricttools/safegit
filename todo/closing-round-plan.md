@@ -174,6 +174,18 @@ No compute of any kind runs over parked state.
   state-control sites, which MUST stay exempt (`--abort`/`--quit` are
   the way out; probed working and staying so). `merge --no-commit` and
   `pull` are already covered (verified; pinned).
+- REBASE JOINS `[user — ruled at the review]`: `safegit rebase` gains
+  the same in-flight entry refusal (probed: a rebase over a parked
+  revert on a clean tree exits 0 and STRANDS the revert's state files
+  behind it, blocking every later commit). The check inserts in
+  rebase's handler before git runs; git's own state-control forms
+  (`rebase --continue`/`--abort`/`--skip`) stay exempt — they operate
+  on the REBASE's own state, which the sequencer reader reports as
+  in-flight, so the exemption keys on the rebase-kind state exactly as
+  the conclusion commands' exemptions do. Red-first: rebase over a
+  parked revert refuses naming the revert and the way out; an
+  ordinary rebase still runs; a conflicted rebase's own --continue
+  still reaches git.
 - Catalog, same commit: the commit-refuses-in-flight entry's claim
   that the check covers merge/cherry-pick/revert/pull "before they
   compute anything" is currently INACCURATE for the --no-commit route
@@ -275,15 +287,16 @@ catalog file. One implementor.
   and dangling ones — stay committable, unchanged. Grounded: the
   judgment is purely lexical after cleaning; absolute targets skip the
   join, so the change is one arm of that function.
-- THE RENAME FAMILY `[plan — the ruling's own rationale applied to the
-  names; weakly held]`: the property the refusal protects is checkout
-  portability, and "escaping" no longer describes the class. The flag
-  becomes `--allow-unportable-targets`; the request fields, the four
-  intake functions, and the exit-29 constant rename to the unportable
-  spelling (registry precedent exists: exit 25's rename); the registry
-  meaning, generated table, and flag help reword to the portability
-  rationale. If the user prefers keeping the old name, the widening
-  stands and only this bullet reverts.
+- THE RENAME FAMILY `[user — spelling settled at the review]`: the
+  property the refusal protects is checkout portability, and
+  "escaping" no longer describes the class. The flag becomes
+  `--allow-non-portable-targets` (standard technical English is
+  "non-portable", not "unportable"; each word hyphenated per the flag
+  convention); the request fields, the four intake functions, and the
+  exit-29 constant rename to the `NonPortable` spelling (registry
+  precedent exists: exit 25's rename); the registry meaning, generated
+  table, and flag help reword to the portability rationale, and every
+  prose mention writes "non-portable" hyphenated.
 - Both operator messages branch by shape `[plan — grounded: the
   current advice is actively misleading for absolute-inside]`: an
   absolute-inside target's refusal says the link is inside the
