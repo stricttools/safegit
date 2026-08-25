@@ -249,7 +249,14 @@ Every future change that introduces a decision of this kind adds its entry here.
   holds for a stopped cherry-pick and revert.
 - **safegit:** `commit`, `--amend`, `--reword`, `safegit mv` and `undo` all
   refuse at exit 5 (`CoordinationBusy`) while git reports a merge, cherry-pick,
-  revert, rebase or `am` in progress, and the refusal names the way out —
+  revert, rebase or `am` in progress, and so do the three restructured authors —
+  `merge`, `cherry-pick` and `revert` — before they compute anything. Those
+  three need the check made rather than inherited: raw git refuses to start one
+  operation over another, but they compute with `git <verb> --no-commit`, which
+  git does not refuse the same way, so without it a pick ran over a parked revert
+  and committed. Their state-control forms (`--abort`, `--quit`) and the three
+  conclusion commands are exempt, because they are the way out of the very state
+  being refused over. The refusal names the way out —
   `safegit merge-continue`, `cherry-pick-continue` or `revert-continue` where
   safegit owns the conclusion, `git rebase --continue` or `git am --continue`
   where it does not, each with the abandoning command beside it, all rendered
@@ -719,6 +726,16 @@ next to what is admitted.
   own reason, because "safegit's merge does not select a merge strategy, and here
   is why" is an answer an operator can act on while "unsupported option" is not.
   Everything else carries the subset law itself, and points here.
+
+  One class of option is refused by neither of those answers: the framework's
+  own flags — `--dry-run`, `--json`, `--quiet`, `--verbose`,
+  `--approve-consequential` — written AFTER one of these command names. They are
+  read anywhere in the command line up to that name, and after it argv is git's
+  vocabulary, which does not include them. The refusal stands (forwarding one to
+  git would be the accept-and-quietly-ignore shape this whole boundary exists to
+  kill), but its reason is neither of the two above: safegit HAS the flag, on
+  every command it has. So it names the route instead — write the flag before the
+  command name — rather than citing a subset law that is not what refused it.
 - **Ruling:** ours — **provisional, newly cataloged, awaiting review**
 
 ### Navigation is `safegit switch`, and there is no `safegit checkout`
