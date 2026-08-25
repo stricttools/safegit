@@ -277,3 +277,55 @@ func TestPickAndRevertSubsetRefusalsApplyToAPreviewToo(t *testing.T) {
 		})
 	}
 }
+
+// A FRAMEWORK-OWNED flag written after the command name is a different refusal
+// from the subset law, and it has to say so.
+//
+// `--dry-run`, `--json`, `--quiet`, `--verbose` and `--approve-consequential`
+// are the framework's, pre-scanned out of argv wherever they appear -- with two
+// boundaries, a bare `--` and a PASSTHROUGH COMMAND'S NAME. After that name the
+// rest of the command line is git's own vocabulary, handed to safegit's
+// git-shaped parser, which measures it against the command's allowlist and
+// finds a flag that is not in it.
+//
+// The refusal itself stays: the flag really is not part of this command's git
+// vocabulary, and forwarding it to git would be worse. What was wrong is the
+// REASON it gave -- the subset law, "safegit implements a deliberate subset of
+// git", said about a flag safegit implements on every command it has. So the
+// refusal now names the route instead: write the flag before the command name.
+func TestAFrameworkFlagAfterTheCommandNameNamesTheRoute(t *testing.T) {
+	for _, flag := range []string{"--dry-run", "--json", "--quiet", "--verbose", "--approve-consequential"} {
+		for _, verb := range []string{"merge", "cherry-pick", "revert", "switch", "rebase", "reset", "bisect"} {
+			t.Run(flag+" after "+verb, func(t *testing.T) {
+				dir := newTwoCommitRepo(t)
+				stdout, stderr, code := runSafegit(t, dir, verb, flag)
+				if code != exitcode.Usage {
+					t.Fatalf("safegit %s %s exited %d, want %d (Usage)\nstdout=%s\nstderr=%s",
+						verb, flag, code, exitcode.Usage, stdout, stderr)
+				}
+				// The route, spelled the way it is typed.
+				if !strings.Contains(stderr, "safegit "+flag+" "+verb) {
+					t.Errorf("the refusal does not spell the pre-command form (safegit %s %s):\n%s", flag, verb, stderr)
+				}
+				if !strings.Contains(stderr, "before the command name") {
+					t.Errorf("the refusal does not name the route:\n%s", stderr)
+				}
+				// And it does NOT blame the subset law for a flag safegit has.
+				if strings.Contains(stderr, "deliberate subset of git") {
+					t.Errorf("the refusal cites the subset law for a flag safegit supports:\n%s", stderr)
+				}
+			})
+		}
+	}
+}
+
+// The counterpart: a flag that really is outside the subset still refuses with
+// the subset law. The route message is scoped to the framework's own names and
+// takes nothing else with it.
+func TestAnOptionOutsideTheSubsetStillCitesTheSubsetLaw(t *testing.T) {
+	dir := newTwoCommitRepo(t)
+	stderr := assertSubsetRefusal(t, dir, "merge", "--squash", "other")
+	if strings.Contains(stderr, "before the command name") {
+		t.Errorf("an option outside the subset was answered with the framework-flag route:\n%s", stderr)
+	}
+}

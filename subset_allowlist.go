@@ -69,6 +69,11 @@ type argvSubset struct {
 // the refusal otherwise.
 func (s argvSubset) refuseUnsupportedOptions(parsed gitArgs) int {
 	for _, o := range parsed.Options {
+		// FIRST, because it is a different answer from either of the two below:
+		// this is a flag safegit HAS, written where this command cannot see it.
+		if frameworkOwnedFlag(o.Name) {
+			return refuseMisplacedFrameworkFlag(s.command, o.Name)
+		}
 		if why, named := s.refusalReason(o.Name); named {
 			return refuseCapability(s.command, o.Name, why)
 		}
@@ -77,6 +82,48 @@ func (s argvSubset) refuseUnsupportedOptions(parsed gitArgs) int {
 		}
 	}
 	return 0
+}
+
+// frameworkOwnedFlags are the flags strictcli owns on every command safegit
+// has: the reserved quartet plus `--json`, all pre-scanned out of argv wherever
+// they appear and delivered on the dispatch Context (see the registration
+// comment in main.go).
+//
+// The list is spelled here rather than derived because the framework exposes no
+// enumeration of it, and it is short and ratified: the quartet has no short
+// forms by design, so a git short option can never collide with one.
+var frameworkOwnedFlags = []string{
+	"--dry-run",
+	"--json",
+	"--quiet",
+	"--verbose",
+	"--approve-consequential",
+}
+
+// frameworkOwnedFlag reports whether name is one of them.
+func frameworkOwnedFlag(name string) bool { return containsString(frameworkOwnedFlags, name) }
+
+// refuseMisplacedFrameworkFlag is the refusal for a framework-owned flag
+// written AFTER a guarded command's name.
+//
+// The pre-scan that recognizes these flags anywhere in the command line stops
+// at a passthrough command's name: everything after it is git's own vocabulary,
+// handed to safegit's git-shaped parser, which measures it against this
+// command's allowlist and finds a flag that is not in it. The refusal is right
+// -- the flag is not part of the command's git vocabulary, and forwarding it to
+// git would be worse -- but the REASON the allowlist gives is not: citing the
+// subset law for `--json` says safegit deliberately lacks a capability it has
+// on every command it has.
+//
+// So this one names the route instead. It is the whole difference: the operator
+// wanted machine mode, or a preview, and has to write it one word earlier.
+func refuseMisplacedFrameworkFlag(command, option string) int {
+	fmt.Fprintf(os.Stderr, "error: safegit %s does not support %s after the command name\n", command, option)
+	fmt.Fprintf(os.Stderr, "  %s is safegit's own flag rather than one of git's, and it is read BEFORE the command\n", option)
+	fmt.Fprintf(os.Stderr, "  name. After that name the command line is git's vocabulary, which does not include it.\n")
+	fmt.Fprintf(os.Stderr, "  Write it before the command name:\n")
+	fmt.Fprintf(os.Stderr, "    safegit %s %s ...\n", option, command)
+	return exitcode.Usage
 }
 
 // refusalReason reports whether this option names a capability the table
