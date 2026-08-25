@@ -1,0 +1,223 @@
+#!/usr/bin/env python3
+"""Verify that a changelog cluster assignment is an EXACT partition of the
+currently-uncovered commits.
+
+Covering a long unreleased span means grouping its commits into clusters and
+writing one changelog entry per cluster. The mistake that survives review is
+arithmetic, not editorial: a commit named in two clusters, a commit nobody
+claimed, or a commit that was already covered being claimed again. This script
+answers that question and nothing else, and it writes nothing.
+
+The uncovered set is read from `rlsbl unreleased`, which is read-only -- the
+commits it marks [MISSING]. Commits it marks [COVERED] or [EXEMPT] are not
+uncovered, so naming one in a cluster is an error.
+
+Usage:
+  scripts/verify-coverage-partition <clusters-file>
+
+Exit status:
+  0  the assignment is an exact partition of the uncovered set
+  1  it is not; every discrepancy is listed
+  2  the clusters file is missing or malformed, the command line is wrong, or
+     `rlsbl unreleased` could not be read
+
+Clusters file format -- one cluster per line:
+
+    <cluster-name> <sha> <sha> <sha> ...
+
+The first whitespace-separated token names the cluster (a trailing `:` is
+allowed, so `moves: abc1234 def5678` reads naturally); the rest are commit
+SHAs, abbreviated or full, in any mixture. Blank lines and lines whose first
+non-space character is `#` are ignored. A cluster name may repeat on several
+lines: the lines are pooled under that name. An empty file is a legal input --
+it asserts that nothing is uncovered.
+
+Every SHA, from the file and from rlsbl alike, is resolved to its full commit
+id with `git rev-parse`, so an abbreviation and its full form are the same
+commit and never two.
+"""
+
+import collections
+import os
+import re
+import subprocess
+import sys
+
+# `  a1b2c3d  the commit subject  [MISSING]` -- rlsbl's own per-commit line.
+COMMIT_LINE = re.compile(r"^\s+([0-9a-fA-F]{7,40})\s+(.*?)\s+\[([A-Z]+)\]\s*$")
+
+# The statuses rlsbl emits. An unrecognized one is a hard error rather than a
+# guess: a status this script cannot classify might well be uncovered.
+UNCOVERED_STATUS = "MISSING"
+KNOWN_STATUSES = {"MISSING", "COVERED", "EXEMPT"}
+
+
+def usage(stream=sys.stderr):
+    stream.write(__doc__)
+
+
+def die(message):
+    sys.stderr.write("verify-coverage-partition: %s\n" % message)
+    raise SystemExit(2)
+
+
+def repo_root():
+    try:
+        out = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, check=True)
+    except (OSError, subprocess.CalledProcessError) as err:
+        die("not inside a git repository: %s" % err)
+    return out.stdout.strip()
+
+
+def read_clusters(path):
+    """Return an ordered mapping of cluster name -> list of SHAs as written."""
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            lines = fh.readlines()
+    except OSError as err:
+        die("cannot read clusters file %s: %s" % (path, err))
+
+    clusters = collections.OrderedDict()
+    for lineno, raw in enumerate(lines, 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split()
+        name = fields[0].rstrip(":")
+        shas = fields[1:]
+        if not name:
+            die("%s line %d: empty cluster name" % (path, lineno))
+        if not shas:
+            die("%s line %d: cluster %s names no commits" % (path, lineno, name))
+        for sha in shas:
+            if not re.fullmatch(r"[0-9a-fA-F]{4,40}", sha):
+                die("%s line %d: %r is not a commit sha" % (path, lineno, sha))
+        clusters.setdefault(name, []).extend(shas)
+    return clusters
+
+
+def unreleased_commits(root):
+    """Run `rlsbl unreleased` and return [(sha, subject, status), ...]."""
+    try:
+        out = subprocess.run(["rlsbl", "unreleased"], cwd=root,
+                             capture_output=True, text=True)
+    except OSError as err:
+        die("cannot run `rlsbl unreleased`: %s" % err)
+    if out.returncode != 0:
+        die("`rlsbl unreleased` exited %d:\n%s" % (out.returncode, out.stderr.strip()))
+
+    rows = []
+    for line in out.stdout.splitlines():
+        m = COMMIT_LINE.match(line)
+        if m:
+            rows.append((m.group(1), m.group(2), m.group(3)))
+    if not rows:
+        die("`rlsbl unreleased` produced no commit lines; its output format may "
+            "have changed:\n%s" % out.stdout.strip())
+
+    unknown = {status for _, _, status in rows} - KNOWN_STATUSES
+    if unknown:
+        die("`rlsbl unreleased` reported status(es) this script cannot classify: %s"
+            % ", ".join(sorted(unknown)))
+    return rows
+
+
+def resolve(root, shas):
+    """Map every sha to its full commit id in one git call."""
+    if not shas:
+        return {}
+    ordered = list(dict.fromkeys(shas))
+    args = ["git", "rev-parse"] + ["%s^{commit}" % s for s in ordered]
+    out = subprocess.run(args, cwd=root, capture_output=True, text=True)
+    if out.returncode != 0:
+        die("git rev-parse refused some sha:\n%s" % out.stderr.strip())
+    full = out.stdout.split()
+    if len(full) != len(ordered):
+        die("git rev-parse returned %d id(s) for %d sha(s)" % (len(full), len(ordered)))
+    return dict(zip(ordered, full))
+
+
+def describe(root, full_sha):
+    out = subprocess.run(["git", "log", "-1", "--format=%h %s", full_sha],
+                         cwd=root, capture_output=True, text=True)
+    if out.returncode != 0:
+        return full_sha
+    return out.stdout.strip()
+
+
+def main(argv):
+    args = argv[1:]
+    if not args:
+        usage()
+        return 2
+    if args[0] in ("-h", "--help"):
+        usage(sys.stdout)
+        return 0
+    if len(args) != 1:
+        die("exactly one clusters file may be named")
+
+    clusters_path = args[0]
+    root = repo_root()
+    clusters = read_clusters(clusters_path)
+    rows = unreleased_commits(root)
+
+    # Resolve both sides through the same git call so an abbreviation written in
+    # the clusters file and rlsbl's own abbreviation land on one id.
+    written = [sha for shas in clusters.values() for sha in shas]
+    full = resolve(root, [sha for sha, _, _ in rows] + written)
+
+    uncovered = {full[sha] for sha, _, status in rows if status == UNCOVERED_STATUS}
+
+    # owner[full_sha] -> list of cluster names that claimed it, in order, with
+    # one entry per claim so a repeat WITHIN a cluster is visible too.
+    owner = collections.OrderedDict()
+    for name, shas in clusters.items():
+        for sha in shas:
+            owner.setdefault(full[sha], []).append(name)
+
+    duplicates = [(f, names) for f, names in owner.items() if len(names) > 1]
+    unassigned = [f for f in sorted(uncovered) if f not in owner]
+    not_uncovered = [f for f in owner if f not in uncovered]
+
+    status_counts = collections.Counter(status for _, _, status in rows)
+    print("unreleased: %d commit(s) -- %s"
+          % (len(rows), ", ".join("%s %d" % (s, n) for s, n in sorted(status_counts.items()))))
+    print("uncovered: %d; assigned: %d across %d cluster(s)"
+          % (len(uncovered), len(owner), len(clusters)))
+
+    ok = True
+
+    if duplicates:
+        ok = False
+        print("\nASSIGNED MORE THAN ONCE (%d):" % len(duplicates))
+        for f, names in duplicates:
+            print("  %s  claimed by: %s" % (describe(root, f), ", ".join(names)))
+
+    if unassigned:
+        ok = False
+        print("\nUNCOVERED BUT UNASSIGNED (%d):" % len(unassigned))
+        for f in unassigned:
+            print("  %s" % describe(root, f))
+
+    if not_uncovered:
+        ok = False
+        print("\nASSIGNED BUT NOT UNCOVERED (%d):" % len(not_uncovered))
+        by_status = {full[sha]: status for sha, _, status in rows}
+        for f in not_uncovered:
+            status = by_status.get(f, "not in the unreleased span")
+            print("  %s  [%s]  claimed by: %s"
+                  % (describe(root, f), status, ", ".join(owner[f])))
+
+    if not ok:
+        print("\nNOT an exact partition of the uncovered set.")
+        return 1
+
+    print("\nOK: exact partition of the uncovered set.")
+    for name, shas in clusters.items():
+        print("  %s: %d commit(s)" % (name, len(shas)))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
