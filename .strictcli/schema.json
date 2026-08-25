@@ -82,7 +82,7 @@
   },
   "project_id": "github.com/smm-h/safegit",
   "name": "safegit",
-  "version": "0.28.1-0.20260825014141-d7b1521eeae1",
+  "version": "0.28.1-0.20260825014510-66a6d327c5d7",
   "help": "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "proc_observe_allowlist": [
     [
