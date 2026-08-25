@@ -316,8 +316,9 @@ Two members are the framework's and are the same on every safegit command. `writ
 
 Each command that produces a payload **declares its JSON Schema**, and the framework validates the value against that declaration before writing it -- a wrong shape fails the run instead of shipping. `safegit --dump-schema` publishes every declaration verbatim.
 
-Five properties worth knowing:
+The properties worth knowing:
 
+- **Write `--json` before a guarded command's name.** `safegit --json merge feature` selects machine mode; `safegit merge --json feature` does not. The framework reads its own flags anywhere in the command line up to the name of a command that takes git's vocabulary -- `switch`, `merge`, `cherry-pick`, `revert`, `rebase`, `reset`, `bisect` -- and after that name argv belongs to that command's git-shaped parser, whose allowlist refuses the flag (exit 2) naming the pre-command form. The same holds for `--dry-run`, `--quiet`, `--verbose` and `--approve-consequential`. Every other command accepts them on either side.
 - **The envelope is exempt from `--quiet`.** `--json --quiet` emits the complete document; quiet governs the human stream only.
 - **`--json` does not imply approval.** A non-interactive `--json` run of a *consequential* command (`scrub file`/`match`/`run`, `author rewrite`) must pass `--approve-consequential` explicitly. Ordinary mutating commands such as `commit` need nothing. A `--json backup backup` to a remote safegit cannot prove is private is the one place `--approve-consequential` is not the answer either: that question belongs to the target, so it takes `--allow-public-remote`.
 - **A successful run of a payload-producing command always carries its payload.** `scrub match` and `scrub run` used to emit a null payload on their nothing-matched early returns, so a machine consumer could not tell "the run said nothing matched" from "the run produced nothing"; both now answer with the payload in every completing shape, which is the one-envelope invariant doing its job.
