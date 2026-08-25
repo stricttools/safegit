@@ -1552,10 +1552,22 @@ INTEGRATIVE-AUDIT FINDINGS (remediated post-audit) `[plan]`:
 - REVIEW NOTES added for the user: mv's payload member is `moves`
   without origin while commit's is `moved_records` with origin
   required — two shapes for one concept (latent only: mv declares
-  every pair; inference cannot currently reach its payload); and the
+  every pair; inference cannot currently reach its payload); the
   reserved quartet's post-subcommand refusal is a sharp edge for
   script authors (machine mode must be spelled `safegit --json merge`,
-  not `safegit merge --json`). Plan-text nit corrected here: the
+  not `safegit merge --json`); and the operator-level
+  `cherry-pick --no-commit` / `revert --no-commit` guarded
+  passthroughs carry NO in-flight entry check — they author nothing
+  and orphan nothing, but they let git stage a compute over another
+  operation's parked state; whether they join the entry refusal is
+  the user's call. REMEDIATION extensions ratified: pull's entry
+  check (the same silent-commit defect, red-proven — git's own
+  refusal is NON-UNIFORM: it refuses a merge over a parked pick at
+  128 but exits 0 over a parked revert, so merge and pull both had
+  live defects, not defense-in-depth); the misdiagnosing branch now
+  reports staged residue instead of rolling it back (an out-of-band
+  writer is demonstrably active there — safegit refuses to ship work
+  it cannot account for and equally refuses to destroy it). Plan-text nit corrected here: the
   "-s/-X refused on pick/revert" correction means the long-only
   strategy spellings (--strategy/-X); bare -s is --signoff there and
   stays allowed.
