@@ -10,28 +10,33 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// The three restructured commands -- merge, cherry-pick and revert -- COMPUTE
-// their operation with `git <verb> --no-commit` and then commit the staged
-// result through safegit's own pipeline. That compute door is the reason they
-// need an in-flight check of their own.
+// The commands that COMPUTE an operation -- merge, cherry-pick, revert, and
+// pull, whose merge step is merge's -- run `git <verb> --no-commit` and then
+// commit the staged result through safegit's own pipeline. That compute door is
+// the reason each needs an in-flight check of its own.
 //
-// Raw git refuses outright: `git cherry-pick <c>` over a parked revert exits
-// 128 with "a revert is already in progress". But `git cherry-pick --no-commit`
-// slips past that refusal -- the compute form is not the form git guards -- so
-// the restructured command ran its compute over somebody else's parked
-// operation and then concluded it as if it were its own.
+// Raw git refuses to start one operation over another: `git cherry-pick <c>`
+// over a parked revert exits 128 with "a revert is already in progress". The
+// `--no-commit` form does not inherit that refusal uniformly, and the gaps are
+// probe-verified rather than assumed:
 //
-// Two shapes of damage, both reproduced below:
+//   - `git cherry-pick --no-commit` over a parked revert applies cleanly;
+//   - `git revert --no-commit` over a parked cherry-pick stages its inverse
+//     patch and writes REVERT_HEAD beside the pick's own state file;
+//   - `git merge --no-ff --no-commit` over a parked revert reports "Automatic
+//     merge went well" and exits 0 -- though over a parked cherry-pick it does
+//     refuse, which is why the merge arm's dangerous case is the revert one.
 //
-//   - a pick over a parked REVERT committed, and left REVERT_HEAD orphaned in
-//     the git directory for the next `safegit commit` to refuse over;
-//   - a revert over a parked PICK staged an inverse patch it never committed
-//     and reported a diagnosis that was not true of the state it found.
+// What each gap produced, before the check existed: a pick, a merge or a pull
+// over a parked revert COMMITTED and left REVERT_HEAD orphaned in the git
+// directory for the next `safegit commit` to refuse over; a revert over a
+// parked pick staged an inverse patch it never committed and reported a
+// diagnosis that was not true of the state it found.
 //
 // The fix is the check every other author already makes: coord.GuardInFlight at
-// ENTRY, before the compute, exit 5, rendering the way out from the single
-// way-out authority -- the same refusal `safegit commit` produces in exactly
-// this state.
+// ENTRY, before the compute -- and for pull before its fetch -- exit 5,
+// rendering the way out from the single way-out authority, which is the same
+// refusal `safegit commit` produces in exactly this state.
 //
 // The state-control forms (--abort, --quit) and the -continue commands are NOT
 // covered by it: they are the way out, and a way out that refused over the
