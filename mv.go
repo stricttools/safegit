@@ -739,6 +739,34 @@ func gitIgnoreCase(ctx context.Context) bool {
 	return strings.TrimSpace(out) == "true"
 }
 
+// movesTheCommitCarries narrows the pairs this `mv` minted to the records the
+// commit's own message ended up carrying.
+//
+// The two differ for exactly one reason, the same one the commit pipeline
+// narrows for: a commit-msg hook rewrites the message it is handed, and a
+// policy hook that keeps only the lines it recognizes strips every record. A
+// payload built from the pair list would then name records no reader can find
+// on the commit, and the human line beside it would count moves the commit does
+// not record.
+//
+// The narrowing is by ID, which is what a record is addressed by, and it
+// preserves the ORDER the pairs were given -- the order the payload documents.
+// Under --dry-run no hook runs, so every record survives and the preview reports
+// what the real run would write.
+func movesTheCommitCarries(declared []mvMove, carried []trailer.Record) []mvMove {
+	survived := make(map[string]bool, len(carried))
+	for _, r := range carried {
+		survived[r.ID] = true
+	}
+	out := make([]mvMove, 0, len(declared))
+	for _, m := range declared {
+		if survived[m.ID] {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
 // rollback unwinds every step taken so far, newest first. A step that cannot be
 // taken back is reported and the unwinding continues: the remaining steps are
 // independent of it, and stopping would leave more of the tree moved than
@@ -805,6 +833,14 @@ func commitMvMoves(flags globalFlags, gitDir, message string, pairs []mvPair) in
 	if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, mvOplogOp, firstLine(message)); err != nil {
 		residue = reportAftercareFailure(residue, stepParentBump, err)
 	}
+
+	// What the COMMIT carries, not what the pair list said. The pipeline already
+	// narrowed its own records to the ones the committed message holds -- the
+	// records go on before the commit-msg hook runs, and a policy hook that
+	// rewrites the message is free to strip them -- and this member is that same
+	// claim, so it is answered from that same narrowing rather than from the
+	// arguments this command started with.
+	moves = movesTheCommitCarries(moves, result.MovedRecords)
 
 	flags.payload(mvPayload{
 		Ref:      result.Ref,

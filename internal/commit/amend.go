@@ -485,6 +485,10 @@ type RewordResult struct {
 	// is no delta for inference to read and it mints none. The records carried
 	// across from the replaced message are preserved and, exactly as on an
 	// amend, are not reported here.
+	//
+	// Narrowed to what the COMMITTED message carries, exactly as the commit and
+	// amend arms are: the records go on the message before the commit-msg hook
+	// runs, and a hook that rewrites the message is free to strip them.
 	MovedRecords []trailer.Record `json:"movedRecords,omitempty"`
 }
 
@@ -663,7 +667,7 @@ func (p *Pipeline) tryReword(
 	if req.DryRun {
 		return &RewordResult{
 			Ref:          ref,
-			MovedRecords: mintedRecords(movedTrailers),
+			MovedRecords: committedRecords(movedTrailers, msg),
 			Parents:      parents,
 			Tree:         treeSHA,
 			OldSHA:       headSHA,
@@ -684,7 +688,7 @@ func (p *Pipeline) tryReword(
 
 	result := &RewordResult{
 		SHA:          commitSHA,
-		MovedRecords: mintedRecords(movedTrailers),
+		MovedRecords: committedRecords(movedTrailers, msg),
 		Ref:          ref,
 		Parents:      parents,
 		Tree:         treeSHA,
