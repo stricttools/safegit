@@ -142,7 +142,7 @@
     "schema_hash": "f2105f9f55d8554b738a036a02e5b6f400ec6eb0a97c5a8e4086f708c4391040"
   },
   "en/commands-guide.md": {
-    "content": "a166610fa6338bfdbaa7388cd5f1829d44cefdc751e99a68dd64b5cb1a078276",
+    "content": "56a63b993cb5d969262cfabf10771c6acff4f9f82af89b786a959c38cc13a594",
     "description": "27132e78985f8d7ae789460ba3653d12b2231a6431b5c14454f990b643875045"
   },
   "en/concurrency-guide.md": {
@@ -151,7 +151,7 @@
     "source_docstring": "2abf3c8c3d005782b193f551f456adca30f0421be98a7a9e248ed0147fe7a55a"
   },
   "en/divergences.md": {
-    "content": "3c5dfe300c8e71f0bc20d2dd20453815dded76bcd9060218e6f92c292fac1245",
+    "content": "02e8e46cb5cb231506254dde662ba0e0c36f0cbc0e953e0bf9373d7a5acc3075",
     "description": "53fa9e8f521aaef698c6e43312c24195e53e88716b7eb351c180ec2228471952"
   },
   "en/gen-index.md": {
