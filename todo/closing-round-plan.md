@@ -447,9 +447,14 @@ After Phase 5.
   the compute-guard extension to the no-commit forms (the description
   states the silent-staging hole it closes), the empty-park
   auto-clean, the out-of-band leftover naming; no-user-facing — the
-  plan file, the pins, the predicate hardening, the registry doc, the
-  roster/doc work, the baseline. Type judgments follow the ruled
-  refuses-previously-working-input-means-breaking rule.
+  plan file and its ruling commits, the pins, the predicate hardening,
+  the roster/doc work, and EVERY pre-round housekeeping commit sitting
+  uncovered from the planning session (the registry policy doc, the
+  coincidence pin and catalog sentence, the two promoted tools, the
+  CONTRIBUTING correction, the closing baseline). Type judgments
+  follow the ruled refuses-previously-working-input-means-breaking
+  rule; run `scripts/verify-coverage-partition` on the proposed
+  clusters BEFORE writing any entry.
 - The census regenerates (`scripts/exit-inventory` into the testdata
   file, committed with the established message) as the LAST content
   commit — the release hook blocks on its freshness.
