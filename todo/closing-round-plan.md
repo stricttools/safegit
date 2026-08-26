@@ -672,14 +672,22 @@ one token.
   friendly-errors starting set]`: a PRE-FLIGHT refusal when the merge
   has NO MERGE BASE. Predicate: HEAD RESOLVES and `merge-base` reports
   no base (see Phase interactions — a bare merge-base failure must not
-  refuse, or Phase 2's unborn merges break). Anchor: the shared merge
-  path both merge and pull call, after the sides resolve and before
-  the compute/preview branch — so PULL INHERITS the pre-flight
-  `[user]`, and the `--dry-run` path refuses identically (probed:
-  under safegit's own merge-tree argv the preview dies on unrelated
-  histories with the same bare fatal — merge-tree does have an
-  allow-unrelated flag, but safegit never forwards it — so a preview
-  could never succeed anyway). Rationale: git's own refusal is the bare
+  refuse, or Phase 2's unborn merges break). Anchor `[plan]`: TWO
+  insertion sites mirroring the FETCH_HEAD-octopus precedent
+  (`refuseFetchHeadOctopus` is already called once inside merge's
+  dry-run branch — with its comment explaining why — and once inside
+  `performMerge`, because the shared path contains NO preview branch:
+  merge's dry-run returns before reaching it, and pull's dry-run
+  deliberately performs no merge step at all, per its own comment).
+  One shared predicate helper, called from both sites — so PULL
+  INHERITS the real-mode pre-flight `[user]`, merge's `--dry-run`
+  refuses identically (probed: under safegit's own merge-tree argv the
+  preview dies on unrelated histories with the same bare fatal —
+  merge-tree does have an allow-unrelated flag, but safegit never
+  forwards it — so a preview could never succeed anyway), and pull's
+  dry run stays silent about the merge step (its existing deliberate
+  shape — nothing has been fetched to compute a base against).
+  Rationale: git's own refusal is the bare
   `fatal: refusing to merge unrelated histories` — it names nothing
   actionable; safegit's pre-flight refuses first and supplies the
   documented import route. Red-first (Appendix A records the verified
@@ -736,12 +744,15 @@ one token.
   in the same pass, and the ALREADY-DRIFTED observed-moves exclusion
   reason (pre-existing: its entry gained text its reason copy did
   not) is updated alongside it (rlsbl commit).
+- Sanctioned rewrites: per Appendix A.
 **Verify (red first per change):** strategy options pass end-to-end on
 all three verbs (a conflicted compute under one parks normally and
 concludes); their previews compute the identical tree, INCLUDING a
 two-option case (`-X ours -X ignore-space-change` — both forwarded);
-unrelated histories refuses pre-compute on merge AND pull, in real and
-dry-run modes, naming the import route; rerere auto-update refuses
+unrelated histories refuses pre-compute on merge (real AND dry-run
+modes) and on pull's real mode, naming the import route (pull's dry
+run performs no merge step — its existing deliberate shape, untested
+here); rerere auto-update refuses
 naming the catalog entry while the negative spelling passes; topology-
 preserving rebase runs (git-authored, the door admits the replay);
 every catalog row and guide paragraph agrees with the code tables.
@@ -875,8 +886,9 @@ After Phase 5.
     policy doc, the coincidence pin and catalog sentence, the two
     promoted tools, the CONTRIBUTING correction, the closing baseline,
     and the git-config-audit todo commit).
-  Run `scripts/verify-coverage-partition` on the proposed clusters
-  BEFORE writing any entry.
+  Run `scripts/verify-coverage-partition <clusters-file>` (its input:
+  one cluster per line, a name followed by its commit SHAs) on the
+  proposed clusters BEFORE writing any entry.
 - The census regenerates (`scripts/exit-inventory` into the testdata
   file, committed with its established message — `testdata: regenerate
   the exit-site census`) as the LAST content commit — the release
@@ -1035,7 +1047,7 @@ acceptance of any remainder).
 | 1 | — (the baseline is already committed, pre-round) | ONE implementor; internal order 1.1 then 1.2 then 1.3 is mandatory (fixtures) |
 | 2 | 1 (catalog + guide; sequencer adjacency) | |
 | 3 | 1-2 (catalog + guide files only) | parallelizable with 2 in code — sequence the shared docs |
-| 4 | 1 (catalog + guide serialization with 2-3) | 4.1 and 4.2 share no files |
+| 4 | 1-3 (catalog + guide serialization) | 4.1 and 4.2 share no files |
 | 5 | 1-4 | executes the Catalog actions table's Phase-5 rows; the ONE schema regen |
 | 6 | 5 | census last; battery on the quiescent tree; baseline refresh after reconciliation |
 | 7 | 6 | the Fable-orchestrated audit |
