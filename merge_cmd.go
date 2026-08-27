@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -229,6 +230,55 @@ func refuseFetchHeadOctopus(gitDir, other, command string) int {
 	return exitcode.Usage
 }
 
+// refuseUnrelatedHistories refuses a merge whose two sides share no commit at
+// all, before anything computes.
+//
+// THE PREDICATE is two questions, and dropping either one breaks something:
+//
+//   - HEAD RESOLVES. On an UNBORN branch there is no commit to take a merge
+//     base from, and a merge into one is a plain fast-forward that must keep
+//     working. A predicate written as "merge-base failed" rather than this one
+//     would refuse every unborn merge safegit deliberately supports.
+//   - `merge-base` REPORTS NO BASE -- exit 1 with no base, which is git's own
+//     answer to this exact question. A merge-base that could not be computed at
+//     all (an unresolvable argument) is not an answer, and is left to git,
+//     which is the convention every other verdict here follows.
+//
+// git's own refusal is the bare `fatal: refusing to merge unrelated histories`,
+// which names nothing an operator can act on. This one names the import route
+// instead: raw git computes the merge, safegit's conclusion commits it.
+//
+// It is called from BOTH of merge's paths, exactly as refuseFetchHeadOctopus
+// is, because the shared merge path holds no preview branch -- and `pull`
+// inherits the real-mode one, its merge step being this one.
+//
+// DIVERGENCE: git merges unrelated histories when told to; safegit refuses the
+// flag and the shape. Cataloged in docs/divergences.md as "Merging unrelated
+// histories is refused, flag and pre-flight both".
+func refuseUnrelatedHistories(ctx context.Context, other, command string) int {
+	if git.HeadIsUnborn(ctx) {
+		return 0
+	}
+	have, ok := git.HaveMergeBase(ctx, "HEAD", other)
+	if !ok || have {
+		return 0
+	}
+
+	fmt.Fprintf(os.Stderr, "error: safegit %s cannot merge %s: the two sides share no commit at all\n", command, other)
+	fmt.Fprintf(os.Stderr, "  there is no merge base between this branch and %s -- they are separate histories that\n", other)
+	fmt.Fprintf(os.Stderr, "  were never connected -- so the merge would record a second root rather than bring two\n")
+	fmt.Fprintf(os.Stderr, "  lines of work together. git's own words for it are \"refusing to merge unrelated\n")
+	fmt.Fprintf(os.Stderr, "  histories\", and git offers --allow-unrelated-histories to elect it anyway; safegit\n")
+	fmt.Fprintf(os.Stderr, "  does not, because the state is nearly always reached by accident: a wrong remote, a\n")
+	fmt.Fprintf(os.Stderr, "  wrong branch, or a repository re-initialized over another.\n")
+	fmt.Fprintf(os.Stderr, "  For the deliberate import -- bringing another project's history in, which a repository\n")
+	fmt.Fprintf(os.Stderr, "  does once in its life -- compute it with git and commit it with safegit:\n")
+	fmt.Fprintf(os.Stderr, "    git merge --no-commit --allow-unrelated-histories %s\n", other)
+	fmt.Fprintf(os.Stderr, "    safegit merge-continue\n")
+	fmt.Fprintf(os.Stderr, "  See docs/divergences.md.\n")
+	return exitcode.General
+}
+
 // runRestructuredMerge is the whole flow.
 func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int {
 	// FIRST, and before the repository is touched at all: a command line
@@ -286,6 +336,13 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 		// the preview would reach previewMerge's unborn short-circuit and answer
 		// "a fast-forward" for a command line that cannot run at all.
 		if code := refuseUnbornMergeForm(flags.ctx(), parsed.Has("--no-ff"), parsed.Has("--no-commit"), "--no-ff", "--no-commit", unbornMergeWayOut); code != 0 {
+			return code
+		}
+		// And the unrelated-histories pre-flight, for the same reason and from
+		// the same place: performMerge is where every real run meets it, and a
+		// preview never reaches performMerge. Nothing is recorded here -- a
+		// preview writes no oplog entry, refusal or not.
+		if code := refuseUnrelatedHistories(flags.ctx(), parsed.Revisions[0], "merge"); code != 0 {
 			return code
 		}
 
@@ -408,6 +465,16 @@ func performMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition, re
 	// was typed, this is about where the branch stands, and only the second is a
 	// fact about the repository an audit trail is for.
 	if code := refuseUnbornMergeForm(ctx, req.noFF, req.park, req.noFFFlag, req.parkFlag, req.unbornWayOut); code != 0 {
+		appendOperationEntry(flags, sgDir, req.op, pos, false, req.oplogExtra(oplogOutcomeFailed))
+		return mergePayload{}, false, code
+	}
+
+	// BEFORE the ancestry questions and the compute step: two histories that
+	// share no commit have no fast-forward to find between them either, and
+	// git's own refusal names nothing an operator can act on. RECORDED, on the
+	// same line the --ff-only neighbor draws -- no merge base is a fact about
+	// where the branches stand rather than about what was typed.
+	if code := refuseUnrelatedHistories(ctx, other, req.op); code != 0 {
 		appendOperationEntry(flags, sgDir, req.op, pos, false, req.oplogExtra(oplogOutcomeFailed))
 		return mergePayload{}, false, code
 	}

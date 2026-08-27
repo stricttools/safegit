@@ -179,9 +179,11 @@ func refuseUnlistedOption(command, option string) int {
 //
 // Reaching the compute step is what makes an option ELIGIBLE, not what makes it
 // allowed: a compute-step option may still be refused for a reason of its own.
-// Strategy SELECTION is the standing case -- the conclusion's checks cannot read
-// what another strategy stages -- while strategy OPTIONS, which tune the same
-// ort compute without changing what those checks see, are honored.
+// Strategy SELECTION is refused because the conclusion's checks cannot read what
+// another strategy stages, while strategy OPTIONS, which tune the same ort
+// compute without changing what those checks see, are honored; and
+// `--allow-unrelated-histories` is refused for a reason of a different kind
+// altogether -- a footgun, not a protection hole.
 var mergeSubset = argvSubset{
 	command: "merge",
 	allowed: []string{
@@ -200,9 +202,6 @@ var mergeSubset = argvSubset{
 		"--signoff", "--no-signoff", "--log", "--no-log", "--into-name",
 		// Narration only.
 		"--stat", "--no-stat",
-		// A compute-step verdict: whether git will merge two histories that share
-		// no commit at all. It changes no commit and no ref.
-		"--allow-unrelated-histories",
 		// Strategy OPTIONS, in both of git's spellings -- they are two distinct
 		// option names rather than one alias of the other. They tune the ort
 		// compute's content decisions without changing authorship, parking, or
@@ -222,6 +221,14 @@ var mergeSubset = argvSubset{
 		{
 			[]string{"-s", "--strategy"},
 			"safegit's merge does not select a merge strategy: the conclusion's completeness and conflict-marker checks are written against what the default strategy stages, and a strategy they cannot read would be protected by nothing",
+		},
+		{
+			// DIVERGENCE: git refuses two unrelated histories by default and
+			// offers this flag to elect the merge anyway; safegit refuses the
+			// flag, and refuses the merge itself before anything computes. See
+			// refuseUnrelatedHistories and the catalog entry it names.
+			[]string{"--allow-unrelated-histories"},
+			"safegit does not merge histories that share no commit: the state is nearly always reached by accident -- a wrong remote, a wrong branch, a repository re-initialized over another -- and the commit it makes is a permanent second root. For the deliberate import, compute it with 'git merge --no-commit --allow-unrelated-histories <branch>' and commit that with 'safegit merge-continue'",
 		},
 		{
 			[]string{"--squash"},

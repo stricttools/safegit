@@ -1508,9 +1508,22 @@ safegit decides fast-forward-ness itself, with a merge-base ancestry check, rath
 
 ### What the command line may say
 
-Allowed, because each of them reaches only the compute step or the message draft git writes there -- and the pipeline commits that draft: `-m`/`--message`, `-F`/`--file`, `--no-edit`, `--ff`/`--no-ff`/`--ff-only`/`--no-commit` (safegit's own selectors, which never reach git), `--signoff`/`--no-signoff`, `--log`/`--no-log`, `--into-name`, `--stat`/`--no-stat`, `--allow-unrelated-histories`, `-X`/`--strategy-option` (strategy options tune the ort compute's content decisions without changing authorship, parking, or anything a conclusion reads -- every occurrence of either spelling is forwarded, and the `--dry-run` preview forwards them too), `--rerere-autoupdate`/`--no-rerere-autoupdate`, and the state-control forms `--abort` and `--quit`.
+Allowed, because each of them reaches only the compute step or the message draft git writes there -- and the pipeline commits that draft: `-m`/`--message`, `-F`/`--file`, `--no-edit`, `--ff`/`--no-ff`/`--ff-only`/`--no-commit` (safegit's own selectors, which never reach git), `--signoff`/`--no-signoff`, `--log`/`--no-log`, `--into-name`, `--stat`/`--no-stat`, `-X`/`--strategy-option` (strategy options tune the ort compute's content decisions without changing authorship, parking, or anything a conclusion reads -- every occurrence of either spelling is forwarded, and the `--dry-run` preview forwards them too), `--rerere-autoupdate`/`--no-rerere-autoupdate`, and the state-control forms `--abort` and `--quit`.
 
-Refused by name, each with its reason: `-s`/`--strategy` (selecting a strategy changes what is staged, and the conclusion's completeness and marker checks cannot see the change -- strategy OPTIONS are a different question and are allowed, above), `--squash` (a commit with a merge's content and none of its history), `-e`/`--edit` (safegit's commit surface has no editor; pass `-m`), `--commit` (the opposite of the `--no-commit` the compute step is pinned to -- git takes the last of the pair, so it would hand the commit back to git), `--autostash` (a dead flag: the dirty-tree check refuses before git runs, so a merge never reaches git with anything to stash), `--no-verify` (nothing of git's commit path runs here, so it would skip nothing), and `-S`/`--gpg-sign` (safegit's pipeline does not sign). Everything else is refused by the subset law.
+Refused by name, each with its reason: `-s`/`--strategy` (selecting a strategy changes what is staged, and the conclusion's completeness and marker checks cannot see the change -- strategy OPTIONS are a different question and are allowed, above), `--allow-unrelated-histories` (a merge of two histories that share no commit is nearly always an accident, and the pre-flight below refuses the shape whether or not this flag was typed), `--squash` (a commit with a merge's content and none of its history), `-e`/`--edit` (safegit's commit surface has no editor; pass `-m`), `--commit` (the opposite of the `--no-commit` the compute step is pinned to -- git takes the last of the pair, so it would hand the commit back to git), `--autostash` (a dead flag: the dirty-tree check refuses before git runs, so a merge never reaches git with anything to stash), `--no-verify` (nothing of git's commit path runs here, so it would skip nothing), and `-S`/`--gpg-sign` (safegit's pipeline does not sign). Everything else is refused by the subset law.
+
+### Unrelated histories
+
+A merge whose two sides share no commit at all is refused before anything computes -- with no flag typed, and with no way past it on a safegit command line. The pre-flight fires when this branch's HEAD resolves and `git merge-base` reports no base between it and the other side; `safegit pull` inherits it, and `merge --dry-run` refuses identically. The exit code is the general failure code and the refusal is recorded in the oplog, on the same line the `--ff-only` refusal draws: it is a fact about where the branches stand rather than about what was typed.
+
+Nothing about an unrelated merge defeats a check safegit makes -- the reason is that the state is nearly always reached by accident (a wrong remote, a wrong branch, a repository re-initialized over another) and what it produces is a permanent second root. git's own `refusing to merge unrelated histories` names nothing actionable; this refusal names the route for the case that is deliberate:
+
+```bash
+git merge --no-commit --allow-unrelated-histories other-project
+safegit merge-continue
+```
+
+git computes and parks the merge, safegit's conclusion commits it -- trailers, `commit-msg` hook, undoable. An UNBORN branch is deliberately outside the predicate: it has no commit to take a merge base from, and a merge into one is the plain fast-forward safegit supports there.
 
 ### Examples
 
