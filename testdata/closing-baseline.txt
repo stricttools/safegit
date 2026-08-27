@@ -1,7 +1,8 @@
 # safegit campaign test baseline
 # integration: go test ./internal/test/ -short -count=1 -json
 # unit: go test github.com/smm-h/safegit github.com/smm-h/safegit/internal/commit github.com/smm-h/safegit/internal/conflict github.com/smm-h/safegit/internal/coord github.com/smm-h/safegit/internal/exitcode github.com/smm-h/safegit/internal/filelock github.com/smm-h/safegit/internal/git github.com/smm-h/safegit/internal/gitexec github.com/smm-h/safegit/internal/gitversion github.com/smm-h/safegit/internal/hooks github.com/smm-h/safegit/internal/index github.com/smm-h/safegit/internal/lock github.com/smm-h/safegit/internal/oplog github.com/smm-h/safegit/internal/procutil github.com/smm-h/safegit/internal/repo github.com/smm-h/safegit/internal/scan github.com/smm-h/safegit/internal/sequencer github.com/smm-h/safegit/internal/stage github.com/smm-h/safegit/internal/submodule github.com/smm-h/safegit/internal/testutil github.com/smm-h/safegit/internal/trailer -short -count=1 -json
-# git HEAD: 14c80ba28d585039241c273bf26a21d5dfa1f532
+# git HEAD: 5883601b78170c9d0b76af6ade3e0da31f0ac7f0
+PASS github.com/smm-h/safegit TestAStrategyOptionPreviewsOnAGitThatSatisfiesTheFloor
 PASS github.com/smm-h/safegit TestAppDescriptionStatesNoCommandCount
 PASS github.com/smm-h/safegit TestApplyRecipeToContentDependentMatchesPostDependency
 PASS github.com/smm-h/safegit TestApplyRecipeToContentIndependentSimultaneous
@@ -55,6 +56,7 @@ PASS github.com/smm-h/safegit TestEstimateCommitCount_EntireHistory
 PASS github.com/smm-h/safegit TestEstimateCommitCount_NoFromSHA_NotEntireHistory
 PASS github.com/smm-h/safegit TestEstimateCommitCount_Range
 PASS github.com/smm-h/safegit TestEveryDoctorCheckDeclaresAQuestion
+PASS github.com/smm-h/safegit TestEveryStrategyOptionIsCollected
 PASS github.com/smm-h/safegit TestEveryTransportPatternIsMultiWord
 PASS github.com/smm-h/safegit TestExitCodeTableIsGenerated
 PASS github.com/smm-h/safegit TestFinalizeNoRewritesWritesNoRecords
@@ -113,6 +115,7 @@ PASS github.com/smm-h/safegit TestIsTransportErrorIgnoresVerdicts/non-fast-forwa
 PASS github.com/smm-h/safegit TestIsTransportErrorIgnoresVerdicts/permission_denied
 PASS github.com/smm-h/safegit TestLeaseRejectedNeedsTheParenthesesAndTheForce
 PASS github.com/smm-h/safegit TestMatchAnyScope
+PASS github.com/smm-h/safegit TestNoAttachedOnlyOptionIsReadAsTakingTheNextElement
 PASS github.com/smm-h/safegit TestNoProductionExitSiteUsesABareLiteral
 PASS github.com/smm-h/safegit TestNoReservedGlobalFlagNames
 PASS github.com/smm-h/safegit TestNoTestAssertsAnUnregisteredExitCode
@@ -175,6 +178,14 @@ PASS github.com/smm-h/safegit TestResolveLockTargetGrammar/safegit/operation
 PASS github.com/smm-h/safegit TestResolveLockTargetGrammar/safegit/rewrite
 PASS github.com/smm-h/safegit TestResolveLockTargetGrammar/side
 PASS github.com/smm-h/safegit TestResolveLockTargetRefusesUnknownPseudoRef
+PASS github.com/smm-h/safegit TestTheRebaseTopologyFlagDoesNotSwallowTheUpstream
+PASS github.com/smm-h/safegit TestTheStrategyOptionFloorIsAskedForEverySpelling
+PASS github.com/smm-h/safegit TestTheStrategyOptionFloorIsAskedForEverySpelling/the_long_spelling
+PASS github.com/smm-h/safegit TestTheStrategyOptionFloorIsAskedForEverySpelling/the_short_spelling,_attached
+PASS github.com/smm-h/safegit TestTheStrategyOptionFloorIsAskedForEverySpelling/the_short_spelling,_detached
+PASS github.com/smm-h/safegit TestTheStrategyOptionFloorIsNotAskedWithoutAStrategyOption
+PASS github.com/smm-h/safegit TestTheStrategyOptionFloorIsNotAskedWithoutAStrategyOption/a_bare_merge
+PASS github.com/smm-h/safegit TestTheStrategyOptionFloorIsNotAskedWithoutAStrategyOption/a_merge_whose_options_change_no_tree
 PASS github.com/smm-h/safegit TestTopoSortAllIndependent
 PASS github.com/smm-h/safegit TestTopoSortDiamond
 PASS github.com/smm-h/safegit TestTopoSortLinearChain
@@ -185,6 +196,10 @@ PASS github.com/smm-h/safegit TestVerifyIntendedChangesCatchesADeclaredChangeTha
 PASS github.com/smm-h/safegit TestVerifyIntendedChangesCatchesAnUndeclaredPath
 PASS github.com/smm-h/safegit TestVerifyIntendedChangesPassesWhatTheOperationDeclared
 PASS github.com/smm-h/safegit TestVerifyIntendedChangesTripwireOnADroppedCommit
+PASS github.com/smm-h/safegit/internal/commit TestADeclaredContextAloneDoesNotExemptTheUnmergedGuard
+PASS github.com/smm-h/safegit/internal/commit TestADeclaredContextAloneDoesNotExemptTheUnmergedGuard/amend
+PASS github.com/smm-h/safegit/internal/commit TestADeclaredContextAloneDoesNotExemptTheUnmergedGuard/reword
+PASS github.com/smm-h/safegit/internal/commit TestASharedIndexBaseAloneDoesNotExemptTheUnmergedGuard
 PASS github.com/smm-h/safegit/internal/commit TestAmend
 PASS github.com/smm-h/safegit/internal/commit TestAmendCASRetry
 PASS github.com/smm-h/safegit/internal/commit TestAmendKeepMessage
@@ -302,7 +317,9 @@ PASS github.com/smm-h/safegit/internal/conflict TestStagesReportsADeleteModifyCo
 PASS github.com/smm-h/safegit/internal/conflict TestStagesReportsAnAbsentSideAsAbsent
 PASS github.com/smm-h/safegit/internal/conflict TestStyleReadsTheConfiguredConflictStyle
 PASS github.com/smm-h/safegit/internal/coord TestCleanRepo
+PASS github.com/smm-h/safegit/internal/coord TestCleanUnbornRepo
 PASS github.com/smm-h/safegit/internal/coord TestDirtyModified
+PASS github.com/smm-h/safegit/internal/coord TestDirtyUnbornRepo
 PASS github.com/smm-h/safegit/internal/coord TestDirtyUntracked
 PASS github.com/smm-h/safegit/internal/coord TestGuardInFlightHonorsOnlyAMatchingDeclaration
 PASS github.com/smm-h/safegit/internal/coord TestGuardInFlightOnAQuietRepository
@@ -348,6 +365,7 @@ PASS github.com/smm-h/safegit/internal/git TestDeleteRefRefusesAnEmptyExpectedVa
 PASS github.com/smm-h/safegit/internal/git TestDiffTreeRawFieldsPerStatus
 PASS github.com/smm-h/safegit/internal/git TestDiffTreeRawFieldsQuotedPath
 PASS github.com/smm-h/safegit/internal/git TestDiffTreeRawFieldsRootCommitSynthesis
+PASS github.com/smm-h/safegit/internal/git TestEmptyTreeSHAIsTheTreeWithNoEntries
 PASS github.com/smm-h/safegit/internal/git TestGitAutostashStashMessageShape
 PASS github.com/smm-h/safegit/internal/git TestGitDir
 PASS github.com/smm-h/safegit/internal/git TestGitMergeContinueAppliesTheAutostash
@@ -357,6 +375,7 @@ PASS github.com/smm-h/safegit/internal/git TestHashObjectBytesMatchesTheWritingF
 PASS github.com/smm-h/safegit/internal/git TestHashObjectWriteBytes
 PASS github.com/smm-h/safegit/internal/git TestHashObjectWriteBytesEmpty
 PASS github.com/smm-h/safegit/internal/git TestHeadRef
+PASS github.com/smm-h/safegit/internal/git TestHeadTreeishSubstitutesTheEmptyTreeOnAnUnbornBranch
 PASS github.com/smm-h/safegit/internal/git TestIsAncestorOfFalse
 PASS github.com/smm-h/safegit/internal/git TestIsAncestorOfSameCommit
 PASS github.com/smm-h/safegit/internal/git TestIsAncestorOfTrue
@@ -758,6 +777,7 @@ PASS github.com/smm-h/safegit/internal/submodule TestEnumerate_DeduplicatesIniti
 PASS github.com/smm-h/safegit/internal/submodule TestEnumerate_DeinitializedSubmodule
 PASS github.com/smm-h/safegit/internal/submodule TestEnumerate_NoSubmodules
 PASS github.com/smm-h/safegit/internal/submodule TestEnumerate_WithInitializedSubmodule
+PASS github.com/smm-h/safegit/internal/test TestAConflictUnderAStrategyOptionParksAndConcludes
 PASS github.com/smm-h/safegit/internal/test TestAFrameworkFlagAfterTheCommandNameNamesTheRoute
 PASS github.com/smm-h/safegit/internal/test TestAFrameworkFlagAfterTheCommandNameNamesTheRoute/--approve-consequential_after_bisect
 PASS github.com/smm-h/safegit/internal/test TestAFrameworkFlagAfterTheCommandNameNamesTheRoute/--approve-consequential_after_cherry-pick
@@ -797,8 +817,10 @@ PASS github.com/smm-h/safegit/internal/test TestAFrameworkFlagAfterTheCommandNam
 PASS github.com/smm-h/safegit/internal/test TestAMergeWithNoAutoMergeIsRefusedBeforeTheVerification
 PASS github.com/smm-h/safegit/internal/test TestAMergeWithNoAutoMergeIsRefusedBeforeTheVerification/with_the_conflict_still_in_the_file
 PASS github.com/smm-h/safegit/internal/test TestAMergeWithNoAutoMergeIsRefusedBeforeTheVerification/with_the_file_resolved
-PASS github.com/smm-h/safegit/internal/test TestANoChangeSecondPickParksItsState
-PASS github.com/smm-h/safegit/internal/test TestANoChangeSecondRevertParksItsState
+PASS github.com/smm-h/safegit/internal/test TestANoChangeSecondPickCleansItsState
+PASS github.com/smm-h/safegit/internal/test TestANoChangeSecondRevertCleansItsState
+PASS github.com/smm-h/safegit/internal/test TestAPreviewOfAShallowMergeSaysTheSameThing
+PASS github.com/smm-h/safegit/internal/test TestAPreviewOfAnUnrelatedMergeRefusesToo
 PASS github.com/smm-h/safegit/internal/test TestASecondPickIsNotMistakenForTheFirst
 PASS github.com/smm-h/safegit/internal/test TestASecondPickWithTheSameSubjectIsNotMistakenForTheFirst
 PASS github.com/smm-h/safegit/internal/test TestAbsentStageResolutionRefusesToDestroyAHandEdit
@@ -806,6 +828,7 @@ PASS github.com/smm-h/safegit/internal/test TestAddAddConclusionVerifiesTheEmitt
 PASS github.com/smm-h/safegit/internal/test TestAddAddConclusionVerifiesTheEmittedRegion/a_resolved_add/add_concludes
 PASS github.com/smm-h/safegit/internal/test TestAddAddConclusionVerifiesTheEmittedRegion/the_emitted_block_is_refused
 PASS github.com/smm-h/safegit/internal/test TestAllowEmptyDoesNotExcuseANamedPathThatChangesNothing
+PASS github.com/smm-h/safegit/internal/test TestAllowEmptyOnAnUnbornBranchMakesAnEmptyRootCommit
 PASS github.com/smm-h/safegit/internal/test TestAmendAcceptsMovedRetract
 PASS github.com/smm-h/safegit/internal/test TestAmendAddsToTheRecordsTheMessageAlreadyCarries
 PASS github.com/smm-h/safegit/internal/test TestAmendAllowsRedeclaringAPairWhoseRecordIsRetracted
@@ -818,7 +841,6 @@ PASS github.com/smm-h/safegit/internal/test TestAmendCrossBranchDeletionOfPathTr
 PASS github.com/smm-h/safegit/internal/test TestAmendDryRunLeavesNoSafegitDir
 PASS github.com/smm-h/safegit/internal/test TestAmendDryRunLeavesNoSafegitDir/amend_with_files
 PASS github.com/smm-h/safegit/internal/test TestAmendDryRunLeavesNoSafegitDir/reword
-PASS github.com/smm-h/safegit/internal/test TestAmendEscapingSymlinkIsRefusedAndElects
 PASS github.com/smm-h/safegit/internal/test TestAmendFromRepoRootUnchangedPath
 PASS github.com/smm-h/safegit/internal/test TestAmendFromSubdirRelativePathNoPendingChange
 PASS github.com/smm-h/safegit/internal/test TestAmendHunkSelectionOnSymlinkIsRefused
@@ -830,6 +852,7 @@ PASS github.com/smm-h/safegit/internal/test TestAmendMintsTheMovesTheAuthoringEv
 PASS github.com/smm-h/safegit/internal/test TestAmendMultipleMessagesSeparatedByBlankLine
 PASS github.com/smm-h/safegit/internal/test TestAmendNamedUnchangedFileIsAnError
 PASS github.com/smm-h/safegit/internal/test TestAmendNoMatchRefusalNamesEveryUnmatchedArgument
+PASS github.com/smm-h/safegit/internal/test TestAmendNonPortableSymlinkIsRefusedAndElects
 PASS github.com/smm-h/safegit/internal/test TestAmendPayloadCarriesTheRecordsItMinted
 PASS github.com/smm-h/safegit/internal/test TestAmendPayloadReportsOnlyTheRecordsTheCommittedMessageCarries
 PASS github.com/smm-h/safegit/internal/test TestAmendPayloadShape
@@ -853,6 +876,7 @@ PASS github.com/smm-h/safegit/internal/test TestAmendUntrackGitignoredPath
 PASS github.com/smm-h/safegit/internal/test TestAmendWithAMessagePreservesMoveRecords
 PASS github.com/smm-h/safegit/internal/test TestAnObservedRecordIsRetractable
 PASS github.com/smm-h/safegit/internal/test TestAnOptionOutsideTheSubsetStillCitesTheSubsetLaw
+PASS github.com/smm-h/safegit/internal/test TestAnUnbornMergeIsNotRefusedForWantOfAMergeBase
 PASS github.com/smm-h/safegit/internal/test TestApproveConsequentialDoesNotConsentToAnUnprovenRemote
 PASS github.com/smm-h/safegit/internal/test TestApproveConsequentialDoesNotConsentToAnUnprovenRemote/blanket_consent_refuses
 PASS github.com/smm-h/safegit/internal/test TestApproveConsequentialDoesNotConsentToAnUnprovenRemote/the_per-condition_flag_consents
@@ -919,6 +943,9 @@ PASS github.com/smm-h/safegit/internal/test TestCheckoutIsNotASafegitCommand
 PASS github.com/smm-h/safegit/internal/test TestCherryPickAbortStaysAStateControlForm
 PASS github.com/smm-h/safegit/internal/test TestCherryPickConclusionAcceptsMarkerShapedContentFromTheSource
 PASS github.com/smm-h/safegit/internal/test TestCherryPickConclusionPreservesTheSourceAuthor
+PASS github.com/smm-h/safegit/internal/test TestCherryPickNamesItsLeftoversWhenTheStateChangedUnderIt
+PASS github.com/smm-h/safegit/internal/test TestCherryPickNoCommitPreviewRefusesOverAParkedRevert
+PASS github.com/smm-h/safegit/internal/test TestCherryPickNoCommitRefusesOverAParkedRevert
 PASS github.com/smm-h/safegit/internal/test TestCherryPickNoCommitStaysAPassthrough
 PASS github.com/smm-h/safegit/internal/test TestCherryPickOfAnAlreadyAppliedCommitIsRefused
 PASS github.com/smm-h/safegit/internal/test TestCherryPickPreviewRefusesOverAParkedRevert
@@ -941,7 +968,8 @@ PASS github.com/smm-h/safegit/internal/test TestCleanCherryPickIsPipelineAuthore
 PASS github.com/smm-h/safegit/internal/test TestCleanConclusionReportsNoResidue
 PASS github.com/smm-h/safegit/internal/test TestCleanMergeIsPipelineAuthored
 PASS github.com/smm-h/safegit/internal/test TestCleanupExpiresTaintedReflog
-PASS github.com/smm-h/safegit/internal/test TestCommitAbsoluteSymlinkTargetInsideTheRepositoryIsCommitted
+PASS github.com/smm-h/safegit/internal/test TestCommitAbsoluteSymlinkTargetInsideTheRepositoryIsRefused
+PASS github.com/smm-h/safegit/internal/test TestCommitAbsoluteSymlinkTargetOutsideTheRepositoryIsRefused
 PASS github.com/smm-h/safegit/internal/test TestCommitAllowEmptyRefusedDuringMerge
 PASS github.com/smm-h/safegit/internal/test TestCommitDifferentBranches
 PASS github.com/smm-h/safegit/internal/test TestCommitDirectoryExpandsToDiskAndTreeUnion
@@ -957,13 +985,11 @@ PASS github.com/smm-h/safegit/internal/test TestCommitDryRunEnvelopeCarriesOneRe
 PASS github.com/smm-h/safegit/internal/test TestCommitDryRunHunkPathLeavesObjectStoreUntouched
 PASS github.com/smm-h/safegit/internal/test TestCommitDryRunLeavesNoSafegitDir
 PASS github.com/smm-h/safegit/internal/test TestCommitDryRunLeavesObjectStoreUntouched
+PASS github.com/smm-h/safegit/internal/test TestCommitDryRunNonPortableSymlinkIsRefused
 PASS github.com/smm-h/safegit/internal/test TestCommitDryRunObjectPurityAcrossPaths
 PASS github.com/smm-h/safegit/internal/test TestCommitDryRunObjectPurityAcrossPaths/amend_with_files
 PASS github.com/smm-h/safegit/internal/test TestCommitDryRunObjectPurityAcrossPaths/reword
 PASS github.com/smm-h/safegit/internal/test TestCommitDryRunRecordsAndCommitsNothing
-PASS github.com/smm-h/safegit/internal/test TestCommitEscapingSymlinkFoundByDirectoryExpansionIsRefused
-PASS github.com/smm-h/safegit/internal/test TestCommitEscapingSymlinkRefusalNamesEveryOffender
-PASS github.com/smm-h/safegit/internal/test TestCommitEscapingSymlinkRefusalNamesTheLiteralTarget
 PASS github.com/smm-h/safegit/internal/test TestCommitExplicitWholeFileVersusHunksIsStillRefused
 PASS github.com/smm-h/safegit/internal/test TestCommitExplicitlyNamedIgnoredFileIsRefused
 PASS github.com/smm-h/safegit/internal/test TestCommitFromRepoRootUnchangedPath
@@ -986,6 +1012,10 @@ PASS github.com/smm-h/safegit/internal/test TestCommitNamedMissingFileIsAnError
 PASS github.com/smm-h/safegit/internal/test TestCommitNamedUnchangedFileIsAnError
 PASS github.com/smm-h/safegit/internal/test TestCommitNamedVanishedDirectoryIsAnError
 PASS github.com/smm-h/safegit/internal/test TestCommitNoMatchRefusalNamesEveryUnmatchedArgument
+PASS github.com/smm-h/safegit/internal/test TestCommitNonPortableSymlinkFoundByDirectoryExpansionIsRefused
+PASS github.com/smm-h/safegit/internal/test TestCommitNonPortableSymlinkRefusalGroupsOffendersByShape
+PASS github.com/smm-h/safegit/internal/test TestCommitNonPortableSymlinkRefusalNamesEveryOffender
+PASS github.com/smm-h/safegit/internal/test TestCommitNonPortableSymlinkRefusalNamesTheLiteralTarget
 PASS github.com/smm-h/safegit/internal/test TestCommitOnePathTwiceInHunksDifferentSpellingIsRefused
 PASS github.com/smm-h/safegit/internal/test TestCommitPayloadCarriesSkippedIgnoredPaths
 PASS github.com/smm-h/safegit/internal/test TestCommitPayloadCarriesTheRecordsItMinted
@@ -1015,8 +1045,8 @@ PASS github.com/smm-h/safegit/internal/test TestCommitStagedDeletions_DirectoryP
 PASS github.com/smm-h/safegit/internal/test TestCommitStagedDeletions_DirectoryPathWithMovedFile
 PASS github.com/smm-h/safegit/internal/test TestCommitStagedDeletions_DirectoryPathWithUnrelatedEmptyFile
 PASS github.com/smm-h/safegit/internal/test TestCommitStagedDeletions_FilePathsWithMovedFile
-PASS github.com/smm-h/safegit/internal/test TestCommitSymlinkEscapingTargetIsCommittedWhenElected
 PASS github.com/smm-h/safegit/internal/test TestCommitSymlinkInsideTargetIsSilent
+PASS github.com/smm-h/safegit/internal/test TestCommitSymlinkOutsideTargetIsCommittedWhenElected
 PASS github.com/smm-h/safegit/internal/test TestCommitSymlink_LinkToCommittedFile
 PASS github.com/smm-h/safegit/internal/test TestCommitSymlink_MixedWithRegularFile
 PASS github.com/smm-h/safegit/internal/test TestCommitTraversingSymlinkTargetLandingInsideIsCommitted
@@ -1309,7 +1339,9 @@ PASS github.com/smm-h/safegit/internal/test TestMergeFetchHeadWithOneForMergeHea
 PASS github.com/smm-h/safegit/internal/test TestMergeFetchHeadWithOneForMergeHeadStillWorks/fast-forward
 PASS github.com/smm-h/safegit/internal/test TestMergeFetchHeadWithOneForMergeHeadStillWorks/merge_commit
 PASS github.com/smm-h/safegit/internal/test TestMergeFetchHeadWithTwoForMergeHeadsIsRefused
+PASS github.com/smm-h/safegit/internal/test TestMergeInAShallowCloneDoesNotCallTheHistoriesUnrelated
 PASS github.com/smm-h/safegit/internal/test TestMergeNoCommitParksWithoutConcluding
+PASS github.com/smm-h/safegit/internal/test TestMergeNoCommitRefusesOverAParkedRevert
 PASS github.com/smm-h/safegit/internal/test TestMergeNoFFElectsAMergeCommit
 PASS github.com/smm-h/safegit/internal/test TestMergeOplogEntryCarriesBranchPositions
 PASS github.com/smm-h/safegit/internal/test TestMergeRefusesOverAParkedPick
@@ -1320,11 +1352,10 @@ PASS github.com/smm-h/safegit/internal/test TestMergeRefusesRawGitShapes/commit
 PASS github.com/smm-h/safegit/internal/test TestMergeRefusesRawGitShapes/edit
 PASS github.com/smm-h/safegit/internal/test TestMergeRefusesRawGitShapes/octopus
 PASS github.com/smm-h/safegit/internal/test TestMergeRefusesRawGitShapes/squash
-PASS github.com/smm-h/safegit/internal/test TestMergeRefusesRawGitShapes/strategy_option
 PASS github.com/smm-h/safegit/internal/test TestMergeRefusesRawGitShapes/strategy_selection
+PASS github.com/smm-h/safegit/internal/test TestMergeRefusesWhenThereIsNoMergeBase
 PASS github.com/smm-h/safegit/internal/test TestMergeSubsetRefusalsApplyToAPreviewToo
 PASS github.com/smm-h/safegit/internal/test TestMergeSubsetRefusalsApplyToAPreviewToo/--squash_feature
-PASS github.com/smm-h/safegit/internal/test TestMergeSubsetRefusalsApplyToAPreviewToo/-X_ours_feature
 PASS github.com/smm-h/safegit/internal/test TestMergeSubsetRefusalsApplyToAPreviewToo/-s_resolve_feature
 PASS github.com/smm-h/safegit/internal/test TestMidMergeCommitFromASubdirectoryIsRefused
 PASS github.com/smm-h/safegit/internal/test TestMintedRecordsCarryTheObservedToken
@@ -1354,7 +1385,8 @@ PASS github.com/smm-h/safegit/internal/test TestMvMovesAFileRewrittenWithItsOwnC
 PASS github.com/smm-h/safegit/internal/test TestMvMovesEveryPairInOneCommit
 PASS github.com/smm-h/safegit/internal/test TestMvMovesRecordsAndCommitsInOneInvocation
 PASS github.com/smm-h/safegit/internal/test TestMvNegatedCreateMissingDirectoriesStillRefuses
-PASS github.com/smm-h/safegit/internal/test TestMvOfATrackedEscapingSymlinkProceeds
+PASS github.com/smm-h/safegit/internal/test TestMvOfATrackedNonPortableSymlinkProceeds
+PASS github.com/smm-h/safegit/internal/test TestMvPayloadCarriesTheRecordItMintedWithItsOrigin
 PASS github.com/smm-h/safegit/internal/test TestMvPayloadCarriesTheResidueMember
 PASS github.com/smm-h/safegit/internal/test TestMvPayloadReportsOnlyTheRecordsTheCommittedMessageCarries
 PASS github.com/smm-h/safegit/internal/test TestMvPostRefReconcileFailureStands
@@ -1424,9 +1456,7 @@ PASS github.com/smm-h/safegit/internal/test TestPickAndRevertRefuseAnUnlistedOpt
 PASS github.com/smm-h/safegit/internal/test TestPickAndRevertRefuseAnUnlistedOption/revert
 PASS github.com/smm-h/safegit/internal/test TestPickAndRevertRefuseStrategySelection
 PASS github.com/smm-h/safegit/internal/test TestPickAndRevertRefuseStrategySelection/cherry-pick_--strategy
-PASS github.com/smm-h/safegit/internal/test TestPickAndRevertRefuseStrategySelection/cherry-pick_-X
 PASS github.com/smm-h/safegit/internal/test TestPickAndRevertRefuseStrategySelection/revert_--strategy
-PASS github.com/smm-h/safegit/internal/test TestPickAndRevertRefuseStrategySelection/revert_-X
 PASS github.com/smm-h/safegit/internal/test TestPickAndRevertSubsetRefusalsApplyToAPreviewToo
 PASS github.com/smm-h/safegit/internal/test TestPickAndRevertSubsetRefusalsApplyToAPreviewToo/cherry-pick
 PASS github.com/smm-h/safegit/internal/test TestPickAndRevertSubsetRefusalsApplyToAPreviewToo/revert
@@ -1456,6 +1486,7 @@ PASS github.com/smm-h/safegit/internal/test TestPullCarriesAPayload
 PASS github.com/smm-h/safegit/internal/test TestPullDryRunRecordsTheFetchAndSaysWhatItCannotCompute
 PASS github.com/smm-h/safegit/internal/test TestPullFastForwardMovesTheRefAndSyncs
 PASS github.com/smm-h/safegit/internal/test TestPullFfOnlyRefusesADivergedBranch
+PASS github.com/smm-h/safegit/internal/test TestPullInheritsTheNoMergeBaseRefusal
 PASS github.com/smm-h/safegit/internal/test TestPullMergeIsPipelineAuthored
 PASS github.com/smm-h/safegit/internal/test TestPullNoFfElectsAMergeCommit
 PASS github.com/smm-h/safegit/internal/test TestPullRefusesOverAParkedRevert
@@ -1509,12 +1540,17 @@ PASS github.com/smm-h/safegit/internal/test TestReRunAfterTheCrashWindowDoesNotM
 PASS github.com/smm-h/safegit/internal/test TestReadOnlyCommandNeedsNoConsent
 PASS github.com/smm-h/safegit/internal/test TestRebaseContinuePassthroughStillNamesGit
 PASS github.com/smm-h/safegit/internal/test TestRebasePassesAnAllowedForm
+PASS github.com/smm-h/safegit/internal/test TestRebasePassesTheTopologyPreservingForm
+PASS github.com/smm-h/safegit/internal/test TestRebasePassesTheTopologyPreservingForm/--rebase-merges
+PASS github.com/smm-h/safegit/internal/test TestRebasePassesTheTopologyPreservingForm/--rebase-merges=no-rebase-cousins
+PASS github.com/smm-h/safegit/internal/test TestRebasePassesTheTopologyPreservingForm/-r
+PASS github.com/smm-h/safegit/internal/test TestRebaseRefusesOverAParkedNonRebaseOperation
 PASS github.com/smm-h/safegit/internal/test TestRebaseRefusesTheApplyBackendAndItsOptions
 PASS github.com/smm-h/safegit/internal/test TestRebaseRefusesTheApplyBackendAndItsOptions/--apply
 PASS github.com/smm-h/safegit/internal/test TestRebaseRefusesTheApplyBackendAndItsOptions/--exec
-PASS github.com/smm-h/safegit/internal/test TestRebaseRefusesTheApplyBackendAndItsOptions/--rebase-merges
 PASS github.com/smm-h/safegit/internal/test TestRebaseRefusesTheApplyBackendAndItsOptions/--root
 PASS github.com/smm-h/safegit/internal/test TestRebaseRefusesTheApplyBackendAndItsOptions/--whitespace=fix
+PASS github.com/smm-h/safegit/internal/test TestRebaseStillRunsWithNothingInFlight
 PASS github.com/smm-h/safegit/internal/test TestReconstructionSuppliesTheEmittedBlocksWhenAutoMergeIsGone
 PASS github.com/smm-h/safegit/internal/test TestRedeclaringADeclaredPairIsStillRefused
 PASS github.com/smm-h/safegit/internal/test TestRefusedConclusionNeverTouchesTheWorkingTree
@@ -1532,6 +1568,7 @@ PASS github.com/smm-h/safegit/internal/test TestResetWorktreeWritingModesRefuseO
 PASS github.com/smm-h/safegit/internal/test TestResetWorktreeWritingModesRefuseOnADirtyTree/--merge
 PASS github.com/smm-h/safegit/internal/test TestRevertConclusionAuthorsAsTheOperator
 PASS github.com/smm-h/safegit/internal/test TestRevertConclusionPayloadReportsTheOperatorAsAuthor
+PASS github.com/smm-h/safegit/internal/test TestRevertNoCommitRefusesOverAParkedPick
 PASS github.com/smm-h/safegit/internal/test TestRevertNoCommitStaysAPassthrough
 PASS github.com/smm-h/safegit/internal/test TestRevertOfAMoveDeclaresTheMoveBack
 PASS github.com/smm-h/safegit/internal/test TestRevertOfAMoveWhoseRecordWasRetractedStillDeclaresTheMoveBack
@@ -1813,6 +1850,7 @@ PASS github.com/smm-h/safegit/internal/test TestSessionTrailer_AmendKeepMessage_
 PASS github.com/smm-h/safegit/internal/test TestSessionTrailer_CommitWithEnv
 PASS github.com/smm-h/safegit/internal/test TestSessionTrailer_CommitWithoutEnv
 PASS github.com/smm-h/safegit/internal/test TestSignalledCommitReleasesItsLocksAndExitsTheConventionalStatus
+PASS github.com/smm-h/safegit/internal/test TestSignoffIsStillTheShortSpellingOnAReplay
 PASS github.com/smm-h/safegit/internal/test TestSingleCommitRevertIsPipelineAuthored
 PASS github.com/smm-h/safegit/internal/test TestSingleRevertCarriesAPayload
 PASS github.com/smm-h/safegit/internal/test TestSingleRevertFromASubdirectory
@@ -1827,6 +1865,15 @@ PASS github.com/smm-h/safegit/internal/test TestStaleOperationLockIsListedByDoct
 PASS github.com/smm-h/safegit/internal/test TestStaleRewriteLockIsUnlockable
 PASS github.com/smm-h/safegit/internal/test TestStoredAutostashExitsTheFamilyCode
 PASS github.com/smm-h/safegit/internal/test TestStoredAutostashPayloadIsDistinguishableFromCleanSuccess
+PASS github.com/smm-h/safegit/internal/test TestStrategyOptionsAreHonoredOnAllThreeVerbs
+PASS github.com/smm-h/safegit/internal/test TestStrategyOptionsAreHonoredOnAllThreeVerbs/cherry-pick
+PASS github.com/smm-h/safegit/internal/test TestStrategyOptionsAreHonoredOnAllThreeVerbs/merge
+PASS github.com/smm-h/safegit/internal/test TestStrategyOptionsAreHonoredOnAllThreeVerbs/revert
+PASS github.com/smm-h/safegit/internal/test TestStrategySelectionIsStillRefusedUnderTheOptionAllowance
+PASS github.com/smm-h/safegit/internal/test TestStrategySelectionIsStillRefusedUnderTheOptionAllowance/cherry-pick_--strategy_resolve_side
+PASS github.com/smm-h/safegit/internal/test TestStrategySelectionIsStillRefusedUnderTheOptionAllowance/merge_--strategy_resolve_side
+PASS github.com/smm-h/safegit/internal/test TestStrategySelectionIsStillRefusedUnderTheOptionAllowance/merge_-s_resolve_side
+PASS github.com/smm-h/safegit/internal/test TestStrategySelectionIsStillRefusedUnderTheOptionAllowance/revert_--strategy_resolve_HEAD
 PASS github.com/smm-h/safegit/internal/test TestSubdirAbsolutePath
 PASS github.com/smm-h/safegit/internal/test TestSubdirFromRepoRoot
 PASS github.com/smm-h/safegit/internal/test TestSubdirMultipleFiles
@@ -1871,10 +1918,27 @@ PASS github.com/smm-h/safegit/internal/test TestSwitchRefusesTheFlagsThatDetachO
 PASS github.com/smm-h/safegit/internal/test TestSwitchRefusesTheFlagsThatDetachOrDestroy/--orphan
 PASS github.com/smm-h/safegit/internal/test TestSwitchRefusesTheFlagsThatDetachOrDestroy/-C
 PASS github.com/smm-h/safegit/internal/test TestSwitchTakesNoPathspec
+PASS github.com/smm-h/safegit/internal/test TestTheImportRouteTheRefusalNamesWorks
+PASS github.com/smm-h/safegit/internal/test TestTheNegativeRerereSpellingIsStillAllowed
+PASS github.com/smm-h/safegit/internal/test TestTheNegativeRerereSpellingIsStillAllowed/cherry-pick
+PASS github.com/smm-h/safegit/internal/test TestTheNegativeRerereSpellingIsStillAllowed/merge
+PASS github.com/smm-h/safegit/internal/test TestTheNegativeRerereSpellingIsStillAllowed/revert
 PASS github.com/smm-h/safegit/internal/test TestTheObservedTokenSurvivesAScrub
 PASS github.com/smm-h/safegit/internal/test TestTheOverlapRefusalGetsItsOwnSentence
+PASS github.com/smm-h/safegit/internal/test TestThePreviewForwardsStrategyOptions
+PASS github.com/smm-h/safegit/internal/test TestThePreviewForwardsStrategyOptions/one_option
+PASS github.com/smm-h/safegit/internal/test TestThePreviewForwardsStrategyOptions/the_long_spelling
+PASS github.com/smm-h/safegit/internal/test TestThePreviewForwardsStrategyOptions/two_options
+PASS github.com/smm-h/safegit/internal/test TestThePreviewForwardsStrategyOptionsOnAReplay
+PASS github.com/smm-h/safegit/internal/test TestThePreviewForwardsStrategyOptionsOnAReplay/cherry-pick
+PASS github.com/smm-h/safegit/internal/test TestThePreviewForwardsStrategyOptionsOnAReplay/revert
 PASS github.com/smm-h/safegit/internal/test TestTheRefusalNoticeCountsMovesRatherThanEntries
+PASS github.com/smm-h/safegit/internal/test TestTheRerereAutoUpdateFlagIsRefusedOnAllThreeVerbs
+PASS github.com/smm-h/safegit/internal/test TestTheRerereAutoUpdateFlagIsRefusedOnAllThreeVerbs/cherry-pick
+PASS github.com/smm-h/safegit/internal/test TestTheRerereAutoUpdateFlagIsRefusedOnAllThreeVerbs/merge
+PASS github.com/smm-h/safegit/internal/test TestTheRerereAutoUpdateFlagIsRefusedOnAllThreeVerbs/revert
 PASS github.com/smm-h/safegit/internal/test TestTheSupersedeRetractionBypassesTheRetractResolver
+PASS github.com/smm-h/safegit/internal/test TestTheUnrelatedHistoriesFlagIsRefused
 PASS github.com/smm-h/safegit/internal/test TestTheWayOutStillWorksOverAParkedOperation
 PASS github.com/smm-h/safegit/internal/test TestTheWayOutStillWorksOverAParkedOperation/cherry-pick-continue_over_a_parked_pick
 PASS github.com/smm-h/safegit/internal/test TestTheWayOutStillWorksOverAParkedOperation/cherry-pick_--abort_over_a_parked_pick
@@ -1882,6 +1946,38 @@ PASS github.com/smm-h/safegit/internal/test TestTheWayOutStillWorksOverAParkedOp
 PASS github.com/smm-h/safegit/internal/test TestTmpDirGc
 PASS github.com/smm-h/safegit/internal/test TestTwoSessionsRacingAConclusion
 PASS github.com/smm-h/safegit/internal/test TestTwoUnrelatedFilesSharingContentAreRecordedAsAMove
+PASS github.com/smm-h/safegit/internal/test TestUnbornCherryPickPreviewComputes
+PASS github.com/smm-h/safegit/internal/test TestUnbornCherryPickRootsWithTheAuthorPreserved
+PASS github.com/smm-h/safegit/internal/test TestUnbornCommitStillRoots
+PASS github.com/smm-h/safegit/internal/test TestUnbornConflictedCherryPickParksAndConcludes
+PASS github.com/smm-h/safegit/internal/test TestUnbornDirtyTreeRefusesWithBothPathsListed
+PASS github.com/smm-h/safegit/internal/test TestUnbornFriendlyRefusals
+PASS github.com/smm-h/safegit/internal/test TestUnbornFriendlyRefusals/bisect_start
+PASS github.com/smm-h/safegit/internal/test TestUnbornFriendlyRefusals/merge_--no-commit
+PASS github.com/smm-h/safegit/internal/test TestUnbornFriendlyRefusals/merge_--no-ff
+PASS github.com/smm-h/safegit/internal/test TestUnbornFriendlyRefusals/merge_--no-ff_under_--dry-run
+PASS github.com/smm-h/safegit/internal/test TestUnbornFriendlyRefusals/rebase
+PASS github.com/smm-h/safegit/internal/test TestUnbornMergeFastForwards
+PASS github.com/smm-h/safegit/internal/test TestUnbornMergePreviewShortCircuits
+PASS github.com/smm-h/safegit/internal/test TestUnbornPullFastForwards
+PASS github.com/smm-h/safegit/internal/test TestUnbornPullNoFFRefusesBeforeTheFetch
+PASS github.com/smm-h/safegit/internal/test TestUnbornRefusalOplogSplit
+PASS github.com/smm-h/safegit/internal/test TestUnbornRefusalOplogSplit/a_preview_of_any_of_them_records_nothing
+PASS github.com/smm-h/safegit/internal/test TestUnbornRefusalOplogSplit/a_preview_of_any_of_them_records_nothing/bisect_start
+PASS github.com/smm-h/safegit/internal/test TestUnbornRefusalOplogSplit/a_preview_of_any_of_them_records_nothing/merge_--no-commit
+PASS github.com/smm-h/safegit/internal/test TestUnbornRefusalOplogSplit/a_preview_of_any_of_them_records_nothing/merge_--no-ff
+PASS github.com/smm-h/safegit/internal/test TestUnbornRefusalOplogSplit/a_preview_of_any_of_them_records_nothing/pull_--merge-strategy_no-ff
+PASS github.com/smm-h/safegit/internal/test TestUnbornRefusalOplogSplit/a_preview_of_any_of_them_records_nothing/rebase
+PASS github.com/smm-h/safegit/internal/test TestUnbornRefusalOplogSplit/bisect_start_records_nothing
+PASS github.com/smm-h/safegit/internal/test TestUnbornRefusalOplogSplit/merge_--no-commit_is_recorded
+PASS github.com/smm-h/safegit/internal/test TestUnbornRefusalOplogSplit/merge_--no-ff_is_recorded
+PASS github.com/smm-h/safegit/internal/test TestUnbornRefusalOplogSplit/pull_--merge-strategy_no-ff_is_recorded
+PASS github.com/smm-h/safegit/internal/test TestUnbornRefusalOplogSplit/rebase_records_nothing
+PASS github.com/smm-h/safegit/internal/test TestUnbornResetHardWorks
+PASS github.com/smm-h/safegit/internal/test TestUnbornRevertRefusesAsEmpty
+PASS github.com/smm-h/safegit/internal/test TestUnbornSwitchBothForms
+PASS github.com/smm-h/safegit/internal/test TestUnbornSwitchBothForms/creating_a_branch
+PASS github.com/smm-h/safegit/internal/test TestUnbornSwitchBothForms/onto_an_existing_branch
 PASS github.com/smm-h/safegit/internal/test TestUndo
 PASS github.com/smm-h/safegit/internal/test TestUndoAmend
 PASS github.com/smm-h/safegit/internal/test TestUndoBypassSession
@@ -1936,8 +2032,8 @@ PASS github.com/smm-h/safegit/internal/test TestUnreachedAutostashDoesNotClaimWo
 PASS github.com/smm-h/safegit/internal/test TestUnreachedAutostashStillClaimsTheMergesOwn
 PASS github.com/smm-h/safegit/internal/test TestUntrackRefusalIsReportedAndNamesTheFlag
 PASS github.com/smm-h/safegit/internal/test TestUntrackSuppressionIsScopedToItsOwnPaths
-PASS github.com/smm-h/safegit/internal/test TestWave2CommitEscapingSymlinkIsRefused
-PASS github.com/smm-h/safegit/internal/test TestWave2CommitNonEscapingSymlinkStillCommits
+PASS github.com/smm-h/safegit/internal/test TestWave2CommitNonPortableSymlinkIsRefused
+PASS github.com/smm-h/safegit/internal/test TestWave2CommitPortableSymlinkStillCommits
 PASS github.com/smm-h/safegit/internal/test TestWorktree_LockSharing
 PASS github.com/smm-h/safegit/internal/test TestWrongContinueCommandNamesTheStateAndTheRightCommand
 PASS github.com/smm-h/safegit/internal/testutil TestInitRepoWithSubmodule
