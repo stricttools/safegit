@@ -97,13 +97,14 @@ func TestCommitSymlink_LinkToCommittedFile(t *testing.T) {
 	}
 }
 
-// TestCommitSymlinkEscapingTargetIsCommittedWhenElected: a symlink whose
-// target leaves the repository is REFUSED (see
-// TestWave2CommitEscapingSymlinkIsRefused) -- the object it would write is a
-// reference to a place only this machine has. --allow-non-portable-targets is the
-// election, and it restores the one-line notice the refusal replaced: the link
-// text is what gets recorded, and it resolves to nothing in another checkout.
-func TestCommitSymlinkEscapingTargetIsCommittedWhenElected(t *testing.T) {
+// TestCommitSymlinkOutsideTargetIsCommittedWhenElected: a symlink whose target
+// leaves the repository is REFUSED (see
+// TestWave2CommitNonPortableSymlinkIsRefused) -- the object it would write is a
+// reference to a place only this machine has. --allow-non-portable-targets is
+// the election, and it restores the one-line notice the refusal replaced: the
+// link text is what gets recorded, and it resolves to nothing in another
+// checkout.
+func TestCommitSymlinkOutsideTargetIsCommittedWhenElected(t *testing.T) {
 	dir := newRepo(t)
 
 	if err := os.Symlink("../elsewhere/secret.txt", filepath.Join(dir, "escapes")); err != nil {
@@ -111,9 +112,9 @@ func TestCommitSymlinkEscapingTargetIsCommittedWhenElected(t *testing.T) {
 	}
 
 	stdout, stderr, code := runSafegit(t, dir, "commit", "--allow-non-portable-targets",
-		"-m", "add escaping link", "--", "escapes")
+		"-m", "add a link that leaves", "--", "escapes")
 	if code != 0 {
-		t.Fatalf("an elected escaping symlink was refused (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		t.Fatalf("an elected outside-the-repository symlink was refused (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 	if mode := treeEntryMode(t, dir, "escapes"); mode != "120000" {
 		t.Errorf("expected HEAD entry %q with mode 120000, got mode %q; tree:\n%s", "escapes", mode, lsTreeHEAD(t, dir))
@@ -127,12 +128,12 @@ func TestCommitSymlinkEscapingTargetIsCommittedWhenElected(t *testing.T) {
 	}
 }
 
-// TestCommitEscapingSymlinkRefusalNamesTheLiteralTarget: the refusal has to say
-// the link's own TEXT, not a resolved absolute path, because the text is what
-// would be committed and what the operator has to recognize. A relative target
-// that never resolves anywhere is the sharpest case: there is nothing to
+// TestCommitNonPortableSymlinkRefusalNamesTheLiteralTarget: the refusal has to
+// say the link's own TEXT, not a resolved absolute path, because the text is
+// what would be committed and what the operator has to recognize. A relative
+// target that never resolves anywhere is the sharpest case: there is nothing to
 // resolve, and only the literal answer exists.
-func TestCommitEscapingSymlinkRefusalNamesTheLiteralTarget(t *testing.T) {
+func TestCommitNonPortableSymlinkRefusalNamesTheLiteralTarget(t *testing.T) {
 	dir := newRepo(t)
 
 	const target = "../../nowhere/at/all.txt"
@@ -141,9 +142,9 @@ func TestCommitEscapingSymlinkRefusalNamesTheLiteralTarget(t *testing.T) {
 	}
 	before := testutil.Rev(t, dir, "HEAD")
 
-	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add escaping link", "--", "escapes")
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add a link that leaves", "--", "escapes")
 	if code != exitcode.NonPortableTarget {
-		t.Errorf("an escaping symlink exited %d, want %d (NonPortableTarget); stderr: %s",
+		t.Errorf("a symlink leaving the repository exited %d, want %d (NonPortableTarget); stderr: %s",
 			code, exitcode.NonPortableTarget, stderr)
 	}
 	if !strings.Contains(stderr, target) {
@@ -157,11 +158,11 @@ func TestCommitEscapingSymlinkRefusalNamesTheLiteralTarget(t *testing.T) {
 	}
 }
 
-// TestCommitEscapingSymlinkRefusalNamesEveryOffender: intake resolves the whole
-// argument list before it judges, so one invocation naming several escaping
-// links is one refusal naming all of them -- not the first one, discovered
-// again on the next attempt.
-func TestCommitEscapingSymlinkRefusalNamesEveryOffender(t *testing.T) {
+// TestCommitNonPortableSymlinkRefusalNamesEveryOffender: intake resolves the
+// whole argument list before it judges, so one invocation naming several
+// non-portable links is one refusal naming all of them -- not the first one,
+// discovered again on the next attempt.
+func TestCommitNonPortableSymlinkRefusalNamesEveryOffender(t *testing.T) {
 	dir := newRepo(t)
 
 	for _, link := range []struct{ name, target string }{
@@ -173,9 +174,9 @@ func TestCommitEscapingSymlinkRefusalNamesEveryOffender(t *testing.T) {
 		}
 	}
 
-	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add two escaping links", "--", "one", "two")
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add two links that leave", "--", "one", "two")
 	if code != exitcode.NonPortableTarget {
-		t.Fatalf("two escaping symlinks exited %d, want %d (NonPortableTarget); stderr: %s",
+		t.Fatalf("two non-portable symlinks exited %d, want %d (NonPortableTarget); stderr: %s",
 			code, exitcode.NonPortableTarget, stderr)
 	}
 	for _, want := range []string{"../elsewhere/first.txt", "../elsewhere/second.txt"} {
@@ -185,10 +186,10 @@ func TestCommitEscapingSymlinkRefusalNamesEveryOffender(t *testing.T) {
 	}
 }
 
-// TestAmendEscapingSymlinkIsRefusedAndElects: the refusal is made in intake,
+// TestAmendNonPortableSymlinkIsRefusedAndElects: the refusal is made in intake,
 // which the amend path shares, so --amend inherits both halves of the ruling
 // from the one place both forms resolve their files.
-func TestAmendEscapingSymlinkIsRefusedAndElects(t *testing.T) {
+func TestAmendNonPortableSymlinkIsRefusedAndElects(t *testing.T) {
 	dir := newRepo(t)
 
 	const target = "../elsewhere/secret.txt"
@@ -199,11 +200,11 @@ func TestAmendEscapingSymlinkIsRefusedAndElects(t *testing.T) {
 
 	_, stderr, code := runSafegit(t, dir, "commit", "--amend", "-m", "amend in the link", "--", "escapes")
 	if code != exitcode.NonPortableTarget {
-		t.Errorf("an --amend of an escaping symlink exited %d, want %d (NonPortableTarget); stderr: %s",
+		t.Errorf("an --amend of a non-portable symlink exited %d, want %d (NonPortableTarget); stderr: %s",
 			code, exitcode.NonPortableTarget, stderr)
 	}
 	if !strings.Contains(stderr, target) {
-		t.Errorf("the refusal must name the escaping target %q; stderr:\n%s", target, stderr)
+		t.Errorf("the refusal must name the target %q; stderr:\n%s", target, stderr)
 	}
 	if after := testutil.Rev(t, dir, "HEAD"); after != before {
 		t.Errorf("HEAD moved despite the refusal: %s -> %s", before, after)
@@ -402,8 +403,8 @@ func TestCommitSymlink_MixedWithRegularFile(t *testing.T) {
 	}
 }
 
-// TestCommitEscapingSymlinkFoundByDirectoryExpansionIsRefused pins the OTHER
-// route a symlink reaches the escaping-target verdict by: not named on the
+// TestCommitNonPortableSymlinkFoundByDirectoryExpansionIsRefused pins the OTHER
+// route a symlink reaches the non-portable-target verdict by: not named on the
 // command line at all, but swept up by a directory argument's expansion. The
 // expansion collects every link it walks over and hands them to the same
 // end-of-intake judgement, so a link nobody typed is refused exactly like one
@@ -413,7 +414,7 @@ func TestCommitSymlink_MixedWithRegularFile(t *testing.T) {
 // only, and a future intake change that stopped collecting the expansion's
 // links would leave the whole directory-argument route unguarded with every
 // named-argument test still green.
-func TestCommitEscapingSymlinkFoundByDirectoryExpansionIsRefused(t *testing.T) {
+func TestCommitNonPortableSymlinkFoundByDirectoryExpansionIsRefused(t *testing.T) {
 	dir := newRepo(t)
 
 	testutil.WriteFile(t, dir, "sub/ordinary.txt", "ordinary\n")
@@ -427,11 +428,11 @@ func TestCommitEscapingSymlinkFoundByDirectoryExpansionIsRefused(t *testing.T) {
 	// expansion.
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "commit the directory", "--", "sub")
 	if code != exitcode.NonPortableTarget {
-		t.Errorf("a directory holding an escaping symlink exited %d, want %d (NonPortableTarget); stderr: %s",
+		t.Errorf("a directory holding a non-portable symlink exited %d, want %d (NonPortableTarget); stderr: %s",
 			code, exitcode.NonPortableTarget, stderr)
 	}
 	if !strings.Contains(stderr, target) {
-		t.Errorf("the refusal must name the escaping target %q; stderr:\n%s", target, stderr)
+		t.Errorf("the refusal must name the target %q; stderr:\n%s", target, stderr)
 	}
 	if !strings.Contains(stderr, "sub/escapes") {
 		t.Errorf("the refusal must name the expanded path sub/escapes; stderr:\n%s", stderr)
@@ -519,7 +520,7 @@ func TestCommitNonPortableSymlinkRefusalGroupsOffendersByShape(t *testing.T) {
 	}
 	const outTarget = "../elsewhere/secret.txt"
 	if err := os.Symlink(outTarget, filepath.Join(dir, "escapes")); err != nil {
-		t.Fatalf("creating escaping symlink: %v", err)
+		t.Fatalf("creating the symlink that leaves the repository: %v", err)
 	}
 	before := testutil.Rev(t, dir, "HEAD")
 
@@ -543,14 +544,16 @@ func TestCommitNonPortableSymlinkRefusalGroupsOffendersByShape(t *testing.T) {
 	}
 }
 
-// TestCommitTraversingSymlinkTargetLandingInsideIsCommitted pins that the
-// verdict is about where a target RESOLVES, never about how it is spelled: a
-// relative target that climbs out of its own directory with `..` and comes back
-// down inside the repository is an ordinary in-repository link.
+// TestCommitTraversingSymlinkTargetLandingInsideIsCommitted pins that for a
+// RELATIVE target the verdict is about where it resolves, never about how it is
+// spelled: one that climbs out of its own directory with `..` and comes back
+// down inside the repository is an ordinary portable link. (Absolute targets
+// are the other half of the rule, and they ARE judged on spelling alone --
+// where they resolve here says nothing about where they resolve elsewhere.)
 //
 // Pinned because the cheap implementation of the check -- looking for a leading
-// `..` in the link text -- would refuse this one, and every existing escaping
-// test would still pass.
+// `..` in the link text -- would refuse this one, and every refusal test in the
+// file would still pass.
 func TestCommitTraversingSymlinkTargetLandingInsideIsCommitted(t *testing.T) {
 	dir := newRepo(t)
 
