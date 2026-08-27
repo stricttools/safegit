@@ -328,7 +328,7 @@ func TestRewordPayloadReportsOnlyTheRecordsTheCommittedMessageCarries(t *testing
 	}
 }
 
-// mvMovedRecordsDoc is the one member of mv's payload these two tests read,
+// mvMovedRecordsDoc is the one member of mv's payload these tests read,
 // spelled as a consumer sees it on the wire. The slice is a POINTER so the three
 // answers stay distinguishable: an absent member and a null one both decode to a
 // nil pointer and are failures, while the member the command owes -- present and
@@ -340,6 +340,39 @@ type mvMovedRecordsDoc struct {
 		New    string `json:"new"`
 		Origin string `json:"origin"`
 	} `json:"moved_records"`
+}
+
+// The ordinary mv run, with no hook in the way: the record it minted is on the
+// payload under the member `commit` declares, in the entry shape `commit`
+// declares -- the id it can be found on the message by, both paths, and the
+// ORIGIN. Every pair `mv` is given is a person's statement, so the word is
+// `declared`, which is also what the message spells by writing no token at all.
+func TestMvPayloadCarriesTheRecordItMintedWithItsOrigin(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
+	safegitCommit(t, dir, "seed", "a.txt")
+
+	stdout, stderr, code := runSafegit(t, dir, "--json", "mv", "a.txt -> b.txt", "-m", "move a")
+	if code != 0 {
+		t.Fatalf("safegit mv failed (%d): stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	var doc mvMovedRecordsDoc
+	if err := json.Unmarshal(decodeEnvelope(t, stdout).Payload, &doc); err != nil {
+		t.Fatalf("mv payload does not decode: %v\nstdout: %s", err, stdout)
+	}
+	if doc.MovedRecords == nil || len(*doc.MovedRecords) != 1 {
+		t.Fatalf("moved_records = %v, want the one record the move minted\nstdout: %s", doc.MovedRecords, stdout)
+	}
+	got := (*doc.MovedRecords)[0]
+	if got.Old != "a.txt" || got.New != "b.txt" || got.Origin != "declared" {
+		t.Errorf("moved_records[0] = %+v, want a.txt -> b.txt (declared)", got)
+	}
+	// The id is the address a reader looks the record up by, so it has to be one
+	// the committed message really carries.
+	msg := commitMessageOf(t, dir, "HEAD")
+	if got.ID == "" || !strings.Contains(msg, got.ID) {
+		t.Errorf("moved_records[0] names %q, which is not in the commit message:\n%s", got.ID, msg)
+	}
 }
 
 // The MV arm. `safegit mv` mints a record per pair and hands them to the same
