@@ -256,10 +256,25 @@ func EmptyTreeSHA(ctx context.Context) (string, error) {
 // "ambiguous argument" advice and exits 128, so the cheap question would answer
 // with noise on stderr in the ordinary case this function exists for.
 func HeadTreeish(ctx context.Context) (string, error) {
-	if _, _, err := Run(ctx, "rev-parse", "--verify", "--quiet", "HEAD"); err == nil {
+	if !HeadIsUnborn(ctx) {
 		return "HEAD", nil
 	}
 	return EmptyTreeSHA(ctx)
+}
+
+// HeadIsUnborn reports whether HEAD names a branch that does not exist yet.
+//
+// It is the cheap question, asked with `rev-parse --verify --quiet`: without
+// --quiet git prints its "ambiguous argument 'HEAD'" advice and exits 128, so
+// the ordinary case this exists for would answer with noise on stderr.
+//
+// A bool rather than (bool, error), because every caller is already inside a
+// repository safegit resolved a git directory for, and the only other way this
+// invocation fails is a repository nothing else in the process could read
+// either.
+func HeadIsUnborn(ctx context.Context) bool {
+	_, _, err := Run(ctx, "rev-parse", "--verify", "--quiet", "HEAD")
+	return err != nil
 }
 
 // ReadTree populates a temporary index from a treeish (commit/tree SHA or ref).

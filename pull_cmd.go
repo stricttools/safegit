@@ -89,6 +89,21 @@ func runPull(flags globalFlags, mode pullMode, remote, branch string, rebase boo
 
 	pos := readOplogPosition(flags)
 
+	// Before the FETCH too, and for the same reason: `--merge-strategy no-ff`
+	// asks for a merge commit, an unborn branch cannot carry one, and the field
+	// it sets is exactly the one that skips the unborn fast-forward arm -- so
+	// without this a pull would go to the network and then die on git's raw
+	// fatal. performMerge asks the same question for every other route into a
+	// merge; here it is asked early enough to cost nothing.
+	//
+	// It is asked before the dry-run branch as well: a preview of a command that
+	// cannot run is not a preview of anything, which is the rule merge's own
+	// preview follows. appendOperationEntry writes nothing in a dry run.
+	if code := refuseUnbornMergeForm(flags.ctx(), mode == pullNoFF, false, "--merge-strategy no-ff", ""); code != 0 {
+		appendOperationEntry(flags, sgDir, "pull", pos, false, pullExtraBase(remote, branch))
+		return code
+	}
+
 	fetchArgs := []string{"fetch", remote}
 	if branch != "" {
 		fetchArgs = append(fetchArgs, branch)
@@ -130,6 +145,10 @@ func runPull(flags globalFlags, mode pullMode, remote, branch string, rebase boo
 		extraBase:    pullExtraBase(remote, branch),
 		ffOnlyFlag:   "--merge-strategy ff-only",
 		ffOnlyWayOut: "  Re-run with --merge-strategy ff or no-ff to make one, or rebase this branch onto the remote instead.\n",
+		noFFFlag:     "--merge-strategy no-ff",
+		// A pull has no parking form: --merge-strategy names three merge
+		// selections and none of them leaves the result in flight.
+		parkFlag: "",
 		headline: func(conclusionResult) string {
 			return "pulled " + pullSubject(remote, branch)
 		},

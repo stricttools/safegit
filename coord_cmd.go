@@ -406,6 +406,16 @@ func runRebase(flags globalFlags, args []string) int {
 		return code
 	}
 
+	// A SECOND refusal, beside that one rather than folded into it: the check
+	// above is about somebody else's in-flight state, this one is about where
+	// this branch stands. An unborn branch has no commits to replay, and git's
+	// own answer ("Could not resolve HEAD to a commit") names the ref rather
+	// than the reason. Like every other pre-git refusal here it writes no oplog
+	// entry, which is why it comes before readOplogPosition.
+	if code := refuseUnbornRebase(flags.ctx(), rebaseUpstream(parsed)); code != 0 {
+		return code
+	}
+
 	pos := readOplogPosition(flags)
 	// The upstream as the operator NAMED it, read off the parsed command line
 	// rather than off argv[0], which for `--onto <base> <upstream>` and for the
@@ -502,6 +512,14 @@ func runBisect(flags globalFlags, args []string) int {
 		if code := coordGuard(flags, gitDir, "bisect"); code != 0 {
 			return code
 		}
+	}
+
+	// An unborn branch has no range to search, and `bisect start` is the one
+	// subcommand that can be typed there: every other one needs a bisect that is
+	// already running, which cannot have been started. Before git, and with no
+	// oplog entry, like the sibling pre-git refusals.
+	if code := refuseUnbornBisect(flags.ctx(), args); code != 0 {
+		return code
 	}
 
 	// A bisect step moves HEAD and no branch ref -- `bisect start` detaches it
