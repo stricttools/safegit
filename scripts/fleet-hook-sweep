@@ -1,0 +1,214 @@
+#!/usr/bin/env bash
+# fleet-hook-sweep -- retire legacy pre-pre-push hooks across a tree of repositories.
+#
+# safegit 0.29.0 refuses (exit 24) any push or `hook run` while a pre-pre-push
+# hook is still in git's own hook directory instead of the tool-owned store under
+# .git/safegit/hooks. This script discovers every repository under a root that
+# still has one, classifies it, and clears the refusal:
+#
+#   * a no-op placeholder (a script whose only executable statement is `exit 0`,
+#     or none at all) is DELETED via saferm -- there is nothing to preserve;
+#   * a hook with real content is handed to `safegit hook migrate`, which
+#     relocates it into the tool-owned store.
+#
+# Afterwards every touched repository is verified with `safegit hook list`,
+# which must no longer exit 24. Verification never pushes.
+#
+# The affected set is discovered, never hand-maintained. Worktree ".git" files
+# are resolved to their common git dir, so linked worktrees of one repository
+# collapse to the single hook directory they share.
+#
+# Usage:
+#   scripts/fleet-hook-sweep --dry-run [--root DIR]
+#   scripts/fleet-hook-sweep --execute [--root DIR]
+#
+# The mode is mandatory: there is no default, so a caller always states whether
+# this run mutates anything.
+
+set -uo pipefail
+
+MODE=""
+ROOT="$HOME/Projects"
+SAFERM_DESCRIPTION="legacy no-op placeholder pre-pre-push hook superseded by safegit 0.29.0 hook store"
+
+usage() {
+	sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+	exit "${1:-2}"
+}
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--dry-run)
+		[ -n "$MODE" ] && { echo "error: --dry-run and --execute are mutually exclusive" >&2; exit 2; }
+		MODE=dry-run
+		;;
+	--execute)
+		[ -n "$MODE" ] && { echo "error: --dry-run and --execute are mutually exclusive" >&2; exit 2; }
+		MODE=execute
+		;;
+	--root)
+		shift
+		[ $# -gt 0 ] || { echo "error: --root needs a directory" >&2; exit 2; }
+		ROOT="$1"
+		;;
+	-h | --help) usage 0 ;;
+	*)
+		echo "error: unknown argument: $1" >&2
+		usage 2
+		;;
+	esac
+	shift
+done
+
+if [ -z "$MODE" ]; then
+	echo "error: one of --dry-run or --execute is required" >&2
+	usage 2
+fi
+if [ ! -d "$ROOT" ]; then
+	echo "error: root is not a directory: $ROOT" >&2
+	exit 2
+fi
+for tool in git safegit saferm; do
+	command -v "$tool" >/dev/null 2>&1 || { echo "error: $tool not found on PATH" >&2; exit 2; }
+done
+
+# is_noop_script FILE -- true when the file has no executable statement other
+# than a bare `exit 0`. Shebang, comments and blank lines are stripped first.
+is_noop_script() {
+	local body
+	body="$(sed -e 's/[[:space:]]*#.*$//' -e '/^[[:space:]]*$/d' "$1" | sed -e '1{/^#!/d}')"
+	body="$(printf '%s' "$body" | tr -d '[:space:]')"
+	[ -z "$body" ] || [ "$body" = "exit0" ]
+}
+
+# is_placeholder_target PATH -- true for a no-op hook file, or for a
+# pre-pre-push.d directory that is empty or holds only no-op scripts.
+is_placeholder_target() {
+	local target="$1" entry
+	if [ -f "$target" ]; then
+		is_noop_script "$target"
+		return
+	fi
+	if [ -d "$target" ]; then
+		for entry in "$target"/* "$target"/.[!.]*; do
+			[ -e "$entry" ] || continue
+			[ -f "$entry" ] || return 1
+			is_noop_script "$entry" || return 1
+		done
+		return 0
+	fi
+	return 1
+}
+
+echo "fleet-hook-sweep: mode=$MODE root=$ROOT"
+echo
+
+# --- discovery ---------------------------------------------------------------
+
+declare -a REPOS=()   # worktree root, one per distinct hook directory
+declare -a HOOKDIRS=()
+declare -A SEEN_HOOKDIR=()
+
+while IFS= read -r dotgit; do
+	repo="$(dirname "$dotgit")"
+	common="$(git -C "$repo" rev-parse --git-common-dir 2>/dev/null)" || continue
+	case "$common" in
+	/*) ;;
+	*) common="$repo/$common" ;;
+	esac
+	common="$(cd "$common" 2>/dev/null && pwd -P)" || continue
+	hooks="$common/hooks"
+	[ -e "$hooks/pre-pre-push" ] || [ -d "$hooks/pre-pre-push.d" ] || continue
+	[ -n "${SEEN_HOOKDIR[$hooks]:-}" ] && continue
+	SEEN_HOOKDIR[$hooks]=1
+	REPOS+=("$repo")
+	HOOKDIRS+=("$hooks")
+done < <(find "$ROOT" -name .git -not -path '*/.archive/*' -print 2>/dev/null | sort)
+
+if [ "${#REPOS[@]}" -eq 0 ]; then
+	echo "No repository under $ROOT carries a legacy pre-pre-push hook. Nothing to do."
+	exit 0
+fi
+
+echo "Discovered ${#REPOS[@]} repository/repositories with a legacy pre-pre-push hook:"
+for i in "${!REPOS[@]}"; do
+	echo "  ${REPOS[$i]}  (hooks: ${HOOKDIRS[$i]})"
+done
+echo
+
+# --- classify, act, verify ---------------------------------------------------
+
+failures=0
+
+for i in "${!REPOS[@]}"; do
+	repo="${REPOS[$i]}"
+	hooks="${HOOKDIRS[$i]}"
+
+	declare -a targets=()
+	[ -e "$hooks/pre-pre-push" ] && targets+=("$hooks/pre-pre-push")
+	[ -d "$hooks/pre-pre-push.d" ] && targets+=("$hooks/pre-pre-push.d")
+
+	all_placeholder=1
+	for t in "${targets[@]}"; do
+		is_placeholder_target "$t" || all_placeholder=0
+	done
+
+	if [ "$all_placeholder" -eq 1 ]; then
+		verdict="DELETE (no-op placeholder)"
+	else
+		verdict="MIGRATE (real content)"
+	fi
+
+	echo "--- $repo"
+	for t in "${targets[@]}"; do
+		echo "    target: $t"
+	done
+	echo "    verdict: $verdict"
+
+	if [ "$all_placeholder" -eq 1 ]; then
+		recursive=""
+		for t in "${targets[@]}"; do
+			[ -d "$t" ] && recursive="-r"
+		done
+		cmd=(saferm delete --on-error abort ${recursive:+$recursive} --description "$SAFERM_DESCRIPTION" "${targets[@]}")
+	else
+		cmd=(safegit hook migrate)
+	fi
+
+	if [ "$MODE" = dry-run ]; then
+		printf '    would run:'
+		printf ' %q' "${cmd[@]}"
+		printf '\n'
+		printf '    would verify: (cd %q && safegit hook list)  # must not exit 24\n\n' "$repo"
+		continue
+	fi
+
+	if [ "$all_placeholder" -eq 1 ]; then
+		"${cmd[@]}" || { echo "    ERROR: deletion failed" >&2; failures=$((failures + 1)); echo; continue; }
+	else
+		(cd "$repo" && "${cmd[@]}") || { echo "    ERROR: hook migrate failed" >&2; failures=$((failures + 1)); echo; continue; }
+	fi
+
+	out="$(cd "$repo" && safegit hook list 2>&1)"
+	rc=$?
+	if [ "$rc" -eq 24 ]; then
+		echo "    VERIFY FAIL: hook list still exits 24 (not migrated)" >&2
+		echo "$out" | sed 's/^/      /' >&2
+		failures=$((failures + 1))
+	else
+		echo "    verified: hook list exit=$rc (no exit-24 refusal)"
+		echo "$out" | sed 's/^/      /'
+	fi
+	echo
+done
+
+if [ "$MODE" = dry-run ]; then
+	echo "Dry run complete. Nothing was changed. Re-run with --execute to apply."
+	exit 0
+fi
+
+if [ "$failures" -gt 0 ]; then
+	echo "fleet-hook-sweep: $failures repository/repositories failed." >&2
+	exit 1
+fi
+echo "fleet-hook-sweep: all repositories cleared."
