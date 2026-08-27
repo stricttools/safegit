@@ -381,7 +381,9 @@ Every future change that introduces a decision of this kind adds its entry here.
   uncommitted-work check, a refusal over an in-flight state that is NOT a rebase
   (whose predicate and whose reason are spelled in "`safegit commit` refuses
   while an operation is in flight", the entry that owns the in-flight refusal
-  across every command that makes one), the argv allowlist and the oplog entry.
+  across every command that makes one), a refusal on an UNBORN branch, where
+  there are no commits to replay (see "The friendly unborn pre-flight
+  refusals"), the argv allowlist and the oplog entry.
 
   The exception is enforced structurally rather than maintained by convention.
   safegit's git-execution boundary refuses any invocation whose verb-and-flag
