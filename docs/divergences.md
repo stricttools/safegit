@@ -1198,9 +1198,16 @@ next to what is admitted.
   the case the flag exists to prevent.
 
   A `revert` onto an unborn branch is not in this set and needs no refusal of
-  its own: reverting onto nothing puts nothing back, so the standing
-  empty-result refusal ("An empty commit is refused; an empty merge is not")
-  fires, cleans up the state safegit parked, and says so.
+  its own, because both of its outcomes are already served. Where the reverted
+  commit's effect is ALREADY ABSENT from the tree — reverting a commit that only
+  added a file, since deleting a file the unborn branch never had puts nothing
+  back — the standing empty-result refusal ("An empty commit is refused; an
+  empty merge is not") fires, cleans up the state safegit parked, and says so.
+  Where the reverted commit MODIFIED something instead, its inverse wants to
+  restore content the unborn tree does not carry, so the revert parks on a
+  MODIFY/DELETE conflict exactly as it would on a born branch — and
+  `safegit revert-continue` concludes it, into a ROOT commit holding the
+  restored content.
 - **Ruling:** mixed — deliberate
 
 ### A fast-forward is safegit's own ref move, and undo refuses it

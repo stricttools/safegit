@@ -1435,7 +1435,7 @@ Each refusal names the unborn branch and the way forward, and exits with the gen
 
 **What is NOT refused, and reads badly:** a `merge` naming a ref that does not resolve. On an unborn branch it reaches the compute step, which safegit pins to `--no-ff --no-commit`, so the operator meets git's own "Non-fast-forward commit does not make sense into an empty head" -- an error about a flag they never typed rather than about the ref they got wrong.
 
-**`revert`** is refused too, but by the standing empty-result rule rather than by a check of its own: reverting onto nothing puts nothing back, so the result would be a root commit with an empty tree. safegit removes the state it parked and says the revert produces no change.
+**`revert`** has no check of its own, and which of its two outcomes you get depends on what the reverted commit did. Reverting a commit that only ADDED files puts nothing back -- the unborn branch never had them -- so the result would be a root commit with an empty tree, and the standing empty-result rule refuses it: safegit removes the state it parked and says the revert produces no change. Reverting a commit that MODIFIED a file is the other outcome: the inverse patch wants to restore content the unborn tree does not carry, so the revert PARKS on a MODIFY/DELETE conflict, and `safegit revert-continue` concludes it into a root commit holding the restored content -- the same conflict shape a cherry-pick meets here, stages 1 and 3 with no stage 2.
 
 ## switch
 
