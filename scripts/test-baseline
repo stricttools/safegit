@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Capture the campaign test baseline as a deterministic artifact.
 #
-# The redesign campaign keeps the suite deliberately red: a large set of
-# investigation tests fail on purpose and later phases turn them green.
-# Refactors that are supposed to be behavior-preserving are checked by
-# regenerating this artifact and diffing it against the committed one.
+# The artifact records whatever the suite reports -- passes, failures and skips
+# alike -- and says nothing about which of those is expected. Refactors that are
+# supposed to be behavior-preserving are checked by regenerating it and diffing
+# it against the committed one: a diff is a behavior change to account for,
+# whatever the suite's overall verdict is.
 #
 # Usage:
 #   scripts/test-baseline [output-path]      # write the artifact (default: stdout)
@@ -17,9 +18,11 @@
 # -short is always passed, and it no longer has anything to do with the stress
 # scenarios: those are opt-in behind the test binary's --stress flag and are
 # excluded here simply because this script does not pass it. What -short still
-# does is keep the artifact deterministic -- it skips internal/hooks'
-# wall-clock hook-timeout test, the one test keyed on testing.Short(), whose
-# result depends on timing rather than on the code under test.
+# does is keep the artifact deterministic. TWO tests key on testing.Short():
+# internal/hooks' wall-clock hook-timeout test, which it SKIPS because the
+# result depends on timing rather than on the code under test, and
+# internal/git's index-reconcile property test, which it SHORTENS from 200
+# generated cases to 40 -- the same one test line either way, over fewer cases.
 set -euo pipefail
 
 root="$(git rev-parse --show-toplevel)"
@@ -78,7 +81,8 @@ guard_build_failures() {
 	esac
 }
 
-# The suite is red on purpose, so a nonzero exit is expected and not an error.
+# A nonzero exit is not an error here: the artifact is the pass/fail set itself,
+# so a failing test is content to record rather than a reason to stop.
 integration_json="$(go test "$integration_pkg" -short -count=1 -json || true)"
 unit_json="$(go test "${unit_pkgs[@]}" -short -count=1 -json || true)"
 
