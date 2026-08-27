@@ -183,7 +183,7 @@ func refuseUnlistedOption(command, option string) int {
 // another strategy stages, while strategy OPTIONS, which tune the same ort
 // compute without changing what those checks see, are honored; and two more are
 // refused for reasons of a different kind altogether --
-// `--allow-unrelated-histories` for a footgun rather than a protection hole, and
+// `--allow-unrelated-histories` for the hazard rather than a protection hole, and
 // `--rerere-autoupdate` because what it stages is a REMEMBERED resolution
 // nobody made in this operation.
 var mergeSubset = argvSubset{

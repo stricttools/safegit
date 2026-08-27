@@ -1037,7 +1037,7 @@ next to what is admitted.
   its merge step is this one — and `merge --dry-run` refuses identically, since a
   preview of a command that cannot run is not a preview of anything.
 
-  The reason is a footgun rather than a protection hole: nothing about an
+  The reason is the hazard rather than a protection hole: nothing about an
   unrelated merge defeats a check safegit makes. It is that the state is nearly
   always reached by accident — a wrong remote, a wrong branch, a repository
   re-initialized over another — and what it produces is a permanent second root
@@ -1349,7 +1349,7 @@ a compute-step option may still be refused for a reason of its own. Strategy
 SELECTION changes what the conclusion's checks would have to read, while
 strategy OPTIONS tune the same compute without changing what those checks see
 and are admitted. Two more are refused for reasons of a different kind —
-`--allow-unrelated-histories` for a footgun rather than a protection hole, and
+`--allow-unrelated-histories` for the hazard rather than a protection hole, and
 `--rerere-autoupdate` because what it stages is a REMEMBERED resolution nobody
 made in this operation.
 
