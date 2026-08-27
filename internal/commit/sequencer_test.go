@@ -117,10 +117,19 @@ func TestPipelineHonorsADeclaredSequencerContext(t *testing.T) {
 	ctx := context.Background()
 
 	declared := &coord.SequencerContext{Kind: sequencer.KindMerge}
+	// A conclusion declares BOTH halves: the context, and the shared-index base
+	// that says the commit's content is what that index holds. The base is what
+	// makes this request a conclusion rather than an ordinary commit made during
+	// a merge, so the exemption requires it -- without it the fixture's unmerged
+	// index refuses. It also seeds the temp index from a copy of the shared index
+	// instead of from the parent tree, which switches observed-move inference off
+	// for this request (inference keys on the parent-tree base); this test asserts
+	// parents and branch only, so nothing here reads that difference.
 	result, err := p.Execute(ctx, CommitRequest{
 		Message:   "conclude",
 		Files:     []string{"c.txt"},
 		Sequencer: declared,
+		IndexBase: IndexBaseSharedIndex,
 	})
 	if err != nil {
 		t.Fatalf("a declared merge conclusion was refused: %v", err)
@@ -138,5 +147,63 @@ func TestPipelineHonorsADeclaredSequencerContext(t *testing.T) {
 		Sequencer: &coord.SequencerContext{Kind: sequencer.KindRevert},
 	}); err == nil {
 		t.Error("an amend declaring a revert conclusion ran during a merge")
+	}
+}
+
+// The unmerged-index exemption needs BOTH declarations, and this pins the half
+// that a single field used to be enough for: a request carrying the sequencer
+// context while its commit is built on the PARENT TREE is not a conclusion, and
+// the guard refuses it.
+//
+// The amend and reword call sites are exactly that shape -- they pass the
+// parent-tree base hard-coded -- so a declared context can no longer carry them
+// past an index git itself refuses to commit beside. Both are pinned because
+// both call the guard, and a future edit that restores the either-one form
+// would go unnoticed on whichever one was left unpinned.
+func TestADeclaredContextAloneDoesNotExemptTheUnmergedGuard(t *testing.T) {
+	ctx := context.Background()
+
+	refusals := map[string]func(p *Pipeline, declared *coord.SequencerContext) error{
+		"amend": func(p *Pipeline, declared *coord.SequencerContext) error {
+			_, err := p.Amend(ctx, AmendRequest{
+				Message:   "amend during a merge",
+				FileSpecs: []FileSpec{{Path: "c.txt"}},
+				Sequencer: declared,
+			})
+			return err
+		},
+		"reword": func(p *Pipeline, declared *coord.SequencerContext) error {
+			_, err := p.Reword(ctx, RewordRequest{Message: "reword during a merge", Sequencer: declared})
+			return err
+		},
+	}
+	for name, call := range refusals {
+		t.Run(name, func(t *testing.T) {
+			// A fresh fixture per arm: under a regression the first arm would
+			// commit, and the second would then be judging a repository the
+			// first one moved.
+			sgDir, tip := conflictedMergeRepo(t)
+			p := newPipeline(sgDir)
+
+			// The declaration matches the merge git has in flight, so the
+			// in-flight guard passes it through and the unmerged-index guard is
+			// the one answering.
+			err := call(p, &coord.SequencerContext{Kind: sequencer.KindMerge})
+			if err == nil {
+				t.Fatal("a declared context alone exempted the unmerged-index guard")
+			}
+			var ce *CommitError
+			if !errors.As(err, &ce) {
+				t.Fatalf("refusal is untyped (%T: %v)", err, err)
+			}
+			if ce.Code != exitcode.UnmergedIndex {
+				t.Fatalf("refusal exits %d, want %d (UnmergedIndex): %v", ce.Code, exitcode.UnmergedIndex, err)
+			}
+			if !strings.Contains(err.Error(), "unmerged entries") {
+				t.Errorf("refusal does not name the unmerged entries: %v", err)
+			}
+
+			commitLandsOnBranch(t, "refs/heads/main", tip)
+		})
 	}
 }

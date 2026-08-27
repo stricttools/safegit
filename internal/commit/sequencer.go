@@ -53,13 +53,22 @@ func guardSequencer(ctx context.Context, declared *coord.SequencerContext, opera
 // operation git has in flight, which is the ONE thing that exempts a commit from
 // the unmerged-index refusal below.
 //
-// Two independent declarations say it, and either one is enough: the sequencer
+// Two independent declarations say it and BOTH are required: the sequencer
 // context, which names the operation being concluded, and the shared-index base,
-// which says the commit's content IS what that index holds. The conclusion path
-// sets both; asking for either keeps the exemption from turning on a single
-// field that a future caller might set for an unrelated reason.
+// which says the commit's content IS what that index holds. Either alone
+// describes something that is not a conclusion -- a context without the base is a
+// commit built from some other content while an operation happens to be in
+// flight, and the base without a context is a commit seeded from the shared index
+// with nothing claiming to resolve it -- and the exemption it would turn on is
+// the one refusal git itself makes unconditionally.
+//
+// Requiring both is the fail-closed direction: the conclusion path sets both, so
+// every caller that IS a conclusion is exempt today, and a future
+// half-configured request refuses instead of silently bypassing the
+// unmerged-index guard. The permissive form would have let one field set for an
+// unrelated reason stand in for the whole declaration.
 func concludesInFlightOperation(declared *coord.SequencerContext, base IndexBase) bool {
-	return declared != nil || base == IndexBaseSharedIndex
+	return declared != nil && base == IndexBaseSharedIndex
 }
 
 // guardUnmergedIndex refuses when the repository's SHARED index still carries
