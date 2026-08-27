@@ -947,23 +947,46 @@ next to what is admitted.
   undoable, and that none of them is git's.
 - **Ruling:** ours — deliberate
 
-### Merge strategies and strategy options are refused
+### Selecting a merge strategy is refused; tuning one is not
 
-- **git's idiom:** `-s ort`, `-s resolve`, `-X ours`, `-X theirs` and the rest
-  change how git computes and stages a merge, a pick or a revert.
-- **safegit:** refused on `merge`, `cherry-pick` and `revert` alike. Everything
-  safegit checks about the result — the completeness check over the conflicted
-  paths, the differential marker verification, the overwrite refusal that reads
-  `AUTO_MERGE` — is written against what the DEFAULT strategy stages, and a
-  strategy those checks cannot read would be protected by nothing while still
-  reporting as protected.
+- **git's idiom:** `-s ort`, `-s resolve` and the rest SELECT the strategy that
+  computes a merge, a pick or a revert; `-X ours`, `-X theirs`,
+  `-X ignore-space-change` and the rest are options handed TO the selected
+  strategy, tuning how it resolves.
+- **safegit:** the two halves of that vocabulary part company. Strategy
+  SELECTION is refused on `merge`, `cherry-pick` and `revert` alike; strategy
+  OPTIONS are honored on all three.
 
-  It is not hypothetical: a pick computed with `-s resolve` parks a content
-  conflict with no `AUTO_MERGE` at all, which is precisely the shape the
-  overwrite refusal has nothing to compare against — and the same shape
-  `merge-continue` refuses when raw git produces it. Refusing at the front door
-  is what keeps that check total rather than degraded.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+  Selection is refused because everything safegit checks about the result — the
+  completeness check over the conflicted paths, the differential marker
+  verification, the overwrite refusal that reads `AUTO_MERGE` — is written
+  against what the DEFAULT strategy stages, and a strategy those checks cannot
+  read would be protected by nothing while still reporting as protected. It is
+  not hypothetical: a pick computed with `-s resolve` parks a content conflict
+  with no `AUTO_MERGE` at all, which is precisely the shape the overwrite
+  refusal has nothing to compare against — and the same shape `merge-continue`
+  refuses when raw git produces it. Refusing at the front door is what keeps
+  that check total rather than degraded.
+
+  Options carry none of that. The compute stays ort under them, `AUTO_MERGE` is
+  written exactly as it is without them, the operation parks and concludes the
+  same way, and authorship is untouched — so every protection over the staged
+  result sees what it sees without one. What they change is the CONTENT
+  decisions inside the one strategy safegit's checks are written against, which
+  is a thing an operator may legitimately want and safegit has no reason to
+  withhold. Both spellings are honored, `-X` and `--strategy-option`, and every
+  occurrence of either: git honors all of them and so does safegit. On
+  `cherry-pick` and `revert` the SHORT `-s` is signoff rather than selection —
+  git's own spelling — so only the long `--strategy` is refused by name there.
+
+  The `--dry-run` preview forwards the options to the merge it computes rather
+  than previewing the unoptioned outcome, which would answer a different command
+  line without saying so. That forwarding has a version cost, and it is the one
+  place the two halves of safegit's answer can disagree: `git merge-tree` learned
+  `-X` in git 2.43, newer than the 2.38 floor the preview otherwise needs, so on
+  a git in between the real run honors the option while the preview refuses,
+  naming the floor.
+- **Ruling:** ours — deliberate
 
 ### `--squash` is refused
 
@@ -1208,9 +1231,9 @@ allowlist tables hold.
 | Command | Arguments | Options it honors |
 |---|---|---|
 | `switch` | one existing branch name, or nothing with `-c` | `-c`/`--create` |
-| `merge` | exactly one commit-ish (branch, tag or object name) | `-m`/`--message`, `-F`/`--file`, `--no-edit`, `--ff`/`--no-ff`/`--ff-only`/`--no-commit` (safegit's own selectors; they never reach git), `--signoff`/`--no-signoff`, `--log`/`--no-log`, `--into-name`, `--stat`/`--no-stat`, `--allow-unrelated-histories`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
-| `cherry-pick` | exactly one commit | `-x`, `-s`/`--signoff`, `--no-edit`, `-m`/`--mainline`, `-n`/`--no-commit`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
-| `revert` | exactly one commit | `-s`/`--signoff`, `--no-edit`, `-m`/`--mainline`, `-n`/`--no-commit`, `--reference`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
+| `merge` | exactly one commit-ish (branch, tag or object name) | `-m`/`--message`, `-F`/`--file`, `--no-edit`, `--ff`/`--no-ff`/`--ff-only`/`--no-commit` (safegit's own selectors; they never reach git), `--signoff`/`--no-signoff`, `--log`/`--no-log`, `--into-name`, `--stat`/`--no-stat`, `--allow-unrelated-histories`, `-X`/`--strategy-option`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
+| `cherry-pick` | exactly one commit | `-x`, `-s`/`--signoff`, `--no-edit`, `-m`/`--mainline`, `-X`/`--strategy-option`, `-n`/`--no-commit`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
+| `revert` | exactly one commit | `-s`/`--signoff`, `--no-edit`, `-m`/`--mainline`, `-X`/`--strategy-option`, `-n`/`--no-commit`, `--reference`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
 | `pull` | an optional remote and branch | `--merge-strategy ff\|ff-only\|no-ff` (required, no default) |
 | `rebase` | exactly one upstream | `--onto`, `-i`/`--interactive`, `--continue`/`--abort`/`--skip` (git's own, taking no argument), `--autostash` |
 | `reset` | one commit | `--soft`, `--mixed`, `--hard`, `--merge`, `--keep` |
@@ -1222,6 +1245,12 @@ writes there — the pipeline commits that draft — and refused when it would c
 how git COMMITS, since nothing of git's commit path runs. `--signoff` is allowed
 because git writes the trailer into the draft at the compute step; `--gpg-sign`
 is not, because the pipeline is what commits here, and it does not sign.
+
+Reaching the compute step is what makes an option ELIGIBLE, not what settles it:
+a compute-step option may still be refused for a reason of its own. Strategy
+SELECTION is the standing case — it changes what the conclusion's checks would
+have to read — while strategy OPTIONS, which tune the same compute without
+changing what those checks see, are admitted.
 
 One spelling in the code's tables is not in this one: `--continue` passes each
 command's option allowlist and is then refused by name further in, since

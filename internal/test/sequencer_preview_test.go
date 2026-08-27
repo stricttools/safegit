@@ -283,15 +283,21 @@ func previewTree(t *testing.T, stdout string) string {
 // refused with its reason, rather than previewed under rules the real run would
 // not use.
 //
-// The strategy and --squash rows this table used to carry moved to the
-// commands' own subset refusals: safegit's merge, cherry-pick and revert do not
-// implement those options at ALL any more, so the refusal an operator meets is
-// the command's rather than the preview's, and it applies to the real run too
-// (see TestMergeSubsetRefusalsApplyToAPreviewToo and
-// TestPickAndRevertSubsetRefusalsApplyToAPreviewToo). What is left to the
-// criterion is the command line that names no operation to compute at all: a
-// state-control form acts on what git already has in flight, which is a
-// different question from what this command line would do.
+// The strategy-SELECTION and --squash rows this table used to carry moved to
+// the commands' own subset refusals: safegit's merge, cherry-pick and revert do
+// not implement those options at all, so the refusal an operator meets is the
+// command's rather than the preview's, and it applies to the real run too (see
+// TestMergeSubsetRefusalsApplyToAPreviewToo and
+// TestPickAndRevertSubsetRefusalsApplyToAPreviewToo). Strategy OPTIONS left the
+// table by the other door: they are honored, and the preview FORWARDS them to
+// the merge it computes (see TestThePreviewForwardsStrategyOptions), so there
+// is nothing to refuse -- except on a git below the 2.43 floor merge-tree's own
+// `-X` carries, which is the one refusal of this family left.
+//
+// What is left to the criterion here is the command line that names no
+// operation to compute at all: a state-control form acts on what git already
+// has in flight, which is a different question from what this command line
+// would do.
 func TestPreviewRefusesWhatItCannotCompute(t *testing.T) {
 	cases := []struct {
 		name string

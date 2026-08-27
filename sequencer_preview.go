@@ -10,6 +10,7 @@ import (
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/gitexec"
+	"github.com/smm-h/safegit/internal/gitversion"
 )
 
 // Honest previews for merge, cherry-pick and revert.
@@ -51,7 +52,7 @@ func previewSequencerOperation(flags globalFlags, verb string, args []string, re
 	// a would-do log listing a command safegit just declined to preview would
 	// state something that is not going to happen.
 	parsed := parseGitArgs(verb, args)
-	if reason := previewRefusal(verb, parsed); reason != "" {
+	if reason := previewRefusal(flags.ctx(), verb, parsed); reason != "" {
 		fmt.Fprintf(os.Stderr, "error: --dry-run cannot preview this %s: %s\n", verb, reason)
 		fmt.Fprintf(os.Stderr, "  safegit's preview computes the real outcome with git's own merge engine\n")
 		fmt.Fprintf(os.Stderr, "  (git merge-tree --write-tree), and a preview computed under different rules\n")
@@ -86,6 +87,54 @@ func previewSequencerOperation(flags globalFlags, verb string, args []string, re
 	return previewReplay(flags, ctx, verb, parsed)
 }
 
+// strategyOptionArgv collects every strategy option on the command line, ready
+// to hand to merge-tree.
+//
+// EVERY occurrence, because git honors every one of them: the argv reader's
+// Find returns only the first, so a single read would silently drop the second
+// half of `-X ours -X ignore-space-change` and preview a tree the real run does
+// not produce. And as SEPARATE elements, name then value, rather than the Raw
+// member the messages quote: merge-tree rejects the space-joined `-X ours` as
+// one argument (probed).
+//
+// The two spellings are two distinct option NAMES rather than one folded into
+// the other, which is why both are asked for here.
+func strategyOptionArgv(parsed gitArgs) []string {
+	var out []string
+	for _, o := range parsed.Options {
+		if o.Name != "-X" && o.Name != "--strategy-option" {
+			continue
+		}
+		out = append(out, o.Name, o.Value)
+	}
+	return out
+}
+
+// previewStrategyOptionFloor is the version floor the forwarding above needs,
+// asked only where the forwarding happens.
+//
+// merge-tree learned `-X` in git 2.43, which is newer than the 2.38 floor
+// `--write-tree` itself carries, so an operator on a git in between can RUN a
+// merge with a strategy option while its preview cannot be computed. The
+// question is therefore CONDITIONAL: a command line carrying no strategy option
+// is previewed on every git that meets the older floor, and never refused for
+// wanting the newer one.
+//
+// requireFloor is the check itself rather than a call reached for inside,
+// because on a git that satisfies the floor a real check can only answer yes --
+// and the conditional would then be untestable, both branches looking the same
+// from outside. Production passes the standard floor-check path, which is the
+// one authority on what safegit's git floors are.
+func previewStrategyOptionFloor(parsed gitArgs, requireFloor func() error) string {
+	if len(strategyOptionArgv(parsed)) == 0 {
+		return ""
+	}
+	if err := requireFloor(); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
 // previewRefusal decides whether this command line's outcome is computable, and
 // returns the operator-facing reason when it is not.
 //
@@ -97,22 +146,23 @@ func previewSequencerOperation(flags globalFlags, verb string, args []string, re
 // message flags -- changes no tree and is accepted.
 //
 // Applying that criterion needs no list of git's whole vocabulary: safegit's
-// merge-tree argv is fixed (--write-tree, a merge base, two commits), so the
-// question for any option is only whether it is one of the few that reach the
-// merge machinery.
-func previewRefusal(verb string, parsed gitArgs) string {
+// merge-tree argv carries --write-tree, a merge base, two commits and the
+// STRATEGY OPTIONS the command line asked for, so the question for any other
+// option is only whether it is one of the few that reach the merge machinery.
+//
+// Strategy options themselves are FORWARDED rather than refused (see
+// strategyOptionArgv): previewing the unoptioned merge instead would answer a
+// different command line without saying so. What they need is a newer git than
+// the rest of the preview does, which is the one refusal left in this family.
+func previewRefusal(ctx context.Context, verb string, parsed gitArgs) string {
 	if len(parsed.AfterDoubleDash) > 0 {
 		return "it carries a pathspec, which limits what the operation touches and which merge-tree has no way to express"
 	}
 
-	if o, ok := parsed.Find("-s", "--strategy"); ok && verb == "merge" && !isOrtStrategy(o.Value) {
-		return fmt.Sprintf("%q selects a merge strategy other than ort, and merge-tree implements only ort", o.Raw)
-	}
-	if o, ok := parsed.Find("--strategy"); ok && verb != "merge" && !isOrtStrategy(o.Value) {
-		return fmt.Sprintf("%q selects a merge strategy other than ort, and merge-tree implements only ort", o.Raw)
-	}
-	if o, ok := parsed.Find("-X", "--strategy-option"); ok {
-		return fmt.Sprintf("%q changes how the merge resolves, and safegit's preview does not forward strategy options to the merge it computes", o.Raw)
+	if reason := previewStrategyOptionFloor(parsed, func() error {
+		return git.RequireFeature(ctx, gitversion.MergeTreeStrategyOption)
+	}); reason != "" {
+		return reason
 	}
 	if o, ok := parsed.Find("--squash"); ok {
 		return fmt.Sprintf("%q stages the merge's result instead of committing it, and what it leaves behind is a staged index rather than the tree merge-tree computes", o.Raw)
@@ -124,17 +174,6 @@ func previewRefusal(verb string, parsed gitArgs) string {
 		return "it names no commit to " + verb
 	}
 	return ""
-}
-
-// isOrtStrategy reports whether a --strategy value names the strategy
-// merge-tree implements. The default (an unset value) is ort, and `recursive`
-// is git's own long-standing alias for it.
-func isOrtStrategy(value string) bool {
-	switch value {
-	case "", "ort", "recursive":
-		return true
-	}
-	return false
 }
 
 // previewMerge computes what `safegit merge <branch>` would do.
@@ -220,7 +259,7 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs) int {
 		return exitcode.OK
 	}
 
-	result, err := git.MergeTree(ctx, "", head, otherSHA)
+	result, err := git.MergeTree(ctx, "", head, otherSHA, strategyOptionArgv(parsed)...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General
@@ -273,7 +312,7 @@ func previewReplay(flags globalFlags, ctx context.Context, verb string, parsed g
 		return exitcode.General
 	}
 
-	result, err := git.MergeTree(ctx, base, ours, theirs)
+	result, err := git.MergeTree(ctx, base, ours, theirs, strategyOptionArgv(parsed)...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return exitcode.General

@@ -38,6 +38,12 @@ type MergeTreeResult struct {
 // incoming side. Empty means "let git find the merge base itself", which is the
 // branch-merge case.
 //
+// extra are further merge-tree options, each its own element, inserted before
+// the two sides. It carries the STRATEGY OPTIONS a previewed command line asked
+// for, so the previewed tree is the one that command line really produces.
+// Their own version floor is newer than this function's and belongs to the
+// caller that knows whether any were asked for -- see previewRefusal.
+//
 // The version floor is checked here rather than at each caller:
 // `--write-tree` is git 2.38, and on an older git the flag does not exist at
 // all, so an unchecked call would fail with git's usage text instead of a

@@ -1711,7 +1711,8 @@ func refuseParkedRawGitShape(flags globalFlags, gitDir string, state sequencer.S
 //
 // DIVERGENCE: git concludes a conflict computed by any strategy; safegit
 // concludes only the ones the default strategy recorded. Cataloged in
-// docs/divergences.md as "Merge strategies and strategy options are refused"
+// docs/divergences.md as "Selecting a merge strategy is refused; tuning one is
+// not"
 // (the front-door half) and "Every commit made through safegit is safegit's;
 // the ones it cannot write, it refuses" (this raw-git half).
 func (op continueOp) refuseUnreadableConflict(ctx context.Context, sides map[string]conflict.Sides) int {
