@@ -144,7 +144,7 @@ Two shapes fail that question and are REFUSED (exit **29**), naming the literal 
 
 A relative target that resolves inside the repository is portable and commits as usual, including one that climbs out of its own directory with `..` and comes back down, and including one whose target does not exist yet.
 
-The remedies differ, so the refusal states the one that fits: an absolute in-repository target should be spelled relative to the link, while a target that leaves the repository has to be pointed back inside. A commit naming offenders of both shapes gets ONE refusal with the offenders grouped by shape, each group followed by its own remedy.
+The remedies differ, so the refusal states the one that fits the shape. A relative target that leaves the repository has to be pointed back inside. An absolute target gets both halves of the answer, because the judgment never resolves it and the group therefore holds both cases: spell it relative to the link if it points inside the repository, and if it points outside there is nothing portable to spell -- point the link inside instead. A commit naming offenders of both shapes gets ONE refusal with the offenders grouped by shape, each group followed by its own remedy.
 
 `--allow-non-portable-targets` elects committing such a link anyway, and restores the one-line notice on stderr saying the link will not resolve elsewhere. The election is a fact about ONE invocation and is recorded nowhere, so a repository that deliberately carries such a link needs the flag on EVERY later commit that names that link or sweeps it up by directory expansion.
 
