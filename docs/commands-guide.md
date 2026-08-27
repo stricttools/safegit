@@ -65,7 +65,7 @@ Use `safegit commit` instead of `git add` + `git commit` whenever multiple sessi
 | `--hunks` | | optional; omitted means every named file is committed whole | Commit only the selected hunks of one file, as `path:1,3` or `path:2-4`; repeatable, once per path |
 | `--untrack` | | optional; omitted means nothing is untracked | Stop tracking a path, leaving the file on disk: the commit records its removal from the index (repeatable) |
 | `--moved` | | optional; omitted means the commit declares no moves | Declare that content moved, as `'old -> new'` (repeatable). End BOTH paths with a slash for a whole subtree. The old path must be tracked in the commit's parent and gone from disk, and the new one must exist |
-| `--allow-escaping-targets` | | optional; omitted means such a link is refused | Record a symlink whose target resolves outside the repository, as the link text. Omitted (and with `--no-allow-escaping-targets`) the commit is refused with the target named |
+| `--allow-non-portable-targets` | | optional; omitted means such a link is refused | Record a symlink whose target text will not resolve in another checkout -- an absolute target, or a relative one resolving outside the repository -- as the link text. Omitted (and with `--no-allow-non-portable-targets`) the commit is refused with the target named |
 | `--moved-retract` | | optional; omitted means the commit retracts nothing | Retract a move record declared earlier in this branch's history, by its id -- the token a `Moved:` trailer begins with (repeatable, one id each). The id must name a record that exists and is not already retracted in the history this commit is built on; one that does not is refused (exit 19) rather than written, and every bad id is named. `--trailer 'Moved-Retract: <id>'` writes an unchecked retraction instead |
 
 ### Arguments
@@ -133,15 +133,20 @@ safegit commit --amend --moved 'src/parse.go -> internal/parse/parse.go'
 safegit commit --allow-empty -m "trigger CI rebuild"
 ```
 
-### Symlinks, and the targets that leave the repository
+### Symlinks, and the targets that will not resolve elsewhere
 
-A symlink is committed as its LINK TEXT -- the string it points at -- exactly as git records one. safegit adds one rule about which link texts it will record.
+A symlink is committed as its LINK TEXT -- the string it points at -- exactly as git records one. safegit adds one rule about which link texts it will record, and the rule is PORTABILITY: since the text is all that gets stored, the only question is what a checkout somewhere else makes of it.
 
-A link whose target resolves **outside the repository** is REFUSED (exit **29**), naming the literal target, with nothing staged and nothing committed. Such a link is a fact about one machine: in anybody else's checkout it resolves to nothing, or -- worse -- to a different file that happens to sit at that absolute path. Committing it publishes a reference the repository cannot honor.
+Two shapes fail that question and are REFUSED (exit **29**), naming the literal target, with nothing staged and nothing committed:
 
-`--allow-escaping-targets` elects committing it anyway, and restores the one-line notice on stderr saying the link will not resolve elsewhere. The refusal covers ADDING or STAGING escaping link content, which is where a machine-specific link enters history; `safegit mv` moving an already-tracked escaping link is untouched, because a move-only commit carries the blob across and never re-reads the link.
+- an **absolute** target, whether or not it resolves inside this checkout -- it resolves against a machine's filesystem rather than against the repository, so a checkout at any other path finds nothing there, or finds a file the repository never carried;
+- a **relative** target that resolves **outside the repository** -- portable in spelling, but pointing at something the repository does not carry.
 
-An absolute target that resolves INSIDE the repository is accepted as it stands, and is a review item rather than a settled rule -- it is machine-specific in the same way, since it names a path this checkout happens to sit at.
+A relative target that resolves inside the repository is portable and commits as usual, including one that climbs out of its own directory with `..` and comes back down, and including one whose target does not exist yet.
+
+The remedies differ, so the refusal states the one that fits: an absolute in-repository target should be spelled relative to the link, while a target that leaves the repository has to be pointed back inside. A commit naming offenders of both shapes gets ONE refusal with the offenders grouped by shape, each group followed by its own remedy.
+
+`--allow-non-portable-targets` elects committing such a link anyway, and restores the one-line notice on stderr saying the link will not resolve elsewhere. The refusal covers ADDING or STAGING that link content, which is where a machine-specific link enters history; `safegit mv` moving an already-tracked one is untouched, because a move-only commit carries the blob across and never re-reads the link.
 
 ### Safety Guarantees
 
@@ -1992,7 +1997,7 @@ merge exits 1 the way git does -- and the operation parks for the matching
 | 26 | The operation's ref move is real, but a step after it did not finish (aftercare) |
 | 27 | A conclusion's working-tree write would destroy a hand edit no side of the conflict accounts for |
 | 28 | The shared index carries an unmerged entry, so no commit can be built beside it |
-| 29 | A named symlink's target leaves the repository (`--allow-escaping-targets` records it anyway) |
+| 29 | A named symlink's target will not resolve in another checkout: absolute, or outside the repository (`--allow-non-portable-targets` records it anyway) |
 | 30 | A history rewrite was refused before any ref moved (nothing changed) |
 | 31 | A history rewrite stands, but post-rewrite verification found residue or skipped the working-tree sync |
 | 32 | A concurrent change altered the moves this commit's delta witnesses; nothing was committed, so run the command again |

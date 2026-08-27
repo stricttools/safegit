@@ -343,93 +343,159 @@ func resolveParentSymlinks(absPath string) string {
 	return filepath.Join(resolvedDir, base)
 }
 
-// escapingLinkTarget returns the target text of a symlink that points outside
-// the repository, and the empty string for anything else -- a regular file, a
-// symlink that stays inside, or a path that is not there at all.
+// targetShape says WHY a symlink's target text will not resolve in another
+// checkout, because the two reasons have different remedies and the refusal
+// states the one that fits.
+type targetShape int
+
+const (
+	// portableTarget is everything the refusal leaves alone: a regular file, a
+	// path that is not there at all, or a relative target that resolves inside
+	// the repository -- including one that traverses out of its own directory
+	// with `..` and comes back down.
+	portableTarget targetShape = iota
+	// absoluteTarget is a target spelled as an absolute path, whether or not it
+	// resolves inside this repository. The text names a location on THIS
+	// machine, so a checkout anywhere else resolves it somewhere the repository
+	// never chose.
+	absoluteTarget
+	// outsideTarget is a relative target that resolves outside the repository:
+	// portable in spelling, but pointing at something the repository does not
+	// carry.
+	outsideTarget
+)
+
+// nonPortableLinkTarget returns the target text of a symlink whose recorded
+// text will not resolve in another checkout, together with the shape that says
+// why. Anything else answers with the empty string and portableTarget.
 //
-// git records such a link as its TEXT and nothing more, so the object it would
-// write resolves to nothing in anyone else's checkout -- and where it resolves
-// at all, resolves to a file the repository never carried. safegit refuses it
-// (refuseEscapingLinks) rather than recording a reference to a place only this
-// machine has; --allow-escaping-targets is the election that records it anyway
-// and restores the notice the refusal replaced.
-func escapingLinkTarget(repoRoot, rel string) string {
+// git records a link as its TEXT and nothing more, so what a checkout at
+// another path -- on another machine, under another directory -- makes of that
+// text is the whole question. An ABSOLUTE target resolves against that
+// machine's filesystem rather than against the repository, and a RELATIVE one
+// that climbs out of the repository names a place the repository never
+// carried; both resolve to nothing there, or to a file that has nothing to do
+// with this project. safegit refuses both (refuseNonPortableLinks) rather than
+// recording a reference only this checkout can honor;
+// --allow-non-portable-targets is the election that records it anyway and
+// restores the notice the refusal replaced.
+func nonPortableLinkTarget(repoRoot, rel string) (string, targetShape) {
 	abs := git.Anchor(repoRoot, rel)
 	info, err := os.Lstat(abs)
 	if err != nil || info.Mode()&os.ModeSymlink == 0 {
-		return ""
+		return "", portableTarget
 	}
 	target, err := os.Readlink(abs)
 	if err != nil {
-		return ""
+		return "", portableTarget
 	}
-	resolved := target
-	if !filepath.IsAbs(resolved) {
-		resolved = filepath.Join(filepath.Dir(abs), target)
+	// An absolute target is judged on its spelling alone: where it resolves in
+	// THIS checkout says nothing about where it resolves in another one, which
+	// is the only question the recorded text has to answer.
+	if filepath.IsAbs(target) {
+		return target, absoluteTarget
 	}
-	resolved = filepath.Clean(resolved)
+	resolved := filepath.Clean(filepath.Join(filepath.Dir(abs), target))
 	within, err := filepath.Rel(repoRoot, resolved)
 	if err != nil || within == ".." || strings.HasPrefix(within, ".."+string(filepath.Separator)) {
-		return target
+		return target, outsideTarget
 	}
-	return ""
+	return "", portableTarget
 }
 
-// noticeEscapingLinks writes one stderr line per staged symlink whose target
-// leaves the repository. It runs once per operation, after intake has settled,
-// so a CAS retry cannot repeat it.
+// The two remedies. They differ because the shapes do: an absolute target that
+// lands inside the repository has a portable spelling to be written in, while a
+// target that leaves the repository has nowhere portable to point at as it
+// stands. Both end at the same election, which is the only way to say the link
+// is meant as it is.
+const (
+	absoluteTargetRemedy = "  a symlink is committed as its target TEXT, so an absolute one is recorded exactly\n" +
+		"  as it is spelled: a checkout at any other path resolves it to nothing, or to a file\n" +
+		"  the repository never carried. Spell the target relative to the link, or pass\n" +
+		"  --allow-non-portable-targets to record it as it is."
+
+	outsideTargetRemedy = "  a symlink is committed as its target TEXT, so this records a reference to a place\n" +
+		"  only this machine has: in another checkout it resolves to nothing, or to a file the\n" +
+		"  repository never carried. Point the link inside the repository, or pass\n" +
+		"  --allow-non-portable-targets to record it as it is."
+)
+
+// noticeNonPortableLinks writes one stderr line per staged symlink whose target
+// text will not resolve in another checkout. It runs once per operation, after
+// intake has settled, so a CAS retry cannot repeat it.
 //
 // It is what the ELECTION produces: reaching it at all means the caller passed
-// --allow-escaping-targets, so the link is being recorded deliberately and the
-// line says what the recorded object will and will not resolve to.
-func noticeEscapingLinks(repoRoot string, paths []string) {
+// --allow-non-portable-targets, so the link is being recorded deliberately and
+// the line says what the recorded object will and will not resolve to. Each
+// shape says its own reason, and every line carries the same statement of what
+// is being recorded, so a control asserting silence has one phrase to name.
+func noticeNonPortableLinks(repoRoot string, paths []string) {
 	for _, path := range paths {
-		if target := escapingLinkTarget(repoRoot, path); target != "" {
+		target, shape := nonPortableLinkTarget(repoRoot, path)
+		switch shape {
+		case absoluteTarget:
+			fmt.Fprintf(os.Stderr, "notice: %s is a symlink to %s, an absolute path this checkout happens to sit at; the commit records the link text, which will not resolve in a checkout at another path\n", path, target)
+		case outsideTarget:
 			fmt.Fprintf(os.Stderr, "notice: %s is a symlink to %s, which is outside the repository; the commit records the link text, which will not resolve in another checkout\n", path, target)
 		}
 	}
 }
 
-// refuseEscapingLinks is the verdict on every symlink intake resolved: a target
-// that leaves the repository is refused, unless the caller elected to record it.
+// refuseNonPortableLinks is the verdict on every symlink intake resolved: a
+// target whose recorded text will not resolve in another checkout is refused,
+// unless the caller elected to record it.
 //
 // The refusal names the literal target -- the text the link holds, not a
 // resolved absolute path -- because that text is what would be committed and
 // what the operator has to recognize to decide the link is what they meant.
 // Every offender is named in one refusal rather than one at a time: a commit
 // naming several such links is one statement, and fixing them one command at a
-// time is the discovery loop the collected refusal exists to remove.
+// time is the discovery loop the collected refusal exists to remove. Offenders
+// are GROUPED BY SHAPE inside that one refusal, because the two shapes take
+// different advice and a single remedy would be wrong for half the list.
 //
 // It runs at the END of intake, before anything is staged and before the CAS
 // loop, so nothing is written when it fires and commit and --amend inherit it
 // from the one place both of them resolve their files.
 //
 // docs/divergences.md carries this as an entry of its own, rewritten when the
-// notice became a refusal plus the election flag; the entry that still
-// described a plain commit-with-a-notice is the one being replaced, not a
+// notice became a refusal plus the election flag and again when the class
+// widened from targets that leave the repository to targets that will not
+// resolve elsewhere; the superseded entry is the one being replaced, never a
 // second one to add beside it.
-func refuseEscapingLinks(repoRoot string, paths []string, allow bool) error {
+func refuseNonPortableLinks(repoRoot string, paths []string, allow bool) error {
 	if allow {
-		noticeEscapingLinks(repoRoot, paths)
+		noticeNonPortableLinks(repoRoot, paths)
 		return nil
 	}
-	var offenders []string
+	var absolute, outside []string
 	for _, path := range paths {
-		if target := escapingLinkTarget(repoRoot, path); target != "" {
-			offenders = append(offenders, fmt.Sprintf("  %s -> %s", path, target))
+		target, shape := nonPortableLinkTarget(repoRoot, path)
+		switch shape {
+		case absoluteTarget:
+			absolute = append(absolute, fmt.Sprintf("    %s -> %s", path, target))
+		case outsideTarget:
+			outside = append(outside, fmt.Sprintf("    %s -> %s", path, target))
 		}
 	}
-	if len(offenders) == 0 {
+	if len(absolute) == 0 && len(outside) == 0 {
 		return nil
 	}
+	var msg strings.Builder
+	msg.WriteString("symlink target(s) that will not resolve in another checkout:")
+	if len(absolute) > 0 {
+		msg.WriteString("\n  absolute targets, which name a path on this machine rather than a place in the repository:\n")
+		msg.WriteString(strings.Join(absolute, "\n"))
+		msg.WriteString("\n" + absoluteTargetRemedy)
+	}
+	if len(outside) > 0 {
+		msg.WriteString("\n  targets that leave the repository:\n")
+		msg.WriteString(strings.Join(outside, "\n"))
+		msg.WriteString("\n" + outsideTargetRemedy)
+	}
 	return &CommitError{
-		Code: exitcode.EscapingSymlinkTarget,
-		Message: fmt.Sprintf("symlink target(s) outside the repository:\n%s\n"+
-			"  a symlink is committed as its target TEXT, so this records a reference to a place\n"+
-			"  only this machine has: in another checkout it resolves to nothing, or to a file the\n"+
-			"  repository never carried. Point the link inside the repository, or pass\n"+
-			"  --allow-escaping-targets to record it as it is.",
-			strings.Join(offenders, "\n")),
+		Code:    exitcode.NonPortableTarget,
+		Message: msg.String(),
 	}
 }
 
@@ -441,10 +507,11 @@ func refuseEscapingLinks(repoRoot string, paths []string, allow bool) error {
 // tracked-path judgement is made against it, because a path's presence in HEAD
 // says nothing about a commit built on another branch.
 //
-// allowEscapingTargets is the caller's election to record a symlink whose
-// target leaves the repository. Without it such a link is refused here, at the
-// end of intake -- see refuseEscapingLinks.
-func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, specs []FileSpec, untrack []string, allowEscapingTargets bool) (*intake, error) {
+// allowNonPortableTargets is the caller's election to record a symlink whose
+// target text will not resolve in another checkout -- an absolute one, or a
+// relative one landing outside the repository. Without it such a link is
+// refused here, at the end of intake -- see refuseNonPortableLinks.
+func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, specs []FileSpec, untrack []string, allowNonPortableTargets bool) (*intake, error) {
 	in := &intake{}
 	tree := newTreeIndex(ctx, baseRev)
 	seen := make(map[string]bool)
@@ -576,7 +643,7 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 	}
 
 	sort.Strings(in.skipped)
-	if err := refuseEscapingLinks(repoRoot, links, allowEscapingTargets); err != nil {
+	if err := refuseNonPortableLinks(repoRoot, links, allowNonPortableTargets); err != nil {
 		return nil, err
 	}
 	return in, nil
@@ -788,7 +855,7 @@ func (p *Pipeline) validateNamedPath(ctx context.Context, repoRoot, rel, baseRev
 
 // expansion is what a directory argument produced: the paths to stage, the
 // gitignored paths passed over, and the symlinks seen on the way, which are the
-// only members worth asking about an escaping target.
+// only members whose target text is worth judging for portability.
 type expansion struct {
 	members []string
 	ignored []string

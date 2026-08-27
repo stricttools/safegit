@@ -261,7 +261,7 @@ func orEmpty(list []string) []string {
 // it takes the envelope the framework emits below a handler's return (see
 // aftercare.go). Every refusal above the ref update still dies -- there is
 // nothing to report when nothing was written.
-func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, allowEscapingTargets bool, trailers []string, files []string, hunks []string, untrack []string, moved []string, movedRetract []string) int {
+func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, allowNonPortableTargets bool, trailers []string, files []string, hunks []string, untrack []string, moved []string, movedRetract []string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -282,7 +282,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 			die(exitcode.Usage, "-F cannot be used with --amend")
 		}
 
-		return runCommitAmend(flags, gitDir, messages, branch, allowEscapingTargets, trailers, files, hunks, untrack, moved, movedRetract)
+		return runCommitAmend(flags, gitDir, messages, branch, allowNonPortableTargets, trailers, files, hunks, untrack, moved, movedRetract)
 	}
 
 	// Normal commit path
@@ -344,16 +344,16 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 
 	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
 	result, err := p.Execute(flags.ctx(), commit.CommitRequest{
-		Message:              msg,
-		FileSpecs:            fileSpecs,
-		Branch:               branch,
-		Trailers:             trailers,
-		AllowEmpty:           allowEmpty,
-		AllowEscapingTargets: allowEscapingTargets,
-		DryRun:               flags.dryRun,
-		Untrack:              untrack,
-		Moved:                moved,
-		MovedRetract:         movedRetract,
+		Message:                 msg,
+		FileSpecs:               fileSpecs,
+		Branch:                  branch,
+		Trailers:                trailers,
+		AllowEmpty:              allowEmpty,
+		AllowNonPortableTargets: allowNonPortableTargets,
+		DryRun:                  flags.dryRun,
+		Untrack:                 untrack,
+		Moved:                   moved,
+		MovedRetract:            movedRetract,
 	})
 	// A commit-stands verdict is not a refusal: the ref moved, so the run goes
 	// on to report the commit rather than dying above the envelope seam.
@@ -500,7 +500,7 @@ func (u effectsRefUpdate) Update(_ context.Context, ref, newSHA, expected string
 	return nil
 }
 
-func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch string, allowEscapingTargets bool, trailers []string, files []string, hunks []string, untrack []string, moved []string, movedRetract []string) int {
+func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch string, allowNonPortableTargets bool, trailers []string, files []string, hunks []string, untrack []string, moved []string, movedRetract []string) int {
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
@@ -561,15 +561,15 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		}
 
 		result, err := p.Amend(flags.ctx(), commit.AmendRequest{
-			Message:              msg,
-			FileSpecs:            fileSpecs,
-			Branch:               branch,
-			Trailers:             trailers,
-			AllowEscapingTargets: allowEscapingTargets,
-			DryRun:               flags.dryRun,
-			Untrack:              untrack,
-			Moved:                moved,
-			MovedRetract:         movedRetract,
+			Message:                 msg,
+			FileSpecs:               fileSpecs,
+			Branch:                  branch,
+			Trailers:                trailers,
+			AllowNonPortableTargets: allowNonPortableTargets,
+			DryRun:                  flags.dryRun,
+			Untrack:                 untrack,
+			Moved:                   moved,
+			MovedRetract:            movedRetract,
 		})
 		if partial := commitStands(err); partial != nil && result != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)

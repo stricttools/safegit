@@ -100,7 +100,7 @@ func TestCommitSymlink_LinkToCommittedFile(t *testing.T) {
 // TestCommitSymlinkEscapingTargetIsCommittedWhenElected: a symlink whose
 // target leaves the repository is REFUSED (see
 // TestWave2CommitEscapingSymlinkIsRefused) -- the object it would write is a
-// reference to a place only this machine has. --allow-escaping-targets is the
+// reference to a place only this machine has. --allow-non-portable-targets is the
 // election, and it restores the one-line notice the refusal replaced: the link
 // text is what gets recorded, and it resolves to nothing in another checkout.
 func TestCommitSymlinkEscapingTargetIsCommittedWhenElected(t *testing.T) {
@@ -110,7 +110,7 @@ func TestCommitSymlinkEscapingTargetIsCommittedWhenElected(t *testing.T) {
 		t.Fatalf("creating symlink: %v", err)
 	}
 
-	stdout, stderr, code := runSafegit(t, dir, "commit", "--allow-escaping-targets",
+	stdout, stderr, code := runSafegit(t, dir, "commit", "--allow-non-portable-targets",
 		"-m", "add escaping link", "--", "escapes")
 	if code != 0 {
 		t.Fatalf("an elected escaping symlink was refused (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
@@ -142,14 +142,14 @@ func TestCommitEscapingSymlinkRefusalNamesTheLiteralTarget(t *testing.T) {
 	before := testutil.Rev(t, dir, "HEAD")
 
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add escaping link", "--", "escapes")
-	if code != exitcode.EscapingSymlinkTarget {
-		t.Errorf("an escaping symlink exited %d, want %d (EscapingSymlinkTarget); stderr: %s",
-			code, exitcode.EscapingSymlinkTarget, stderr)
+	if code != exitcode.NonPortableTarget {
+		t.Errorf("an escaping symlink exited %d, want %d (NonPortableTarget); stderr: %s",
+			code, exitcode.NonPortableTarget, stderr)
 	}
 	if !strings.Contains(stderr, target) {
 		t.Errorf("the refusal must name the literal target %q; stderr:\n%s", target, stderr)
 	}
-	if !strings.Contains(stderr, "--allow-escaping-targets") {
+	if !strings.Contains(stderr, "--allow-non-portable-targets") {
 		t.Errorf("the refusal must name the flag that elects recording it; stderr:\n%s", stderr)
 	}
 	if after := testutil.Rev(t, dir, "HEAD"); after != before {
@@ -174,9 +174,9 @@ func TestCommitEscapingSymlinkRefusalNamesEveryOffender(t *testing.T) {
 	}
 
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add two escaping links", "--", "one", "two")
-	if code != exitcode.EscapingSymlinkTarget {
-		t.Fatalf("two escaping symlinks exited %d, want %d (EscapingSymlinkTarget); stderr: %s",
-			code, exitcode.EscapingSymlinkTarget, stderr)
+	if code != exitcode.NonPortableTarget {
+		t.Fatalf("two escaping symlinks exited %d, want %d (NonPortableTarget); stderr: %s",
+			code, exitcode.NonPortableTarget, stderr)
 	}
 	for _, want := range []string{"../elsewhere/first.txt", "../elsewhere/second.txt"} {
 		if !strings.Contains(stderr, want) {
@@ -198,9 +198,9 @@ func TestAmendEscapingSymlinkIsRefusedAndElects(t *testing.T) {
 	before := testutil.Rev(t, dir, "HEAD")
 
 	_, stderr, code := runSafegit(t, dir, "commit", "--amend", "-m", "amend in the link", "--", "escapes")
-	if code != exitcode.EscapingSymlinkTarget {
-		t.Errorf("an --amend of an escaping symlink exited %d, want %d (EscapingSymlinkTarget); stderr: %s",
-			code, exitcode.EscapingSymlinkTarget, stderr)
+	if code != exitcode.NonPortableTarget {
+		t.Errorf("an --amend of an escaping symlink exited %d, want %d (NonPortableTarget); stderr: %s",
+			code, exitcode.NonPortableTarget, stderr)
 	}
 	if !strings.Contains(stderr, target) {
 		t.Errorf("the refusal must name the escaping target %q; stderr:\n%s", target, stderr)
@@ -209,7 +209,7 @@ func TestAmendEscapingSymlinkIsRefusedAndElects(t *testing.T) {
 		t.Errorf("HEAD moved despite the refusal: %s -> %s", before, after)
 	}
 
-	_, stderr, code = runSafegit(t, dir, "commit", "--amend", "--allow-escaping-targets",
+	_, stderr, code = runSafegit(t, dir, "commit", "--amend", "--allow-non-portable-targets",
 		"-m", "amend in the link", "--", "escapes")
 	if code != 0 {
 		t.Fatalf("an elected --amend was refused (code %d): %s", code, stderr)
@@ -236,7 +236,10 @@ func TestCommitSymlinkInsideTargetIsSilent(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("committing an in-repository symlink failed (code %d): %s", code, stderr)
 	}
-	if strings.Contains(stderr, "outside the repository") {
+	// The phrase is one every notice carries, whichever shape produced it, so
+	// this stays a real assertion when a notice is reworded rather than going
+	// silently vacuous against text nothing writes any more.
+	if strings.Contains(stderr, "the commit records the link text") {
 		t.Errorf("a symlink that stays inside the repository must produce no notice, got:\n%s", stderr)
 	}
 }
@@ -423,9 +426,9 @@ func TestCommitEscapingSymlinkFoundByDirectoryExpansionIsRefused(t *testing.T) {
 	// The argument names the DIRECTORY. sub/escapes is reached only by the
 	// expansion.
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "commit the directory", "--", "sub")
-	if code != exitcode.EscapingSymlinkTarget {
-		t.Errorf("a directory holding an escaping symlink exited %d, want %d (EscapingSymlinkTarget); stderr: %s",
-			code, exitcode.EscapingSymlinkTarget, stderr)
+	if code != exitcode.NonPortableTarget {
+		t.Errorf("a directory holding an escaping symlink exited %d, want %d (NonPortableTarget); stderr: %s",
+			code, exitcode.NonPortableTarget, stderr)
 	}
 	if !strings.Contains(stderr, target) {
 		t.Errorf("the refusal must name the escaping target %q; stderr:\n%s", target, stderr)
@@ -444,29 +447,51 @@ func TestCommitEscapingSymlinkFoundByDirectoryExpansionIsRefused(t *testing.T) {
 	}
 }
 
-// TestCommitAbsoluteSymlinkTargetInsideTheRepositoryIsCommitted pins the
-// CURRENT definition of escape: a target that resolves OUTSIDE the repository.
-// An ABSOLUTE target that resolves back inside it is therefore not an escape and
-// is committed, notice-free -- even though the recorded text is a machine
-// specific path that resolves to nothing in a checkout at any other location.
+// TestCommitAbsoluteSymlinkTargetInsideTheRepositoryIsRefused pins the
+// definition of the refused class: a target whose recorded TEXT will not
+// resolve in another checkout. An ABSOLUTE target is in that class whether or
+// not it resolves inside this repository, because the text names a location on
+// this machine -- a checkout at any other path resolves it to nothing, or to a
+// file the repository never carried.
 //
-// This is a record of behavior as built, not a ruling: whether an absolute
-// in-repository target should share the escaping verdict is listed for the
-// user's pre-release review. If that review changes the definition, this test
-// is the one to rewrite, and it exists so the change cannot happen silently.
-func TestCommitAbsoluteSymlinkTargetInsideTheRepositoryIsCommitted(t *testing.T) {
+// The remedy differs from the outside-the-repository one and is pinned with the
+// refusal: an absolute in-repository target has a portable spelling, so the
+// advice is to spell it relative to the link rather than to point it inside.
+// The election is pinned too, on this shape as well as on the outside one.
+func TestCommitAbsoluteSymlinkTargetInsideTheRepositoryIsRefused(t *testing.T) {
 	dir := newRepo(t)
 
 	// newRepo's directory is already symlink-resolved, so the absolute target
-	// really is inside the repository by path comparison.
+	// really is inside the repository by path comparison -- and is refused all
+	// the same.
 	target := filepath.Join(dir, "seed.txt")
 	if err := os.Symlink(target, filepath.Join(dir, "abslink")); err != nil {
 		t.Fatalf("creating symlink: %v", err)
 	}
+	before := testutil.Rev(t, dir, "HEAD")
 
-	stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "add absolute link", "--", "abslink")
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add absolute link", "--", "abslink")
+	if code != exitcode.NonPortableTarget {
+		t.Errorf("an absolute in-repository symlink exited %d, want %d (NonPortableTarget); stderr: %s",
+			code, exitcode.NonPortableTarget, stderr)
+	}
+	if !strings.Contains(stderr, target) {
+		t.Errorf("the refusal must name the literal target %q; stderr:\n%s", target, stderr)
+	}
+	if !strings.Contains(stderr, "Spell the target relative to the link") {
+		t.Errorf("the refusal must offer the relative spelling as the remedy; stderr:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "--allow-non-portable-targets") {
+		t.Errorf("the refusal must name the flag that elects recording it; stderr:\n%s", stderr)
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("HEAD moved despite the refusal: %s -> %s", before, after)
+	}
+
+	stdout, stderr, code := runSafegit(t, dir, "commit", "--allow-non-portable-targets",
+		"-m", "add absolute link", "--", "abslink")
 	if code != 0 {
-		t.Fatalf("an absolute in-repository symlink was refused (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		t.Fatalf("an elected absolute symlink was refused (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 	if mode := treeEntryMode(t, dir, "abslink"); mode != "120000" {
 		t.Errorf("expected HEAD entry %q with mode 120000, got mode %q; tree:\n%s", "abslink", mode, lsTreeHEAD(t, dir))
@@ -474,8 +499,47 @@ func TestCommitAbsoluteSymlinkTargetInsideTheRepositoryIsCommitted(t *testing.T)
 	if got := catFileBlob(t, dir, "abslink"); got != target {
 		t.Errorf("symlink blob = %q, want the absolute link text %q", got, target)
 	}
-	if strings.Contains(stderr, "outside the repository") {
-		t.Errorf("a target that resolves inside the repository must produce no escaping notice, got:\n%s", stderr)
+	if !strings.Contains(stderr, "notice:") || !strings.Contains(stderr, "the commit records the link text") {
+		t.Errorf("the election must say once what the recorded text will not resolve to; stderr:\n%s", stderr)
+	}
+}
+
+// TestCommitNonPortableSymlinkRefusalGroupsOffendersByShape: the two shapes of
+// the refused class have different remedies, and a commit naming offenders of
+// both still gets ONE refusal -- the offenders grouped by shape, each group
+// followed by the advice that fits it. The collected refusal is what keeps the
+// operator out of a fix-one-rerun-discover-the-next loop, and grouping is what
+// keeps the advice from being wrong for half the list.
+func TestCommitNonPortableSymlinkRefusalGroupsOffendersByShape(t *testing.T) {
+	dir := newRepo(t)
+
+	absTarget := filepath.Join(dir, "seed.txt")
+	if err := os.Symlink(absTarget, filepath.Join(dir, "abslink")); err != nil {
+		t.Fatalf("creating absolute symlink: %v", err)
+	}
+	const outTarget = "../elsewhere/secret.txt"
+	if err := os.Symlink(outTarget, filepath.Join(dir, "escapes")); err != nil {
+		t.Fatalf("creating escaping symlink: %v", err)
+	}
+	before := testutil.Rev(t, dir, "HEAD")
+
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add both shapes", "--", "abslink", "escapes")
+	if code != exitcode.NonPortableTarget {
+		t.Fatalf("a mixed-shape commit exited %d, want %d (NonPortableTarget); stderr: %s",
+			code, exitcode.NonPortableTarget, stderr)
+	}
+	for _, want := range []string{absTarget, outTarget, "abslink", "escapes"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("the refusal does not name %q; stderr:\n%s", want, stderr)
+		}
+	}
+	for _, remedy := range []string{"Spell the target relative to the link", "Point the link inside the repository"} {
+		if !strings.Contains(stderr, remedy) {
+			t.Errorf("the refusal does not carry the remedy %q; stderr:\n%s", remedy, stderr)
+		}
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("HEAD moved despite the refusal: %s -> %s", before, after)
 	}
 }
 
@@ -508,7 +572,10 @@ func TestCommitTraversingSymlinkTargetLandingInsideIsCommitted(t *testing.T) {
 	if got := catFileBlob(t, dir, "sub/climber"); got != target {
 		t.Errorf("symlink blob = %q, want the link text %q", got, target)
 	}
-	if strings.Contains(stderr, "outside the repository") {
-		t.Errorf("a target that resolves inside the repository must produce no escaping notice, got:\n%s", stderr)
+	// As in the inside-target control: the phrase asserted absent is one every
+	// notice carries, so a reworded notice fails this test instead of passing
+	// it vacuously.
+	if strings.Contains(stderr, "the commit records the link text") {
+		t.Errorf("a target that resolves inside the repository must produce no notice, got:\n%s", stderr)
 	}
 }

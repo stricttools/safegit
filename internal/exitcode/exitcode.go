@@ -377,25 +377,30 @@ const (
 	// and by mv, which reaches the same pipeline.
 	UnmergedIndex = 28
 
-	// EscapingSymlinkTarget means a commit named a symlink whose target leaves
-	// the repository, and the caller did not elect to record it.
+	// NonPortableTarget means a commit named a symlink whose target text will
+	// not resolve in another checkout, and the caller did not elect to record
+	// it.
 	//
-	// git records a symlink as the link TEXT and nothing else, so a link
-	// pointing outside the repository is an object that resolves to nothing in
-	// anyone else's checkout -- and, where it resolves at all, resolves to a
-	// file the repository never carried. safegit refuses it rather than
-	// recording a reference to a place only this machine has, and the refusal
-	// names the literal target so the operator can see what the link says.
-	// `--allow-escaping-targets` is the election that commits it anyway, and
-	// restores the one-line notice the refusal replaced.
+	// git records a symlink as the link TEXT and nothing else, so the only
+	// question is what a checkout somewhere else makes of that text. Two shapes
+	// fail it: an ABSOLUTE target, which resolves against the machine's
+	// filesystem rather than against the repository, and a RELATIVE target that
+	// climbs out of the repository. Both resolve to nothing in anyone else's
+	// checkout -- and, where they resolve at all, to a file the repository never
+	// carried. safegit refuses them rather than recording a reference only this
+	// checkout can honor, and the refusal names the literal target so the
+	// operator can see what the link says; offenders of both shapes in one
+	// commit are one refusal, grouped by shape, because the remedies differ.
+	// `--allow-non-portable-targets` is the election that commits it anyway,
+	// and restores the one-line notice the refusal replaced.
 	//
-	// The scope is ADDING or STAGING escaping link content: the refusal is made
-	// at intake, before anything is staged, so commit and its --amend form both
+	// The scope is ADDING or STAGING such link content: the refusal is made at
+	// intake, before anything is staged, so commit and its --amend form both
 	// inherit it and nothing is written when it fires. `safegit mv` moving an
-	// existing tracked escaping link is not covered -- a move-only commit
+	// existing tracked link of either shape is not covered -- a move-only commit
 	// carries the blob its parent held across and restages no link content at
 	// all. Produced by commit, including its --amend form.
-	EscapingSymlinkTarget = 29
+	NonPortableTarget = 29
 
 	// RewriteRefused means a history rewrite was refused by the verification
 	// that runs BEFORE any ref moves: the rewritten commits existed only as
@@ -531,7 +536,7 @@ func All() []Entry {
 		{CommitStands, "CommitStands", "The operation's ref move is real, but a step after it did not finish (aftercare)"},
 		{ConclusionWouldOverwrite, "ConclusionWouldOverwrite", "A conclusion's working-tree write would destroy a hand edit no side of the conflict accounts for"},
 		{UnmergedIndex, "UnmergedIndex", "The shared index carries an unmerged entry, so no commit can be built beside it"},
-		{EscapingSymlinkTarget, "EscapingSymlinkTarget", "A named symlink's target leaves the repository (`--allow-escaping-targets` records it anyway)"},
+		{NonPortableTarget, "NonPortableTarget", "A named symlink's target will not resolve in another checkout: absolute, or outside the repository (`--allow-non-portable-targets` records it anyway)"},
 		{RewriteRefused, "RewriteRefused", "A history rewrite was refused before any ref moved (nothing changed)"},
 		{RewriteIncomplete, "RewriteIncomplete", "A history rewrite stands, but post-rewrite verification found residue or skipped the working-tree sync"},
 		{MoveWitnessChanged, "MoveWitnessChanged", "A concurrent change altered the moves this commit's delta witnesses; nothing was committed, so run the command again"},

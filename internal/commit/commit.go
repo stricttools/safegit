@@ -152,13 +152,14 @@ type CommitRequest struct {
 	AllowEmpty bool
 	DryRun     bool
 
-	// AllowEscapingTargets elects to record a symlink whose target leaves the
-	// repository. Without it intake refuses such a link, naming the literal
-	// target; with it the commit records the link text and says so once on
-	// stderr. It covers ADDING or STAGING link content and nothing else: a
-	// commit that only carries an already-tracked link across to another path
-	// restages no link content and never asks the question.
-	AllowEscapingTargets bool
+	// AllowNonPortableTargets elects to record a symlink whose target text will
+	// not resolve in another checkout -- an absolute target, or a relative one
+	// landing outside the repository. Without it intake refuses such a link,
+	// naming the literal target; with it the commit records the link text and
+	// says so once on stderr. It covers ADDING or STAGING link content and
+	// nothing else: a commit that only carries an already-tracked link across to
+	// another path restages no link content and never asks the question.
+	AllowNonPortableTargets bool
 
 	// Untrack lists paths to remove from the index while leaving them on disk.
 	// Each must be tracked in the tree the commit is built on; one that is not
@@ -388,7 +389,7 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	// Resolve, canonicalize and expand the arguments once, before the retry
 	// loop, against the tree this commit is built on -- the TARGET branch's
 	// tip, which is not HEAD when --branch names another branch.
-	files, err := p.resolveFiles(ctx, repoRoot, baseRev(ctx, ref), fileSpecs, req.Untrack, req.AllowEscapingTargets)
+	files, err := p.resolveFiles(ctx, repoRoot, baseRev(ctx, ref), fileSpecs, req.Untrack, req.AllowNonPortableTargets)
 	if err != nil {
 		return nil, err
 	}

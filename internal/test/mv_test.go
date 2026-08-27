@@ -680,7 +680,7 @@ func TestMvOfATrackedEscapingSymlinkProceeds(t *testing.T) {
 	}
 	// Getting it INTO the tree needs the election -- that is the staging half
 	// the refusal governs. Moving it afterwards is the half that does not.
-	if _, stderr, code := runSafegit(t, dir, "commit", "--allow-escaping-targets",
+	if _, stderr, code := runSafegit(t, dir, "commit", "--allow-non-portable-targets",
 		"-m", "add escaping link", "--", "escapes"); code != 0 {
 		t.Fatalf("seeding the tracked escaping link failed (code %d): %s", code, stderr)
 	}
@@ -689,7 +689,7 @@ func TestMvOfATrackedEscapingSymlinkProceeds(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("mv of a tracked escaping symlink was refused (code %d): %s", code, stderr)
 	}
-	if strings.Contains(stderr, "--allow-escaping-targets") {
+	if strings.Contains(stderr, "--allow-non-portable-targets") {
 		t.Errorf("mv must not ask for the staging election; stderr:\n%s", stderr)
 	}
 
