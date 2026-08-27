@@ -332,11 +332,23 @@ func pickExtra(picked string) map[string]interface{} {
 }
 
 // refuseEmptyCherryPick covers a pick whose change the branch already carries.
-// git refuses the same case, and the state it left is still in flight, so the
-// message names the ways out that actually exist.
-func refuseEmptyCherryPick() int {
+// git refuses the same case, and safegit's own compute step has already been
+// unparked by the time this is called -- so the message says which of the two
+// states the operator is left in, and offers an abort only where there is still
+// something to abort.
+//
+// The residue detail comes first and the advice last, so the line an operator
+// acts on is the one nearest their cursor.
+func refuseEmptyCherryPick(cleanup cleanEmptyParkOutcome) int {
+	cleanup.reportResidue()
 	fmt.Fprintf(os.Stderr, "error: this cherry-pick produces no change: the branch already carries the commit's effect\n")
-	fmt.Fprintf(os.Stderr, "  the pick is still in progress; drop it with:\n")
+	if cleanup.cleaned() {
+		fmt.Fprintf(os.Stderr, "  nothing was committed, and the cherry-pick state safegit parked has been cleaned up:\n")
+		fmt.Fprintf(os.Stderr, "  the branch, the index and the working tree stand where they did, and the next\n")
+		fmt.Fprintf(os.Stderr, "  safegit command just works.\n")
+		return exitcode.General
+	}
+	fmt.Fprintf(os.Stderr, "  nothing was committed, but the pick is STILL in progress; drop it with:\n")
 	fmt.Fprintf(os.Stderr, "    git cherry-pick --abort\n")
 	return exitcode.General
 }

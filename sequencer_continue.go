@@ -980,7 +980,87 @@ type parkedConclusion struct {
 	// onEmpty words the refusal for a conclusion whose result changes nothing.
 	// It is per-command because the ways out are, and it is only ever called
 	// when allowEmpty is false.
-	onEmpty func() int
+	//
+	// It takes the outcome of the auto-clean the engine performs first (see
+	// cleanEmptyPark), because the abort advice is worded INSIDE the callback and
+	// has to branch on it: after a successful cleanup there is no operation left
+	// to abort, and after a failed one there is. A zero-argument callback could
+	// not tell the two apart.
+	onEmpty func(cleanEmptyParkOutcome) int
+}
+
+// cleanEmptyParkOutcome is what became of the state safegit parked for a
+// compute whose result changed nothing: nothing at all, or the halves that did
+// not finish.
+type cleanEmptyParkOutcome struct {
+	// residue names each half of the unpark that failed, worded for an operator.
+	// Empty means the operation is genuinely no longer in flight.
+	residue []string
+}
+
+// cleaned reports whether the parked state is really gone.
+func (o cleanEmptyParkOutcome) cleaned() bool { return len(o.residue) == 0 }
+
+// reportResidue prints what did not finish, BEFORE the caller's own one-line
+// refusal. The order is deliberate: the refusal's last line is the advice an
+// operator acts on, so the detail that qualifies it comes first rather than
+// after it, where a long list would push the actionable line off the top of the
+// message.
+func (o cleanEmptyParkOutcome) reportResidue() {
+	for _, line := range o.residue {
+		fmt.Fprintf(os.Stderr, "  %s\n", line)
+	}
+}
+
+// cleanEmptyPark removes the operation state safegit's OWN compute step parked,
+// once that compute has turned out to change nothing.
+//
+// The state here is safegit's, not the operator's, and that is the whole
+// argument for removing it. `safegit cherry-pick` and `safegit revert` compute
+// with `git <verb> --no-commit` and park what git staged; when the result is
+// empty there is no commit to make, and what was left behind was a repository
+// mid-operation that nobody had asked to be mid-operation -- every later
+// `safegit commit` refused over it, and the refusal advised aborting an
+// operation the operator never started. The `-continue` door's own empty
+// refusal (refuseEmptyConclusion) is deliberately NOT given this treatment: the
+// state there was in flight before the command ran, so it belongs to the
+// operator and only they may say it should go.
+//
+// It mirrors refuseParkedRawGitShape's unpark, step for step and through the
+// same two primitives: sequencer.Cleanup for the operation's declared
+// state-file set, and git.SyncMainIndexWithWorktree to put the index and the
+// working tree back onto HEAD. The helper is used rather than a bare read-tree
+// because the helper carries the tracked-but-gitignored protection; a raw call
+// would silently lose it. What the helper runs underneath is
+// `read-tree --reset -u HEAD` -- a destructive primitive, and a NO-OP on this
+// path, because a compute whose result changed nothing leaves a tree already
+// equal to HEAD's. That is why it is safe here and why nobody should later
+// "simplify" it away: it is the step that puts an index the compute staged into
+// back in step with the branch.
+//
+// Both halves are attempted whatever the first one answers -- a surviving state
+// file and an unrestored index are separate pieces of residue, and an operator
+// has to be told about each.
+//
+// DELIBERATELY NO NEW EXIT CODE. A failed cleanup is exit-indistinguishable
+// from a clean one: both leave the general code the empty refusal already
+// carried, and a refusal's payload is null, so the MESSAGE is the only signal
+// that the state is still there. This is accepted rather than overlooked, and
+// it diverges from the precedent above, which degrades to the general code on a
+// failed half -- this path already sits at the general code, so there is nothing
+// to degrade to and the alternative would be a new code for a case that changes
+// nothing an operator does differently.
+func cleanEmptyPark(flags globalFlags, gitDir string, state sequencer.State) cleanEmptyParkOutcome {
+	var out cleanEmptyParkOutcome
+	if err := sequencer.Cleanup(gitDir, state.Kind); err != nil {
+		out.residue = append(out.residue,
+			fmt.Sprintf("the %s state safegit parked could not be removed: %v", state.Kind, err))
+	}
+	if _, err := git.SyncMainIndexWithWorktree(flags.ctx(), "HEAD"); err != nil {
+		out.residue = append(out.residue,
+			fmt.Sprintf("the index and the working tree could not be put back onto HEAD: %v", err))
+	}
+	return out
 }
 
 // concludeParkedOperation turns the state git just parked into a commit,
@@ -1075,7 +1155,10 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 		out.residue = recordAftercareFailure(out.residue, partial.Step, err.Error())
 	} else if err != nil {
 		if errors.Is(err, commit.ErrTreeUnchanged) {
-			return conclusionResult{}, req.onEmpty(), false
+			// Nothing to commit, so nothing keeps this operation open: the state
+			// safegit parked for its own compute goes before the refusal is
+			// worded, and the refusal words itself from what became of it.
+			return conclusionResult{}, req.onEmpty(cleanEmptyPark(flags, gitDir, state)), false
 		}
 		die(pipelineExitCode(err), err.Error())
 	}
@@ -1727,6 +1810,14 @@ func (op continueOp) refuseDetachedHead(state sequencer.State) int {
 // conflicted path was resolved to content the branch already had -- and git
 // refuses the same case for the same reason. safegit offers no --allow-empty
 // here, so the message names the ways out that do exist.
+//
+// THE TWO DOORS DIFFER, and this is the one that leaves the state alone. Behind
+// a `-continue` command the operation was in flight before the command ran: it
+// is the operator's, they may still resolve it differently, and removing it
+// would throw away a choice they have not made yet. Behind the compute commands
+// the parked state is safegit's own, created moments earlier by safegit's own
+// `--no-commit` step, and it is cleaned up rather than left behind -- see
+// cleanEmptyPark.
 func (op continueOp) refuseEmptyConclusion() int {
 	verb := strings.TrimSuffix(op.command, "-continue")
 	fmt.Fprintf(os.Stderr, "error: this %s produces no change: the resolutions leave the tree exactly as it is\n", verb)

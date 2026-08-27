@@ -495,7 +495,8 @@ func performMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition, re
 		parentBumpOp: req.op,
 		// A merge commit records its parents whether or not it changes a single
 		// byte, so the pipeline's tree-unchanged refusal does not apply and
-		// onEmpty is unreachable.
+		// onEmpty is unreachable -- which is why no merge caller declares one,
+		// and why the empty-park auto-clean behind it never runs for a merge.
 		allowEmpty: true,
 	})
 	if !ok {

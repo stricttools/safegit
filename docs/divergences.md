@@ -236,9 +236,22 @@ Every future change that introduces a decision of this kind adds its entry here.
   anything changed.
 - **safegit:** the same split. `safegit commit` refuses a tree-unchanged commit
   and names `--allow-empty`; `safegit merge-continue` commits without any flag
-  at all. A cherry-pick or revert conclusion that produces nothing gets its own
+  at all. `safegit cherry-pick-continue` or `revert-continue` — the door where
+  the operation was already in flight when the command ran — gets its own
   refusal naming `git <verb> --skip` and `git <verb> --abort`, because those
-  commands have no `--allow-empty` to point at.
+  commands have no `--allow-empty` to point at, and because the state is the
+  operator's to resolve differently.
+- **safegit, where the empty result is safegit's own compute:** `safegit
+  cherry-pick` and `safegit revert` compute with `git <verb> --no-commit` and
+  park what git staged. When that turns out to change nothing there is no commit
+  to make, so safegit removes the state it just parked and the refusal says so —
+  the branch, the index and the working tree stand where they did, and the next
+  safegit command just works. git leaves the equivalent state in place and
+  offers its own ways out of it (`--skip`, `--abort`, `--continue`, or an
+  `--allow-empty` commit); the operation safegit is cleaning up after is one it
+  started itself moments earlier, and one nobody asked to be left mid-flight.
+  Where a half of that cleanup fails the operation really is still in flight,
+  and the message says that instead, with the abort advice that is then correct.
 - **Ruling:** git-like — deliberate
 
 ### `safegit commit` refuses while an operation is in flight
