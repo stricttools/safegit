@@ -282,8 +282,8 @@ func TestBisectPassesAClassifiedSubcommand(t *testing.T) {
 
 // TestRebaseRefusesTheApplyBackendAndItsOptions: the rebase door is git's own
 // replay, and it is declared for the merge backend's interactive and
-// non-interactive forms. The apply backend, per-commit command execution, merge
-// preservation and the root rewrite are outside it.
+// non-interactive forms. The apply backend, its patch options, per-commit
+// command execution and the root rewrite are outside it.
 func TestRebaseRefusesTheApplyBackendAndItsOptions(t *testing.T) {
 	for _, args := range [][]string{
 		{"rebase", "--apply", "side"},
