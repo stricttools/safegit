@@ -99,7 +99,7 @@ func runPull(flags globalFlags, mode pullMode, remote, branch string, rebase boo
 	// It is asked before the dry-run branch as well: a preview of a command that
 	// cannot run is not a preview of anything, which is the rule merge's own
 	// preview follows. appendOperationEntry writes nothing in a dry run.
-	if code := refuseUnbornMergeForm(flags.ctx(), mode == pullNoFF, false, "--merge-strategy no-ff", ""); code != 0 {
+	if code := refuseUnbornMergeForm(flags.ctx(), mode == pullNoFF, false, "--merge-strategy no-ff", "", unbornPullWayOut); code != 0 {
 		appendOperationEntry(flags, sgDir, "pull", pos, false, pullExtraBase(remote, branch))
 		return code
 	}
@@ -148,7 +148,8 @@ func runPull(flags globalFlags, mode pullMode, remote, branch string, rebase boo
 		noFFFlag:     "--merge-strategy no-ff",
 		// A pull has no parking form: --merge-strategy names three merge
 		// selections and none of them leaves the result in flight.
-		parkFlag: "",
+		parkFlag:     "",
+		unbornWayOut: unbornPullWayOut,
 		headline: func(conclusionResult) string {
 			return "pulled " + pullSubject(remote, branch)
 		},

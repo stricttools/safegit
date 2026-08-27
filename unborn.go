@@ -47,10 +47,13 @@ import (
 //
 // noFFFlag and parkFlag are the caller's OWN spelling of the two requests:
 // `--no-ff` and `--no-commit` for `safegit merge`, `--merge-strategy no-ff` for
-// `safegit pull`, which has no parking form at all. A refusal naming a flag the
-// operator did not type is a refusal they cannot act on -- the same rule the
-// fast-forward-only refusal beside it follows.
-func refuseUnbornMergeForm(ctx context.Context, noFF, park bool, noFFFlag, parkFlag string) int {
+// `safegit pull`, which has no parking form at all. wayOut is the same thing
+// for the advice, because "re-run without that flag" is not how a pull asks for
+// a fast-forward -- its merge strategy is a required declaration. A refusal
+// naming a flag the operator did not type, or advice they cannot follow, is a
+// refusal they cannot act on -- the same rule the fast-forward-only refusal
+// beside it follows.
+func refuseUnbornMergeForm(ctx context.Context, noFF, park bool, noFFFlag, parkFlag, wayOut string) int {
 	if !noFF && !park {
 		return 0
 	}
@@ -58,18 +61,37 @@ func refuseUnbornMergeForm(ctx context.Context, noFF, park bool, noFFFlag, parkF
 		return 0
 	}
 
-	asked, why := noFFFlag, "asks for a merge commit, and a merge commit needs a first parent to record"
+	asked := noFFFlag
+	why := []string{
+		"asks for a merge commit, and a merge commit needs a first parent to record.",
+	}
 	if park {
 		asked = parkFlag
-		why = "asks for the merge to be computed and left parked, and safegit parks a merge by computing it with --no-ff"
+		why = []string{
+			"asks for the merge to be computed and left parked, and safegit parks a",
+			"merge by computing it with --no-ff underneath.",
+		}
 	}
 	fmt.Fprintf(os.Stderr, "error: this branch is unborn -- it has no commits yet -- so a merge into it can only be a fast-forward\n")
-	fmt.Fprintf(os.Stderr, "  %s %s. git's own words for the attempt are \"Non-fast-forward commit\n", asked, why)
-	fmt.Fprintf(os.Stderr, "  does not make sense into an empty head\".\n")
-	fmt.Fprintf(os.Stderr, "  Re-run without %s to take the fast-forward, or make a commit on this branch first and\n", asked)
-	fmt.Fprintf(os.Stderr, "  then merge. See docs/divergences.md.\n")
+	fmt.Fprintf(os.Stderr, "  %s %s\n", asked, why[0])
+	for _, line := range why[1:] {
+		fmt.Fprintf(os.Stderr, "  %s\n", line)
+	}
+	fmt.Fprintf(os.Stderr, "  git's own words for the attempt: \"Non-fast-forward commit does not make sense into an\n")
+	fmt.Fprintf(os.Stderr, "  empty head\".\n")
+	fmt.Fprint(os.Stderr, wayOut)
+	fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
 	return exitcode.General
 }
+
+// The way-out lines the two callers give refuseUnbornMergeForm. They are
+// constants rather than literals at the call sites because `merge` has two of
+// those -- its real run and its preview -- and a preview that gave different
+// advice from the run it previews would be a second answer to one question.
+const (
+	unbornMergeWayOut = "  Take the fast-forward instead by leaving that flag off, or make a commit on this branch\n  first and then merge.\n"
+	unbornPullWayOut  = "  Take the fast-forward instead with --merge-strategy ff, or make a commit on this branch\n  first and then pull.\n"
+)
 
 // refuseUnbornRebase refuses a rebase on an unborn branch.
 //

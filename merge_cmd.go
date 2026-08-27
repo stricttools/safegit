@@ -285,7 +285,7 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 		// preview REFUSES exactly the command lines the run refuses. Without it
 		// the preview would reach previewMerge's unborn short-circuit and answer
 		// "a fast-forward" for a command line that cannot run at all.
-		if code := refuseUnbornMergeForm(flags.ctx(), parsed.Has("--no-ff"), parsed.Has("--no-commit"), "--no-ff", "--no-commit"); code != 0 {
+		if code := refuseUnbornMergeForm(flags.ctx(), parsed.Has("--no-ff"), parsed.Has("--no-commit"), "--no-ff", "--no-commit", unbornMergeWayOut); code != 0 {
 			return code
 		}
 
@@ -314,6 +314,7 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 		ffOnlyWayOut: fmt.Sprintf("  Re-run without --ff-only to make one, or rebase this branch onto %s instead.\n", other),
 		noFFFlag:     "--no-ff",
 		parkFlag:     "--no-commit",
+		unbornWayOut: unbornMergeWayOut,
 		headline: func(out conclusionResult) string {
 			return "merged " + short(other, secondParentOf(out))
 		},
@@ -353,9 +354,12 @@ type mergeRequest struct {
 	ffOnlyFlag   string
 	ffOnlyWayOut string
 	// noFFFlag and parkFlag are the same thing for the other two selections,
-	// which the unborn-branch refusal names. `pull` has no parking form, so its
-	// parkFlag is empty and its park field is never set.
+	// which the unborn-branch refusal names, and unbornWayOut is that refusal's
+	// advice line -- a pull asks for a fast-forward by naming another merge
+	// strategy rather than by leaving a flag off. `pull` has no parking form, so
+	// its parkFlag is empty and its park field is never set.
 	noFFFlag, parkFlag string
+	unbornWayOut       string
 	// headline words the one-line human summary of a merge that made a commit.
 	headline func(out conclusionResult) string
 }
@@ -403,7 +407,7 @@ func performMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition, re
 	// between them is the one the --ff-only neighbor draws: those are about what
 	// was typed, this is about where the branch stands, and only the second is a
 	// fact about the repository an audit trail is for.
-	if code := refuseUnbornMergeForm(ctx, req.noFF, req.park, req.noFFFlag, req.parkFlag); code != 0 {
+	if code := refuseUnbornMergeForm(ctx, req.noFF, req.park, req.noFFFlag, req.parkFlag, req.unbornWayOut); code != 0 {
 		appendOperationEntry(flags, sgDir, req.op, pos, false, req.oplogExtra(oplogOutcomeFailed))
 		return mergePayload{}, false, code
 	}
