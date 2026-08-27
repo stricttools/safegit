@@ -259,3 +259,23 @@ func TestUnbornResetHardWorks(t *testing.T) {
 		t.Errorf("HEAD = %s, want %s", head, f.secondSHA)
 	}
 }
+
+// A revert onto an unborn head reverts nothing: there is no parent tree to put
+// back, so the result is the empty tree and the standing empty-result refusal
+// is the honest answer. Before the root-path comparison it minted a nonsense
+// empty root commit instead.
+func TestUnbornRevertRefusesAsEmpty(t *testing.T) {
+	f := newUnbornRepo(t)
+
+	stdout, stderr, code := runSafegit(t, f.dir, "revert", f.firstSHA)
+	if code == 0 {
+		t.Fatalf("revert onto an unborn head succeeded; it should refuse as empty\nstdout=%s\nstderr=%s", stdout, stderr)
+	}
+	if !strings.Contains(stdout+stderr, "no change") {
+		t.Errorf("refusal does not say the revert produced no change:\nstdout=%s\nstderr=%s", stdout, stderr)
+	}
+	if _, ok := testutil.GitTryOut(t, f.dir, "rev-parse", "--verify", "--quiet", "HEAD"); ok {
+		t.Errorf("the refused revert created a commit")
+	}
+	assertNoSequencerResidue(t, f.dir, "after a refused unborn revert")
+}

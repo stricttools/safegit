@@ -612,8 +612,33 @@ func (p *Pipeline) tryCommit(
 		return nil, false, unmatchedSourceError(unmatched, refOrEmptyTree(isRootCommit, ref))
 	}
 
-	// Check for empty commit (tree unchanged). Root commits are never empty.
-	if !req.AllowEmpty && !isRootCommit && treeSHA == parentTree {
+	// Check for empty commit (tree unchanged).
+	//
+	// "Unchanged" needs a tree to be unchanged FROM, and the root path has no
+	// parent to take one from. It is compared against the EMPTY TREE instead,
+	// which is precisely what a branch holds before its first commit -- so a
+	// root commit that would record nothing is refused exactly as a commit onto
+	// a tip that changes nothing is.
+	//
+	// The premise this replaces -- "root commits are never empty" -- was true of
+	// the shape a root commit usually has and false of the one an unborn REVERT
+	// produces: reverting onto nothing puts nothing back, so the result is a
+	// tree with no entries, and it was MINTED rather than refused.
+	//
+	// --allow-empty still elects it, which is the deliberately empty first
+	// commit of a repository, so the guard keeps its shape and the pin on that
+	// behavior stays green. parentTree itself keeps its empty-STRING spelling on
+	// the root path: git.DiffTree and the move inference both key off that
+	// spelling, and only this comparison changes.
+	emptyResult := treeSHA == parentTree
+	if isRootCommit {
+		emptyTree, err := git.EmptyTreeSHA(ctx)
+		if err != nil {
+			return nil, false, fmt.Errorf("comparing the new tree against the empty tree: %w", err)
+		}
+		emptyResult = treeSHA == emptyTree
+	}
+	if !req.AllowEmpty && emptyResult {
 		return nil, false, &CommitError{
 			Code:    exitcode.General,
 			Message: "nothing to commit (tree unchanged); use --allow-empty to override",
