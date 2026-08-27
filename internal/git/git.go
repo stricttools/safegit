@@ -503,7 +503,26 @@ func ListTrackedIgnoredFiles(ctx context.Context) ([]string, error) {
 // are also preserved.
 //
 // Returns the list of protected tracked+gitignored paths (empty if none).
+//
+// ONE substitution is made on the caller's treeish, and its scope is narrow on
+// purpose: a literal "HEAD" on an UNBORN branch becomes the empty tree, because
+// `read-tree --reset -u HEAD` is fatal there and what the caller means -- put
+// the index and the working tree in step with the committed state -- is the
+// empty tree in a repository that has no commits. It applies to nothing else.
+// An unresolvable treeish that is NOT literal HEAD stays a hard error, and must:
+// substituting the empty tree for a failed resolution generally would
+// `read-tree --reset -u` every tracked file out of the working tree, which is
+// the opposite of what a caller passing a real SHA (a merge's incoming tip)
+// asked for.
 func SyncMainIndexWithWorktree(ctx context.Context, treeish string) ([]string, error) {
+	if treeish == "HEAD" {
+		resolved, err := HeadTreeish(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("naming the tree to put the index and the working tree in step with: %w", err)
+		}
+		treeish = resolved
+	}
+
 	// 1. Save existing skip-worktree files. Restoring them afterwards is the
 	// reconciliation authority's job (restoreSkipWorktree, the same one
 	// ReconcileMainIndex uses), so a flag set by the operator is re-applied the
