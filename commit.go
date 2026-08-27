@@ -149,6 +149,22 @@ type refusedMoveEntry struct {
 	Reason string   `json:"reason"`
 }
 
+// movedRecordEntrySchema declares one movedRecordEntry, and it is declared ONCE
+// because the entry is one shape: `commit` and `mv` both report the records
+// their run put on the commit, in the same member, so a second copy of this
+// fragment would be a second authority for what an entry is and the two could
+// drift apart at emission-time validation.
+var movedRecordEntrySchema = strictcli.SchemaObject(
+	map[string]interface{}{
+		"id":     strictcli.SchemaType("string"),
+		"old":    strictcli.SchemaType("string"),
+		"new":    strictcli.SchemaType("string"),
+		"origin": strictcli.SchemaType("string"),
+	},
+	[]string{"id", "old", "new", "origin"},
+	false,
+)
+
 // movedRecordEntries renders the pipeline's records for the payload, never nil.
 func movedRecordEntries(records []trailer.Record) []movedRecordEntry {
 	out := make([]movedRecordEntry, 0, len(records))
@@ -200,16 +216,7 @@ var commitPayloadSchema = strictcli.SchemaObject(
 			false,
 		)),
 		"dry_run": strictcli.SchemaType("boolean"),
-		"moved_records": strictcli.SchemaArray(strictcli.SchemaObject(
-			map[string]interface{}{
-				"id":     strictcli.SchemaType("string"),
-				"old":    strictcli.SchemaType("string"),
-				"new":    strictcli.SchemaType("string"),
-				"origin": strictcli.SchemaType("string"),
-			},
-			[]string{"id", "old", "new", "origin"},
-			false,
-		)),
+		"moved_records": strictcli.SchemaArray(movedRecordEntrySchema),
 		"refused_moves": strictcli.SchemaArray(strictcli.SchemaObject(
 			map[string]interface{}{
 				"old":    strictcli.SchemaArray(strictcli.SchemaType("string")),
