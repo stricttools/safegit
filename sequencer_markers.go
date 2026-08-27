@@ -131,7 +131,17 @@ func (op continueOp) verifyMarkers(ctx context.Context, state sequencer.State, s
 
 	// The first parent is the branch tip this conclusion commits onto, and it is
 	// the tree every attribute question is answered from.
-	const firstParent = "HEAD"
+	//
+	// On an UNBORN branch there is no such tip and no HEAD to name it with, so
+	// the EMPTY TREE stands in (git.HeadTreeish decides which applies). Every
+	// question asked of it below then answers the way it should: the exemption
+	// attribute is unset because a repository with no commits declares nothing,
+	// and a base-content lookup finds no path there, which is exactly true.
+	firstParent, err := git.HeadTreeish(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: naming the tree the conflict attributes are read from: %v\n", err)
+		return nil, exitcode.General
+	}
 	attrs, err := conflict.Resolve(ctx, firstParent, paths)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: reading the conflict attributes from the first parent's tree: %v\n", err)
@@ -191,7 +201,17 @@ func verifiablePaths(ctx context.Context, sides map[string]conflict.Sides, choic
 	for path := range sides {
 		seen[path] = true
 	}
-	changed, err := git.IndexPathsChangedFrom(ctx, "HEAD")
+	// The same first-parent substitution verifyMarkers makes, and it is a second
+	// site rather than a parameter because this listing is computed before the
+	// caller has resolved anything: on an unborn branch the index's changes are
+	// measured against the EMPTY TREE, which is what a repository with no
+	// commits holds, so every staged path is listed exactly as it would be
+	// against a born tip.
+	from, err := git.HeadTreeish(ctx)
+	if err != nil {
+		return nil, err
+	}
+	changed, err := git.IndexPathsChangedFrom(ctx, from)
 	if err != nil {
 		return nil, err
 	}

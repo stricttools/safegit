@@ -170,6 +170,64 @@ func TestUnbornCommitStillRoots(t *testing.T) {
 	}
 }
 
+func TestUnbornCherryPickRootsWithTheAuthorPreserved(t *testing.T) {
+	f := newUnbornRepo(t)
+
+	stdout, stderr, code := runSafegit(t, f.dir, "cherry-pick", f.firstSHA)
+	if code != 0 {
+		t.Fatalf("safegit cherry-pick onto an unborn branch: code %d\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	if n := gitLog(t, f.dir, "HEAD"); n != 1 {
+		t.Errorf("commit count = %d, want 1 (the pick is a ROOT commit here)", n)
+	}
+	author := strings.TrimSpace(testutil.Git(t, f.dir, "log", "-1", "--format=%an <%ae>"))
+	sourceAuthor := strings.TrimSpace(testutil.Git(t, f.dir, "log", "-1", "--format=%an <%ae>", f.firstSHA))
+	if author != sourceAuthor {
+		t.Errorf("author = %q, want the source's %q", author, sourceAuthor)
+	}
+	if got := readWorktreeFile(t, f.dir, "file.txt"); got != "one\n" {
+		t.Errorf("file.txt = %q, want the picked content", got)
+	}
+	assertNoSequencerResidue(t, f.dir, "after a clean unborn pick")
+}
+
+// The one path that exercises the substituted first-parent uses in marker
+// verification: a conflicted pick onto an unborn head, concluded through
+// safegit. The conflict must be MODIFY/DELETE, because an add-only pick onto
+// nothing applies cleanly -- so the index holds stages 1 and 3 and NO stage 2,
+// which is what the resolution declaration has to be written against.
+func TestUnbornConflictedCherryPickParksAndConcludes(t *testing.T) {
+	f := newUnbornRepo(t)
+
+	_, stderr, code := runSafegit(t, f.dir, "cherry-pick", f.secondSHA)
+	if code == 0 {
+		t.Fatalf("cherry-pick of the modifying commit onto an unborn head succeeded; the fixture needs a conflict\n%s", stderr)
+	}
+	stages := strings.TrimSpace(testutil.Git(t, f.dir, "ls-files", "-u", "file.txt"))
+	if stages == "" {
+		t.Fatalf("no unmerged stages for file.txt; the pick did not park a conflict")
+	}
+	for _, line := range strings.Split(stages, "\n") {
+		if strings.Contains(line, "\tfile.txt") && strings.Contains(line, " 2\t") {
+			t.Errorf("unexpected stage 2 in a modify/delete conflict:\n%s", stages)
+		}
+	}
+
+	// theirs is the picked content: keeping it is what an operator concluding
+	// this conflict means by "apply the pick".
+	stdout, stderr, code := runSafegit(t, f.dir, "cherry-pick-continue", "--resolve", "file.txt=theirs")
+	if code != 0 {
+		t.Fatalf("cherry-pick-continue on an unborn branch: code %d\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	if n := gitLog(t, f.dir, "HEAD"); n != 1 {
+		t.Errorf("commit count = %d, want 1 (a conclusion onto an unborn head is a ROOT commit)", n)
+	}
+	if got := readWorktreeFile(t, f.dir, "file.txt"); got != "two\n" {
+		t.Errorf("file.txt = %q, want the picked content", got)
+	}
+	assertNoSequencerResidue(t, f.dir, "after concluding an unborn pick")
+}
+
 func TestUnbornPullFastForwards(t *testing.T) {
 	f := newUnbornRepo(t)
 	// A remote whose branch is the one the fixture fetched: a pull is the merge
