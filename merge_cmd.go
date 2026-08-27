@@ -392,13 +392,6 @@ func performMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition, re
 	// empty head"), so the compute step cannot serve this case at all. The
 	// compare-and-swap below is pinned to the zero object name, git's own
 	// spelling for "this ref must not exist yet".
-	//
-	// It is unreachable TODAY, and not because of anything here: the
-	// coordination check runs `git diff HEAD`, which is itself fatal on an
-	// unborn HEAD, so every guarded command already refuses in that repository
-	// before its own handler decides anything. This branch is what merge does
-	// once that check learns about unborn HEADs; without it, merge would meet
-	// git's fatal instead.
 	var upToDate, fastForward bool
 	otherSHA, resolveErr := git.RevParse(ctx, other+"^{commit}")
 	switch {

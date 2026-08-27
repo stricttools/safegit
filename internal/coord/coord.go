@@ -56,11 +56,24 @@ func Check(ctx context.Context, gitDir string) (*DirtyState, error) {
 	}
 	ds.Sequencer = state
 
-	// 1. Check for tracked modifications by diffing working tree against HEAD directly.
-	// This avoids relying on the main .git/index which may be stale after safegit commits.
-	stdout, _, err := git.Run(ctx, "diff", "HEAD", "--name-status")
+	// 1. Check for tracked modifications by diffing the working tree against the
+	// committed state directly. This avoids relying on the main .git/index which
+	// may be stale after safegit commits.
+	//
+	// The treeish is `HEAD` on a born branch and the EMPTY TREE on an unborn one
+	// (git.HeadTreeish decides which). A repository with no commits holds exactly
+	// the empty tree, so the diff reports the same thing in the same shape --
+	// every staged addition, and nothing else -- while `git diff HEAD` there is
+	// fatal, which is what used to make every guarded command refuse an unborn
+	// repository with git's "ambiguous argument 'HEAD'" before its own handler
+	// decided anything.
+	treeish, err := git.HeadTreeish(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("running git diff HEAD: %w", err)
+		return nil, fmt.Errorf("naming the tree to compare the working tree against: %w", err)
+	}
+	stdout, _, err := git.Run(ctx, "diff", treeish, "--name-status")
+	if err != nil {
+		return nil, fmt.Errorf("running git diff %s: %w", treeish, err)
 	}
 	for _, line := range strings.Split(stdout, "\n") {
 		if strings.TrimSpace(line) == "" {

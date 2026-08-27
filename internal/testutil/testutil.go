@@ -98,6 +98,32 @@ func InitRepo(t *testing.T, safegitInit func(ctx context.Context, gitDir string)
 	return dir, gd, sgDir
 }
 
+// InitUnbornRepo creates a temp git repo with NO commits at all, so HEAD names
+// a branch that does not exist yet -- the state a repository is in between
+// `git init` and its first commit. Returns (repoDir, gitDir).
+//
+// It is the fixture for everything that has to keep working before there is a
+// HEAD to resolve: `git rev-parse HEAD` fails there, and so does every git
+// command that takes HEAD as a treeish.
+func InitUnbornRepo(t *testing.T) (repoDir, gitDir string) {
+	t.Helper()
+	isolate(t)
+	dir := evalTempDir(t)
+
+	for _, args := range [][]string{
+		{"git", "init", "--initial-branch=main"},
+		{"git", "config", "user.email", IdentityEmail},
+		{"git", "config", "user.name", IdentityName},
+	} {
+		cmd := exec.Command(args[0], args[1:]...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("%v failed: %v\n%s", args, err, out)
+		}
+	}
+	return dir, filepath.Join(dir, ".git")
+}
+
 // InitBareRepo creates a temp git repo with an allow-empty initial commit
 // (no seed file, no safegit init). Returns the repo directory. Suitable for
 // packages like git and index that don't need safegit infrastructure.

@@ -213,6 +213,55 @@ func RevParse(ctx context.Context, rev string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
+// EmptyTreeSHA is the object name of the tree with no entries, asked of git
+// rather than spelled out.
+//
+// The two well-known constants (sha1's 4b825dc6... and sha256's 6ef19b41...)
+// are deliberately NOT hardcoded here. Hardcoding them would save one
+// subprocess on paths that are already cold, in exchange for a table that has
+// to be extended by hand the day git gains another hash algorithm -- and the
+// failure then is silent, a name that resolves to nothing in a repository the
+// table does not know. `hash-object` computes the name from the algorithm the
+// repository actually uses, so it self-adapts.
+//
+// It is `hash-object -t tree` on EMPTY STDIN rather than MkTree with no
+// entries, which also yields the empty tree: mktree WRITES the object, which
+// puts it in the class the preview quarantine exists for, while hash-object
+// without -w computes the name and writes nothing at all. Empty stdin rather
+// than /dev/null for the same reason every other hashing helper here takes
+// bytes: safegit's hash-object callers hand git content, never a path (see the
+// comment above HashObjectBytes), and /dev/null is not a path every platform
+// has.
+func EmptyTreeSHA(ctx context.Context) (string, error) {
+	out, _, err := RunWithEnvStdin(ctx, nil, nil, "hash-object", "-t", "tree", "--stdin")
+	if err != nil {
+		return "", fmt.Errorf("asking git for the empty tree's object name: %w", err)
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// HeadTreeish names the tree to compare the working tree, the index or a
+// conclusion's first parent against: `HEAD` where it resolves, and the EMPTY
+// TREE where it does not.
+//
+// The second case is an UNBORN branch -- the state between `git init` and the
+// first commit, and the state `safegit undo` of a root commit leaves behind.
+// There is no HEAD there, and every git command that takes HEAD as a treeish is
+// fatal, which is why the substitution is made here rather than left to each
+// caller: a repository with no commits holds exactly the empty tree, so a diff
+// against it reports precisely what a diff against HEAD reports on a born
+// branch -- every staged addition, and nothing else.
+//
+// The test is `rev-parse --verify --quiet`: without --quiet git prints its
+// "ambiguous argument" advice and exits 128, so the cheap question would answer
+// with noise on stderr in the ordinary case this function exists for.
+func HeadTreeish(ctx context.Context) (string, error) {
+	if _, _, err := Run(ctx, "rev-parse", "--verify", "--quiet", "HEAD"); err == nil {
+		return "HEAD", nil
+	}
+	return EmptyTreeSHA(ctx)
+}
+
 // ReadTree populates a temporary index from a treeish (commit/tree SHA or ref).
 func ReadTree(ctx context.Context, indexPath, treeish string) error {
 	env := []string{"GIT_INDEX_FILE=" + indexPath}

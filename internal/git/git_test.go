@@ -843,6 +843,60 @@ func TestHashObjectWriteBytes(t *testing.T) {
 	}
 }
 
+// The empty-tree name and the HEAD substitution built on it. Both are pinned
+// against git's own answers rather than against a spelled-out constant, which
+// is the whole reason EmptyTreeSHA asks git in the first place.
+
+func TestEmptyTreeSHAIsTheTreeWithNoEntries(t *testing.T) {
+	dir := testutil.InitBareRepo(t)
+	testutil.Chdir(t, dir)
+	ctx := context.Background()
+
+	sha, err := EmptyTreeSHA(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// InitBareRepo's initial commit is --allow-empty, so HEAD's tree IS the
+	// empty tree: the name computed from stdin must equal the one git recorded.
+	headTree, err := RevParse(ctx, "HEAD^{tree}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sha != headTree {
+		t.Errorf("EmptyTreeSHA = %q, want %q (HEAD's empty tree)", sha, headTree)
+	}
+}
+
+func TestHeadTreeishSubstitutesTheEmptyTreeOnAnUnbornBranch(t *testing.T) {
+	born := testutil.InitBareRepo(t)
+	testutil.Chdir(t, born)
+	ctx := context.Background()
+
+	if got, err := HeadTreeish(ctx); err != nil || got != "HEAD" {
+		t.Errorf("HeadTreeish on a born branch = (%q, %v), want (\"HEAD\", nil)", got, err)
+	}
+
+	unborn, _ := testutil.InitUnbornRepo(t)
+	testutil.Chdir(t, unborn)
+
+	got, err := HeadTreeish(ctx)
+	if err != nil {
+		t.Fatalf("HeadTreeish on an unborn branch: %v", err)
+	}
+	empty, err := EmptyTreeSHA(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != empty {
+		t.Errorf("HeadTreeish on an unborn branch = %q, want the empty tree %q", got, empty)
+	}
+	// And it is usable as a treeish there, which is the point: `git diff HEAD`
+	// is fatal in this repository.
+	if _, _, err := Run(ctx, "diff", got, "--name-status"); err != nil {
+		t.Errorf("git diff %s on an unborn branch: %v", got, err)
+	}
+}
+
 func TestHashObjectWriteBytesEmpty(t *testing.T) {
 	dir := testutil.InitBareRepo(t)
 	testutil.Chdir(t, dir)
