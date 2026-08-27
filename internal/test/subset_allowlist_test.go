@@ -284,7 +284,6 @@ func TestRebaseRefusesTheApplyBackendAndItsOptions(t *testing.T) {
 		{"rebase", "--apply", "side"},
 		{"rebase", "--whitespace=fix", "side"},
 		{"rebase", "--exec", "make test", "side"},
-		{"rebase", "--rebase-merges", "side"},
 		{"rebase", "--root"},
 	} {
 		t.Run(args[1], func(t *testing.T) {
@@ -308,6 +307,63 @@ func TestRebasePassesAnAllowedForm(t *testing.T) {
 	}
 	if !testutil.Contains(testutil.TreePaths(t, dir, "HEAD"), "one.txt") {
 		t.Error("the rebase did not replay onto the side branch")
+	}
+}
+
+// newBranchWithAMergeRepo builds a branch whose own history contains a merge
+// commit, and an upstream that has moved on -- the one shape where preserving
+// merge topology through a rebase is a different answer from flattening it.
+func newBranchWithAMergeRepo(t *testing.T) string {
+	t.Helper()
+	dir := newRepo(t)
+
+	testutil.WriteFile(t, dir, "base.txt", "base\n")
+	safegitCommit(t, dir, "base", "base.txt")
+
+	testutil.Git(t, dir, "branch", "topic")
+	testutil.Git(t, dir, "branch", "feature")
+
+	testutil.Git(t, dir, "switch", "feature")
+	testutil.WriteFile(t, dir, "feature.txt", "feature\n")
+	safegitCommit(t, dir, "the feature side", "feature.txt")
+
+	testutil.Git(t, dir, "switch", "topic")
+	testutil.WriteFile(t, dir, "topic.txt", "topic\n")
+	safegitCommit(t, dir, "the topic side", "topic.txt")
+	testutil.Git(t, dir, "merge", "--no-ff", "-m", "merge feature into topic", "feature")
+
+	testutil.Git(t, dir, "switch", "main")
+	testutil.WriteFile(t, dir, "main.txt", "main\n")
+	safegitCommit(t, dir, "the upstream moves on", "main.txt")
+
+	testutil.Git(t, dir, "switch", "topic")
+	return dir
+}
+
+// TestRebasePassesTheTopologyPreservingForm: preserving merge topology is
+// ALLOWED. The whole replay runs inside the one door where git authors the
+// commits, which is verb-scoped and already admits everything a rebase makes --
+// so a merge re-created by the replay is no more git's than a linear commit
+// replayed beside it, and safegit checks neither.
+func TestRebasePassesTheTopologyPreservingForm(t *testing.T) {
+	for _, flag := range []string{"-r", "--rebase-merges", "--rebase-merges=no-rebase-cousins"} {
+		t.Run(flag, func(t *testing.T) {
+			dir := newBranchWithAMergeRepo(t)
+			upstream := testutil.Rev(t, dir, "main")
+
+			if _, stderr, code := runSafegit(t, dir, "rebase", flag, "main"); code != 0 {
+				t.Fatalf("a topology-preserving rebase was refused (code %d): %s", code, stderr)
+			}
+			if !testutil.Contains(testutil.TreePaths(t, dir, "HEAD"), "main.txt") {
+				t.Error("the rebase did not replay onto the upstream")
+			}
+			if parents := testutil.Parents(t, dir, "HEAD"); len(parents) != 2 {
+				t.Errorf("the replayed tip has %d parent(s), want 2 -- the merge was flattened", len(parents))
+			}
+			if out := testutil.GitOut(t, dir, "merge-base", "--is-ancestor", upstream, "HEAD"); out != "" {
+				t.Errorf("the upstream is not an ancestor of the replayed branch: %s", out)
+			}
+		})
 	}
 }
 
