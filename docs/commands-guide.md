@@ -1561,7 +1561,7 @@ safegit rebase --onto main feature-base
 
 ### Safety Guarantees
 
-- **Coordination guard, both layers, plus a third check of its own**: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- then the dirty-tree check, and then a refusal (exit **5**) over an in-flight operation that is not a REBASE. See "The guarded commands and their two coordination layers".
+- **Coordination guard, both layers, plus its own refusals**: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- then the dirty-tree check, then a refusal (exit **5**) over an in-flight operation that is not a REBASE, and then a refusal on an unborn branch, which has no commits to replay (see "Unborn branches"). See "The guarded commands and their two coordination layers".
 - **git's own exit code**: When `git rebase` stops or fails, safegit exits with the code git returned.
 - **The index is git's**: a rebase stopped at a conflict keeps its unmerged entries; safegit does not touch the index after the rebase.
 - **Oplog recording**: the branch baseline (see "The oplog baseline" above). The upstream ref rides alongside it.
@@ -1627,6 +1627,7 @@ safegit bisect reset
 ### Safety Guarantees
 
 - **Selective guard**: the worktree operation lock is taken for every `bisect` invocation; the STEPPING subcommands (`start`, `good`, `bad`, `old`, `new`, `skip`, `run`, `replay`, `reset`) additionally go through the dirty-tree check, because each of them checks another commit out. The reporting forms (`terms`, `log`, `view`) do not. Which is which is DERIVED from internal/gitexec's classification table rather than kept as a list here.
+- **`bisect start` on an unborn branch is refused** before git runs: there is no range of commits to search there. See "Unborn branches".
 - **`bisect run` and build artifacts**: `git bisect run` steps by itself, so the dirty-tree check applies to the invocation and not to each step -- but a build the script performs between steps leaves whatever it wrote in the working tree. Anything the repository IGNORES never counts as dirt; a build artifact that is NOT gitignored does, and the next guarded `bisect` invocation in that worktree is refused at exit 5 until it is cleaned up or ignored.
 - **git's own exit code**: When `git bisect` fails, safegit exits with the code git returned.
 - **The index is git's**: safegit does not touch the index after the bisect step.
