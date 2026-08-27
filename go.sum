@@ -10,7 +10,5 @@ github.com/smm-h/stricttest/go v0.1.1 h1:z3N7RPoeLjrWTrcudxNJh2W5PVYZPJ/WsqX8ssX
 github.com/smm-h/stricttest/go v0.1.1/go.mod h1:/rFaWmnLgp6wY9Ne+/kZIMUdOOGTPjjTHDgJjxyaYTs=
 github.com/toml-lang/toml-test/v2 v2.2.0 h1:q3ELZu7oPnpl9TClC6OOcAccXwj+jwAyFP8WvzBdK1M=
 github.com/toml-lang/toml-test/v2 v2.2.0/go.mod h1:TQdjhQItoZ0R+OODNiHUuxxxErtaE0Xsod2ENZbMvxI=
-golang.org/x/sys v0.46.0 h1:noSf2Fq6F8DBgS+LysIkx7rIExoNHJsxOAtPp4rthXw=
-golang.org/x/sys v0.46.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
 golang.org/x/text v0.14.0 h1:ScX5w1eTa3QqT8oi6+ziP7dTV1S2+ALU0bI+0zXKWiQ=
 golang.org/x/text v0.14.0/go.mod h1:18ZOQIKpY8NJVqYksKHtTdi31H5itFRjB5/qKTNYzSU=
