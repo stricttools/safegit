@@ -156,11 +156,14 @@ Every future change that introduces a decision of this kind adds its entry here.
   wanted. `--allow-non-portable-targets` elects committing it and restores the
   notice line; it is the only way to say so. Offenders of both shapes in one
   commit are ONE refusal with the offenders grouped by shape, because the
-  remedies differ: an absolute in-repository target has a portable spelling to
-  be rewritten in, while a target that leaves the repository has to be pointed
-  back inside. The judgment is made in the commit family's intake and nowhere
-  else — `safegit commit` and its `--amend` form, over the paths that invocation
-  stages, the ones a directory argument expands to included. Two other ways link
+  remedies differ: a relative target that leaves the repository has to be
+  pointed back inside, while the absolute group carries both halves of its own
+  answer — the judgment never resolves the target, so the group holds an
+  absolute target pointing inside the repository, which has a portable spelling
+  to be rewritten in, alongside one pointing outside, which has none and can
+  only be pointed inside. The judgment is made in the commit family's intake and
+  nowhere else — `safegit commit` and its `--amend` form, over the paths that
+  invocation stages, the ones a directory argument expands to included. Two other ways link
   content reaches a tree do not pass through it: `safegit mv` moving an
   already-tracked link carries the blob across without re-reading it, and a
   conclusion's `--resolve path=worktree|ours|theirs` stages a conflicted path's
