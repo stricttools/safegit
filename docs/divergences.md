@@ -725,9 +725,11 @@ Every future change that introduces a decision of this kind adds its entry here.
   halves and is applied. That state takes hand-mutilated repository state to
   reach: git's `merge --abort` and `rebase --abort` re-apply the autostash and
   remove the file, so it survives at an unmoved tip only where somebody deleted
-  the operation's state files by hand. Whether to strengthen the key is part of
-  what this entry awaits.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+  the operation's state files by hand. The key stays as it is: the two facts are
+  everything a conclusion can read out of a file git owns, and strengthening
+  them would mean safegit keeping a record of its own beside that file for a
+  state nothing but hand-mutilation produces. The limit is accepted.
+- **Ruling:** ours — deliberate
 
 ### A detached HEAD is refused, with the exact way back
 
