@@ -215,7 +215,7 @@ var commitPayloadSchema = strictcli.SchemaObject(
 			[]string{"step", "detail"},
 			false,
 		)),
-		"dry_run": strictcli.SchemaType("boolean"),
+		"dry_run":       strictcli.SchemaType("boolean"),
 		"moved_records": strictcli.SchemaArray(movedRecordEntrySchema),
 		"refused_moves": strictcli.SchemaArray(strictcli.SchemaObject(
 			map[string]interface{}{
