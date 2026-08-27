@@ -440,9 +440,10 @@ var resetSubset = argvSubset{
 // A rebase is the campaign's one declared exception: git performs the replay
 // and AUTHORS the replayed commits, uniformly. What the allowlist keeps is the
 // forms of that one door -- an upstream, a new base, the interactive session,
-// git's own state-control verbs -- and what it refuses is the apply backend
-// (whose state safegit's readers do not speak) and the options that turn a
-// rebase into something else.
+// the autostash, the topology of the range being replayed, and git's own
+// state-control verbs -- and what it refuses is the apply backend (whose state
+// safegit's readers do not speak) and the options that turn a rebase into
+// something else.
 var rebaseSubset = argvSubset{
 	command: "rebase",
 	allowed: []string{
@@ -450,6 +451,21 @@ var rebaseSubset = argvSubset{
 		"-i", "--interactive",
 		"--continue", "--abort", "--skip",
 		"--autostash",
+		// Preserving merge topology through the replay. It creates merge
+		// commits, but so does nothing else about this door's answer: the whole
+		// replay runs inside the one place git is declared to author, which is
+		// scoped to this verb, so a re-created merge is no more git's than a
+		// linear commit replayed beside it and safegit checks neither.
+		//
+		// Its optional value (`--rebase-merges=rebase-cousins`) is ATTACHED
+		// ONLY, and no valueFlags entry may be added for it -- see the rule
+		// beside that map. ACCEPTED LIMIT: the short cluster spelling
+		// `-rno-rebase-cousins` is therefore read letter by letter rather than
+		// as one token, and refuses on the first letter that is not allowed.
+		// The two spellings that carry a value, `-r no-rebase-cousins` (which
+		// git does not accept either) and `--rebase-merges=no-rebase-cousins`,
+		// are unaffected.
+		"-r", "--rebase-merges",
 	},
 	refused: []refusedCapability{
 		{
@@ -463,10 +479,6 @@ var rebaseSubset = argvSubset{
 		{
 			[]string{"-x", "--exec"},
 			"--exec runs a command of your own after every replayed commit, and a rebase through safegit is a replay and nothing else; run the command yourself when the rebase finishes",
-		},
-		{
-			[]string{"-r", "--rebase-merges"},
-			"--rebase-merges replays merge commits by re-merging their sides, so the operation creates merges safegit never computed and cannot check; rebase a linear range, or redo the merges with 'safegit merge'",
 		},
 		{
 			[]string{"--root"},

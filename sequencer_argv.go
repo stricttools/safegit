@@ -26,9 +26,12 @@ import (
 // they are one element and are recognized structurally.
 //
 // Optional-value options (`-S[<keyid>]`, `--gpg-sign[=<keyid>]`,
-// `--log[=<n>]`) are deliberately ABSENT: git accepts their value only
-// attached, so treating them as consuming the next element would swallow a
-// revision.
+// `--log[=<n>]`, `--rebase-merges[=<mode>]`) are deliberately ABSENT: git
+// accepts their value only attached, so treating them as consuming the next
+// element would swallow a revision. `--rebase-merges` is the one of them safegit
+// ALLOWS, which is why the rule is worth stating rather than assuming: an entry
+// for it here would make `safegit rebase --rebase-merges main` read `main` as
+// the option's value and then refuse for naming no upstream.
 var valueFlags = map[string]map[string]bool{
 	"merge": {
 		"-m": true, "--message": true,
@@ -59,7 +62,6 @@ var valueFlags = map[string]map[string]bool{
 		"--whitespace": true, "-C": true,
 		"-s": true, "--strategy": true,
 		"-X": true, "--strategy-option": true,
-		"--gpg-sign": true,
 	},
 	// reset and bisect declare none: reset's argument is a commit and bisect's
 	// vocabulary is subcommands and revisions, so nothing there consumes the

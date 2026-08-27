@@ -1256,12 +1256,22 @@ next to what is admitted.
 
 ### `rebase` is one upstream and a replay, and nothing else
 
-- **git's idiom:** `git rebase` has two backends, replays merges with
-  `--rebase-merges`, runs a command after each commit with `--exec`, rewrites
-  from the root with `--root`, and takes `<upstream> <branch>` to switch
-  branches before it starts.
+- **git's idiom:** `git rebase` has two backends, runs a command after each
+  commit with `--exec`, rewrites from the root with `--root`, and takes
+  `<upstream> <branch>` to switch branches before it starts.
 - **safegit:** the door safegit declares is a replay onto an upstream, and the
-  allowlist keeps the forms of that door and nothing more.
+  allowlist keeps the forms of that door and nothing more. Preserving the
+  range's own merge topology, `-r`/`--rebase-merges`, is one of them: the whole
+  replay runs inside the one place git is declared to author commits, and that
+  declaration is scoped to this verb rather than to the shape of what comes out,
+  so a merge the replay re-creates is no more git's than a linear commit
+  replayed beside it — safegit checks neither, and says so. Its optional value is
+  attached only (`--rebase-merges=rebase-cousins`), and the short cluster
+  spelling `-rno-rebase-cousins` is read letter by letter and refuses, which is
+  an accepted limit of reading git's argv without git's parser.
+
+  What the allowlist refuses is the rest:
+
   - the **apply backend** (`--apply`, and its `--whitespace`/`-C` patch options)
     is refused: safegit's in-flight state reader, its conflict machinery and its
     refusals are all written against the merge backend, and the apply backend
@@ -1271,9 +1281,6 @@ next to what is admitted.
     else, and running an operator's command after every replayed commit is a
     second, unbounded operation inside one lock. Run it yourself when the rebase
     finishes.
-  - `-r`/`--rebase-merges` is refused: it re-merges the sides of every merge
-    commit, so the operation creates merges safegit never computed and cannot
-    check. Rebase a linear range, or redo the merges with `safegit merge`.
   - `--root` is refused: rewriting every commit including the first is a history
     rewrite rather than a replay, and safegit's history-rewriting surface is
     `safegit scrub`, with its own lock, verification and journal.
@@ -1281,7 +1288,7 @@ next to what is admitted.
     which is a navigation safegit makes you state: switch to the branch, then
     rebase it. A pathspec is refused too — a rebase replays whole commits, and
     there is no part of one it can replay.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### `pull --rebase` is refused, naming the two commands
 
@@ -1326,7 +1333,7 @@ allowlist tables hold.
 | `cherry-pick` | exactly one commit | `-x`, `-s`/`--signoff`, `--no-edit`, `-m`/`--mainline`, `-X`/`--strategy-option`, `-n`/`--no-commit`, `--no-rerere-autoupdate`, `--abort`, `--quit` |
 | `revert` | exactly one commit | `-s`/`--signoff`, `--no-edit`, `-m`/`--mainline`, `-X`/`--strategy-option`, `-n`/`--no-commit`, `--reference`, `--no-rerere-autoupdate`, `--abort`, `--quit` |
 | `pull` | an optional remote and branch | `--merge-strategy ff\|ff-only\|no-ff` (required, no default) |
-| `rebase` | exactly one upstream | `--onto`, `-i`/`--interactive`, `--continue`/`--abort`/`--skip` (git's own, taking no argument), `--autostash` |
+| `rebase` | exactly one upstream | `--onto`, `-i`/`--interactive`, `--continue`/`--abort`/`--skip` (git's own, taking no argument), `--autostash`, `-r`/`--rebase-merges` (its optional value attached only) |
 | `reset` | one commit | `--soft`, `--mixed`, `--hard`, `--merge`, `--keep` |
 | `bisect` | one subcommand from the classification table's vocabulary | none |
 
