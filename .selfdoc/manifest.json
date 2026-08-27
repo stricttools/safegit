@@ -2,7 +2,7 @@
   "schema_version": 1,
   "name": "safegit",
   "slug": "safegit",
-  "version": "0.28.0",
+  "version": "0.29.0",
   "description": "",
   "language": "go",
   "base_url": "https://safegit.smmh.dev",
@@ -7846,6 +7846,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-27T13:32:10.967758+00:00",
+  "last_gen": "2026-08-27T19:02:06.544823+00:00",
   "theme": "minimal"
 }
