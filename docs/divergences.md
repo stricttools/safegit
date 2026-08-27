@@ -1032,13 +1032,52 @@ next to what is admitted.
   a fast-forward, because git takes the fast-forward before the flag is
   consulted. The flag means "do not commit the merge you computed", and a
   fast-forward computes nothing.
-- **safegit:** `--no-commit` parks in every case an operator can reach. The flag
-  says the operator wants to look at the result before it becomes anything, and
-  a fast-forward that moved the branch silently would deny exactly that. So the
-  fast-forward arm is taken only where nothing on the command line asks for a
-  commit to inspect, and the parked state is concluded with `safegit
+- **safegit:** `--no-commit` parks wherever a merge can be parked at all. The
+  flag says the operator wants to look at the result before it becomes anything,
+  and a fast-forward that moved the branch silently would deny exactly that. So
+  the fast-forward arm is taken only where nothing on the command line asks for
+  a commit to inspect, and the parked state is concluded with `safegit
   merge-continue` like any other.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+
+  There is exactly one place a merge cannot be parked, and it is REFUSED rather
+  than quietly fast-forwarded: an unborn branch. Parking is computed with
+  `--no-ff` underneath, and an unborn head cannot take a non-fast-forward — so
+  `--no-commit` there is refused before git runs, with the reason. See "The
+  friendly unborn pre-flight refusals" below.
+- **Ruling:** ours — deliberate
+
+### The friendly unborn pre-flight refusals
+
+- **git's idiom:** git lets each command meet an unborn branch on its own terms
+  and answers about the mechanism that failed. `git merge --no-ff` says
+  "Non-fast-forward commit does not make sense into an empty head", `git rebase`
+  says "Could not resolve HEAD to a commit", `git bisect start` says "bad HEAD -
+  strange symbolic ref". `git merge --no-commit` does not fail at all: it
+  fast-forwards and exits 0, because git takes the fast-forward before the flag
+  is consulted.
+- **safegit:** an unborn branch — a repository between `git init` and its first
+  commit, or one `safegit undo` of a root commit has emptied — is a supported
+  state, not an edge case: `commit` roots, `switch` moves, `merge` and `pull`
+  fast-forward, `cherry-pick` produces a root commit, `reset` works, and the
+  dirty-tree check compares against the empty tree. The four forms that cannot
+  be served there are refused BEFORE git runs, each naming the situation and the
+  way forward rather than the mechanism that would have failed: `merge --no-ff`,
+  `merge --no-commit`, `pull --merge-strategy no-ff` (the same request through
+  the other command), `rebase` and `bisect start`. The exit is safegit's general
+  code.
+
+  Three of them replace a git error with a better-aimed one and end the same
+  way. The `--no-commit` refusal is a real behavioral divergence: git would have
+  succeeded. It follows from the parked-merge model above — safegit parks by
+  computing with `--no-ff`, and an unborn head cannot take one — and the
+  alternative would be a `--no-commit` that silently moves the branch in exactly
+  the case the flag exists to prevent.
+
+  A `revert` onto an unborn branch is not in this set and needs no refusal of
+  its own: reverting onto nothing puts nothing back, so the standing
+  empty-result refusal ("An empty commit is refused; an empty merge is not")
+  fires, cleans up the state safegit parked, and says so.
+- **Ruling:** mixed — deliberate
 
 ### A fast-forward is safegit's own ref move, and undo refuses it
 

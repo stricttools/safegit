@@ -281,6 +281,13 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 		if code := refuseFetchHeadOctopus(gitDir, parsed.Revisions[0], "merge"); code != 0 {
 			return code
 		}
+		// And the unborn forms, in the same order the real run asks them, so the
+		// preview REFUSES exactly the command lines the run refuses. Without it
+		// the preview would reach previewMerge's unborn short-circuit and answer
+		// "a fast-forward" for a command line that cannot run at all.
+		if code := refuseUnbornMergeForm(flags.ctx(), parsed.Has("--no-ff"), parsed.Has("--no-commit"), "--no-ff", "--no-commit"); code != 0 {
+			return code
+		}
 
 		// No git merge runs: the invocation is recorded, and the outcome it
 		// would have is COMPUTED with git's own merge engine instead of guessed.
@@ -305,6 +312,8 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 		extraBase:    map[string]interface{}{"branch": other},
 		ffOnlyFlag:   "--ff-only",
 		ffOnlyWayOut: fmt.Sprintf("  Re-run without --ff-only to make one, or rebase this branch onto %s instead.\n", other),
+		noFFFlag:     "--no-ff",
+		parkFlag:     "--no-commit",
 		headline: func(out conclusionResult) string {
 			return "merged " + short(other, secondParentOf(out))
 		},
@@ -343,6 +352,10 @@ type mergeRequest struct {
 	// type is a refusal they cannot act on.
 	ffOnlyFlag   string
 	ffOnlyWayOut string
+	// noFFFlag and parkFlag are the same thing for the other two selections,
+	// which the unborn-branch refusal names. `pull` has no parking form, so its
+	// parkFlag is empty and its park field is never set.
+	noFFFlag, parkFlag string
 	// headline words the one-line human summary of a merge that made a commit.
 	headline func(out conclusionResult) string
 }
@@ -377,6 +390,21 @@ func performMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition, re
 	// name several sides, and resolving it to a commit answers about the first
 	// one alone. See refuseFetchHeadOctopus.
 	if code := refuseFetchHeadOctopus(gitDir, req.other, req.op); code != 0 {
+		return mergePayload{}, false, code
+	}
+
+	// BEFORE the fast-forward arm, because the two forms refused here are
+	// exactly the ones that would skip it and hand an unborn head to git's merge
+	// machinery, which is fatal there. `pull` asks this same question before its
+	// fetch, so its refusal costs no network round-trip; the copy here covers
+	// every other route into a merge.
+	//
+	// It is RECORDED, unlike the command-line refusals above, and the line
+	// between them is the one the --ff-only neighbor draws: those are about what
+	// was typed, this is about where the branch stands, and only the second is a
+	// fact about the repository an audit trail is for.
+	if code := refuseUnbornMergeForm(ctx, req.noFF, req.park, req.noFFFlag, req.parkFlag); code != 0 {
+		appendOperationEntry(flags, sgDir, req.op, pos, false, req.oplogExtra(oplogOutcomeFailed))
 		return mergePayload{}, false, code
 	}
 
@@ -750,4 +778,4 @@ var mergePayloadSchema = strictcli.SchemaObject(
 )
 
 // mergeHelp is the command's registered help text.
-const mergeHelp = "merge one branch into the current one, and author the result: safegit decides the fast-forward itself and moves the ref under compare-and-swap, or runs git's merge machinery with --no-ff --no-commit and commits the staged result through its own pipeline -- so a merge safegit performed carries safegit's trailers, ran the repository's commit-msg hook and is reversible with 'safegit undo'. A merge git stops on a conflict parks, and 'safegit merge-continue' concludes it; 'safegit merge --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one branch (no octopus), no strategy selection, no --squash, no --edit and no --autostash. --no-commit computes the merge and leaves it parked even when it is clean"
+const mergeHelp = "merge one branch into the current one, and author the result: safegit decides the fast-forward itself and moves the ref under compare-and-swap, or runs git's merge machinery with --no-ff --no-commit and commits the staged result through its own pipeline -- so a merge safegit performed carries safegit's trailers, ran the repository's commit-msg hook and is reversible with 'safegit undo'. A merge git stops on a conflict parks, and 'safegit merge-continue' concludes it; 'safegit merge --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one branch (no octopus), no strategy selection, no --squash, no --edit and no --autostash. --no-commit computes the merge and leaves it parked even when it is clean. On an UNBORN branch -- one with no commits yet -- a merge can only be a fast-forward, so --no-ff and --no-commit are both refused there before git runs, with the reason"

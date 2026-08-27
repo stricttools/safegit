@@ -280,6 +280,71 @@ func TestUnbornRevertRefusesAsEmpty(t *testing.T) {
 	assertNoSequencerResidue(t, f.dir, "after a refused unborn revert")
 }
 
+// The friendly pre-flight refusals. Each names the situation (an unborn branch)
+// and the way forward, and each fires BEFORE any git compute -- which for pull
+// means before the fetch.
+func TestUnbornFriendlyRefusals(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"merge --no-commit", []string{"merge", "--no-commit", "side"}, []string{"unborn", "--no-commit"}},
+		{"merge --no-ff", []string{"merge", "--no-ff", "side"}, []string{"unborn", "--no-ff"}},
+		{"merge --no-ff under --dry-run", []string{"--dry-run", "merge", "--no-ff", "side"}, []string{"unborn", "--no-ff"}},
+		{"rebase", []string{"rebase", "side"}, []string{"unborn", "rebase"}},
+		{"bisect start", []string{"bisect", "start"}, []string{"unborn", "bisect"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newUnbornRepo(t)
+			stdout, stderr, code := runSafegit(t, f.dir, tc.args...)
+			if code == 0 {
+				t.Fatalf("%v succeeded on an unborn branch; it should refuse\nstdout=%s\nstderr=%s", tc.args, stdout, stderr)
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(stderr, want) {
+					t.Errorf("refusal missing %q:\n%s", want, stderr)
+				}
+			}
+			// Nothing ran: no operation state, and the branch is still unborn.
+			assertNoSequencerResidue(t, f.dir, "after a refused unborn "+tc.name)
+			if _, ok := testutil.GitTryOut(t, f.dir, "rev-parse", "--verify", "--quiet", "HEAD"); ok {
+				t.Errorf("the refused command moved HEAD")
+			}
+		})
+	}
+}
+
+// The pull refusal is the one that must happen BEFORE the network round-trip:
+// its no-ff mode sets the very field that skips the unborn fast-forward arm, so
+// without the pre-flight it would fetch and then die on git's raw fatal.
+func TestUnbornPullNoFFRefusesBeforeTheFetch(t *testing.T) {
+	f := newUnbornRepo(t)
+	remote := newRepo(t)
+	testutil.Git(t, f.dir, "remote", "add", "origin", remote)
+
+	_, stderr, code := runSafegit(t, f.dir, "pull", "--merge-strategy", "no-ff", "origin", "main")
+	if code == 0 {
+		t.Fatalf("pull --merge-strategy no-ff succeeded on an unborn branch\n%s", stderr)
+	}
+	for _, want := range []string{"unborn", "--merge-strategy no-ff"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("refusal missing %q:\n%s", want, stderr)
+		}
+	}
+	// The fetch never happened. FETCH_HEAD is no witness -- the fixture's own
+	// `git fetch <src> main:side` wrote one -- so the evidence is the
+	// remote-tracking ref this fetch would have created, and git's own "From
+	// <remote>" narration.
+	if _, ok := testutil.GitTryOut(t, f.dir, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main"); ok {
+		t.Errorf("origin/main exists: the refusal came after the fetch")
+	}
+	if strings.Contains(stderr, "From "+remote) {
+		t.Errorf("git narrated a fetch:\n%s", stderr)
+	}
+}
+
 // A preview of a plain unborn merge answers without computing anything:
 // merge-tree needs two commits and there is only one, and the answer is known
 // by definition.
