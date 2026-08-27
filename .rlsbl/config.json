@@ -257,6 +257,60 @@
             "line": 81
           }
         ]
+      },
+      {
+        "reason": "**A symlink target that will not resolve in another checkout is refused (exit 29).** A link is stored as its text, so two shapes are refused: an ABSOLUTE target, inside the repository or out, and a relative one resolving outside it. A relative target landing inside stays committable, traversing and dangling ones included. The refusal names the target and the remedy that fits its shape; `--allow-non-portable-targets` records it anyway. Migration: a repository carrying a tracked absolute in-repository symlink starts refusing on the next commit that names it or sweeps it up by directory expansion. One refusal together with the message and documentation corrections that followed it, kept in one entry rather than split into arbitrary halves to fit the commit batch limit.",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 53
+          }
+        ]
+      },
+      {
+        "reason": "**A branch with no commits yet is a supported starting point.** On an unborn branch -- a fresh `git init`, or a `switch -c` before the first commit -- `commit`, `switch`, `merge`, `pull`, `cherry-pick`, `reset --hard` and the conclusions all work: the dirty-tree check compares against the empty tree instead of a HEAD that does not resolve, a merge or a pull takes the fast-forward arm, a pick roots the branch with the source commit's author preserved, a conflicted pick parks and concludes, and a revert that would produce an empty root commit is refused as empty instead of minting one. The forms that cannot work there -- `merge --no-commit`, `merge --no-ff`, `pull --merge-strategy no-ff`, `rebase` and `bisect start` -- are refused by safegit before git runs, each naming the unborn branch and the way forward, where raw git answered with a fatal about the wrong thing; the pull refusal fires before the fetch, and a merge preview refuses exactly as the real run does. One feature built across a whole phase, kept in one entry rather than split into arbitrary halves to fit the commit batch limit.",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 84
+          }
+        ]
+      },
+      {
+        "reason": "the closing round's plan file and the ruling records folded into it across its revisions; one plan and its revision history, kept in one entry rather than split into arbitrary halves to fit the commit batch limit",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 85
+          }
+        ]
+      },
+      {
+        "reason": "the closing round's pre-round housekeeping: the exit-code registry's one-code-per-recovery-path policy, the coincidence pin and the catalog sentence stating its consequence, the counted-edit and coverage-partition tools promoted out of one-shot experiments, CONTRIBUTING's corrected release flow, the closing test baseline, and a filed todo; one round of pre-round housekeeping, kept in one entry rather than split into arbitrary halves to fit the commit batch limit",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 86
+          }
+        ]
+      },
+      {
+        "reason": "tests pinning the closing round's behavior and the renames its sanctioned rewrites required; one test wave, kept in one entry rather than split into arbitrary halves to fit the commit batch limit",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 88
+          }
+        ]
+      },
+      {
+        "reason": "the closing round's documentation and divergences-catalog closure: the reviewed entries' rulings marked deliberate, the catalog preamble and its born-deliberate entries, the subset-boundary section restated without a false universal, the friendly-refusal direction recorded in the conventions, CONTRIBUTING's contributor test run and stress budget, the test-baseline header, and a gofmt alignment; one documentation-closure area, kept in one entry rather than split into arbitrary halves to fit the commit batch limit",
+        "entries": [
+          {
+            "version": "unreleased",
+            "line": 89
+          }
+        ]
       }
     ]
   },
