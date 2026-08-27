@@ -1061,16 +1061,16 @@ next to what is admitted.
   commit, or one `safegit undo` of a root commit has emptied — is a supported
   state, not an edge case: `commit` roots, `switch` moves, `merge` and `pull`
   fast-forward, `cherry-pick` produces a root commit, `reset` works, and the
-  dirty-tree check compares against the empty tree. The four forms that cannot
-  be served there are refused BEFORE git runs, each naming the situation and the
+  dirty-tree check compares against the empty tree. The forms that cannot be
+  served there are refused BEFORE git runs, each naming the situation and the
   way forward rather than the mechanism that would have failed: `merge --no-ff`,
   `merge --no-commit`, `pull --merge-strategy no-ff` (the same request through
   the other command), `rebase` and `bisect start`. The exit is safegit's general
   code.
 
-  Three of them replace a git error with a better-aimed one and end the same
-  way. The `--no-commit` refusal is a real behavioral divergence: git would have
-  succeeded. It follows from the parked-merge model above — safegit parks by
+  Most of them replace a git error with a better-aimed one and end the same way.
+  The `--no-commit` refusal is the exception, and a real behavioral divergence:
+  git would have succeeded. It follows from the parked-merge model above — safegit parks by
   computing with `--no-ff`, and an unborn head cannot take one — and the
   alternative would be a `--no-commit` that silently moves the branch in exactly
   the case the flag exists to prevent.

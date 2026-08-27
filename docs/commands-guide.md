@@ -1420,11 +1420,13 @@ safegit treats it as an ordinary state rather than an edge case. The dirty-tree 
 
 **What is refused, before git runs:**
 
-- **`merge --no-ff`**, **`merge --no-commit`** and **`pull --merge-strategy no-ff`**, each naming the flag the operator typed. All three ask for a merge commit onto a first parent that does not exist -- `--no-commit` because safegit parks a merge by computing it with `--no-ff` underneath. `pull` asks before its fetch, so the refusal costs no network round-trip, and merge's `--dry-run` refuses identically to its real run.
+- **`merge --no-ff`**, **`merge --no-commit`** and **`pull --merge-strategy no-ff`**, each naming the flag the operator typed. Each asks for a merge commit onto a first parent that does not exist -- `--no-commit` because safegit parks a merge by computing it with `--no-ff` underneath. `pull` asks before its fetch, so the refusal costs no network round-trip, and merge's `--dry-run` refuses identically to its real run.
 - **`rebase`**: there are no commits to replay.
 - **`bisect start`**: there is no range of commits to search.
 
 Each refusal names the unborn branch and the way forward, and exits with the general code. See `docs/divergences.md`, "The friendly unborn pre-flight refusals" -- one of them is a deliberate divergence, since raw `git merge --no-commit` fast-forwards an unborn head at exit 0.
+
+**What is NOT refused, and reads badly:** a `merge` naming a ref that does not resolve. On an unborn branch it reaches the compute step, which safegit pins to `--no-ff --no-commit`, so the operator meets git's own "Non-fast-forward commit does not make sense into an empty head" -- an error about a flag they never typed rather than about the ref they got wrong.
 
 **`revert`** is refused too, but by the standing empty-result rule rather than by a check of its own: reverting onto nothing puts nothing back, so the result would be a root commit with an empty tree. safegit removes the state it parked and says the revert produces no change.
 

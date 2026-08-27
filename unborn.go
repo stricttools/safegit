@@ -14,8 +14,8 @@ import (
 // An unborn branch -- a repository between `git init` and its first commit, or
 // one `safegit undo` of a root commit has emptied -- supports most of what
 // safegit does: `commit` roots, `switch` moves, `merge` and `pull`
-// fast-forward, `cherry-pick` produces a root commit, `reset` works. Four forms
-// cannot be served there, and this file is where each says so BEFORE git runs,
+// fast-forward, `cherry-pick` produces a root commit, `reset` works. The forms
+// that cannot be served there are these, and each says so here BEFORE git runs,
 // naming the situation and the way forward, instead of letting the operator
 // meet git's own message about something else:
 //
@@ -34,7 +34,7 @@ import (
 // line is correct one commit later), and not one of the numbered situations the
 // exit registry exists to distinguish.
 //
-// One of the four is a DELIBERATE DIVERGENCE rather than a friendlier wording
+// One of them is a DELIBERATE DIVERGENCE rather than a friendlier wording
 // of git's own refusal: raw `git merge --no-commit` into an unborn head
 // fast-forwards and exits 0. safegit refuses it, because safegit's `--no-commit`
 // PARKS in every case an operator can reach, and parking is computed with
