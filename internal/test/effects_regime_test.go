@@ -489,23 +489,30 @@ func TestComputeStepDryRunRecordsTheArgvTheExecutePathRuns(t *testing.T) {
 	})
 }
 
-// TestFastForwardMergePreviewRecordsNoGitMerge is the other half of the same
+// TestMergePreviewRecordsNoGitMergeWhereNoneRuns is the other half of the same
 // honesty, and it is the half that was wrong: a preview must record what the
-// real run would do, so a preview whose answer is "a fast-forward" must record
-// NO `git merge` at all.
+// real run would do, so a preview whose answer is one the real run reaches
+// WITHOUT running git's merge machinery must record NO `git merge` at all.
 //
-// A fast-forward is safegit's own compare-and-swap onto the incoming tip
-// followed by an index-and-working-tree sync. git's merge machinery never runs
-// -- performMerge takes the fast-forward arm before its compute step -- so the
-// `git merge --no-ff --no-commit <branch>` the preview used to record described
-// a subprocess that nothing performs. Both fast-forward shapes are pinned: the
-// ordinary one, and the UNBORN branch, where a merge can only ever be a
-// fast-forward.
+// Three answers are in that set, and they are the three subtests:
 //
-// The control is the third subtest: a merge that really would compute still
-// records its compute step, so the suppression is scoped to the answer that
-// earns it rather than to previews at large.
-func TestFastForwardMergePreviewRecordsNoGitMerge(t *testing.T) {
+//   - a born FAST-FORWARD, which safegit performs itself with a
+//     compare-and-swap onto the incoming tip and an index-and-working-tree
+//     sync -- performMerge takes that arm before its compute step;
+//   - the same on an UNBORN branch, where a merge can only ever be a
+//     fast-forward;
+//   - an `--ff-only` REFUSAL, where performMerge decides the branches have
+//     diverged and exits before handing git any argv at all.
+//
+// Each of them used to record `git merge --no-ff --no-commit <branch>`, which
+// described a subprocess that nothing performs.
+//
+// The control is the last subtest: a merge that really would compute still
+// records its compute step, so the suppression is scoped to the answers that
+// earn it rather than to previews at large. The FAILING paths keep recording
+// too, deliberately -- `safegit merge no-such-ref` really does hand that
+// argument to git in a real run.
+func TestMergePreviewRecordsNoGitMergeWhereNoneRuns(t *testing.T) {
 	// gitMergeRecord is the phrase a would-do log carries only when the compute
 	// step was recorded. Matching on `run: git ... merge` rather than the whole
 	// argv keeps the assertion true whatever branch name the case uses.
@@ -545,6 +552,26 @@ func TestFastForwardMergePreviewRecordsNoGitMerge(t *testing.T) {
 		}
 		if log := wouldDoLog(stdout); strings.Contains(log, gitMergeRecord) {
 			t.Errorf("the unborn fast-forward preview recorded a git merge the real run never issues:\n%s", log)
+		}
+	})
+
+	// --ff-only over DIVERGED branches: safegit decides this one itself, before
+	// git runs, and the divergences catalog records why ("The fast-forward-only
+	// refusal is safegit's, not git's") -- letting git decide would let git move
+	// the ref outside the compare-and-swap. So the preview's verdict is a
+	// refusal, and a refusal reaches no compute step to record.
+	t.Run("an --ff-only refusal", func(t *testing.T) {
+		fx := newPreviewRepo(t)
+
+		stdout, stderr, code := runSafegit(t, fx.dir, "--dry-run", "merge", "--ff-only", "side")
+		if code != 0 {
+			t.Fatalf("merge --ff-only --dry-run failed (%d): %s", code, stderr)
+		}
+		if !strings.Contains(stdout, "REFUSED") {
+			t.Fatalf("the fixture no longer produces an --ff-only refusal preview:\n%s", stdout)
+		}
+		if log := wouldDoLog(stdout); strings.Contains(log, gitMergeRecord) {
+			t.Errorf("the --ff-only refusal preview recorded a git merge the real run never issues:\n%s", log)
 		}
 	})
 
