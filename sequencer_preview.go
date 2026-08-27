@@ -46,6 +46,11 @@ import (
 // here because it differs per caller: the restructured revert computes with
 // `git revert --no-commit ...`, and a preview whose log said `git revert ...`
 // would record a mutation nothing performs.
+//
+// It is recorded CONDITIONALLY, and the condition belongs to the computation
+// below rather than to any caller: a merge that turns out to be a fast-forward
+// reaches no compute step in a real run either, so it records nothing. See the
+// closure built below and previewMerge's own comment.
 func previewSequencerOperation(flags globalFlags, verb string, args []string, recordedArgv []string) int {
 	// The refusal comes before anything else, including the would-do record: a
 	// preview that cannot be computed is a refusal of the whole invocation, and
@@ -70,9 +75,17 @@ func previewSequencerOperation(flags globalFlags, verb string, args []string, re
 	// The invocation is recorded in the framework's would-do log, exactly as it
 	// was before there was anything to compute: the preview below is an
 	// addition to the effects regime's answer, not a replacement for it.
-	if code := runGitMutation(flags, gitexec.NoDoor, recordedArgv...); code != 0 {
-		return code
-	}
+	//
+	// It is handed DOWN rather than emitted here, because whether the real run
+	// issues this git command at all is a question only the computation below
+	// can answer. A merge that turns out to be a FAST-FORWARD never reaches
+	// git's merge machinery -- safegit moves the ref itself -- so recording the
+	// compute step for one would describe a subprocess nothing performs. Every
+	// other path records it, the failing ones included: `safegit merge
+	// no-such-ref` really does hand that argument to git in a real run, and the
+	// preview reporting git's own resolution error first does not change what
+	// the run would have done.
+	record := func() int { return runGitMutation(flags, gitexec.NoDoor, recordedArgv...) }
 
 	ctx, _, cleanup, err := commit.BeginPreview(flags.ctx(), true)
 	if err != nil {
@@ -82,9 +95,9 @@ func previewSequencerOperation(flags globalFlags, verb string, args []string, re
 	defer cleanup()
 
 	if verb == "merge" {
-		return previewMerge(flags, ctx, parsed)
+		return previewMerge(flags, ctx, parsed, record)
 	}
-	return previewReplay(flags, ctx, verb, parsed)
+	return previewReplay(flags, ctx, verb, parsed, record)
 }
 
 // strategyOptionArgv collects every strategy option on the command line, ready
@@ -183,17 +196,34 @@ func previewRefusal(ctx context.Context, verb string, parsed gitArgs) string {
 // date, a fast-forward, and a real merge. Where the operator asked for
 // --ff-only and the merge is not a fast-forward, the honest preview is that
 // git would REFUSE, not that the merge is clean.
-func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs) int {
+//
+// recordCompute emits the would-do record for the compute step, and it is
+// emitted on every path but the two FAST-FORWARD answers -- the only outcomes
+// the real run reaches without running git's merge machinery at all. See
+// previewSequencerOperation, where the closure is built and the rule stated.
+// UP TO DATE is deliberately not one of them: the real run finds that out by
+// running the compute step and reading the state git left, so its record is
+// true.
+func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs, recordCompute func() int) int {
+	// record emits the compute step's would-do record and hands back the exit
+	// code the caller meant to return, so a path that records reads as one line.
+	record := func(code int) int {
+		if c := recordCompute(); c != 0 {
+			return c
+		}
+		return code
+	}
+
 	if len(parsed.Revisions) > 1 {
 		fmt.Fprintf(os.Stderr, "error: --dry-run cannot preview an octopus merge: merge-tree computes one merge of two commits\n")
-		return exitcode.General
+		return record(exitcode.General)
 	}
 	other := parsed.Revisions[0]
 
 	otherSHA, err := git.RevParse(ctx, other+"^{commit}")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s does not name a commit: %v\n", other, err)
-		return exitcode.General
+		return record(exitcode.General)
 	}
 
 	// An UNBORN branch, and the answer is known without computing anything: a
@@ -217,6 +247,9 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs) int {
 	// `--no-commit` are refused before the preview runs, exactly as the real run
 	// refuses them, so no command line the real run would refuse is previewed as
 	// a fast-forward here.
+	//
+	// NO RECORD: the real run takes the unborn fast-forward arm, which is a
+	// compare-and-swap pinned to the zero object name and a sync. No git merge.
 	if git.HeadIsUnborn(ctx) {
 		infof(flags, "would merge %s: a fast-forward onto an unborn branch, no merge commit and no merge to compute\n", short(other, otherSHA))
 		return exitcode.OK
@@ -225,24 +258,29 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs) int {
 	head, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return exitcode.General
+		return record(exitcode.General)
 	}
 
 	upToDate, err := git.IsAncestorOf(ctx, otherSHA, head)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return exitcode.General
+		return record(exitcode.General)
 	}
 	if upToDate {
 		infof(flags, "would merge %s: already up to date, nothing to do\n", short(other, otherSHA))
-		return exitcode.OK
+		return record(exitcode.OK)
 	}
 
 	fastForward, err := git.IsAncestorOf(ctx, head, otherSHA)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return exitcode.General
+		return record(exitcode.General)
 	}
+	// NO RECORD, for the reason above: safegit performs this one itself.
+	//
+	// The predicate is the PREVIEW's, and it is the same one that decides the
+	// sentence printed here -- so the record follows the answer the operator is
+	// given rather than a second reading of the command line.
 	if fastForward && !parsed.Has("--no-ff") {
 		infof(flags, "would merge %s: a fast-forward, no merge commit and no merge to compute\n", short(other, otherSHA))
 		return exitcode.OK
@@ -256,9 +294,12 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs) int {
 	// merge that is not going to start.
 	if parsed.Has("--ff-only") {
 		infof(flags, "would merge %s: REFUSED -- --ff-only was given and this is not a fast-forward\n", short(other, otherSHA))
-		return exitcode.OK
+		return record(exitcode.OK)
 	}
 
+	if code := recordCompute(); code != 0 {
+		return code
+	}
 	result, err := git.MergeTree(ctx, "", head, otherSHA, strategyOptionArgv(parsed)...)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -275,7 +316,15 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs) int {
 // no queue to replay here and no intermediate commit to build. What the
 // computation needs is the two sides that express the operation as a merge --
 // see replaySides.
-func previewReplay(flags globalFlags, ctx context.Context, verb string, parsed gitArgs) int {
+//
+// recordCompute is emitted unconditionally here, and that is the whole
+// difference from previewMerge: a cherry-pick and a revert have no
+// fast-forward arm, so a real run always hands the operation to
+// `git <verb> --no-commit` whatever the outcome turns out to be.
+func previewReplay(flags globalFlags, ctx context.Context, verb string, parsed gitArgs, recordCompute func() int) int {
+	if code := recordCompute(); code != 0 {
+		return code
+	}
 	if len(parsed.Revisions) != 1 {
 		// Unreachable through the commands, which refuse any other count before
 		// the preview: stated rather than assumed, so a future caller that gets

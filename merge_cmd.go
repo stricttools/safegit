@@ -377,6 +377,12 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 		// and the caller's own fast-forward and commit selections never reach
 		// git. A would-do log saying `git merge feature` would describe a
 		// mutation nothing performs.
+		//
+		// WHETHER it is recorded is decided further down, by the preview itself:
+		// a merge that turns out to be a FAST-FORWARD never reaches this argv at
+		// all -- performMerge takes its fast-forward arm first -- so the record
+		// is handed to previewSequencerOperation as a closure rather than emitted
+		// here. See previewMerge.
 		recorded := append([]string{"merge", "--no-ff", "--no-commit"}, withoutMergeSelectors(args)...)
 		return previewSequencerOperation(flags, "merge", args, recorded)
 	}

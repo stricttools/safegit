@@ -489,6 +489,82 @@ func TestComputeStepDryRunRecordsTheArgvTheExecutePathRuns(t *testing.T) {
 	})
 }
 
+// TestFastForwardMergePreviewRecordsNoGitMerge is the other half of the same
+// honesty, and it is the half that was wrong: a preview must record what the
+// real run would do, so a preview whose answer is "a fast-forward" must record
+// NO `git merge` at all.
+//
+// A fast-forward is safegit's own compare-and-swap onto the incoming tip
+// followed by an index-and-working-tree sync. git's merge machinery never runs
+// -- performMerge takes the fast-forward arm before its compute step -- so the
+// `git merge --no-ff --no-commit <branch>` the preview used to record described
+// a subprocess that nothing performs. Both fast-forward shapes are pinned: the
+// ordinary one, and the UNBORN branch, where a merge can only ever be a
+// fast-forward.
+//
+// The control is the third subtest: a merge that really would compute still
+// records its compute step, so the suppression is scoped to the answer that
+// earns it rather than to previews at large.
+func TestFastForwardMergePreviewRecordsNoGitMerge(t *testing.T) {
+	// gitMergeRecord is the phrase a would-do log carries only when the compute
+	// step was recorded. Matching on `run: git ... merge` rather than the whole
+	// argv keeps the assertion true whatever branch name the case uses.
+	const gitMergeRecord = "run: git " + noOptionalLocks + " merge"
+
+	t.Run("a born fast-forward", func(t *testing.T) {
+		dir := newRepo(t)
+		testutil.WriteFile(t, dir, "f.txt", "one\n")
+		safegitCommit(t, dir, "one", "f.txt")
+		testutil.Git(t, dir, "branch", "ahead")
+		testutil.Git(t, dir, "switch", "ahead")
+		testutil.WriteFile(t, dir, "f.txt", "two\n")
+		safegitCommit(t, dir, "two", "f.txt")
+		testutil.Git(t, dir, "switch", "main")
+
+		stdout, stderr, code := runSafegit(t, dir, "--dry-run", "merge", "ahead")
+		if code != 0 {
+			t.Fatalf("merge --dry-run failed (%d): %s", code, stderr)
+		}
+		if !strings.Contains(stdout, "fast-forward") {
+			t.Fatalf("the fixture no longer produces a fast-forward preview:\n%s", stdout)
+		}
+		if log := wouldDoLog(stdout); strings.Contains(log, gitMergeRecord) {
+			t.Errorf("the fast-forward preview recorded a git merge the real run never issues:\n%s", log)
+		}
+	})
+
+	t.Run("an unborn fast-forward", func(t *testing.T) {
+		fx := newUnbornRepo(t)
+
+		stdout, stderr, code := runSafegit(t, fx.dir, "--dry-run", "merge", "side")
+		if code != 0 {
+			t.Fatalf("merge --dry-run on an unborn branch failed (%d): %s", code, stderr)
+		}
+		if !strings.Contains(stdout, "fast-forward") {
+			t.Fatalf("the unborn preview no longer reports a fast-forward:\n%s", stdout)
+		}
+		if log := wouldDoLog(stdout); strings.Contains(log, gitMergeRecord) {
+			t.Errorf("the unborn fast-forward preview recorded a git merge the real run never issues:\n%s", log)
+		}
+	})
+
+	t.Run("a merge that really computes still records it", func(t *testing.T) {
+		fx := newPreviewRepo(t)
+
+		stdout, stderr, code := runSafegit(t, fx.dir, "--dry-run", "merge", "side")
+		if code != 0 {
+			t.Fatalf("merge --dry-run failed (%d): %s", code, stderr)
+		}
+		if !strings.Contains(stdout, "CONFLICT") {
+			t.Fatalf("the fixture no longer produces a conflicting merge preview:\n%s", stdout)
+		}
+		log := wouldDoLog(stdout)
+		if !strings.Contains(log, gitMergeRecord+" --no-ff --no-commit side") {
+			t.Errorf("a preview that would compute did not record its compute step:\n%s", log)
+		}
+	})
+}
+
 // TestHistoryRewriteDryRunRecordsNoInventedSHA is the same honesty on the
 // history-rewrite side, which mints four effects: the ref move onto the
 // rewritten history, then the reflog expire, repack and prune that make the
