@@ -11,6 +11,7 @@ import (
 
 	"github.com/smm-h/safegit/internal/coord"
 	"github.com/smm-h/safegit/internal/exitcode"
+	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/safegit/internal/sequencer"
 	"github.com/smm-h/safegit/internal/testutil"
@@ -148,6 +149,86 @@ func TestPipelineHonorsADeclaredSequencerContext(t *testing.T) {
 	}); err == nil {
 		t.Error("an amend declaring a revert conclusion ran during a merge")
 	}
+}
+
+// orphanedUnmergedRepo parks a repository in a conflicted merge and then strips
+// the state files that say so, leaving an index that still carries stage 1/2/3
+// entries while git reports nothing in flight. It is the unit-level mirror of
+// the integration fixture in internal/test.
+//
+// That is the state the unmerged-index guard exists for: the in-flight guard
+// reads git's state files, so it passes a caller through here, and the
+// unmerged-index guard is the only thing left between the caller and a commit
+// git itself refuses to make.
+func orphanedUnmergedRepo(t *testing.T) (sgDir, tip string) {
+	t.Helper()
+	sgDir, tip = conflictedMergeRepo(t)
+
+	ctx := context.Background()
+	gitDir, err := git.GitDir(ctx)
+	if err != nil {
+		t.Fatalf("resolving the git dir: %v", err)
+	}
+	for _, name := range []string{"MERGE_HEAD", "MERGE_MSG", "MERGE_MODE", "AUTO_MERGE"} {
+		if err := os.Remove(filepath.Join(gitDir, name)); err != nil && !os.IsNotExist(err) {
+			t.Fatalf("removing %s: %v", name, err)
+		}
+	}
+	// AUTO_MERGE is a ref as well as a file on some layouts.
+	del := exec.Command("git", "update-ref", "-d", "AUTO_MERGE")
+	del.Dir = filepath.Dir(gitDir)
+	_ = del.Run()
+
+	// Both halves of the state this fixture is about, asserted rather than
+	// assumed: git sees nothing in flight, and the index is still unmerged.
+	entries, err := git.UnmergedStages(ctx, "")
+	if err != nil {
+		t.Fatalf("reading the index's unmerged entries: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("the fixture must keep the unmerged index entries")
+	}
+	return sgDir, tip
+}
+
+// The mirror of the test below, and the other half of the same pin: a request
+// carrying the SHARED-INDEX BASE while nothing declares which operation it
+// concludes is not a conclusion either, and the guard refuses it.
+//
+// The fixture is deliberately an ORPHANED unmerged index -- the merge's state
+// files removed, the index left as git wrote it. With a merge still in flight
+// the in-flight guard would answer first and this test would pass while saying
+// nothing about the unmerged-index guard; with the state gone, that guard is the
+// only one left to answer.
+//
+// A regression to `base == IndexBaseSharedIndex` alone would exempt exactly this
+// request: a commit seeded from the shared index with nothing claiming to
+// resolve it, which is what every ordinary commit made through the shared-index
+// base looks like.
+func TestASharedIndexBaseAloneDoesNotExemptTheUnmergedGuard(t *testing.T) {
+	sgDir, tip := orphanedUnmergedRepo(t)
+	p := newPipeline(sgDir)
+
+	_, err := p.Execute(context.Background(), CommitRequest{
+		Message:   "a commit seeded from the shared index, concluding nothing",
+		Files:     []string{"c.txt"},
+		IndexBase: IndexBaseSharedIndex,
+	})
+	if err == nil {
+		t.Fatal("a shared-index base alone exempted the unmerged-index guard")
+	}
+	var ce *CommitError
+	if !errors.As(err, &ce) {
+		t.Fatalf("refusal is untyped (%T: %v)", err, err)
+	}
+	if ce.Code != exitcode.UnmergedIndex {
+		t.Fatalf("refusal exits %d, want %d (UnmergedIndex): %v", ce.Code, exitcode.UnmergedIndex, err)
+	}
+	if !strings.Contains(err.Error(), "unmerged entries") {
+		t.Errorf("refusal does not name the unmerged entries: %v", err)
+	}
+
+	commitLandsOnBranch(t, "refs/heads/main", tip)
 }
 
 // The unmerged-index exemption needs BOTH declarations, and this pins the half
