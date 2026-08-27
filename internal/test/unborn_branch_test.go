@@ -345,6 +345,138 @@ func TestUnbornPullNoFFRefusesBeforeTheFetch(t *testing.T) {
 	}
 }
 
+// oplogEntriesIfAny is oplogEntries over a repository that may have no oplog at
+// all. A refusal that records nothing in a repository where no safegit
+// operation ever recorded anything leaves no log file, and that absence is the
+// answer rather than a failure to read.
+func oplogEntriesIfAny(t *testing.T, dir, op string) []map[string]interface{} {
+	t.Helper()
+	if _, err := os.Stat(filepath.Join(dir, ".git", "safegit", "log")); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		t.Fatalf("stat oplog: %v", err)
+	}
+	return oplogEntries(t, dir, op)
+}
+
+// assertRefusalRecorded checks the one entry a recorded refusal writes: a
+// failed outcome and an EMPTY new tip. The empty tip is the mechanism rather
+// than a formality -- the readers of the log take the newest entry for a ref
+// that carries a new tip, so an entry with none is passed over and the position
+// safegit really last left the branch at stays the one undo and doctor's bypass
+// detection compare against.
+func assertRefusalRecorded(t *testing.T, dir, op string) {
+	t.Helper()
+	entries := oplogEntriesIfAny(t, dir, op)
+	if len(entries) != 1 {
+		t.Fatalf("want exactly one %q oplog entry for the refusal, got %d: %v", op, len(entries), entries)
+	}
+	extra, _ := entries[0]["extra"].(map[string]interface{})
+	if extra["outcome"] != "failed" {
+		t.Errorf("outcome = %v, want \"failed\" (entry: %v)", extra["outcome"], entries[0])
+	}
+	if sha, _ := extra["sha"].(string); sha != "" {
+		t.Errorf("sha = %q, want empty: the refused operation moved no ref", sha)
+	}
+}
+
+// assertNothingRecorded checks that none of the named ops appears in the log.
+func assertNothingRecorded(t *testing.T, dir string, ops ...string) {
+	t.Helper()
+	for _, op := range ops {
+		if entries := oplogEntriesIfAny(t, dir, op); len(entries) != 0 {
+			t.Errorf("op %q recorded %d oplog entry(ies), want none: %v", op, len(entries), entries)
+		}
+	}
+}
+
+// The oplog split across the friendly unborn refusals. It is NOT uniform, and
+// the line is drawn by where each refusal sits rather than by how it reads.
+//
+// A refused unborn `merge --no-ff` / `merge --no-commit` and a refused unborn
+// `pull --merge-strategy no-ff` are RECORDED: both sit past the point where the
+// branch position was read, and what they record is a fact about where the
+// branch stands -- the kind of thing an audit trail exists for -- rather than
+// about what was typed. Each writes one entry with a failed outcome and no new
+// tip.
+//
+// A refused unborn `rebase` and `bisect start` record NOTHING: their refusals
+// come before any position is taken, deliberately so, and the operation never
+// entered the recording path at all.
+//
+// Under `--dry-run` none of them records anything, because a preview writes no
+// oplog in any case.
+func TestUnbornRefusalOplogSplit(t *testing.T) {
+	t.Run("merge --no-ff is recorded", func(t *testing.T) {
+		f := newUnbornRepo(t)
+		if stdout, stderr, code := runSafegit(t, f.dir, "merge", "--no-ff", "side"); code == 0 {
+			t.Fatalf("merge --no-ff succeeded on an unborn branch\nstdout=%s\nstderr=%s", stdout, stderr)
+		}
+		assertRefusalRecorded(t, f.dir, "merge")
+	})
+
+	t.Run("merge --no-commit is recorded", func(t *testing.T) {
+		f := newUnbornRepo(t)
+		if stdout, stderr, code := runSafegit(t, f.dir, "merge", "--no-commit", "side"); code == 0 {
+			t.Fatalf("merge --no-commit succeeded on an unborn branch\nstdout=%s\nstderr=%s", stdout, stderr)
+		}
+		assertRefusalRecorded(t, f.dir, "merge")
+	})
+
+	t.Run("pull --merge-strategy no-ff is recorded", func(t *testing.T) {
+		f := newUnbornRepo(t)
+		testutil.Git(t, f.dir, "remote", "add", "origin", newRepo(t))
+		if stdout, stderr, code := runSafegit(t, f.dir, "pull", "--merge-strategy", "no-ff", "origin", "main"); code == 0 {
+			t.Fatalf("pull --merge-strategy no-ff succeeded on an unborn branch\nstdout=%s\nstderr=%s", stdout, stderr)
+		}
+		assertRefusalRecorded(t, f.dir, "pull")
+		// The refusal is the pull's own, before its merge step: no merge entry
+		// rides along with it.
+		assertNothingRecorded(t, f.dir, "merge")
+	})
+
+	t.Run("rebase records nothing", func(t *testing.T) {
+		f := newUnbornRepo(t)
+		if stdout, stderr, code := runSafegit(t, f.dir, "rebase", "side"); code == 0 {
+			t.Fatalf("rebase succeeded on an unborn branch\nstdout=%s\nstderr=%s", stdout, stderr)
+		}
+		assertNothingRecorded(t, f.dir, "rebase")
+	})
+
+	t.Run("bisect start records nothing", func(t *testing.T) {
+		f := newUnbornRepo(t)
+		if stdout, stderr, code := runSafegit(t, f.dir, "bisect", "start"); code == 0 {
+			t.Fatalf("bisect start succeeded on an unborn branch\nstdout=%s\nstderr=%s", stdout, stderr)
+		}
+		assertNothingRecorded(t, f.dir, "bisect")
+	})
+
+	t.Run("a preview of any of them records nothing", func(t *testing.T) {
+		cases := []struct {
+			name string
+			args []string
+			ops  []string
+		}{
+			{"merge --no-ff", []string{"--dry-run", "merge", "--no-ff", "side"}, []string{"merge"}},
+			{"merge --no-commit", []string{"--dry-run", "merge", "--no-commit", "side"}, []string{"merge"}},
+			{"pull --merge-strategy no-ff", []string{"--dry-run", "pull", "--merge-strategy", "no-ff", "origin", "main"}, []string{"pull", "merge"}},
+			{"rebase", []string{"--dry-run", "rebase", "side"}, []string{"rebase"}},
+			{"bisect start", []string{"--dry-run", "bisect", "start"}, []string{"bisect"}},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				f := newUnbornRepo(t)
+				testutil.Git(t, f.dir, "remote", "add", "origin", newRepo(t))
+				if stdout, stderr, code := runSafegit(t, f.dir, tc.args...); code == 0 {
+					t.Fatalf("--dry-run %v succeeded on an unborn branch\nstdout=%s\nstderr=%s", tc.args, stdout, stderr)
+				}
+				assertNothingRecorded(t, f.dir, tc.ops...)
+			})
+		}
+	})
+}
+
 // A preview of a plain unborn merge answers without computing anything:
 // merge-tree needs two commits and there is only one, and the answer is known
 // by definition.
