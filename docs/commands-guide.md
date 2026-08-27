@@ -567,7 +567,7 @@ safegit --dry-run undo
 - **CAS ref updates**: The undo uses the oplog's recorded tip SHA as the expected old value in `git update-ref`. If the branch has moved since the oplog entry was written (e.g., another session committed), the CAS fails and the undo is rejected.
 - **Range validation: a commit safegit did not create is never rolled over**: before anything moves, undo walks the commits the branch would LOSE -- the first-parent walk from the rollback target to where the ref actually stands -- and every one of them must be an operation this undo is reversing, according to the oplog. A plain `git commit`, a commit a rebase replayed, or anything else safegit did not author sitting in that range is a hard error (exit 1) naming the offending commit, not a commit quietly dropped out of history. The CAS above cannot answer this on its own: it pins the newest recorded tip and therefore sees only a foreign commit sitting on top of it. The refusal reaches `--dry-run` too, so a preview never announces a rollback the real run would refuse, and where the foreign commit turns out to be another safegit session's the message names `--bypass-session`.
 - **History rewrite barrier**: If a `scrub` or `rewrite-author` operation is found in the oplog while scanning for undoable operations, the undo is blocked with an error. History rewrites invalidate all prior SHAs, making earlier oplog entries unsafe to undo.
-- **Root commit undo**: Undoing the root commit (the first commit in the repo) deletes the branch ref entirely, leaving the branch in an unborn state.
+- **Root commit undo**: Undoing the root commit (the first commit in the repo) deletes the branch ref entirely, leaving the branch in an unborn state. That state is supported rather than a dead end -- see "Unborn branches" for what works there and what is refused.
 - **Undo moves a ref; it never moves the working tree**: undoing a `safegit mv` reverses the COMMIT and leaves the files at their new paths, and says so on stderr. Undoing a merge, pull, cherry-pick or revert -- the pipeline-authored form or a conclusion (`merge-continue`, `cherry-pick-continue`, `revert-continue`) -- gives back the pre-operation tip but does NOT restore git's operation state -- `MERGE_HEAD`, the message draft and the conflict stages are gone -- so the repository is idle rather than mid-merge, and the notice says to re-run the operation to get back to a state the conclusion command can conclude. Both notices print whatever `--quiet` says: they are facts about what the undo did not do.
 - **Oplog recording**: The undo itself is logged to the oplog, enabling redo-like workflows and audit trails.
 
@@ -1401,7 +1401,32 @@ Every one of these operations appends one oplog entry carrying the same three fa
 
 An operation git REFUSED records an empty new tip and a failed outcome. That is the mechanism rather than a formality: the readers of this log (`oplog.LastRefUpdate`, doctor's bypass check, `undo`'s per-ref filter) take the newest entry for a ref that carries a new tip, so an entry with none is passed over and the position safegit really last left the branch at is still the one they compare against.
 
-`switch` and `bisect` are the exception, because neither moves a branch ref: a switch moves HEAD, and a bisect step parks HEAD on some other commit entirely. Their positions ride under `observed_parent` and `observed_tip`, names those readers do not consume. An entry claiming a branch position there would reset doctor's bypass-detection baseline and mask an out-of-band commit made before the switch.
+`switch` and `bisect` are the exception, because neither moves a branch ref: a switch moves HEAD, and a bisect step parks HEAD on some other commit entirely. Their positions ride under `observed_parent` and `observed_tip`, names those readers do not consume. An entry claiming a branch position there would reset doctor's bypass-detection baseline and mask an out-of-band commit made before the switch. On an unborn branch one of those two is empty -- a `switch -c` that leaves the branch unborn records no tip, a switch away from an unborn HEAD records no parent -- and both are harmless for the same reason: nothing consumes the `observed_` spelling.
+
+## Unborn branches
+
+An **unborn branch** is a branch with no commits: the state a repository is in between `git init` and its first commit, the state a clone that fetched without checking out sits in, and the state `safegit undo` of a root commit leaves behind. `git rev-parse HEAD` fails there, and every git command that takes `HEAD` as a treeish is fatal.
+
+safegit treats it as an ordinary state rather than an edge case. The dirty-tree check compares the working tree against the **empty tree** instead of `HEAD` (a repository with no commits holds exactly that), so a clean unborn repository is clean and a dirty one is refused at exit **5** with its paths listed -- a staged addition and an untracked file alike.
+
+**What works:**
+
+- **`commit`** makes the root commit, exactly as it always did. `--allow-empty` with no named path makes a root commit whose tree has no entries at all.
+- **`switch <branch>`** moves onto a branch that has commits; **`switch -c <name>`** starts a new branch and leaves it unborn too.
+- **`merge <branch>`** and **`pull`** fast-forward: the branch is created by compare-and-swap pinned to the all-zero object name (git's "this ref must not exist yet"), and the index and working tree are put in step with the new tip. The oplog records the fast-forward outcome, and `safegit undo` refuses it like any other fast-forward.
+- **`cherry-pick <commit>`** produces a ROOT commit with the source's author preserved. A conflicted pick parks and `safegit cherry-pick-continue` concludes it -- note the conflict shape: onto an unborn branch an add-only pick applies cleanly, so a conflict is a MODIFY/DELETE one whose index holds stages 1 and 3 and no stage 2.
+- **`reset --hard <commit>`** works.
+- **`--dry-run`** works: a plain merge preview answers "a fast-forward" without computing anything (merge-tree needs two commits and there is one), and a cherry-pick or revert preview computes against the empty tree as our side.
+
+**What is refused, before git runs:**
+
+- **`merge --no-ff`**, **`merge --no-commit`** and **`pull --merge-strategy no-ff`**, each naming the flag the operator typed. All three ask for a merge commit onto a first parent that does not exist -- `--no-commit` because safegit parks a merge by computing it with `--no-ff` underneath. `pull` asks before its fetch, so the refusal costs no network round-trip, and merge's `--dry-run` refuses identically to its real run.
+- **`rebase`**: there are no commits to replay.
+- **`bisect start`**: there is no range of commits to search.
+
+Each refusal names the unborn branch and the way forward, and exits with the general code. See `docs/divergences.md`, "The friendly unborn pre-flight refusals" -- one of them is a deliberate divergence, since raw `git merge --no-commit` fast-forwards an unborn head at exit 0.
+
+**`revert`** is refused too, but by the standing empty-result rule rather than by a check of its own: reverting onto nothing puts nothing back, so the result would be a root commit with an empty tree. safegit removes the state it parked and says the revert produces no change.
 
 ## switch
 
