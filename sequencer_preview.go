@@ -79,11 +79,12 @@ func previewSequencerOperation(flags globalFlags, verb string, args []string, re
 	// It is handed DOWN rather than emitted here, because whether the real run
 	// issues this git command at all is a question only the computation below
 	// can answer. A merge that turns out to be a FAST-FORWARD never reaches
-	// git's merge machinery -- safegit moves the ref itself -- so recording the
-	// compute step for one would describe a subprocess nothing performs. Every
-	// other path records it, the failing ones included: `safegit merge
-	// no-such-ref` really does hand that argument to git in a real run, and the
-	// preview reporting git's own resolution error first does not change what
+	// git's merge machinery -- safegit moves the ref itself -- and neither does
+	// one safegit REFUSES for `--ff-only`, which it decides before git runs. In
+	// both cases recording the compute step would describe a subprocess nothing
+	// performs. Every other path records it, the failing ones included: `safegit
+	// merge no-such-ref` really does hand that argument to git in a real run, and
+	// the preview reporting git's own resolution error first does not change what
 	// the run would have done.
 	record := func() int { return runGitMutation(flags, gitexec.NoDoor, recordedArgv...) }
 
@@ -198,12 +199,15 @@ func previewRefusal(ctx context.Context, verb string, parsed gitArgs) string {
 // git would REFUSE, not that the merge is clean.
 //
 // recordCompute emits the would-do record for the compute step, and it is
-// emitted on every path but the two FAST-FORWARD answers -- the only outcomes
-// the real run reaches without running git's merge machinery at all. See
-// previewSequencerOperation, where the closure is built and the rule stated.
-// UP TO DATE is deliberately not one of them: the real run finds that out by
-// running the compute step and reading the state git left, so its record is
-// true.
+// emitted on every path but the THREE answers the real run reaches without
+// running git's merge machinery at all: the two fast-forwards, which safegit
+// performs itself with a compare-and-swap, and the `--ff-only` refusal, which
+// safegit decides before git runs. See previewSequencerOperation, where the
+// closure is built and the rule stated.
+//
+// UP TO DATE is deliberately not one of them, and the difference is where the
+// answer comes from: the real run finds that out by RUNNING the compute step
+// and reading the state git left behind, so its record is true.
 func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs, recordCompute func() int) int {
 	// record emits the compute step's would-do record and hands back the exit
 	// code the caller meant to return, so a path that records reads as one line.
@@ -292,9 +296,14 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs, record
 	// first and reporting a conflict would answer a question this command line
 	// does not reach -- and would tell the operator to resolve conflicts in a
 	// merge that is not going to start.
+	// NO RECORD either, and for the same reason one step further along: this is a
+	// REFUSAL that safegit makes itself, before git runs. performMerge exits here
+	// without ever building the compute step's argv, so recording it would name a
+	// subprocess nothing issues -- the property every other safegit refusal
+	// already has, that a refused invocation leaves no would-do entry behind.
 	if parsed.Has("--ff-only") {
 		infof(flags, "would merge %s: REFUSED -- --ff-only was given and this is not a fast-forward\n", short(other, otherSHA))
-		return record(exitcode.OK)
+		return exitcode.OK
 	}
 
 	if code := recordCompute(); code != 0 {

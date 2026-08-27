@@ -1695,17 +1695,26 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   A preview creates nothing, not even safegit's own state directory on a
   first-ever run.
 
-  One recorded gap, stated because "records each mutation" is otherwise read as
-  exhaustive: a merge preview whose answer is a FAST-FORWARD records nothing at
-  all. It used to record the compute step — `git merge --no-ff --no-commit
-  <branch>` — which was simply false, since a fast-forward is safegit's own
-  compare-and-swap and git's merge machinery never runs (see "A fast-forward is
-  safegit's own ref move, and undo refuses it"). Suppressing that record leaves
-  the ref move itself unrecorded, because the fast-forward arm is not reached on
-  the preview path and so mints no effect there. So the preview is honest in
-  human mode, where the sentence names the fast-forward, and SILENT in machine
-  mode, where such a run carries `payload: null` and an empty `preview`. A
-  record naming the real ref move is the right end state; it is not yet made.
+  Two merge previews record nothing at all, and they are stated because "records
+  each mutation" is otherwise read as exhaustive. A preview whose answer is a
+  FAST-FORWARD is the first: it used to record the compute step — `git merge
+  --no-ff --no-commit <branch>` — which was simply false, since a fast-forward is
+  safegit's own compare-and-swap and git's merge machinery never runs (see "A
+  fast-forward is safegit's own ref move, and undo refuses it"). The second is an
+  `--ff-only` REFUSAL over diverged branches, which safegit decides itself before
+  git runs (see "The fast-forward-only refusal is safegit's, not git's"), so
+  there is no compute step for the preview to name either. Everything else
+  records, the failures included: `safegit merge no-such-ref` really does hand
+  that argument to git.
+
+  The fast-forward one leaves a consequence worth naming. Suppressing its false
+  record does not put a true one in its place: the fast-forward arm is not
+  reached on the preview path and so mints no effect there, and the ref move goes
+  unrecorded. The preview is therefore honest in human mode, where the sentence
+  names the fast-forward, and SILENT in machine mode, where such a run carries
+  `payload: null` and an empty `preview`. A record naming the real ref move is
+  the right end state; it is not yet made. The `--ff-only` refusal has no such
+  gap — a refusal performs nothing, so recording nothing is the whole truth.
 
   Where an honest preview is impossible the flag is **refused
   with its reason** rather than quietly ignored: `hook run` refuses at
