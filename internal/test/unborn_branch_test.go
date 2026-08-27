@@ -279,3 +279,36 @@ func TestUnbornRevertRefusesAsEmpty(t *testing.T) {
 	}
 	assertNoSequencerResidue(t, f.dir, "after a refused unborn revert")
 }
+
+// A preview of a plain unborn merge answers without computing anything:
+// merge-tree needs two commits and there is only one, and the answer is known
+// by definition.
+func TestUnbornMergePreviewShortCircuits(t *testing.T) {
+	f := newUnbornRepo(t)
+
+	stdout, stderr, code := runSafegit(t, f.dir, "--dry-run", "merge", "side")
+	if code != 0 {
+		t.Fatalf("--dry-run merge side on an unborn branch: code %d\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "fast-forward") {
+		t.Errorf("preview does not report a fast-forward:\n%s", stdout)
+	}
+	if _, ok := testutil.GitTryOut(t, f.dir, "rev-parse", "--verify", "--quiet", "HEAD"); ok {
+		t.Errorf("the preview created a commit")
+	}
+}
+
+func TestUnbornCherryPickPreviewComputes(t *testing.T) {
+	f := newUnbornRepo(t)
+
+	stdout, stderr, code := runSafegit(t, f.dir, "--dry-run", "cherry-pick", f.firstSHA)
+	if code != 0 {
+		t.Fatalf("--dry-run cherry-pick on an unborn branch: code %d\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "would cherry-pick") {
+		t.Errorf("preview said nothing about the pick:\n%s", stdout)
+	}
+	if _, ok := testutil.GitTryOut(t, f.dir, "rev-parse", "--verify", "--quiet", "HEAD"); ok {
+		t.Errorf("the preview created a commit")
+	}
+}

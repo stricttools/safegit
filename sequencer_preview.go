@@ -156,10 +156,22 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs) int {
 		fmt.Fprintf(os.Stderr, "error: %s does not name a commit: %v\n", other, err)
 		return exitcode.General
 	}
+
 	head, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: reading HEAD: %v\n", err)
-		return exitcode.General
+		// An UNBORN branch, and the answer is known without computing anything:
+		// a merge into a branch with no commits is a fast-forward by definition.
+		// It cannot be computed here in any case -- the ancestry questions below
+		// need a commit on both sides, and merge-tree rejects a side that is not
+		// one -- and the empty tree is no substitute, because a merge has no
+		// merge base to give it.
+		//
+		// This is reached only by the PLAIN unborn merge. `--no-ff` and
+		// `--no-commit` are refused before the preview runs, exactly as the real
+		// run refuses them, so no command line the real run would refuse is
+		// previewed as a fast-forward here.
+		infof(flags, "would merge %s: a fast-forward onto an unborn branch, no merge commit and no merge to compute\n", short(other, otherSHA))
+		return exitcode.OK
 	}
 
 	upToDate, err := git.IsAncestorOf(ctx, otherSHA, head)
@@ -229,7 +241,12 @@ func previewReplay(flags globalFlags, ctx context.Context, verb string, parsed g
 		mainline = o.Value
 	}
 
-	ours, err := git.RevParse(ctx, "HEAD")
+	// Our side of the replay. On an UNBORN branch there is no commit to name it
+	// with, and the EMPTY TREE is the honest stand-in: it is what the branch
+	// holds, and merge-tree accepts a tree for a side WHEN a merge base is given
+	// -- which a replay always has, because the base is the source commit's
+	// parent (a pick) or the source commit itself (a revert).
+	ours, err := git.HeadTreeish(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: reading HEAD: %v\n", err)
 		return exitcode.General
