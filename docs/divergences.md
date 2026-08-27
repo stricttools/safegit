@@ -44,39 +44,17 @@ Each entry records which way the decision went:
 Status is **deliberate** for a settled decision, or **provisional — awaiting
 review** for one that has not yet been confirmed and may be overturned. A
 behavior newly cataloged here is provisional until it has been reviewed as an
-entry, whatever its direction says.
+entry, whatever its direction says — except where the entry is written to
+record a ruling the review itself made, which is the review it would otherwise
+be waiting for, and is born deliberate.
 
-> **The provisional entries**, listed rather than counted, are these:
->
-> - [A dirty working tree refuses the guarded commands, untracked files
->   included](#a-dirty-working-tree-refuses-the-guarded-commands-untracked-files-included)
-> - [`safegit commit` refuses while an operation is in
->   flight](#safegit-commit-refuses-while-an-operation-is-in-flight)
-> - [`reset` is refused when the tree is dirty, in exactly the modes that write
->   to it](#reset-is-refused-when-the-tree-is-dirty-in-exactly-the-modes-that-write-to-it)
-> - [An autostash is applied only when it belongs to the merge being
->   concluded](#an-autostash-is-applied-only-when-it-belongs-to-the-merge-being-concluded)
->   — its stated limit is part of what it awaits.
-> - [A conclusion whose commit already stands finishes the cleanup, and commits
->   nothing](#a-conclusion-whose-commit-already-stands-finishes-the-cleanup-and-commits-nothing)
-> - [A working-tree write that would destroy a hand edit is
->   refused](#a-working-tree-write-that-would-destroy-a-hand-edit-is-refused)
-> - [A path the commit stops tracking never pairs into an observed
->   move](#a-path-the-commit-stops-tracking-never-pairs-into-an-observed-move)
-> - every entry under [The subset boundary](#the-subset-boundary), which is
->   where the allowlist verdicts live — including the fast-forward rulings
->   ([the fast-forward-only
->   refusal](#the-fast-forward-only-refusal-is-safegits-not-gits), [a parked
->   merge stays
->   parked](#a-parked-merge-stays-parked-even-when-it-could-have-fast-forwarded),
->   [a fast-forward is safegit's own ref
->   move](#a-fast-forward-is-safegits-own-ref-move-and-undo-refuses-it)) and
->   [the `FETCH_HEAD`
->   refusal](#a-fetch-that-marked-several-branches-is-not-a-merge-safegit-will-make).
+> **No entry is provisional.** Every ruling below has been reviewed. A behavior
+> cataloged ahead of its review is listed here, entry by entry rather than as a
+> count, until that review settles it.
 >
 > Every entry under "The subset boundary" is a verdict about what safegit will
-> not do, and every one of them is open at the review: overturning one means
-> putting a capability back into an allowlist, not writing new machinery.
+> not do, and overturning one is cheap: it means putting a capability back into
+> an allowlist, not writing new machinery.
 
 Every future change that introduces a decision of this kind adds its entry here.
 
@@ -756,11 +734,11 @@ be stated, because an operator can type anything git accepts and expect it to
 arrive. Every entry in this section is one git capability safegit deliberately
 does not have.
 
-They are all open at the review, and overturning one is cheap: it means putting
-a capability back into an allowlist, not writing new machinery. [What each
-guarded command allows](#what-each-guarded-command-allows), at the end of the
-section, is the other half of the picture — the refusals below only make sense
-next to what is admitted.
+Overturning one is cheap: it means putting a capability back into an allowlist,
+not writing new machinery. [What each guarded command
+allows](#what-each-guarded-command-allows), at the end of the section, is the
+other half of the picture — the refusals below only make sense next to what is
+admitted.
 
 ### The forwarded command line is an allowlist, not a refusal list
 
