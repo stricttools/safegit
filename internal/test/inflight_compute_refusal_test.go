@@ -41,6 +41,15 @@ import (
 // The state-control forms (--abort, --quit) and the -continue commands are NOT
 // covered by it: they are the way out, and a way out that refused over the
 // state it exists to clear would strand the repository.
+//
+// `safegit rebase` belongs to the same refusal class without being a compute
+// door: git replays and authors there, but the replay runs over whatever state
+// it finds, and over a parked revert on a clean tree it exits 0 and strands that
+// revert's state files. Its refusal is KIND-SCOPED -- an in-flight state that is
+// not a rebase -- so a mid-rebase `--continue`/`--abort`/`--skip` passes by
+// construction rather than by an argv exemption list. Its two pins are
+// TestRebaseRefusesOverAParkedNonRebaseOperation and
+// TestRebaseStillRunsWithNothingInFlight, below.
 
 var inflightSession = []string{"CLAUDE_CODE_SESSION_ID=inflight-compute-refusal-test"}
 
