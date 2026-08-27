@@ -640,3 +640,85 @@ func TestTheWayOutStillWorksOverAParkedOperation(t *testing.T) {
 		}
 	})
 }
+
+// TestTheWayOutOfAConflictedParkedOperation is the shape an operator actually
+// meets, and it answers differently from the empty parked states above -- which
+// is the whole reason it is pinned separately.
+//
+// The states above are parked with NOTHING to resolve: raw git stopped over a
+// clean working tree, so safegit's own `--abort` gets past the dirty-tree check
+// and clears the state. A CONFLICTED park is the ordinary case, and there the
+// conflict markers and the staged result ARE the dirt, so the dirty-tree check
+// refuses every guarded command line over it -- `safegit cherry-pick --abort`
+// included, at exit 5.
+//
+// That is not the check failing to make an exception. The refusal changes SHAPE
+// instead of relaxing: it names the operation in flight, the safegit command
+// that CONCLUDES it, and git's own `--abort` for abandoning it. Abandoning is
+// git's command in practice, and this refusal is where safegit says so -- the
+// same position docs/commands-guide.md states in "The guarded commands and
+// their two coordination layers".
+//
+// So the way out of a conflicted park is: conclude it with safegit, or abandon
+// it with git. This test walks the abandoning half end to end, because that is
+// the leg no other test covers: the refusal, the git abort it names, and the
+// property that makes the whole thing worth anything -- the NEXT safegit commit
+// just works.
+func TestTheWayOutOfAConflictedParkedOperation(t *testing.T) {
+	for _, verb := range []string{"cherry-pick", "revert"} {
+		t.Run(verb, func(t *testing.T) {
+			fx := newConflictedPickRepo(t, verb)
+
+			// The compute forms refuse over it, which is the state-control
+			// forms' counterpart and the reason the two are worth telling apart.
+			_, stderr, code := runSafegitEnv(t, fx.dir, conclusionSession, "revert", "--no-edit", "HEAD")
+			if code != exitcode.CoordinationBusy {
+				t.Fatalf("a compute form over a conflicted parked %s exited %d, want %d (CoordinationBusy)\n%s",
+					verb, code, exitcode.CoordinationBusy, stderr)
+			}
+			if !strings.Contains(stderr, "safegit "+verb+"-continue") {
+				t.Errorf("the refusal does not name the command that concludes the %s:\n%s", verb, stderr)
+			}
+
+			// safegit's own state-control form is refused too, and by the DIRTY
+			// layer rather than the in-flight one: a conflicted park is dirt.
+			// The refusal names git's abort, which is the way out it has.
+			_, stderr, code = runSafegitEnv(t, fx.dir, conclusionSession, verb, "--abort")
+			if code != exitcode.CoordinationBusy {
+				t.Fatalf("safegit %s --abort over a conflicted park exited %d, want %d (CoordinationBusy)\n%s",
+					verb, code, exitcode.CoordinationBusy, stderr)
+			}
+			if !strings.Contains(stderr, "git "+verb+" --abort") {
+				t.Errorf("the refusal does not name git's own abort, which is the way out here:\n%s", stderr)
+			}
+			if !stateFilePresent(t, fx.dir, stateFileFor(verb)) {
+				t.Fatalf("the refused abort removed the %s state it refused over", verb)
+			}
+
+			// The way out the refusal named, taken.
+			if out, code := testutil.GitTry(t, fx.dir, verb, "--abort"); code != 0 {
+				t.Fatalf("git %s --abort failed (code %d): %s", verb, code, out)
+			}
+			assertNoSequencerResidue(t, fx.dir, "git "+verb+" --abort over a conflicted park")
+			if head := testutil.Rev(t, fx.dir, "HEAD"); head != fx.tip {
+				t.Errorf("the abort left HEAD at %s, want the pre-operation tip %s", head, fx.tip)
+			}
+			if status := testutil.Git(t, fx.dir, "status", "--porcelain"); strings.TrimSpace(status) != "" {
+				t.Errorf("the abort left the working tree dirty:\n%s", status)
+			}
+
+			// The point of the whole walk.
+			testutil.WriteFile(t, fx.dir, "after.txt", "after\n")
+			safegitCommitEnv(t, fx.dir, conclusionSession, "the commit after the abort", "after.txt")
+		})
+	}
+}
+
+// stateFileFor names the state file git writes for a single cherry-pick or
+// revert, which is the file an abort has to remove.
+func stateFileFor(verb string) string {
+	if verb == "revert" {
+		return "REVERT_HEAD"
+	}
+	return "CHERRY_PICK_HEAD"
+}
