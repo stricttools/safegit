@@ -24,8 +24,12 @@ import (
 // engine commits it. There is no second arm any more: the passthrough that used
 // to catch everything the restructure could not honor is gone, so a command
 // line outside the subset meets a refusal that names what is absent. The tests
-// below assert both halves, plus the two forms that author nothing and
-// therefore stay plain passthroughs.
+// below assert both halves, plus the two forms that author nothing and are
+// therefore forwarded to git. Those two are forwarded through DIFFERENT doors:
+// the state-control verbs (`--abort`, `--quit`) are the way out of a parked
+// operation and carry the worktree guards alone, while `--no-commit` COMPUTES
+// and takes the in-flight entry refusal the restructured form takes -- the pin
+// for that is in inflight_compute_refusal_test.go, which owns the class.
 
 // revertSession is the handshake these tests spawn safegit with, so the session
 // trailer is observable at all.

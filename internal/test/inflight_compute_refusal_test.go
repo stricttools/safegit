@@ -421,6 +421,180 @@ func TestPullRefusesOverAParkedRevert(t *testing.T) {
 	}
 }
 
+// TestCherryPickNoCommitRefusesOverAParkedRevert covers the FIRST of the two
+// holes the restructure left open: `--no-commit` is forwarded to git, and the
+// forwarded form computes too.
+//
+// It exited 0 before the check reached it: `git cherry-pick --no-commit` over a
+// parked revert applies cleanly, and safegit wrote no CHERRY_PICK_HEAD for it
+// (that file is the restructured pick's own addition, not the passthrough's).
+// The pick's files then sat in the index of somebody else's revert, and a later
+// `safegit revert-continue` would have committed them into the revert commit.
+func TestCherryPickNoCommitRefusesOverAParkedRevert(t *testing.T) {
+	dir, _ := newParkedRevertRepo(t)
+	tip := testutil.Rev(t, dir, "HEAD")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, inflightSession, "cherry-pick", "--no-commit", "side")
+	if code != exitcode.CoordinationBusy {
+		t.Fatalf("cherry-pick --no-commit over a parked revert exited %d, want %d (CoordinationBusy)\nstdout=%s\nstderr=%s",
+			code, exitcode.CoordinationBusy, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "revert") {
+		t.Errorf("the refusal does not name the revert in flight:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "safegit revert-continue") {
+		t.Errorf("the refusal does not name the command that concludes the revert:\n%s", stderr)
+	}
+	if head := testutil.Rev(t, dir, "HEAD"); head != tip {
+		t.Errorf("the refused pick moved HEAD to %s (was %s)", head, tip)
+	}
+	if status := testutil.Git(t, dir, "status", "--porcelain"); strings.TrimSpace(status) != "" {
+		t.Errorf("the refused pick staged something:\n%s", status)
+	}
+	if stateFilePresent(t, dir, "CHERRY_PICK_HEAD") {
+		t.Errorf("the refused pick wrote a state file of its own over somebody else's revert")
+	}
+	if !stateFilePresent(t, dir, "REVERT_HEAD") {
+		t.Errorf("the refused pick removed the revert state it refused over")
+	}
+}
+
+// TestCherryPickNoCommitPreviewRefusesOverAParkedRevert: the check sits in front
+// of the passthrough's dry-run branch, for the same reason it sits in front of
+// the restructured command's -- a preview computes the operation with git's own
+// merge engine, over the very state being refused over.
+func TestCherryPickNoCommitPreviewRefusesOverAParkedRevert(t *testing.T) {
+	dir, _ := newParkedRevertRepo(t)
+
+	stdout, stderr, code := runSafegitEnv(t, dir, inflightSession, "--dry-run", "cherry-pick", "--no-commit", "side")
+	if code != exitcode.CoordinationBusy {
+		t.Fatalf("a previewed cherry-pick --no-commit over a parked revert exited %d, want %d (CoordinationBusy)\nstdout=%s\nstderr=%s",
+			code, exitcode.CoordinationBusy, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "safegit revert-continue") {
+		t.Errorf("the previewed refusal does not name the way out:\n%s", stderr)
+	}
+}
+
+// TestRevertNoCommitRefusesOverAParkedPick covers the SECOND hole: over a parked
+// cherry-pick, `git revert --no-commit` staged its inverse patch AND wrote
+// REVERT_HEAD beside the pick's own state file, leaving TWO operations in flight
+// at once.
+func TestRevertNoCommitRefusesOverAParkedPick(t *testing.T) {
+	dir, _ := newParkedPickRepo(t)
+	tip := testutil.Rev(t, dir, "HEAD")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, inflightSession, "revert", "--no-commit", "HEAD")
+	if code != exitcode.CoordinationBusy {
+		t.Fatalf("revert --no-commit over a parked pick exited %d, want %d (CoordinationBusy)\nstdout=%s\nstderr=%s",
+			code, exitcode.CoordinationBusy, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "cherry-pick") {
+		t.Errorf("the refusal does not name the cherry-pick in flight:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "safegit cherry-pick-continue") {
+		t.Errorf("the refusal does not name the command that concludes the pick:\n%s", stderr)
+	}
+	if head := testutil.Rev(t, dir, "HEAD"); head != tip {
+		t.Errorf("the refused revert moved HEAD to %s (was %s)", head, tip)
+	}
+	if status := testutil.Git(t, dir, "status", "--porcelain"); strings.TrimSpace(status) != "" {
+		t.Errorf("the refused revert staged something:\n%s", status)
+	}
+	if stateFilePresent(t, dir, "REVERT_HEAD") {
+		t.Errorf("the refused revert wrote REVERT_HEAD over somebody else's parked cherry-pick")
+	}
+	if !stateFilePresent(t, dir, "CHERRY_PICK_HEAD") {
+		t.Errorf("the refused revert removed the pick state it refused over")
+	}
+}
+
+// TestMergeNoCommitRefusesOverAParkedRevert is the merge arm's `--no-commit`
+// form, which needs no wrapper of its own: `safegit merge --no-commit` is
+// safegit's own restructured merge parking deliberately, so it reaches the
+// restructured command's entry check rather than a passthrough. The pin exists
+// because the merge arm's other pins exercise only the PLAIN form, and the
+// enumeration is what this subphase changed.
+func TestMergeNoCommitRefusesOverAParkedRevert(t *testing.T) {
+	dir, _ := newParkedRevertRepo(t)
+	tip := testutil.Rev(t, dir, "HEAD")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, inflightSession, "merge", "--no-commit", "side")
+	if code != exitcode.CoordinationBusy {
+		t.Fatalf("merge --no-commit over a parked revert exited %d, want %d (CoordinationBusy)\nstdout=%s\nstderr=%s",
+			code, exitcode.CoordinationBusy, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "safegit revert-continue") {
+		t.Errorf("the refusal does not name the command that concludes the revert:\n%s", stderr)
+	}
+	if head := testutil.Rev(t, dir, "HEAD"); head != tip {
+		t.Errorf("the refused merge moved HEAD to %s (was %s)", head, tip)
+	}
+	if stateFilePresent(t, dir, "MERGE_HEAD") {
+		t.Errorf("the refused merge parked a merge of its own over somebody else's revert")
+	}
+}
+
+// TestRebaseRefusesOverAParkedNonRebaseOperation: a rebase is not a compute
+// door, but it is a git operation that runs over whatever state it finds -- and
+// over a parked revert on a clean tree it exited 0 and STRANDED the revert's
+// state files behind it, so every later `safegit commit` refused over a revert
+// nobody was running.
+//
+// The predicate is KIND-SCOPED rather than "anything in flight": mid-rebase
+// state reports the rebase kind, so `rebase --continue`/`--abort`/`--skip` pass
+// by construction and need no exemption list of their own.
+func TestRebaseRefusesOverAParkedNonRebaseOperation(t *testing.T) {
+	dir, _ := newParkedRevertRepo(t)
+	tip := testutil.Rev(t, dir, "HEAD")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, inflightSession, "rebase", "side")
+	if code != exitcode.CoordinationBusy {
+		t.Fatalf("a rebase over a parked revert exited %d, want %d (CoordinationBusy)\nstdout=%s\nstderr=%s",
+			code, exitcode.CoordinationBusy, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "revert") {
+		t.Errorf("the refusal does not name the revert in flight:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "safegit revert-continue") {
+		t.Errorf("the refusal does not name the command that concludes the revert:\n%s", stderr)
+	}
+	if head := testutil.Rev(t, dir, "HEAD"); head != tip {
+		t.Errorf("the refused rebase moved HEAD to %s (was %s)", head, tip)
+	}
+	if !stateFilePresent(t, dir, "REVERT_HEAD") {
+		t.Errorf("the refused rebase removed the revert state it refused over")
+	}
+
+	// A preview refuses identically: the refusal is before git runs, so there is
+	// nothing to preview.
+	if _, stderr, code := runSafegitEnv(t, dir, inflightSession, "--dry-run", "rebase", "side"); code != exitcode.CoordinationBusy {
+		t.Errorf("a previewed rebase over a parked revert exited %d, want %d\n%s",
+			code, exitcode.CoordinationBusy, stderr)
+	}
+}
+
+// TestRebaseStillRunsWithNothingInFlight is the control for the refusal above:
+// the kind-scoped predicate must not touch an ordinary rebase.
+func TestRebaseStillRunsWithNothingInFlight(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "base.txt", "base\n")
+	safegitCommitEnv(t, dir, inflightSession, "the base", "base.txt")
+	testutil.Git(t, dir, "branch", "topic")
+	testutil.WriteFile(t, dir, "main.txt", "main\n")
+	safegitCommitEnv(t, dir, inflightSession, "the main change", "main.txt")
+	testutil.Git(t, dir, "switch", "-q", "topic")
+	testutil.WriteFile(t, dir, "topic.txt", "topic\n")
+	safegitCommitEnv(t, dir, inflightSession, "the topic change", "topic.txt")
+
+	if stdout, stderr, code := runSafegitEnv(t, dir, inflightSession, "rebase", "main"); code != 0 {
+		t.Fatalf("an ordinary rebase exited %d\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	if !testutil.FileExists(filepath.Join(dir, "main.txt")) {
+		t.Errorf("the rebase did not replay topic onto main")
+	}
+}
+
 // TestTheWayOutStillWorksOverAParkedOperation is the other half of the ruling:
 // the entry check is scoped to the COMPUTE forms, so the state-control verbs --
 // the commands that exist to clear the very state being refused over -- still

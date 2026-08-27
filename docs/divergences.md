@@ -263,16 +263,25 @@ Every future change that introduces a decision of this kind adds its entry here.
 - **safegit:** `commit`, `--amend`, `--reword`, `safegit mv` and `undo` all
   refuse at exit 5 (`CoordinationBusy`) while git reports a merge, cherry-pick,
   revert, rebase or `am` in progress, and so do the commands that COMPUTE an
-  operation — `merge`, `cherry-pick`, `revert` and `pull` — before they compute
-  anything, and for `pull` before its fetch. Those need the check made rather
+  operation — `merge`, `cherry-pick`, `revert` and `pull`, in their own form and
+  in the forwarded `-n`/`--no-commit` form, which hands git the same computation
+  — before they compute anything, and for `pull` before its fetch. Those need
+  the check made rather
   than inherited: raw git refuses to start one operation over another, but they
   compute with `git <verb> --no-commit`, and git's refusal does not reach that
   form uniformly — `git merge --no-ff --no-commit` over a parked revert reports
   "Automatic merge went well" and exits 0, though it does refuse over a parked
   cherry-pick — so without it a pick ran over a parked revert and committed.
-  Their state-control forms (`--abort`, `--quit`) and the three conclusion
-  commands are exempt, because they are the way out of the very state being
-  refused over. The refusal names the way out —
+  `safegit rebase` refuses there too, on a NARROWER predicate: an in-flight state
+  whose kind is not a REBASE. It computes nothing of safegit's — git replays and
+  authors — but it runs over whatever state it finds, and over a parked revert on
+  a clean tree it exits 0 and strands that revert's state files behind it,
+  blocking every later commit. Scoping the predicate to the kind is what lets a
+  rebase's own `--continue`, `--abort` and `--skip` through with no second
+  exemption list: mid-rebase state reports the rebase kind.
+  The other verbs' state-control forms (`--abort`, `--quit`) and the three
+  conclusion commands are exempt, because they are the way out of the very state
+  being refused over. The refusal names the way out —
   `safegit merge-continue`, `cherry-pick-continue` or `revert-continue` where
   safegit owns the conclusion, `git rebase --continue` or `git am --continue`
   where it does not, each with the abandoning command beside it, all rendered
@@ -289,7 +298,7 @@ Every future change that introduces a decision of this kind adds its entry here.
   safegit cannot parse is a refusal too — an unreadable `MERGE_HEAD` is not
   evidence that no merge is in flight, and the permissive reading is the
   dangerous one.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ---
 
@@ -369,7 +378,11 @@ Every future change that introduces a decision of this kind adds its entry here.
   of `safegit rebase` there is. There is no run-time split to reason about and
   no announcement to read; what safegit adds is the worktree operation lock
   (held for the whole rebase, an interactive one's editor session included), the
-  uncommitted-work check, the argv allowlist and the oplog entry.
+  uncommitted-work check, a refusal over an in-flight state that is NOT a rebase
+  (a rebase over a parked revert exits 0 under raw git and strands that revert's
+  state files behind it, blocking every later commit; scoping the predicate to
+  the KIND is what lets a rebase's own `--continue`, `--abort` and `--skip`
+  through by construction), the argv allowlist and the oplog entry.
 
   The exception is enforced structurally rather than maintained by convention.
   safegit's git-execution boundary refuses any invocation whose verb-and-flag

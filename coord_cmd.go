@@ -131,8 +131,17 @@ func coordGuard(flags globalFlags, gitDir, operation string) int {
 	return 0
 }
 
-// refuseComputeOverInFlight is the entry check the three RESTRUCTURED commands
-// -- merge, cherry-pick and revert -- owe before they compute anything.
+// refuseComputeOverInFlight is the entry check every command that COMPUTES an
+// operation owes before it computes anything.
+//
+// Which commands those are: the restructured `merge`, `cherry-pick` and
+// `revert`; `pull`, whose merge step is merge's but which reaches it through its
+// own handler and so makes the check itself, before its fetch; and the
+// `--no-commit` forms of cherry-pick and revert, which are forwarded to git yet
+// ask it for exactly the same computation (see runComputingPassthrough).
+// `safegit rebase` makes a REFUSAL of its own rather than this one -- it is not
+// a compute door, and its predicate has to be kind-scoped so a rebase's own
+// --continue is not refused; see refuseRebaseOverAnotherOperation.
 //
 // Raw git refuses to start one operation over another: `git cherry-pick <c>`
 // during a parked revert exits 128 with "a revert is already in progress". The
@@ -168,6 +177,41 @@ func refuseComputeOverInFlight(gitDir, operation string) int {
 		return exitcode.CoordinationBusy
 	}
 	return 0
+}
+
+// refuseRebaseOverAnotherOperation refuses a rebase asked for while git holds
+// SOMEBODY ELSE'S operation in flight.
+//
+// A rebase is not a compute door -- git replays and authors, and that is the one
+// declared exception to single authorship -- but it runs over whatever state it
+// finds. Over a parked revert on a clean working tree it exits 0 and STRANDS the
+// revert's state files behind it, so every later `safegit commit` refuses over a
+// revert nobody is running. The dirty-tree guard cannot stand in for this: a
+// parked operation whose result equals the current tree leaves nothing for
+// `git diff HEAD` to report.
+//
+// THE PREDICATE IS KIND-SCOPED, and that is the whole design. It refuses an
+// in-flight state whose kind is not the REBASE kind. The state-control forms --
+// `rebase --continue`, `--abort`, `--skip` -- therefore pass by construction,
+// because mid-rebase state reports the rebase kind; there is no second,
+// argv-based exemption list to keep in step with this one.
+//
+// It is deliberately NOT coord.GuardInFlight with a declared rebase context:
+// that path hard-errors when a context is declared and nothing is in flight, so
+// it would refuse every clean-repository rebase. The refusal text is still
+// coord's own (coord.RefuseInFlight), so it cannot name a different way out from
+// the one the sibling refusals name.
+func refuseRebaseOverAnotherOperation(gitDir string) int {
+	state, err := sequencer.Read(gitDir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: refusing rebase: cannot read git's in-flight operation state: %v\n", err)
+		return exitcode.CoordinationBusy
+	}
+	if !state.InProgress() || state.Kind == sequencer.KindRebase {
+		return 0
+	}
+	fmt.Fprintf(os.Stderr, "error: %s\n", coord.RefuseInFlight("rebase", state))
+	return exitcode.CoordinationBusy
 }
 
 // announceWayOut prints safegit's own next step when a passthrough failed and
@@ -352,6 +396,16 @@ func runRebase(flags globalFlags, args []string) int {
 		return code
 	}
 
+	// Inside the operation lock and immediately after the coordination guard, so
+	// no passthrough in this worktree can start an operation between the read and
+	// the work -- the same rule every other in-flight check here follows. It is
+	// BEFORE readOplogPosition on purpose: a refusal that happens before git runs
+	// writes no oplog entry, like every other pre-git refusal, and a --dry-run
+	// rebase refuses here too rather than previewing a run that cannot happen.
+	if code := refuseRebaseOverAnotherOperation(gitDir); code != 0 {
+		return code
+	}
+
 	pos := readOplogPosition(flags)
 	// The upstream as the operator NAMED it, read off the parsed command line
 	// rather than off argv[0], which for `--onto <base> <upstream>` and for the
@@ -468,7 +522,25 @@ func runBisect(flags globalFlags, args []string) int {
 	return 0
 }
 
-// runGuardedPassthrough runs a coordination check, then passes through to git.
+// passthroughRole is what a forwarded command line DOES, and the only thing the
+// guarded passthrough branches on.
+//
+// The two roles reach git through the same code and differ in one check. A
+// STATE-CONTROL form (`--abort`, `--quit`) acts on an operation git already has
+// in flight: it is the way out of that state, and a check that refused it would
+// strand the repository in the very state it was protecting. A COMPUTE form
+// (`-n`/`--no-commit`) asks git to work out a merge, a pick or an inverse patch
+// and stage it, and that is exactly what may not run over somebody else's parked
+// operation -- see refuseComputeOverInFlight.
+type passthroughRole int
+
+const (
+	passthroughStateControl passthroughRole = iota
+	passthroughComputes
+)
+
+// runGuardedPassthrough forwards a STATE-CONTROL form to git behind the worktree
+// guards.
 //
 // It handles no --help of its own, and neither does any other passthrough
 // handler here. strictcli intercepts --help and -h anywhere in a passthrough's
@@ -477,6 +549,23 @@ func runBisect(flags globalFlags, args []string) int {
 // these handlers used to print lives in the app.Passthrough registrations in
 // main.go, which is what the framework actually renders.
 func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int {
+	return guardedPassthrough(flags, gitCmd, args, passthroughStateControl)
+}
+
+// runComputingPassthrough forwards a `--no-commit` COMPUTE form to git behind
+// the same guards PLUS the in-flight entry check.
+//
+// It is a door of its own rather than a flag on the one above because the role
+// is a property of the DISPATCH SITE, not of the argv: the cherry-pick and
+// revert handlers already decided which form they are looking at, and re-deriving
+// it from the arguments down here would be a second parser answering a question
+// that was already answered.
+func runComputingPassthrough(flags globalFlags, gitCmd string, args []string) int {
+	return guardedPassthrough(flags, gitCmd, args, passthroughComputes)
+}
+
+// guardedPassthrough runs a coordination check, then passes through to git.
+func guardedPassthrough(flags globalFlags, gitCmd string, args []string, role passthroughRole) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -496,6 +585,16 @@ func runGuardedPassthrough(flags globalFlags, gitCmd string, args []string) int 
 
 	if code := coordGuard(flags, gitDir, gitCmd); code != 0 {
 		return code
+	}
+
+	// AFTER the coordination guard, so the ordinary dirty-tree case still carries
+	// the listing of what is in the tree, and BEFORE the dry-run branch, because
+	// the preview below computes the operation with git's own merge engine over
+	// the very state being refused over. Only the compute forms reach it.
+	if role == passthroughComputes {
+		if code := refuseComputeOverInFlight(gitDir, gitCmd); code != 0 {
+			return code
+		}
 	}
 
 	if flags.dryRun {

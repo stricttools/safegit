@@ -119,9 +119,20 @@ const (
 	//
 	// merge, cherry-pick, revert and pull refuse outright there too, in the form
 	// that COMPUTES an operation (never --abort or --quit), before the compute
-	// and for pull before its fetch. They cannot inherit git's own refusal: they
-	// compute with `git <verb> --no-commit`, and git does not refuse that form
-	// the way it refuses a plain one.
+	// and for pull before its fetch. That covers the forwarded `--no-commit`
+	// forms of cherry-pick and revert as well: they are handed to git, but what
+	// they ask git for is the same computation. They cannot inherit git's own
+	// refusal: they compute with `git <verb> --no-commit`, and git does not
+	// refuse that form the way it refuses a plain one.
+	//
+	// rebase refuses there too, and its predicate is NARROWER than the rest: it
+	// refuses an in-flight state whose kind is not a REBASE. A rebase computes
+	// nothing of safegit's, but it runs over whatever state it finds -- over a
+	// parked revert on a clean tree it exits 0 and strands that revert's state
+	// files behind it, so every later commit refuses over a revert nobody is
+	// running. Scoping the predicate to the kind is what lets a rebase's own
+	// --continue, --abort and --skip through without a second exemption list:
+	// mid-rebase state reports the rebase kind.
 	//
 	// The three conclusion commands -- merge-continue, cherry-pick-continue and
 	// revert-continue -- produce it from the other direction, for the two ways a

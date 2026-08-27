@@ -68,7 +68,11 @@ Tree-mutating commands (`switch`, `pull`, `merge`, `rebase`, `reset`, `bisect`,
 `cherry-pick`, `revert`) run behind two coordination guards -- the worktree
 operation lock, then the uncommitted-work check -- and each validates its
 command line against an explicit allowlist first, so an option safegit has not
-considered is refused rather than passed to git.
+considered is refused rather than passed to git. Some add a third check on top:
+the forms that COMPUTE an operation (`merge`, `pull`, and `cherry-pick` and
+`revert` in both their own and their forwarded `--no-commit` shape) refuse over
+any operation git already has in flight, and `rebase` refuses over one that is
+not itself a rebase -- so a rebase's own `--continue` still reaches git.
 
 **Every commit safegit makes is safegit's own.** `merge`, `cherry-pick`,
 `revert` and `pull` use git only to compute a result and then write the commit

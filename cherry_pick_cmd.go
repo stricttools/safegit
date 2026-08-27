@@ -52,11 +52,15 @@ import (
 
 // runCherryPick dispatches `safegit cherry-pick`.
 //
-// Two routes stay guarded passthroughs, and both for the same reason: they
-// author nothing, so nothing about single authorship is at stake in them. The
-// state-control verbs act on an operation git already has in flight, and
-// `--no-commit` asks git to stage the pick and stop -- which is what it did
-// before the restructure existed. `--continue` is refused inside, by name,
+// Two routes stay passthroughs, and both for the same reason: they author
+// nothing, so nothing about single authorship is at stake in them. They are NOT
+// the same passthrough, and the difference is what each one asks git to do. The
+// state-control verbs act on an operation git already has in flight and are the
+// way out of it, so they carry the two worktree guards and nothing more.
+// `--no-commit` asks git to COMPUTE the pick and stage it, which is the one
+// thing that may not run over somebody else's parked operation -- so it goes
+// through the computing door, which adds the in-flight entry refusal the
+// restructured command already makes. `--continue` is refused inside, by name,
 // because concluding a cherry-pick is safegit's own job.
 func runCherryPick(flags globalFlags, args []string) int {
 	parsed := parseGitArgs("cherry-pick", args)
@@ -70,7 +74,7 @@ func runCherryPick(flags globalFlags, args []string) int {
 		return runGuardedPassthrough(flags, "cherry-pick", args)
 	}
 	if parsed.Has("-n", "--no-commit") {
-		return runGuardedPassthrough(flags, "cherry-pick", args)
+		return runComputingPassthrough(flags, "cherry-pick", args)
 	}
 	return runRestructuredCherryPick(flags, args, parsed)
 }
@@ -445,4 +449,4 @@ var cherryPickPayloadSchema = strictcli.SchemaObject(
 )
 
 // cherryPickHelp is the command's registered help text.
-const cherryPickHelp = "apply ONE commit onto the current branch, and author the result: git computes the pick with --no-commit and safegit commits the staged result through its own pipeline -- so a pick safegit performed carries safegit's trailers, ran the repository's commit-msg hook and is reversible with 'safegit undo'. The AUTHOR is preserved from the commit being applied and the committer is you, which is git's own division. A pick git stops on a conflict parks -- safegit writes CHERRY_PICK_HEAD itself, because 'git cherry-pick --no-commit' does not -- and 'safegit cherry-pick-continue' concludes it; 'safegit cherry-pick --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one commit named as a commit (a range or any other revision set is refused, because a range hands the operation to git's sequencer even when it holds one commit), no --edit, no --ff, no --commit, no --cleanup, no signing and no empty-commit flags. --abort, --quit and --no-commit stay plain passthroughs, because they author nothing"
+const cherryPickHelp = "apply ONE commit onto the current branch, and author the result: git computes the pick with --no-commit and safegit commits the staged result through its own pipeline -- so a pick safegit performed carries safegit's trailers, ran the repository's commit-msg hook and is reversible with 'safegit undo'. The AUTHOR is preserved from the commit being applied and the committer is you, which is git's own division. A pick git stops on a conflict parks -- safegit writes CHERRY_PICK_HEAD itself, because 'git cherry-pick --no-commit' does not -- and 'safegit cherry-pick-continue' concludes it; 'safegit cherry-pick --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one commit named as a commit (a range or any other revision set is refused, because a range hands the operation to git's sequencer even when it holds one commit), no --edit, no --ff, no --commit, no --cleanup, no signing and no empty-commit flags. --abort and --quit stay plain passthroughs, because they author nothing and are the way out of a state safegit must not refuse over; --no-commit is forwarded to git too, but it COMPUTES, so it takes the same refusal the restructured form does over an operation git already has in flight"

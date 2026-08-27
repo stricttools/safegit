@@ -265,10 +265,17 @@ var cherryPickSubset = argvSubset{
 		// question about what patch to apply.
 		"-m", "--mainline",
 		// The operator asking for the pick to be computed and left staged. It
-		// authors nothing, so it stays a guarded passthrough.
+		// authors nothing, so it is forwarded to git -- but it COMPUTES, so it
+		// goes through the computing door, which refuses over an operation git
+		// already has in flight (runComputingPassthrough). "Authors nothing" is
+		// why it may be forwarded; it is not why it would be exempt from that
+		// refusal, and the state-control rows three lines below are exempt for the
+		// different reason spelled there.
 		"-n", "--no-commit",
 		"--rerere-autoupdate", "--no-rerere-autoupdate",
-		// The state-control forms, which author nothing.
+		// The state-control forms, which author nothing AND are the way out of a
+		// parked operation -- so they are the ones that must not be refused over
+		// the state they exist to clear.
 		"--continue", "--abort", "--quit",
 	},
 	refused: []refusedCapability{
