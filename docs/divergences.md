@@ -1030,8 +1030,10 @@ next to what is admitted.
   and `rebase.autoStash` exist and are honored by git too — but they are INERT
   through safegit, because the clean-tree check runs before git and there is
   never anything to stash by the time git looks. That is the same reason the
-  `--autostash` flag is dead on `merge` (and genuinely allowed on `rebase`, where
-  git owns the whole operation). rerere's key has no such structural answer: it
+  `--autostash` flag is dead on `merge`, where it is [refused for
+  it](#a-flag-whose-whole-job-is-to-carry-a-dirty-tree-is-dead-here) — and it is
+  equally dead on `rebase`, where the allowlist happens to admit it. rerere's key
+  has no such structural answer: it
   really can change what a safegit operation stages. The full treatment of git
   configuration keys that reach safegit's operations is deferred — see
   `todo/git-config-audit-and-pin-table.md`.
