@@ -745,6 +745,26 @@ func IsAncestorOf(ctx context.Context, commitSHA, descendantSHA string) (bool, e
 	return false, err
 }
 
+// HaveMergeBase reports whether two commits share any merge base at all.
+//
+// The three answers git's own `merge-base` gives are kept distinct, because
+// only one of them means "these histories are unrelated": exit 0 with a base,
+// exit 1 with none, and anything else -- an unresolvable argument, a broken
+// object store -- which is not an answer to this question. ok is false for that
+// third case, so a caller refuses on a FACT rather than on a failure that could
+// mean anything.
+func HaveMergeBase(ctx context.Context, a, b string) (have, ok bool) {
+	_, _, err := Run(ctx, "merge-base", a, b)
+	if err == nil {
+		return true, true
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		return false, true
+	}
+	return false, false
+}
+
 // AuthorInfo holds the name, email, and raw git date for an author or committer.
 type AuthorInfo struct {
 	Name  string

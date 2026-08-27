@@ -988,6 +988,48 @@ next to what is admitted.
   naming the floor.
 - **Ruling:** ours — deliberate
 
+### Merging unrelated histories is refused, flag and pre-flight both
+
+- **git's idiom:** `git merge` refuses two histories that share no commit, and
+  `--allow-unrelated-histories` elects the merge anyway. The refusal is git's own
+  and the flag is git's own way past it.
+- **safegit:** refused twice, and there is no way past it on a safegit command
+  line. The FLAG is outside the subset, refused by name. And the SHAPE is refused
+  by a pre-flight that fires with no flag typed at all: when this branch's HEAD
+  resolves and `git merge-base` reports no base between it and the other side,
+  the merge is refused before anything computes. `safegit pull` inherits it —
+  its merge step is this one — and `merge --dry-run` refuses identically, since a
+  preview of a command that cannot run is not a preview of anything.
+
+  The reason is a footgun rather than a protection hole: nothing about an
+  unrelated merge defeats a check safegit makes. It is that the state is nearly
+  always reached by accident — a wrong remote, a wrong branch, a repository
+  re-initialized over another — and what it produces is a permanent second root
+  in the history. git's own words for it, `refusing to merge unrelated
+  histories`, name nothing an operator can act on, which is what the pre-flight
+  is for: it says which two sides have no base, why that is usually a mistake,
+  and what to do when it is not.
+
+  The legitimate case is not blocked, only routed. Importing another project's
+  history — something a repository does once in its life — is:
+
+  ```bash
+  git merge --no-commit --allow-unrelated-histories <branch>
+  safegit merge-continue
+  ```
+
+  git computes the merge and parks it; safegit's own conclusion commits it, with
+  trailers, the `commit-msg` hook and `safegit undo` behind it. The one-off
+  operation goes through git, and the commit is still safegit's.
+
+  The pre-flight's predicate asks about HEAD first, and that is not incidental:
+  an UNBORN branch has no commit to take a merge base from, so a `merge-base`
+  that simply failed would refuse every merge into one — the plain fast-forward
+  safegit deliberately supports there. A `merge-base` that could not be computed
+  at all, rather than one that answered "none", is left to git, which is the same
+  convention every other verdict in this command follows.
+- **Ruling:** ours — deliberate
+
 ### `--squash` is refused
 
 - **git's idiom:** `git merge --squash` stages a merge's whole result and leaves
@@ -1231,7 +1273,7 @@ allowlist tables hold.
 | Command | Arguments | Options it honors |
 |---|---|---|
 | `switch` | one existing branch name, or nothing with `-c` | `-c`/`--create` |
-| `merge` | exactly one commit-ish (branch, tag or object name) | `-m`/`--message`, `-F`/`--file`, `--no-edit`, `--ff`/`--no-ff`/`--ff-only`/`--no-commit` (safegit's own selectors; they never reach git), `--signoff`/`--no-signoff`, `--log`/`--no-log`, `--into-name`, `--stat`/`--no-stat`, `--allow-unrelated-histories`, `-X`/`--strategy-option`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
+| `merge` | exactly one commit-ish (branch, tag or object name) | `-m`/`--message`, `-F`/`--file`, `--no-edit`, `--ff`/`--no-ff`/`--ff-only`/`--no-commit` (safegit's own selectors; they never reach git), `--signoff`/`--no-signoff`, `--log`/`--no-log`, `--into-name`, `--stat`/`--no-stat`, `-X`/`--strategy-option`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
 | `cherry-pick` | exactly one commit | `-x`, `-s`/`--signoff`, `--no-edit`, `-m`/`--mainline`, `-X`/`--strategy-option`, `-n`/`--no-commit`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
 | `revert` | exactly one commit | `-s`/`--signoff`, `--no-edit`, `-m`/`--mainline`, `-X`/`--strategy-option`, `-n`/`--no-commit`, `--reference`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
 | `pull` | an optional remote and branch | `--merge-strategy ff\|ff-only\|no-ff` (required, no default) |
@@ -1248,9 +1290,10 @@ is not, because the pipeline is what commits here, and it does not sign.
 
 Reaching the compute step is what makes an option ELIGIBLE, not what settles it:
 a compute-step option may still be refused for a reason of its own. Strategy
-SELECTION is the standing case — it changes what the conclusion's checks would
-have to read — while strategy OPTIONS, which tune the same compute without
-changing what those checks see, are admitted.
+SELECTION changes what the conclusion's checks would have to read, while
+strategy OPTIONS tune the same compute without changing what those checks see
+and are admitted. `--allow-unrelated-histories` is refused for a reason of a
+different kind — a footgun rather than a protection hole.
 
 One spelling in the code's tables is not in this one: `--continue` passes each
 command's option allowlist and is then refused by name further in, since
