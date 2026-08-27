@@ -1642,8 +1642,15 @@ safegit's pre-pre-push hooks, which are its own subsystem.
 - **git's idiom:** git writes progress, prompts, notices and results to whichever
   stream is convenient, and interleaves them freely.
 - **safegit:** stdout carries the command's own result and nothing else — under
-  `--json`, exactly one document, the framework's envelope, with the command's
-  data as its payload and a declared JSON Schema validated at emission.
+  `--json`, exactly one document, the framework's envelope. A command that
+  DECLARES a payload schema answers with its data in that envelope's `payload`,
+  validated against the declaration at emission. Not every command declares one,
+  and the reporting commands are split: `version`, `scan`, `author list` and
+  `author check` carry a payload, while `config show`, `config get`, `hook
+  list`, `hook run`, `hook migrate`, `backup list` and `doctor` answer with
+  `payload: null` today and report their result on the human channel that
+  machine mode replaces — so a machine consumer of those reads the exit code,
+  and the result text is not on stdout at all.
   Everything that is not the result goes to stderr: notices, warnings, prompts,
   a guarded child's output in machine mode, and git's own stdout during a
   push under `--json`. That holds for the guarded commands too — `switch`,
