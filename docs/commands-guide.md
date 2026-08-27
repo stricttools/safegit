@@ -1146,6 +1146,8 @@ Exactly one value, and there is no default: a doctor invocation that does not sa
 
 This table is generated from the check registry in `doctor.go` by `scripts/gen-doctor-table`; edit the registry, not the table.
 
+**A registered severity is a FLOOR, not the verdict.** The severity below is the one a failing finding carries ORDINARILY, and a check may report an individual finding at a graver status when the reason for failing is graver than its ordinary one. Two warn-severity checks do: `config` reports an UNREADABLE config file at error severity (every command reads it, so it is not advisory), and `bypass_detect` reports at error severity the two cases where it cannot make its comparison at all -- an oplog it cannot read for the current ref, and a ref the oplog records a tip for that no longer resolves, which is itself the bypass signal. An escalated finding is an error-severity finding in every respect, the exit code included. A script that reads this table alone and concludes those two checks can never fail a run is therefore wrong; read the reported status, not the registered one.
+
 <!-- BEGIN generated doctor health-check table (scripts/gen-doctor-table) -->
 
 | Check | Severity | Question |
@@ -1168,7 +1170,7 @@ This table is generated from the check registry in `doctor.go` by `scripts/gen-d
 
 <!-- END generated doctor health-check table -->
 
-**Exit code 50.** `diagnose` exits `50` when at least one **error**-severity check fails; warnings alone exit `0`. After `--action fix` the code reflects what the fix LEFT: an error-severity finding that is still there keeps the exit nonzero.
+**Exit code 50.** `diagnose` exits `50` when at least one finding is REPORTED at **error** status; findings reported as warnings alone exit `0`. Reported, not registered: a finding a warn-severity check escalated to error (see above) counts here exactly like one from a check registered at error. After `--action fix` the code reflects what the fix LEFT: an error-status finding that is still there keeps the exit nonzero.
 
 ### Uninstall is repository-wide
 
