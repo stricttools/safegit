@@ -156,9 +156,11 @@ type CommitRequest struct {
 	// not resolve in another checkout -- an absolute target, or a relative one
 	// landing outside the repository. Without it intake refuses such a link,
 	// naming the literal target; with it the commit records the link text and
-	// says so once on stderr. It covers ADDING or STAGING link content and
-	// nothing else: a commit that only carries an already-tracked link across to
-	// another path restages no link content and never asks the question.
+	// says so once on stderr. The question is asked in this intake and nowhere
+	// else: a commit that only carries an already-tracked link across to another
+	// path restages no link content and never asks it, and a conclusion's
+	// declared resolution stages a conflicted path's content without coming
+	// through here at all.
 	AllowNonPortableTargets bool
 
 	// Untrack lists paths to remove from the index while leaving them on disk.

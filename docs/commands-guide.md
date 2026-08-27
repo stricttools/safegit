@@ -146,7 +146,9 @@ A relative target that resolves inside the repository is portable and commits as
 
 The remedies differ, so the refusal states the one that fits: an absolute in-repository target should be spelled relative to the link, while a target that leaves the repository has to be pointed back inside. A commit naming offenders of both shapes gets ONE refusal with the offenders grouped by shape, each group followed by its own remedy.
 
-`--allow-non-portable-targets` elects committing such a link anyway, and restores the one-line notice on stderr saying the link will not resolve elsewhere. The refusal covers ADDING or STAGING that link content, which is where a machine-specific link enters history; `safegit mv` moving an already-tracked one is untouched, because a move-only commit carries the blob across and never re-reads the link.
+`--allow-non-portable-targets` elects committing such a link anyway, and restores the one-line notice on stderr saying the link will not resolve elsewhere. The election is a fact about ONE invocation and is recorded nowhere, so a repository that deliberately carries such a link needs the flag on EVERY later commit that names that link or sweeps it up by directory expansion.
+
+The judgment is made in the commit family's intake and nowhere else: `safegit commit` and its `--amend` form, over the paths that invocation stages -- the ones named on the command line, a `--moved` commit's paths among them, and the ones a directory argument expands to. Two other ways link content reaches a tree do not pass through it: `safegit mv` moving an already-tracked link carries the blob across and never re-reads it, and a conclusion's `--resolve path=worktree|ours|theirs` stages a conflicted path's content directly.
 
 ### Safety Guarantees
 

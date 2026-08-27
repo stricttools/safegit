@@ -394,12 +394,16 @@ const (
 	// `--allow-non-portable-targets` is the election that commits it anyway,
 	// and restores the one-line notice the refusal replaced.
 	//
-	// The scope is ADDING or STAGING such link content: the refusal is made at
-	// intake, before anything is staged, so commit and its --amend form both
-	// inherit it and nothing is written when it fires. `safegit mv` moving an
-	// existing tracked link of either shape is not covered -- a move-only commit
-	// carries the blob its parent held across and restages no link content at
-	// all. Produced by commit, including its --amend form.
+	// The judgment is made in the COMMIT FAMILY'S INTAKE and nowhere else:
+	// commit and its --amend form, over the paths that invocation stages -- the
+	// ones the caller named, a --moved commit's paths among them, and the ones a
+	// directory argument expands to. It runs before anything is staged, so
+	// nothing is written when it fires. Two other ways link content reaches a
+	// tree do not pass through it: `safegit mv` moving an existing tracked link
+	// of either shape carries the blob its parent held across and restages no
+	// link content at all, and a conclusion's --resolve path=worktree|ours|theirs
+	// stages the conflicted path's content directly. Produced by commit,
+	// including its --amend form.
 	NonPortableTarget = 29
 
 	// RewriteRefused means a history rewrite was refused by the verification
