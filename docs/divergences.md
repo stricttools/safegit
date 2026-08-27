@@ -379,10 +379,9 @@ Every future change that introduces a decision of this kind adds its entry here.
   no announcement to read; what safegit adds is the worktree operation lock
   (held for the whole rebase, an interactive one's editor session included), the
   uncommitted-work check, a refusal over an in-flight state that is NOT a rebase
-  (a rebase over a parked revert exits 0 under raw git and strands that revert's
-  state files behind it, blocking every later commit; scoping the predicate to
-  the KIND is what lets a rebase's own `--continue`, `--abort` and `--skip`
-  through by construction), the argv allowlist and the oplog entry.
+  (whose predicate and whose reason are spelled in "`safegit commit` refuses
+  while an operation is in flight", the entry that owns the in-flight refusal
+  across every command that makes one), the argv allowlist and the oplog entry.
 
   The exception is enforced structurally rather than maintained by convention.
   safegit's git-execution boundary refuses any invocation whose verb-and-flag
