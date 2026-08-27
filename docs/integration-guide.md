@@ -299,8 +299,8 @@ interchangeable:
    four emit `payload: null` under `--dry-run --json` while `preview` carries
    the recorded argv.
 3. **No envelope at all.** Some refusals exit before the framework's dispatch
-   returns -- `safegit commit`'s escaping-symlink refusal (exit 29) is one --
-   and those write to stderr and exit with nothing on stdout. This set is
+   returns -- `safegit commit`'s non-portable symlink target refusal (exit 29)
+   is one -- and those write to stderr and exit with nothing on stdout. This set is
    deliberately shrinking: every post-ref-update failure was moved onto shape 1
    precisely so that the paths where an operation half-happened always answer
    with a document. Treat empty stdout plus a nonzero exit as a valid outcome,

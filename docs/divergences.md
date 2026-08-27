@@ -134,25 +134,34 @@ Every future change that introduces a decision of this kind adds its entry here.
   never move another repository's pointer by accident.
 - **Ruling:** ours — deliberate
 
-### A symlink whose target leaves the repository is refused
+### A symlink target that will not resolve in another checkout is refused
 
 - **git's idiom:** git records the link text and says nothing. Whether that text
   resolves anywhere is not git's problem.
 - **safegit:** committing such a link is REFUSED (exit 29), naming the literal
-  target, with nothing staged and nothing committed. A link whose target
-  resolves outside the repository is a fact about one machine: in anybody
-  else's checkout it resolves to nothing, or — worse — to a different file that
-  happens to sit at that absolute path, which is a reference the repository
-  cannot honor and cannot be seen to be dishonoring. The earlier answer was to
-  commit it with a warning line, and that is exactly the shape this tool refuses
-  everywhere else: a warning nobody reads in front of a mistake nobody wanted.
-  `--allow-escaping-targets` elects committing it and restores the notice line;
-  it is the only way to say so. The refusal covers ADDING or STAGING escaping
-  link content, which is where such a link enters history; `safegit mv` moving
-  an already-tracked one is untouched, because a move-only commit carries the
-  blob across without re-reading the link. An ABSOLUTE target that resolves
-  INSIDE the repository is accepted, which is machine-specific in the same way
-  and is listed for the review rather than defended.
+  target, with nothing staged and nothing committed. What is judged is
+  PORTABILITY: git stores a symlink as its target TEXT, so the only question is
+  what a checkout somewhere else makes of that text. Two shapes fail it — an
+  ABSOLUTE target, which resolves against a machine's filesystem rather than
+  against the repository, whether or not it happens to land inside this
+  checkout; and a RELATIVE target that climbs out of the repository. Both are
+  facts about one machine: elsewhere they resolve to nothing, or — worse — to a
+  different file that happens to sit at that path, which is a reference the
+  repository cannot honor and cannot be seen to be dishonoring. A relative
+  target landing inside the repository is portable and stays committable,
+  including one that traverses out of its own directory with `..` and comes
+  back down, and including one that points at nothing yet. The earlier answer
+  was to commit it with a warning line, and that is exactly the shape this tool
+  refuses everywhere else: a warning nobody reads in front of a mistake nobody
+  wanted. `--allow-non-portable-targets` elects committing it and restores the
+  notice line; it is the only way to say so. Offenders of both shapes in one
+  commit are ONE refusal with the offenders grouped by shape, because the
+  remedies differ: an absolute in-repository target has a portable spelling to
+  be rewritten in, while a target that leaves the repository has to be pointed
+  back inside. The refusal covers ADDING or STAGING such link content, which is
+  where it enters history; `safegit mv` moving an already-tracked one is
+  untouched, because a move-only commit carries the blob across without
+  re-reading the link.
 - **Ruling:** ours — deliberate
 
 ### `--untrack` removes the index entry and leaves the file on disk
