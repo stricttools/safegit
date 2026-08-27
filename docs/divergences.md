@@ -1693,7 +1693,21 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   tree and builds the commit object — inside a throwaway object store, so nothing
   reaches the repository — and then records the ref update rather than making it.
   A preview creates nothing, not even safegit's own state directory on a
-  first-ever run. Where an honest preview is impossible the flag is **refused
+  first-ever run.
+
+  One recorded gap, stated because "records each mutation" is otherwise read as
+  exhaustive: a merge preview whose answer is a FAST-FORWARD records nothing at
+  all. It used to record the compute step — `git merge --no-ff --no-commit
+  <branch>` — which was simply false, since a fast-forward is safegit's own
+  compare-and-swap and git's merge machinery never runs (see "A fast-forward is
+  safegit's own ref move, and undo refuses it"). Suppressing that record leaves
+  the ref move itself unrecorded, because the fast-forward arm is not reached on
+  the preview path and so mints no effect there. So the preview is honest in
+  human mode, where the sentence names the fast-forward, and SILENT in machine
+  mode, where such a run carries `payload: null` and an empty `preview`. A
+  record naming the real ref move is the right end state; it is not yet made.
+
+  Where an honest preview is impossible the flag is **refused
   with its reason** rather than quietly ignored: `hook run` refuses at
   registration time because a hook is an operator-supplied script whose effects
   cannot be known. (The other refusal this used to name — a queued conclusion —

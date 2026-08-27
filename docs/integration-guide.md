@@ -294,10 +294,20 @@ interchangeable:
    worked example: the complete, never-truncated list of offending paths goes to
    **stderr**, which machine mode never suppresses, while the envelope carries
    only the exit code. The same holds for the previews of `merge`,
-   `cherry-pick`, `revert` and `pull`: a preview records the compute step and
-   stops before the pipeline conclusion that would build the payload, so those
-   four emit `payload: null` under `--dry-run --json` while `preview` carries
-   the recorded argv.
+   `cherry-pick`, `revert` and `pull`: a preview computes the outcome and stops
+   before the pipeline conclusion that would build the payload, so those four
+   emit `payload: null` under `--dry-run --json`. `preview` usually carries the
+   compute step's recorded argv, with one exception worth knowing before you
+   parse it: a merge preview that answers **"a fast-forward"** records NOTHING,
+   because the real run performs that one itself with a compare-and-swap and
+   never invokes git's merge machinery -- recording the compute step there would
+   name a subprocess nothing runs. The consequence is stated rather than hidden:
+   such a run answers with `exit_code: 0`, `payload: null` and `preview: []`,
+   which in machine mode is indistinguishable from a preview that found nothing
+   to say. The fast-forward's own ref move is not minted as an effect on the
+   preview path, so there is nothing else for the envelope to carry; a machine
+   consumer that needs the verdict must run the preview in human mode, where the
+   sentence is printed.
 3. **No envelope at all.** Some refusals exit before the framework's dispatch
    returns, and those write to stderr and exit with nothing on stdout.
    `safegit commit`'s refusals are the class to know: every one probed answers
