@@ -248,6 +248,15 @@ func refuseFetchHeadOctopus(gitDir, other, command string) int {
 // which names nothing an operator can act on. This one names the import route
 // instead: raw git computes the merge, safegit's conclusion commits it.
 //
+// THE DIAGNOSIS BRANCHES, because "no merge base" has a second producer. On a
+// SHALLOW clone the base may exist and simply lie below the fetch depth, where
+// this object store cannot see it -- `merge-base` exits 1 there exactly as it
+// does for two unrelated roots. The refusal is right either way (raw git refuses
+// the same merge for the same reason), but the never-connected diagnosis and the
+// import route it recommends are both FALSE for that repository, so they are
+// spoken only when the repository is not shallow; a shallow one is told to
+// deepen the clone and try again.
+//
 // It is called from BOTH of merge's paths, exactly as refuseFetchHeadOctopus
 // is, because the shared merge path holds no preview branch -- and `pull`
 // inherits the real-mode one, its merge step being this one.
@@ -262,6 +271,20 @@ func refuseUnrelatedHistories(ctx context.Context, other, command string) int {
 	have, ok := git.HaveMergeBase(ctx, "HEAD", other)
 	if !ok || have {
 		return 0
+	}
+
+	if git.IsShallowRepository(ctx) {
+		fmt.Fprintf(os.Stderr, "error: safegit %s cannot merge %s: no merge base is visible in this repository\n", command, other)
+		fmt.Fprintf(os.Stderr, "  this is a SHALLOW clone -- part of its history was never fetched -- so the two sides\n")
+		fmt.Fprintf(os.Stderr, "  may well connect below the fetch depth, where nothing here can see it. git's own\n")
+		fmt.Fprintf(os.Stderr, "  words for what it finds are \"refusing to merge unrelated histories\", and it refuses\n")
+		fmt.Fprintf(os.Stderr, "  this merge too; what safegit will not do is guess which of the two states you are in.\n")
+		fmt.Fprintf(os.Stderr, "  Fetch the rest of the history, then run the same command again:\n")
+		fmt.Fprintf(os.Stderr, "    git fetch --unshallow\n")
+		fmt.Fprintf(os.Stderr, "  If the merge is still refused afterwards, the two sides really do share no commit,\n")
+		fmt.Fprintf(os.Stderr, "  and that refusal names the route for the deliberate import.\n")
+		fmt.Fprintf(os.Stderr, "  See docs/divergences.md.\n")
+		return exitcode.General
 	}
 
 	fmt.Fprintf(os.Stderr, "error: safegit %s cannot merge %s: the two sides share no commit at all\n", command, other)

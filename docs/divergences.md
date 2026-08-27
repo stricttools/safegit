@@ -1061,6 +1061,12 @@ next to what is admitted.
   is for: it says which two sides have no base, why that is usually a mistake,
   and what to do when it is not.
 
+  The DIAGNOSIS is conditional even though the refusal is not: on a SHALLOW clone
+  `merge-base` reports no base for a second reason — the base exists but lies
+  below the fetch depth — so there the refusal says the clone is shallow and
+  names `git fetch --unshallow`, and the never-connected reading and the import
+  route below are spoken only when the repository holds its whole history.
+
   The legitimate case is not blocked, only routed. Importing another project's
   history — something a repository does once in its life — is:
 
