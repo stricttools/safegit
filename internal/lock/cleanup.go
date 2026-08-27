@@ -12,7 +12,7 @@ import (
 // -- see releaseIfOurs.
 type heldLock struct {
 	path      string
-	published os.FileInfo
+	published publication
 }
 
 var (
@@ -21,7 +21,7 @@ var (
 	sigOnce      sync.Once
 )
 
-func registerCleanup(path string, published os.FileInfo) {
+func registerCleanup(path string, published publication) {
 	cleanupMu.Lock()
 	pendingLocks = append(pendingLocks, heldLock{path: path, published: published})
 	cleanupMu.Unlock()

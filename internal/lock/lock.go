@@ -94,7 +94,24 @@ type RefLock struct {
 	// published identifies the file this process linked into place. Release
 	// compares it against whatever is at LockPath before removing anything --
 	// see releaseIfOurs.
-	published os.FileInfo
+	published publication
+}
+
+// publication is the identity of the lock file a process linked into place:
+// the stat taken of that exact file before the link, and the owner record it
+// carries.
+//
+// Both halves are needed, and the record is the half that actually decides.
+// A stat identity is dev+inode, and a filesystem is free to hand a freed inode
+// number straight back out: after a force-release, the newcomer's lock can
+// land on the very inode this one had, and os.SameFile then says "ours" about
+// somebody else's live lock. (ext4 does this routinely; btrfs, whose inode
+// numbers only ever increase, does not -- which is why the hazard is invisible
+// on one developer machine and reproducible on another.) A lock file is
+// immutable once published, so comparing the bytes settles it.
+type publication struct {
+	info   os.FileInfo
+	record string
 }
 
 // TimeoutError is what Acquire returns when the timeout expired with a live
@@ -347,40 +364,41 @@ func (h holderIdentity) changedFrom(prev holderIdentity) bool {
 // start time the field is omitted and reuse detection is simply absent (see
 // IsStale). started= is the same instant in human-readable form and carries no
 // decision.
-func tryCreate(path, op string) (os.FileInfo, error) {
+func tryCreate(path, op string) (publication, error) {
 	tmp, err := os.CreateTemp(filepath.Dir(path), publicationTempPrefix(filepath.Base(path)))
 	if err != nil {
-		return nil, fmt.Errorf("creating temporary lock file: %w", err)
+		return publication{}, fmt.Errorf("creating temporary lock file: %w", err)
 	}
 	tmpName := tmp.Name()
 	// The temp name is unlinked whichever way this goes: on success the lock
 	// lives at path under its own link, on failure nothing is left behind.
 	defer os.Remove(tmpName)
 
-	if err := writeLockContent(tmp, op); err != nil {
+	record, err := writeLockContent(tmp, op)
+	if err != nil {
 		tmp.Close()
-		return nil, err
+		return publication{}, err
 	}
 	if err := tmp.Chmod(0644); err != nil {
 		tmp.Close()
-		return nil, err
+		return publication{}, err
 	}
 	if err := tmp.Close(); err != nil {
-		return nil, err
+		return publication{}, err
 	}
 
-	published, err := os.Stat(tmpName)
+	info, err := os.Stat(tmpName)
 	if err != nil {
-		return nil, fmt.Errorf("identifying the lock file before publishing it: %w", err)
+		return publication{}, fmt.Errorf("identifying the lock file before publishing it: %w", err)
 	}
 
 	// link(2) fails with EEXIST when path already exists, which is the same
 	// atomic "one winner" property O_CREAT|O_EXCL gives, and Acquire reads that
 	// error as "someone else holds it".
 	if err := os.Link(tmpName, path); err != nil {
-		return nil, err
+		return publication{}, err
 	}
-	return published, nil
+	return publication{info: info, record: record}, nil
 }
 
 // publicationTempInfix is what tryCreate appends to a lock's own base name to
@@ -412,8 +430,10 @@ func IsPublicationTemp(name string) bool {
 	return strings.HasPrefix(name, ".") && strings.Contains(name, lockSuffix+publicationTempInfix)
 }
 
-// writeLockContent writes the owner record into an open lock file.
-func writeLockContent(f *os.File, op string) error {
+// lockContent builds the owner record a lock file carries. It is returned
+// rather than written straight out because the publication keeps a copy: the
+// record is the half of the lock's identity that survives inode reuse.
+func lockContent(op string) string {
 	hostname, _ := os.Hostname()
 	content := fmt.Sprintf("pid=%d\nts=%s\nop=%s\nhost=%s\n",
 		os.Getpid(),
@@ -427,8 +447,15 @@ func writeLockContent(f *os.File, op string) error {
 			content += fmt.Sprintf("started=%s\n", start.Wall.Format(time.RFC3339Nano))
 		}
 	}
+	return content
+}
+
+// writeLockContent writes the owner record into an open lock file and returns
+// the exact bytes it wrote.
+func writeLockContent(f *os.File, op string) (string, error) {
+	content := lockContent(op)
 	_, err := f.WriteString(content)
-	return err
+	return content, err
 }
 
 // Release removes the lock file this process published, and nothing else.
@@ -455,18 +482,28 @@ func (l *RefLock) Release() error {
 // have performed has already happened, and the file at the path belongs to
 // somebody else. Silence is the whole response.
 //
-// The residual window is between the stat and the remove: the force-release
+// The identity is the stat AND the owner record, because the stat alone is not
+// proof. A filesystem may hand a freed inode number straight back out, so the
+// newcomer's lock can occupy the exact dev+inode this one had and os.SameFile
+// then answers "ours" about somebody else's live lock -- the very deletion this
+// function exists to prevent, reappearing through the check meant to stop it.
+// A lock file's record is written before publication and never modified after,
+// so comparing the bytes on disk against the ones we wrote settles ownership
+// where the inode number cannot.
+//
+// The residual window is between the read and the remove: the force-release
 // plus the newcomer's publication would have to fall inside those two syscalls.
 // Closing it entirely would mean flock, and an flock that cannot be taken (a
 // filesystem without it, a contender mid-reclaim) would leave a holder unable
 // to release its own lock at all -- a worse failure, and a much likelier one,
 // than the window it removes.
-func releaseIfOurs(path string, published os.FileInfo) error {
-	if published == nil {
+func releaseIfOurs(path string, published publication) error {
+	if published.info == nil {
 		// Acquire is the only constructor of a held lock and always records
-		// this, so a nil here is a RefLock somebody built by hand. Refusing is
-		// the honest answer: removing blind is what this function exists to
-		// stop, and pretending the release happened would strand the lock.
+		// this, so a zero publication here is a RefLock somebody built by hand.
+		// Refusing is the honest answer: removing blind is what this function
+		// exists to stop, and pretending the release happened would strand the
+		// lock.
 		return fmt.Errorf("releasing %s: the lock carries no published identity", path)
 	}
 	current, err := os.Stat(path)
@@ -476,7 +513,18 @@ func releaseIfOurs(path string, published os.FileInfo) error {
 		}
 		return err
 	}
-	if !os.SameFile(published, current) {
+	if !os.SameFile(published.info, current) {
+		return nil
+	}
+	record, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if string(record) != published.record {
+		// Same inode number, different lock: the inode was reused under us.
 		return nil
 	}
 	return os.Remove(path)
