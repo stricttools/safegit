@@ -1525,6 +1525,8 @@ safegit merge-continue
 
 git computes and parks the merge, safegit's conclusion commits it -- trailers, `commit-msg` hook, undoable. An UNBORN branch is deliberately outside the predicate: it has no commit to take a merge base from, and a merge into one is the plain fast-forward safegit supports there.
 
+On a SHALLOW clone the refusal stands but the wording changes, because `merge-base` reports no base there for a second reason: the base may exist below the fetch depth, in the part of the history that was never fetched. That refusal says the clone is shallow and names `git fetch --unshallow` followed by the same command again; the never-connected reading and the import route above are spoken only in a repository that holds its whole history.
+
 ### Examples
 
 ```bash

@@ -765,6 +765,22 @@ func HaveMergeBase(ctx context.Context, a, b string) (have, ok bool) {
 	return false, false
 }
 
+// IsShallowRepository reports whether this repository was fetched with a depth
+// limit, so part of its history is simply absent from the object store.
+//
+// It answers TRUE only on git's own "true": anything else -- "false", or a
+// rev-parse that failed for any reason at all -- is read as not shallow, which
+// is the safe direction for the one thing the answer is used for. It refines a
+// refusal's WORDING, never the refusal itself, so a wrong "false" leaves the
+// ordinary message rather than inventing a shallow one for a full clone.
+func IsShallowRepository(ctx context.Context) bool {
+	out, _, err := Run(ctx, "rev-parse", "--is-shallow-repository")
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(out) == "true"
+}
+
 // AuthorInfo holds the name, email, and raw git date for an author or committer.
 type AuthorInfo struct {
 	Name  string
