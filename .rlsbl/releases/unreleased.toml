@@ -2,11 +2,13 @@
 format_version = 1
 # Version bump type: patch, minor, major, infra, or prerelease
 #   prerelease: advance an existing pre-release (0.6.0-beta.0 -> -beta.1)
-bump = ""
+bump = "minor"
 # Short description of this release (required)
-description = ""
+description = "The two-campaign redesign: safegit authors every commit made under its name (clean merges, cherry-picks, reverts and pulls included), concludes parked operations itself, records file moves, supports unborn branches, and refuses with registered exit codes across a default-deny command subset."
 # Optional context explaining why these changes were made
-context = ""
+context = """
+v0.28.0 shipped with known defects — scrub could destroy data when run from a subdirectory, and a dry-run uninstall actually deleted state — whose fixes grew into two full redesign campaigns and a closing round, released here as one version. Campaign 1 rebuilt the commit pipeline, scrub verification, the hooks subsystem, sequencer conclusions and push. Campaign 2 deleted the second authorship class entirely (git computes, safegit commits), codified the subset law with default-deny allowlists, and added declared and observed move records. The closing round added unborn-branch support, the symlink portability refusal, strategy-option forwarding with honest previews, and closed the divergences catalog with every entry deliberate. Every behavior change is red-first tested; the full suite, stress runs, and a released-dependency run are green; a six-domain final audit graded the tree release-ready.
+"""
 # Pre-release channel: alpha, beta, rc, or stable (ordered;
 # demotion is an error). With patch/minor/major it ENTERS the
 # channel (0.5.2 + minor + alpha -> 0.6.0-alpha.0); with
