@@ -348,6 +348,16 @@ func appendOperationEntry(flags globalFlags, sgDir, op string, pos oplogPosition
 //
 // `observed_` is the honest word for what these are: an observation of where
 // HEAD was and where it ended up, not a record of safegit writing a ref.
+//
+// On an UNBORN branch one of the two is EMPTY, in both directions, and neither
+// is a defect: a `switch -c` that leaves the branch still unborn records an
+// empty `observed_tip` (there is no commit to name), and a `switch` FROM an
+// unborn HEAD records an empty `observed_parent` (there was none to leave).
+// Both are harmless precisely because this spelling is deliberately unconsumed
+// -- the same reason the names differ from the commit entry's at all. (A branch
+// CREATION is the one case that records the ZERO SHA rather than an empty
+// parent, which is git's own name for "the ref did not exist"; see
+// switch_cmd.go.)
 func appendNavigationEntry(flags globalFlags, sgDir, op, ref, oldTip, newTip string, ok bool, more map[string]interface{}) {
 	if flags.dryRun {
 		return
