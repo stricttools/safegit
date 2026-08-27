@@ -37,4 +37,14 @@ jobs:
       # No -short: the multi-minute stress scenarios are opt-in behind the test
       # binary's own --stress flag, so an ordinary run is already the fast one
       # and -short would only silence unrelated tests.
-      - run: go test ./... ${{ matrix.os == 'ubuntu-latest' && '-race' || '' }} -timeout=15m
+      #
+      # The budget is 30m because the macOS runner is roughly three times
+      # slower on this suite than the linux one is WITH the race detector --
+      # the suite spawns the safegit binary thousands of times and macOS pays
+      # far more per spawn. Measured on the 0.29.0 release candidate: linux
+      # 4m51s with -race, macOS 14m38s without it, and the attempt before that
+      # one ran past a 15m budget and was killed mid-suite. A budget the suite
+      # finishes against by twenty seconds is a red gate waiting to happen, so
+      # the number is set well clear of the measurement rather than just above
+      # it.
+      - run: go test ./... ${{ matrix.os == 'ubuntu-latest' && '-race' || '' }} -timeout=30m
