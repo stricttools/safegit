@@ -270,14 +270,14 @@ func newApp() *strictcli.App {
 		}
 		amend := optBool(kwargs["amend"], false)
 		allowEmpty := optBool(kwargs["allow_empty"], false)
-		allowEscapingTargets := optBool(kwargs["allow_escaping_targets"], false)
+		allowNonPortableTargets := optBool(kwargs["allow_non_portable_targets"], false)
 		trailers := kwargsStrSlice(kwargs["trailer"])
 		files := kwargsStrSlice(kwargs["files"])
 		hunks := kwargsStrSlice(kwargs["hunks"])
 		untrack := kwargsStrSlice(kwargs["untrack"])
 		moved := kwargsStrSlice(kwargs["moved"])
 		movedRetract := kwargsStrSlice(kwargs["moved_retract"])
-		return strictcli.Exit(runCommit(gf, messages, messageFile, branch, amend, allowEmpty, allowEscapingTargets, trailers, files, hunks, untrack, moved, movedRetract))
+		return strictcli.Exit(runCommit(gf, messages, messageFile, branch, amend, allowEmpty, allowNonPortableTargets, trailers, files, hunks, untrack, moved, movedRetract))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
 		strictcli.WithTags("json"),
@@ -293,11 +293,13 @@ func newApp() *strictcli.App {
 			strictcli.StringFlag("branch", "commit the staged files onto a different branch without switching to it", strictcli.Optional()),
 			strictcli.BoolFlag("amend", "amend the current HEAD commit by replacing it with updated content; omitted means a new commit", strictcli.Optional()),
 			strictcli.BoolFlag("allow-empty", "allow creating a commit even when no files have been changed; omitted means an empty commit is refused", strictcli.Optional()),
-			// A symlink is committed as its target TEXT, so an escaping one
-			// records a reference to a place only this machine has. Recording
-			// it is something the operator says, not something they discover
-			// afterwards from a notice they may not have read.
-			strictcli.BoolFlag("allow-escaping-targets", "record a symlink whose target resolves outside the repository, which the commit stores as the link text; omitted, and with --no-allow-escaping-targets, such a link is refused with its target named, because in another checkout it resolves to nothing or to a file the repository never carried", strictcli.Optional()),
+			// A symlink is committed as its target TEXT, so a target that only
+			// this checkout can resolve -- an absolute one, or a relative one
+			// landing outside the repository -- records a reference nobody
+			// else can honor. Recording it is something the operator says, not
+			// something they discover afterwards from a notice they may not
+			// have read.
+			strictcli.BoolFlag("allow-non-portable-targets", "record a symlink whose target text will not resolve in another checkout -- an absolute target, or a relative one resolving outside the repository -- which the commit stores as the link text; omitted, and with --no-allow-non-portable-targets, such a link is refused with its target named, because elsewhere it resolves to nothing or to a file the repository never carried", strictcli.Optional()),
 			strictcli.StringFlag("trailer", "add a key-value trailer line to the commit message (repeatable)", strictcli.Repeatable(), strictcli.Unique(false), strictcli.Optional()),
 			// The only way to select hunks. A positional path is always the
 			// literal name of a file, so this flag is what distinguishes a
