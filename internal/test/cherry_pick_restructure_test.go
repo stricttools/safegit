@@ -337,3 +337,67 @@ func TestCherryPickOfAnAlreadyAppliedCommitIsRefused(t *testing.T) {
 		t.Errorf("the refused pick moved HEAD to %s (was %s)", head, tip)
 	}
 }
+
+// TestCherryPickNamesItsLeftoversWhenTheStateChangedUnderIt: something else
+// started a git operation in this worktree while safegit's own compute step was
+// running, so the state safegit reads back is not the pick it just computed.
+//
+// Nothing is committed and nothing is rolled back -- an out-of-band writer is
+// demonstrably active here, and safegit refuses to ship work it cannot account
+// for rather than destroying it. What it owes instead is an inventory: the state
+// files left behind, safegit's OWN CHERRY_PICK_HEAD among them (the compute step
+// is `--no-commit`, which writes no such file, so that one is safegit's), and
+// the paths the compute staged.
+//
+// The reproduction device is a `post-index-change` hook: git runs it after the
+// compute step writes the index, and this one writes a MERGE_HEAD, which is
+// exactly the shape of another operation appearing mid-run. MERGE_HEAD outranks
+// CHERRY_PICK_HEAD in the state reader, so the state comes back as a merge.
+//
+// The hook is CONDITIONAL on the picked file being in the index, and it has to
+// be: earlier in the same run the coordination check refreshes a shared index
+// safegit's own commits left stale, which writes it and fires the hook too. A
+// MERGE_HEAD appearing THERE is refused at the entry check instead -- correctly,
+// and at a different exit code -- so an unconditional hook would reproduce the
+// wrong situation.
+func TestCherryPickNamesItsLeftoversWhenTheStateChangedUnderIt(t *testing.T) {
+	dir, first, _ := newPickableRepo(t)
+	tip := testutil.Rev(t, dir, "HEAD")
+
+	mergeHead := filepath.Join(dir, ".git", "MERGE_HEAD")
+	installHook(t, dir, "post-index-change",
+		"#!/bin/sh\n"+
+			"git ls-files --error-unmatch one.txt >/dev/null 2>&1 || exit 0\n"+
+			"printf '%s\\n' '"+tip+"' > '"+mergeHead+"'\nexit 0\n")
+
+	stdout, stderr, code := runSafegitEnv(t, dir, pickSession, "cherry-pick", first)
+	if code != exitcode.General {
+		t.Fatalf("the pick whose state changed under it exited %d, want %d\nstdout=%s\nstderr=%s",
+			code, exitcode.General, stdout, stderr)
+	}
+	if !strings.Contains(stderr, "CHERRY_PICK_HEAD") {
+		t.Errorf("the message does not name safegit's own park file among the leftovers:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "one.txt") {
+		t.Errorf("the message does not report the staged result:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "git status") {
+		t.Errorf("the message does not point at git status:\n%s", stderr)
+	}
+
+	// Nothing rolled back: HEAD stands, and the park file still holds the commit
+	// that was being picked.
+	if head := testutil.Rev(t, dir, "HEAD"); head != tip {
+		t.Errorf("the refused pick moved HEAD to %s (was %s)", head, tip)
+	}
+	parked, err := os.ReadFile(filepath.Join(dir, ".git", "CHERRY_PICK_HEAD"))
+	if err != nil {
+		t.Fatalf("safegit's own park file was removed: %v", err)
+	}
+	if got := strings.TrimSpace(string(parked)); got != first {
+		t.Errorf("CHERRY_PICK_HEAD holds %s, want the picked commit %s", got, first)
+	}
+	if status := testutil.Git(t, dir, "status", "--porcelain"); !strings.Contains(status, "one.txt") {
+		t.Errorf("the staged result was discarded:\n%s", status)
+	}
+}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/smm-h/safegit/internal/conflict"
@@ -266,7 +268,33 @@ func runRestructuredCherryPick(flags globalFlags, args []string, parsed gitArgs)
 		return exitcode.General
 	}
 	if state.Kind != sequencer.KindCherryPick {
-		fmt.Fprintf(os.Stderr, "error: the computed cherry-pick is not in flight (%s); nothing was committed\n", state.String())
+		// git's operation state CHANGED while the compute ran. Nothing was in
+		// flight when this command started -- the entry check looked, inside the
+		// operation lock -- and safegit wrote CHERRY_PICK_HEAD itself a moment
+		// ago, so a state that is not a cherry-pick now is one somebody else
+		// started or cleared underneath. The operation lock serializes safegit
+		// processes in this worktree and nothing else: raw git run beside safegit
+		// is exactly the situation this tool exists for.
+		//
+		// Everything is REPORTED and nothing is rolled back, which is the same
+		// stance the revert sibling takes: discarding the staged result means
+		// throwing the index and the working tree back to HEAD in the one
+		// situation where another process is demonstrably operating here, and that
+		// rollback could take its work with it. safegit refuses to ship work it
+		// cannot account for; it does not destroy it.
+		//
+		// What it owes instead is an INVENTORY, because the leftovers are not all
+		// git's: the park file is safegit's own write (`git cherry-pick
+		// --no-commit` records nothing about the commit it applies), so an
+		// operator finding it would otherwise have no account of where it came
+		// from.
+		fmt.Fprintf(os.Stderr, "error: git's operation state changed while the cherry-pick was being computed (%s now); nothing was committed\n", state.String())
+		fmt.Fprintf(os.Stderr, "  nothing was in flight when this command started, so something else started or cleared a\n")
+		fmt.Fprintf(os.Stderr, "  git operation in this worktree while it ran.\n")
+		reportComputedPickLeftovers(ctx, gitDir)
+		fmt.Fprintf(os.Stderr, "  All of it is left exactly where it is, because something else is operating here and a\n")
+		fmt.Fprintf(os.Stderr, "  rollback could take that work with it. Inspect it with 'git status', then commit it or\n")
+		fmt.Fprintf(os.Stderr, "  drop it yourself.\n")
 		return exitcode.General
 	}
 
@@ -319,6 +347,52 @@ func parkComputedPick(gitDir, sourceSHA string, resolveErr error) error {
 		return fmt.Errorf("recording which commit the cherry-pick is applying: %w", err)
 	}
 	return nil
+}
+
+// reportComputedPickLeftovers names what a cherry-pick whose state changed under
+// it has left in the repository: the pick's own state files that are actually
+// there, and the paths its compute step staged.
+//
+// The state-file set is read from sequencer.Paths -- the one declaration of what
+// a cherry-pick's state IS -- rather than spelled again here, and filtered to
+// what exists, because naming a file that is not there would send an operator
+// looking for it. CHERRY_PICK_HEAD is called out by name in the line above the
+// list: it is the one member of that set safegit wrote itself, and an operator
+// who knows `git cherry-pick --no-commit` writes no such file would otherwise
+// have no account of it.
+//
+// Each half degrades on its own. A listing that cannot be read says so and the
+// rest of the message still prints: this is already the failure path, and a
+// second failure inside the report must not replace the report.
+func reportComputedPickLeftovers(ctx context.Context, gitDir string) {
+	var present []string
+	for _, name := range sequencer.Paths(sequencer.KindCherryPick) {
+		if _, err := os.Lstat(filepath.Join(gitDir, name)); err == nil {
+			present = append(present, name)
+		}
+	}
+	if len(present) > 0 {
+		fmt.Fprintf(os.Stderr, "  Left behind, CHERRY_PICK_HEAD included -- safegit wrote that one itself, so the parked\n")
+		fmt.Fprintf(os.Stderr, "  pick would look to git exactly like a conflicted one:\n")
+		for _, name := range present {
+			fmt.Fprintf(os.Stderr, "    %s\n", filepath.Join(gitDir, name))
+		}
+	}
+
+	staged, err := git.IndexPathsChangedFrom(ctx, "HEAD")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  The computed pick is still staged in the index; what it touched could not be listed: %v\n", err)
+		return
+	}
+	if len(staged) == 0 {
+		fmt.Fprintf(os.Stderr, "  The index holds nothing the branch does not already have.\n")
+		return
+	}
+	sort.Strings(staged)
+	fmt.Fprintf(os.Stderr, "  Staged in the index and the working tree, uncommitted:\n")
+	for _, path := range staged {
+		fmt.Fprintf(os.Stderr, "    %s\n", path)
+	}
 }
 
 // pickLeftAConflict reports whether the compute step stopped on a conflict, as
