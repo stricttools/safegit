@@ -503,6 +503,118 @@ func TestCommitAbsoluteSymlinkTargetInsideTheRepositoryIsRefused(t *testing.T) {
 	if !strings.Contains(stderr, "notice:") || !strings.Contains(stderr, "the commit records the link text") {
 		t.Errorf("the election must say once what the recorded text will not resolve to; stderr:\n%s", stderr)
 	}
+	// The notice's absolute sentence has to be true of EVERY absolute target,
+	// not only of one that happens to land inside this checkout -- the
+	// outside-resolving sibling below asserts the same phrase.
+	if !strings.Contains(stderr, absoluteNoticePhrase) {
+		t.Errorf("the notice must say what is true of every absolute target (%q); stderr:\n%s", absoluteNoticePhrase, stderr)
+	}
+}
+
+// absoluteNoticePhrase and the two remedy phrases below are the distinctive
+// fragments of the absolute shape's operator text. They are named once because
+// the same statement has to hold for an absolute target that resolves inside
+// this checkout and for one that resolves nowhere near it: a sentence true of
+// only one of the two would be a falsehood printed for the other.
+const (
+	absoluteNoticePhrase  = "an absolute path naming a location on this machine rather than a place in the repository"
+	absoluteRemedyInside  = "Spell the target relative to the link"
+	absoluteRemedyOutside = "when it points outside there is nothing portable to spell"
+)
+
+// TestCommitAbsoluteSymlinkTargetOutsideTheRepositoryIsRefused is the other
+// half of the absolute shape, and the one whose operator text is easiest to get
+// wrong: the target is absolute AND resolves outside the repository, so the
+// advice that fits an absolute in-repository target -- spell it relative --
+// would only produce the other refused shape.
+//
+// The refusal itself is the same one the in-repository sibling gets (the
+// judgment is on the SPELLING alone and never resolves), so the exit and the
+// grouping are pinned here as the second member of that class; the wording
+// assertions are what this case adds.
+func TestCommitAbsoluteSymlinkTargetOutsideTheRepositoryIsRefused(t *testing.T) {
+	dir := newRepo(t)
+
+	// A directory of its own, outside the repository entirely -- built here
+	// rather than naming a system path like /etc/hostname, which would tie the
+	// test to the machine running it.
+	outside := evalTempDir(t)
+	target := filepath.Join(outside, "machine.conf")
+	testutil.WriteFileAt(t, target, "machine-local\n")
+	if err := os.Symlink(target, filepath.Join(dir, "abslink")); err != nil {
+		t.Fatalf("creating symlink: %v", err)
+	}
+	before := testutil.Rev(t, dir, "HEAD")
+
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "add absolute link", "--", "abslink")
+	if code != exitcode.NonPortableTarget {
+		t.Errorf("an absolute symlink resolving outside the repository exited %d, want %d (NonPortableTarget); stderr: %s",
+			code, exitcode.NonPortableTarget, stderr)
+	}
+	for _, want := range []string{"abslink", target} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("the refusal must name %q; stderr:\n%s", want, stderr)
+		}
+	}
+	// It is judged as an ABSOLUTE target, not as one that leaves the
+	// repository: the group header is the absolute one.
+	if !strings.Contains(stderr, "absolute targets, which name a path on this machine rather than a place in the repository") {
+		t.Errorf("the offender must sit under the absolute group; stderr:\n%s", stderr)
+	}
+	// The absolute group's remedy carries BOTH halves, because the group holds
+	// both cases: the relative spelling for a target pointing inside, and the
+	// statement that a target pointing outside has no such spelling.
+	for _, want := range []string{absoluteRemedyInside, absoluteRemedyOutside} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("the absolute remedy does not carry %q; stderr:\n%s", want, stderr)
+		}
+	}
+	if !strings.Contains(stderr, "--allow-non-portable-targets") {
+		t.Errorf("the refusal must name the flag that elects recording it; stderr:\n%s", stderr)
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("HEAD moved despite the refusal: %s -> %s", before, after)
+	}
+
+	stdout, stderr, code := runSafegit(t, dir, "commit", "--allow-non-portable-targets",
+		"-m", "add absolute link", "--", "abslink")
+	if code != 0 {
+		t.Fatalf("an elected absolute symlink was refused (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	if got := catFileBlob(t, dir, "abslink"); got != target {
+		t.Errorf("symlink blob = %q, want the absolute link text %q", got, target)
+	}
+	if !strings.Contains(stderr, absoluteNoticePhrase) {
+		t.Errorf("the notice must say what is true of every absolute target (%q); stderr:\n%s", absoluteNoticePhrase, stderr)
+	}
+}
+
+// TestCommitDryRunNonPortableSymlinkIsRefused: a preview of a commit safegit
+// would refuse must BE the refusal, not a rehearsal of a commit that could
+// never happen. The precedent is mv's dirty-move preview
+// (TestMvDryRunRefusesADirtyMove); this pins the same property for the
+// non-portable-target judgment, which sits in the same intake and runs before
+// anything is staged either way.
+func TestCommitDryRunNonPortableSymlinkIsRefused(t *testing.T) {
+	dir := newRepo(t)
+
+	const target = "../elsewhere/secret.txt"
+	if err := os.Symlink(target, filepath.Join(dir, "escapes")); err != nil {
+		t.Fatalf("creating symlink: %v", err)
+	}
+	before := testutil.Rev(t, dir, "HEAD")
+
+	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "commit", "-m", "preview the link", "--", "escapes")
+	if code != exitcode.NonPortableTarget {
+		t.Errorf("a dry-run commit of a non-portable symlink exited %d, want %d (NonPortableTarget)\nstdout: %s\nstderr: %s",
+			code, exitcode.NonPortableTarget, stdout, stderr)
+	}
+	if !strings.Contains(stderr, target) {
+		t.Errorf("the preview's refusal does not name the target %q; stderr:\n%s", target, stderr)
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("HEAD moved despite the refusal: %s -> %s", before, after)
+	}
 }
 
 // TestCommitNonPortableSymlinkRefusalGroupsOffendersByShape: the two shapes of
