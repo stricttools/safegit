@@ -564,3 +564,29 @@ func TestAllowEmptyDoesNotExcuseANamedPathThatChangesNothing(t *testing.T) {
 		t.Errorf("the empty commit's tree is %s, want the tip's own %s", got, want)
 	}
 }
+
+// C2. --allow-empty on an UNBORN branch: an empty ROOT commit
+//
+// The root path has no parent tree to compare against, so what "empty" means
+// there is a different question: the tree is empty in the absolute sense, with
+// no entries at all. --allow-empty elects exactly that, and it is a real,
+// reachable behavior -- the first commit of a repository, deliberately holding
+// nothing -- which nothing pinned until now.
+//
+// It is pinned in its own right because the root path's tree-unchanged
+// comparison is what refuses an unborn REVERT (which produces precisely this
+// tree without asking for it), and that refusal must not take this with it.
+func TestAllowEmptyOnAnUnbornBranchMakesAnEmptyRootCommit(t *testing.T) {
+	dir := rootCasNewUnbornRepo(t)
+
+	if _, stderr, code := runSafegit(t, dir, "commit", "--allow-empty", "-m", "a deliberately empty root commit"); code != 0 {
+		t.Fatalf("--allow-empty on an unborn branch failed (code %d): %s", code, stderr)
+	}
+	head := testutil.Rev(t, dir, "HEAD")
+	if parents := testutil.Parents(t, dir, head); len(parents) != 0 {
+		t.Errorf("the commit's parents are %v, want none (it is a root commit)", parents)
+	}
+	if entries := strings.TrimSpace(testutil.Git(t, dir, "ls-tree", "HEAD")); entries != "" {
+		t.Errorf("the root commit's tree holds %q, want no entries at all", entries)
+	}
+}
