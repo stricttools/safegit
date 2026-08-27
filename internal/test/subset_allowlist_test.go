@@ -97,15 +97,21 @@ func TestMergeAllowlistPassesAnAllowedForm(t *testing.T) {
 	}
 }
 
-// TestPickAndRevertRefuseStrategySelection: the strategy flags are refused on
-// cherry-pick and revert exactly as they are on merge, and for the same reason.
-// A pick computed with a non-default strategy parks a conflict the conclusion's
+// TestPickAndRevertRefuseStrategySelection: strategy SELECTION is refused on
+// cherry-pick and revert exactly as it is on merge, and for the same reason. A
+// pick computed with a non-default strategy parks a conflict the conclusion's
 // own checks cannot read -- no AUTO_MERGE to reconstruct the markers from -- so
 // letting one through would leave the protection over the staged result with a
 // hole in it.
+//
+// Strategy OPTIONS are the other half of that vocabulary and are HONORED: they
+// tune the same ort compute and leave every one of those checks reading what it
+// reads today (see TestStrategyOptionsAreHonoredOnAllThreeVerbs). Only the long
+// spelling is exercised here, because on these two verbs `-s` is git's own
+// spelling for signoff.
 func TestPickAndRevertRefuseStrategySelection(t *testing.T) {
 	for _, verb := range []string{"cherry-pick", "revert"} {
-		for _, opt := range [][]string{{"--strategy", "resolve"}, {"-X", "ours"}} {
+		for _, opt := range [][]string{{"--strategy", "resolve"}} {
 			t.Run(verb+" "+opt[0], func(t *testing.T) {
 				dir, first, _ := newPickableRepo(t)
 				tip := testutil.Rev(t, dir, "HEAD")
@@ -251,9 +257,10 @@ func TestRebasePassesAnAllowedForm(t *testing.T) {
 // cherry-pick and revert do not implement is refused whether or not the run was
 // going to happen, and nothing is recorded in the would-do log for it.
 //
-// These used to be preview-specific refusals ("safegit's preview does not
-// forward strategy options"), which said the outcome could not be COMPUTED. It
-// is the wrong answer now that the option cannot be RUN.
+// The option exercised here is strategy SELECTION, which safegit's cherry-pick
+// and revert do not implement at all. It is spelled long: on these two verbs
+// `-s` is signoff, so `-s resolve` would read as an allowed flag followed by a
+// second revision rather than as the unsupported option under test.
 func TestPickAndRevertSubsetRefusalsApplyToAPreviewToo(t *testing.T) {
 	for _, verb := range []string{"cherry-pick", "revert"} {
 		t.Run(verb, func(t *testing.T) {
@@ -263,7 +270,7 @@ func TestPickAndRevertSubsetRefusalsApplyToAPreviewToo(t *testing.T) {
 				target = first
 			}
 
-			stdout, stderr, code := runSafegit(t, dir, "--dry-run", verb, "-Xtheirs", target)
+			stdout, stderr, code := runSafegit(t, dir, "--dry-run", verb, "--strategy", "resolve", target)
 			if code != exitcode.Usage {
 				t.Fatalf("a preview of an unsupported %s exited %d, want %d (Usage)\nstdout=%s\nstderr=%s",
 					verb, code, exitcode.Usage, stdout, stderr)

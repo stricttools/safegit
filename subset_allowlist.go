@@ -176,6 +176,12 @@ func refuseUnlistedOption(command, option string) int {
 // pipeline, so an option that changes how the message is DRAFTED is honored
 // (the pipeline commits that draft) while one that changes how git would COMMIT
 // is not (nothing of git's commit path runs).
+//
+// Reaching the compute step is what makes an option ELIGIBLE, not what makes it
+// allowed: a compute-step option may still be refused for a reason of its own.
+// Strategy SELECTION is the standing case -- the conclusion's checks cannot read
+// what another strategy stages -- while strategy OPTIONS, which tune the same
+// ort compute without changing what those checks see, are honored.
 var mergeSubset = argvSubset{
 	command: "merge",
 	allowed: []string{
@@ -197,6 +203,14 @@ var mergeSubset = argvSubset{
 		// A compute-step verdict: whether git will merge two histories that share
 		// no commit at all. It changes no commit and no ref.
 		"--allow-unrelated-histories",
+		// Strategy OPTIONS, in both of git's spellings -- they are two distinct
+		// option names rather than one alias of the other. They tune the ort
+		// compute's content decisions without changing authorship, parking, or
+		// anything a conclusion reads: the compute stays ort, AUTO_MERGE is
+		// written exactly as it is without them (probed), and every protection
+		// over the staged result sees what it sees today. Strategy SELECTION,
+		// which does change that, stays refused below.
+		"-X", "--strategy-option",
 		// rerere's remembered resolution is staged during the compute step, and
 		// what it stages is checked by the conclusion like anything else.
 		"--rerere-autoupdate", "--no-rerere-autoupdate",
@@ -208,10 +222,6 @@ var mergeSubset = argvSubset{
 		{
 			[]string{"-s", "--strategy"},
 			"safegit's merge does not select a merge strategy: the conclusion's completeness and conflict-marker checks are written against what the default strategy stages, and a strategy they cannot read would be protected by nothing",
-		},
-		{
-			[]string{"-X", "--strategy-option"},
-			"safegit's merge does not forward strategy options, for the same reason it does not select a strategy: they change what is staged, and the checks over the staged result cannot see the change",
 		},
 		{
 			[]string{"--squash"},
@@ -264,6 +274,13 @@ var cherryPickSubset = argvSubset{
 		// Which parent of a merge commit the pick is relative to: a compute-step
 		// question about what patch to apply.
 		"-m", "--mainline",
+		// Strategy OPTIONS, in both spellings. They tune the ort compute's
+		// content decisions and change neither authorship, parking, nor anything
+		// a conclusion reads; strategy SELECTION, which does, stays refused
+		// below. On this command the SHORT `-s` is signoff rather than strategy
+		// selection, which is git's own spelling and is why the refusal below
+		// names only the long one.
+		"-X", "--strategy-option",
 		// The operator asking for the pick to be computed and left staged. It
 		// authors nothing, so it is forwarded to git -- but it COMPUTES, so it
 		// goes through the computing door, which refuses over an operation git
@@ -296,10 +313,6 @@ var cherryPickSubset = argvSubset{
 			"safegit's cherry-pick does not select a merge strategy: the conclusion's completeness and conflict-marker checks are written against what the default strategy stages -- a pick computed with another one parks a content conflict git recorded nowhere the checks can read -- so a strategy they cannot see would be protected by nothing",
 		},
 		{
-			[]string{"-X", "--strategy-option"},
-			"safegit's cherry-pick does not forward strategy options, for the same reason it does not select a strategy: they change what is staged, and the checks over the staged result cannot see the change",
-		},
-		{
 			[]string{"--ff"},
 			"--ff lets git move the branch onto the picked commit outright, which is a ref move outside safegit's compare-and-swap and a commit safegit did not author. safegit's cherry-pick always makes a commit of its own",
 		},
@@ -326,6 +339,13 @@ var revertSubset = argvSubset{
 		// step (probe-verified), and the pipeline commits that draft.
 		"-s", "--signoff", "--no-edit",
 		"-m", "--mainline",
+		// Strategy OPTIONS, in both spellings, on the same reasoning as merge's
+		// and cherry-pick's rows. Note that a revert applies an INVERSE patch, so
+		// `-X theirs` keeps the revert and `-X ours` keeps the commit being
+		// reverted -- the same reading the conclusion's stage keywords take.
+		// Strategy SELECTION stays refused below, and its SHORT spelling is
+		// signoff here, exactly as it is on cherry-pick.
+		"-X", "--strategy-option",
 		"-n", "--no-commit",
 		"--rerere-autoupdate", "--no-rerere-autoupdate",
 		// The reference line git puts in the draft naming the reverted commit.
@@ -348,10 +368,6 @@ var revertSubset = argvSubset{
 		{
 			[]string{"--strategy"},
 			"safegit's revert does not select a merge strategy: the conclusion's completeness and conflict-marker checks are written against what the default strategy stages -- a revert computed with another one parks a content conflict git recorded nowhere the checks can read -- so a strategy they cannot see would be protected by nothing",
-		},
-		{
-			[]string{"-X", "--strategy-option"},
-			"safegit's revert does not forward strategy options, for the same reason it does not select a strategy: they change what is staged, and the checks over the staged result cannot see the change",
 		},
 		{
 			[]string{"--commit"},

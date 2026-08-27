@@ -137,9 +137,19 @@ var AttrSource = Feature{
 	Used:  "attribute-correct merges computed without a worktree",
 }
 
+// MergeTreeStrategyOption is `-X` on the merge engine: tuning how the merge
+// resolves, the way `git merge -X` does. git's own release note for it reads
+// "git merge-tree" learned to take strategy backend specific options via the
+// "-X" option, like "git merge" does.
+var MergeTreeStrategyOption = Feature{
+	Name:  "git merge-tree -X",
+	Floor: Version{2, 43, 0},
+	Used:  "previewing a merge, cherry-pick or revert that carries a strategy option",
+}
+
 // Features returns every declared feature floor.
 func Features() []Feature {
-	return []Feature{MergeTreeWriteTree, AttrSource}
+	return []Feature{MergeTreeWriteTree, AttrSource, MergeTreeStrategyOption}
 }
 
 // HighestFloor returns the feature with the newest floor: the git version that

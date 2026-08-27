@@ -284,8 +284,10 @@ func TestMergeRefusesRawGitShapes(t *testing.T) {
 		// cannot give: git's own commit, moving the ref outside safegit's
 		// compare-and-swap. cherry-pick and revert already refuse it by name.
 		{"commit", []string{"merge", "--commit", "feature"}, "--commit"},
+		// Strategy SELECTION only: strategy OPTIONS are honored (see
+		// TestStrategyOptionsAreHonoredOnAllThreeVerbs), and the two halves of
+		// git's `-X`/`-s` vocabulary part company here.
 		{"strategy selection", []string{"merge", "-s", "ours", "feature"}, "strateg"},
-		{"strategy option", []string{"merge", "-X", "ours", "feature"}, "strateg"},
 		{"squash", []string{"merge", "--squash", "feature"}, "--squash"},
 		{"edit", []string{"merge", "--edit", "feature"}, "--edit"},
 		{"autostash", []string{"merge", "--autostash", "feature"}, "Commit your changes first"},
@@ -316,13 +318,16 @@ func TestMergeRefusesRawGitShapes(t *testing.T) {
 // a command that cannot run is not a preview of anything, and nothing is
 // recorded in the would-do log for it either.
 //
-// These three cases used to be preview-specific refusals ("merge-tree
-// implements only ort"), which said the outcome could not be COMPUTED. It is
-// the wrong answer now that the option cannot be RUN.
+// Both cases used to be preview-specific refusals ("merge-tree implements only
+// ort"), which said the outcome could not be COMPUTED. It is the wrong answer
+// now that the option cannot be RUN.
+//
+// A third case rode here until strategy OPTIONS became allowed: `-X` is now
+// forwarded to the merge-tree the preview computes with, so there is nothing
+// left to refuse on either side (see TestThePreviewForwardsStrategyOptions).
 func TestMergeSubsetRefusalsApplyToAPreviewToo(t *testing.T) {
 	for _, args := range [][]string{
 		{"--dry-run", "merge", "-s", "resolve", "feature"},
-		{"--dry-run", "merge", "-X", "ours", "feature"},
 		{"--dry-run", "merge", "--squash", "feature"},
 	} {
 		t.Run(strings.Join(args[2:], " "), func(t *testing.T) {
