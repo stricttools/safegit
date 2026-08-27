@@ -13,7 +13,7 @@ pre-release design review that followed campaign 2 (whose plan,
 `todo/campaign2-plan.md`, is a completed historical record — where the
 two disagree about what to do NEXT, this file wins). Anchors are claim
 text (file + function + a distinctive phrase), verified against the
-tree (most recently at HEAD `d5882019` — the anchor names the last
+tree (most recently at HEAD `7728f364` — the anchor names the last
 commit BEFORE this file's own latest edit, since a file cannot carry
 its own commit's SHA; every commit past the anchor touches only
 `todo/`, so the tree the claims describe is unchanged); the Catalog
@@ -26,7 +26,10 @@ verification status.
 
 **EXECUTION starts on the user's explicit go, IN A LATER SESSION** —
 the user ruled that the session which wrote this plan does not execute
-it. This file existing is not that go. Also ruled at the same review:
+it. This file existing is not that go. THAT GO COVERS THE ENTIRE ROUND
+`[user]`: once started, execution runs Phases 0-8 to the PUBLISHED
+release with ZERO mid-run touchpoints — no approval stops, no waiting
+on the user for anything. Also ruled at the same review:
 ONE release, after this round completes (main is green and could ship
 today, but the round is this release's own work — the
 release-once-at-the-end principle governs; the v0.28.0 defect exposure
@@ -1161,12 +1164,14 @@ zero unexplained lines; the refreshed baseline committed.
   and output, generated surfaces (schema and docs), payload schemas,
   the oplog, version-dependent paths, and the catalog — the one
   defect class only tracing finds.
-- Findings remediated red-first; the battery re-run after; a finding
-  the auditor grades as needing a user ruling goes to the user, not
-  to a fixer.
+- Findings remediated red-first; the battery re-run after. A finding
+  the auditor grades as needing a user ruling does NOT stop execution
+  `[user — zero touchpoints]`: the orchestrator resolves it with the
+  most conservative available choice (prefer refusing/documenting over
+  new behavior) and marks it in the round's record for post-release
+  review.
 **Verify:** the audit report addresses every phase of both campaigns
-and this round; zero unremediated findings (or the user's explicit
-acceptance of any remainder).
+and this round; zero unremediated findings.
 
 ---
 
@@ -1243,12 +1248,14 @@ acceptance of any remainder).
   condition (its freshness check is the backstop, not the plan).
 - `rlsbl release init`; the release file: bump MINOR (0.28.0 to
   0.29.0), the two-campaign-plus-closing-round description and
-  context DRAFTED BY THE ORCHESTRATOR AND APPROVED BY THE USER before
-  the release file is committed.
+  context DRAFTED BY THE ORCHESTRATOR and committed — no approval stop
+  `[user — zero touchpoints]`.
 - `actionlint` over the workflows (installed; cheap insurance before
   their first-ever run on this history).
-- ON THE USER'S GO: `rlsbl release run --no-allow-dirty --watch
-  --approve-consequential`. The candidate push is the first push of
+- `rlsbl release run --no-allow-dirty --watch
+  --approve-consequential` — run directly; the round's single starting
+  go covers the release `[user — zero touchpoints]`. The candidate
+  push is the first push of
   the entire two-campaign history; a red CI verdict is fixed forward
   at the same version with `rlsbl release resume --watch` (the
   watch choice is a required flag on resume too) — never a new
@@ -1279,7 +1286,7 @@ acceptance of any remainder).
 | 5 | 1-4 | executes the Catalog actions table's Phase-5 rows; the ONE schema regen |
 | 6 | 5 | census last; battery on the quiescent tree; baseline refresh after reconciliation |
 | 7 | 6 | the Fable-orchestrated audit |
-| 8 | 7 + the user's release-file approval + the user's go | |
+| 8 | 7 (the round's single starting go covers it — zero touchpoints) | |
 
 Sequential execution is the default; Phases 1.2, 2, 3, and 4 collide
 on the catalog file AND the commands guide (1.2's guard-count edits
