@@ -101,6 +101,8 @@ A successful reclamation is logged to the oplog as a `lock_recovered` event.
 
 A holder removes its lock file only while that path still names the exact file it published. The case that makes this necessary is reachable: an operator force-releases a lock this process still holds, a third process wins the free path and publishes its own lock there, and the original process then finishes -- a blind removal would delete the newcomer's live lock. A mismatch means our lock is already gone: there is nothing to remove, and nothing to report.
 
+The identity is two halves, and the second is the one that decides. Comparing the stat -- device plus inode -- is not proof, because a filesystem may hand a freed inode number straight back out: ext4 recycles, btrfs never does, so the newcomer's lock can land on the very inode the previous holder had and the stat comparison then says "ours" about somebody else's live lock. The owner record is therefore compared too, byte-for-byte against the bytes this process wrote. A lock file is written before publication and never modified after, so the record is a stable identity that inode recycling cannot forge.
+
 ### Polling and backoff
 
 Waiters use exponential backoff polling: 10ms, 20ms, 50ms, 100ms, 200ms, 500ms, capped at 1s. The total wait is bounded by `lock.acquireTimeoutSeconds` (default 30s). Past the timeout, safegit exits **8** with an error identifying the lock holder.

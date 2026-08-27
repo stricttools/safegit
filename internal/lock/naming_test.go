@@ -164,7 +164,7 @@ func TestReleaseLeavesAReplacedLockAlone(t *testing.T) {
 		if err != nil {
 			t.Fatalf("publishing the newcomer's lock: %v", err)
 		}
-		return newcomer
+		return newcomer.info
 	}
 
 	assertNewcomerSurvives := func(t *testing.T, path string, newcomer os.FileInfo) {
@@ -180,6 +180,53 @@ func TestReleaseLeavesAReplacedLockAlone(t *testing.T) {
 			t.Fatalf("cleaning up the newcomer's lock: %v", err)
 		}
 	}
+
+	// The stat half of the identity is not proof on its own: a filesystem may
+	// hand the freed inode number straight back to the newcomer, and then
+	// os.SameFile answers "ours" about somebody else's live lock. Whether that
+	// happens is the filesystem's choice -- ext4 reuses, btrfs never does -- so
+	// the sibling test above can only exercise this hazard where the machine
+	// happens to reuse, and passed for a whole campaign on a machine that does
+	// not while failing the moment CI ran it on one that does.
+	//
+	// This test removes the luck: it hands releaseIfOurs a publication whose
+	// stat identity IS the newcomer's file -- exactly what inode reuse produces
+	// -- while the record is the one the previous holder wrote. The record is
+	// what must decide.
+	t.Run("ReleaseUnderInodeReuse", func(t *testing.T) {
+		dir := t.TempDir()
+		path := filepath.Join(dir, "contended"+lockSuffix)
+
+		holder, err := tryCreate(path, "holder")
+		if err != nil {
+			t.Fatalf("publishing the holder's lock: %v", err)
+		}
+		if err := os.Remove(path); err != nil {
+			t.Fatalf("force-releasing the holder's lock: %v", err)
+		}
+		newcomer, err := tryCreate(path, "newcomer")
+		if err != nil {
+			t.Fatalf("publishing the newcomer's lock: %v", err)
+		}
+
+		// The publication a holder would carry on a filesystem that recycled
+		// the inode: the newcomer's stat, the holder's record.
+		reused := publication{info: newcomer.info, record: holder.record}
+		if err := releaseIfOurs(path, reused); err != nil {
+			t.Errorf("releasing a lock that was force-released out from under it: %v", err)
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("the newcomer's lock was removed on a recycled inode: %v", err)
+		}
+
+		// The control: the holder's own publication still releases its own lock.
+		if err := releaseIfOurs(path, newcomer); err != nil {
+			t.Errorf("releasing the newcomer's own lock: %v", err)
+		}
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("a holder failed to release its own lock (err=%v)", err)
+		}
+	})
 
 	t.Run("Release", func(t *testing.T) {
 		base := t.TempDir()
