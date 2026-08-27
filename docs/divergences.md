@@ -541,7 +541,7 @@ Every future change that introduces a decision of this kind adds its entry here.
   re-run of a conclusion whose commit already stands: that path writes the
   working tree from the standing commit's own tree, which is a write like any
   other, so it is checked like any other.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### Every conflicted path must be declared, and nothing else may be
 
@@ -699,7 +699,7 @@ Every future change that introduces a decision of this kind adds its entry here.
   that sliver leaves no entry — a merge is still caught by parentage, a
   cherry-pick or revert in it is not. A crash after the state files were removed
   is `safegit doctor`'s to report.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### An autostash is applied only when it belongs to the merge being concluded
 
@@ -794,7 +794,7 @@ next to what is admitted.
   kill), but its reason is neither of the two above: safegit HAS the flag, on
   every command it has. So it names the route instead — write the flag before the
   command name — rather than citing a subset law that is not what refused it.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### Navigation is `safegit switch`, and there is no `safegit checkout`
 
@@ -859,7 +859,7 @@ next to what is admitted.
   resolves to nothing at all is left to git, so `safegit switch no-such-thing`
   exits with git's own verdict rather than a message safegit invented about
   branches.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### `switch -c` starts the new branch where you are standing
 
@@ -882,7 +882,7 @@ next to what is admitted.
   This is a capability safegit deliberately lacks rather than one it guards.
   Nothing about the start-point is unsafe in itself; it is simply not part of
   the one form this command implements, and git creates branches perfectly well.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### A flag whose whole job is to carry a dirty tree is dead here
 
@@ -937,7 +937,7 @@ next to what is admitted.
   fast-forward arm it silently took the first line and dropped the rest. An
   unreadable or absent `FETCH_HEAD` is left to git, which is the same convention
   every unresolvable revision follows here.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### One commit per cherry-pick, one per revert; ranges are refused
 
@@ -1099,7 +1099,7 @@ next to what is admitted.
   brought together, and `safegit merge` either records a merge commit or records
   nothing. An operator who wants the content without the history can stage it
   themselves and commit it with `safegit commit`, where it is what it looks like.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### Options that would hand the commit or the ref back to git are refused
 
@@ -1117,7 +1117,7 @@ next to what is admitted.
   argv, which is the shape this tool refuses everywhere else: an operator who
   asks for something gets it, or gets told they cannot have it. It is now
   refused by name in all three tables.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### Options that govern git's own commit step are refused, not ignored
 
@@ -1138,7 +1138,7 @@ next to what is admitted.
     `--cleanup` has no step to govern.
   - the pipeline refuses a commit that changes nothing outright, and there is no
     flag here that turns that refusal off.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### `--skip` is refused
 
@@ -1149,7 +1149,7 @@ next to what is admitted.
   cherry-pick --abort`, or concluding the revert you are in with `safegit
   revert-continue` and then `git revert --abort` — and then the sequential form
   for the commits you did want.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### The fast-forward-only refusal is safegit's, not git's
 
@@ -1165,7 +1165,7 @@ next to what is admitted.
   outside safegit's compare-and-swap, which is the one thing the whole commit
   design exists to prevent. The cost is that an operator scripting against git's
   128 sees a different number here.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### A parked merge stays parked, even when it could have fast-forwarded
 
@@ -1238,7 +1238,7 @@ next to what is admitted.
   authored — the pipeline never writes that key — so a one-commit fast-forward,
   which the ancestry check alone would have happily reversed, is excluded by
   construction.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### `reset` takes a commit; the pathspec form is refused
 
@@ -1262,7 +1262,7 @@ next to what is admitted.
   everywhere in safegit: there is no interactive mode anywhere. An argument that
   resolves to NEITHER a commit nor a path is deliberately left to git, so
   `safegit reset --hard no-such-ref` exits with git's own verdict on it.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### `rebase` is one upstream and a replay, and nothing else
 
@@ -1310,7 +1310,7 @@ next to what is admitted.
   end to end, which is a different operation with a different door. Folding them
   into one flag would put two authorship models behind one command line, decided
   by a flag or, worse, by configuration.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### `bisect`'s subcommand vocabulary is its allowlist, and it takes no options
 
@@ -1327,7 +1327,7 @@ next to what is admitted.
   The option allowlist is deliberately EMPTY. Every option git's bisect takes
   renames its terms, changes what it checks out, or limits the walk, and none of
   them has been considered against safegit's guards.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### What each guarded command allows
 
@@ -1484,7 +1484,7 @@ rather than here, because what an operator meets is a refusal.
   The fence is scoped to the paths this command line named, not to a general
   on-disk check: a `--branch` commit's working tree is unrelated to the tree
   being built, and consulting it would be inference reading the wrong world.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### `safegit undo` of a move reverses the commit, not the files
 
@@ -1764,7 +1764,7 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   a clean-tree `reset --hard <older>` still moves the branch back over whatever
   was in the way, with no ancestry check of the kind `undo` performs. The guard
   blunts the destroy-uncommitted-work edge, not the move-the-ref one.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### No bare `--force`, anywhere
 
