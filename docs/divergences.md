@@ -52,9 +52,11 @@ be waiting for, and is born deliberate.
 > cataloged ahead of its review is listed here, entry by entry rather than as a
 > count, until that review settles it.
 >
-> Every entry under "The subset boundary" is a verdict about what safegit will
-> not do, and overturning one is cheap: it means putting a capability back into
-> an allowlist, not writing new machinery.
+> "The subset boundary" catalogs where safegit's command surface diverges from
+> git's — the capabilities it refuses, the refusals it adds where git would
+> proceed, and the table of what each guarded command does admit. Where such an
+> entry is a refusal of a git capability, overturning it is cheap: it means
+> putting that capability back into an allowlist, not writing new machinery.
 
 Every future change that introduces a decision of this kind adds its entry here.
 
@@ -731,14 +733,17 @@ Every future change that introduces a decision of this kind adds its entry here.
 The commands that take git's own vocabulary — `switch`, `merge`, `cherry-pick`,
 `revert`, `pull`, `rebase`, `reset`, `bisect` — are where the subset law has to
 be stated, because an operator can type anything git accepts and expect it to
-arrive. Every entry in this section is one git capability safegit deliberately
-does not have.
+arrive. This section catalogs where that command surface diverges from git's.
+Most entries are one git capability safegit deliberately does not have; some
+are a refusal safegit adds where git would have proceeded; one records what
+safegit does with a ref move of its own that git never authored; and the table
+at the end states what each guarded command admits.
 
-Overturning one is cheap: it means putting a capability back into an allowlist,
-not writing new machinery. [What each guarded command
-allows](#what-each-guarded-command-allows), at the end of the section, is the
-other half of the picture — the refusals below only make sense next to what is
-admitted.
+Overturning a refusal of a git capability is cheap: it means putting that
+capability back into an allowlist, not writing new machinery. [What each
+guarded command allows](#what-each-guarded-command-allows), at the end of the
+section, is the other half of the picture — the refusals below only make sense
+next to what is admitted.
 
 ### The forwarded command line is an allowlist, not a refusal list
 
