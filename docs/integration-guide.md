@@ -299,8 +299,13 @@ interchangeable:
    four emit `payload: null` under `--dry-run --json` while `preview` carries
    the recorded argv.
 3. **No envelope at all.** Some refusals exit before the framework's dispatch
-   returns -- `safegit commit`'s non-portable symlink target refusal (exit 29)
-   is one -- and those write to stderr and exit with nothing on stdout. This set is
+   returns, and those write to stderr and exit with nothing on stdout.
+   `safegit commit`'s refusals are the class to know: every one probed answers
+   this way -- the general failure (1), a rejected command line (2), a path that
+   matched nothing (11), a move the repository does not bear out (19) and the
+   non-portable symlink target (29). `safegit mv` is the contrast, and it is
+   worth stating because the two look alike from outside: its refusal of the
+   same move class (19) DOES emit a null-payload envelope. This set is
    deliberately shrinking: every post-ref-update failure was moved onto shape 1
    precisely so that the paths where an operation half-happened always answer
    with a document. Treat empty stdout plus a nonzero exit as a valid outcome,
