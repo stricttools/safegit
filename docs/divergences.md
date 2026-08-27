@@ -158,10 +158,13 @@ Every future change that introduces a decision of this kind adds its entry here.
   commit are ONE refusal with the offenders grouped by shape, because the
   remedies differ: an absolute in-repository target has a portable spelling to
   be rewritten in, while a target that leaves the repository has to be pointed
-  back inside. The refusal covers ADDING or STAGING such link content, which is
-  where it enters history; `safegit mv` moving an already-tracked one is
-  untouched, because a move-only commit carries the blob across without
-  re-reading the link.
+  back inside. The judgment is made in the commit family's intake and nowhere
+  else — `safegit commit` and its `--amend` form, over the paths that invocation
+  stages, the ones a directory argument expands to included. Two other ways link
+  content reaches a tree do not pass through it: `safegit mv` moving an
+  already-tracked link carries the blob across without re-reading it, and a
+  conclusion's `--resolve path=worktree|ours|theirs` stages a conflicted path's
+  content directly.
 - **Ruling:** ours — deliberate
 
 ### `--untrack` removes the index entry and leaves the file on disk
