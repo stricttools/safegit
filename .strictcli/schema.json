@@ -82,7 +82,7 @@
   },
   "project_id": "github.com/smm-h/safegit",
   "name": "safegit",
-  "version": "0.28.1-0.20260825014510-66a6d327c5d7",
+  "version": "dev",
   "help": "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "proc_observe_allowlist": [
     [
@@ -383,8 +383,8 @@
           "negatable": true
         },
         {
-          "name": "allow-escaping-targets",
-          "help": "record a symlink whose target resolves outside the repository, which the commit stores as the link text; omitted, and with --no-allow-escaping-targets, such a link is refused with its target named, because in another checkout it resolves to nothing or to a file the repository never carried",
+          "name": "allow-non-portable-targets",
+          "help": "record a symlink whose target text will not resolve in another checkout -- an absolute target, or a relative one resolving outside the repository -- which the commit stores as the link text; omitted, and with --no-allow-non-portable-targets, such a link is refused with its target named, because elsewhere it resolves to nothing or to a file the repository never carried",
           "value_schema": {
             "type": "boolean"
           },
@@ -495,7 +495,7 @@
             },
             "type": "array"
           },
-          "moves": {
+          "moved_records": {
             "items": {
               "additionalProperties": false,
               "properties": {
@@ -507,12 +507,16 @@
                 },
                 "old": {
                   "type": "string"
+                },
+                "origin": {
+                  "type": "string"
                 }
               },
               "required": [
                 "id",
                 "old",
-                "new"
+                "new",
+                "origin"
               ],
               "type": "object"
             },
@@ -561,7 +565,7 @@
           "parents",
           "tree",
           "sha",
-          "moves",
+          "moved_records",
           "files",
           "attempts",
           "residue",
@@ -1286,7 +1290,7 @@
     },
     "merge": {
       "name": "merge",
-      "help": "merge one branch into the current one, and author the result: safegit decides the fast-forward itself and moves the ref under compare-and-swap, or runs git's merge machinery with --no-ff --no-commit and commits the staged result through its own pipeline -- so a merge safegit performed carries safegit's trailers, ran the repository's commit-msg hook and is reversible with 'safegit undo'. A merge git stops on a conflict parks, and 'safegit merge-continue' concludes it; 'safegit merge --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one branch (no octopus), no strategy selection, no --squash, no --edit and no --autostash. --no-commit computes the merge and leaves it parked even when it is clean",
+      "help": "merge one branch into the current one, and author the result: safegit decides the fast-forward itself and moves the ref under compare-and-swap, or runs git's merge machinery with --no-ff --no-commit and commits the staged result through its own pipeline -- so a merge safegit performed carries safegit's trailers, ran the repository's commit-msg hook and is reversible with 'safegit undo'. A merge git stops on a conflict parks, and 'safegit merge-continue' concludes it; 'safegit merge --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one branch (no octopus), no strategy selection, no --squash, no --edit and no --autostash. --no-commit computes the merge and leaves it parked even when it is clean. On an UNBORN branch -- one with no commits yet -- a merge can only be a fast-forward, so --no-ff and --no-commit are both refused there before git runs, with the reason",
       "effect": "mutating",
       "payload_schema": {
         "additionalProperties": false,
@@ -1403,7 +1407,7 @@
     },
     "rebase": {
       "name": "rebase",
-      "help": "rebase the current branch onto upstream, guarded twice before git runs: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- and then a check for uncommitted work. A rebase's own --continue, --abort and --skip stay git's: safegit has no verb that finishes one. The command line is a deliberate subset of git's: exactly one upstream, --onto, -i and --autostash. The apply backend and its patch options, --exec, --rebase-merges and --root are refused, each naming why",
+      "help": "rebase the current branch onto upstream, guarded before git runs: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- then a check for uncommitted work, and then a refusal to rebase over ANOTHER operation git already has in flight (a rebase over a parked revert exits 0 and strands that revert's state files behind it, blocking every later commit). That last check is kind-scoped: it refuses an in-flight state that is not a REBASE, so a rebase's own --continue, --abort and --skip pass by construction. Those three stay git's either way: safegit has no verb that finishes a rebase. A rebase on an UNBORN branch -- one with no commits yet, so with nothing to replay -- is refused before git runs too, by a separate check beside that one. The command line is a deliberate subset of git's: exactly one upstream, --onto, -i, --autostash and --rebase-merges (whose optional value is attached only). The apply backend and its patch options, --exec and --root are refused, each naming why",
       "effect": "mutating",
       "passthrough": true
     },
@@ -1415,7 +1419,7 @@
     },
     "bisect": {
       "name": "bisect",
-      "help": "binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the STEPPING subcommands (start, good, bad, old, new, skip, run, replay, reset), each of which checks another commit out, and not to the reporting ones (terms, log, view). Which is which is derived from safegit's git classification table, never kept as a list here -- and so is which subcommands may be typed at all: a word outside that vocabulary is refused before git runs, as is every option",
+      "help": "binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the STEPPING subcommands (start, good, bad, old, new, skip, run, replay, reset), each of which checks another commit out, and not to the reporting ones (terms, log, view). Which is which is derived from safegit's git classification table, never kept as a list here -- and so is which subcommands may be typed at all: a word outside that vocabulary is refused before git runs, as is every option. 'bisect start' on an UNBORN branch is refused before git runs as well: there is no range of commits to search there",
       "effect": "mutating",
       "passthrough": true
     },
@@ -1817,7 +1821,7 @@
     },
     "cherry-pick": {
       "name": "cherry-pick",
-      "help": "apply ONE commit onto the current branch, and author the result: git computes the pick with --no-commit and safegit commits the staged result through its own pipeline -- so a pick safegit performed carries safegit's trailers, ran the repository's commit-msg hook and is reversible with 'safegit undo'. The AUTHOR is preserved from the commit being applied and the committer is you, which is git's own division. A pick git stops on a conflict parks -- safegit writes CHERRY_PICK_HEAD itself, because 'git cherry-pick --no-commit' does not -- and 'safegit cherry-pick-continue' concludes it; 'safegit cherry-pick --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one commit named as a commit (a range or any other revision set is refused, because a range hands the operation to git's sequencer even when it holds one commit), no --edit, no --ff, no --commit, no --cleanup, no signing and no empty-commit flags. --abort, --quit and --no-commit stay plain passthroughs, because they author nothing",
+      "help": "apply ONE commit onto the current branch, and author the result: git computes the pick with --no-commit and safegit commits the staged result through its own pipeline -- so a pick safegit performed carries safegit's trailers, ran the repository's commit-msg hook and is reversible with 'safegit undo'. The AUTHOR is preserved from the commit being applied and the committer is you, which is git's own division. A pick git stops on a conflict parks -- safegit writes CHERRY_PICK_HEAD itself, because 'git cherry-pick --no-commit' does not -- and 'safegit cherry-pick-continue' concludes it; 'safegit cherry-pick --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one commit named as a commit (a range or any other revision set is refused, because a range hands the operation to git's sequencer even when it holds one commit), no --edit, no --ff, no --commit, no --cleanup, no signing and no empty-commit flags. --abort and --quit stay plain passthroughs, because they author nothing and are the way out of a state safegit must not refuse over; --no-commit is forwarded to git too, but it COMPUTES, so it takes the same refusal the restructured form does over an operation git already has in flight",
       "effect": "mutating",
       "payload_schema": {
         "additionalProperties": false,
@@ -1948,7 +1952,7 @@
     },
     "revert": {
       "name": "revert",
-      "help": "revert ONE commit by applying its inverse patch, and author the result: git computes the inverse with --no-commit and safegit commits the staged result through its own pipeline -- so a revert safegit performed carries safegit's trailers, ran the repository's commit-msg hook, is reversible with 'safegit undo', and declares the INVERSE of every move record the reverted commit declared. YOU are recorded as both author and committer, because a revert is your own new change rather than the reverted author's; that is git's own division and the opposite of what a cherry-pick does. A revert git stops on a conflict parks, and 'safegit revert-continue' concludes it; 'safegit revert --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one commit named as a commit (a range or any other revision set is refused, because a range hands the operation to git's sequencer even when it holds one commit), no --edit, no --commit, no --cleanup and no signing. --abort, --quit and --no-commit stay plain passthroughs, because they author nothing",
+      "help": "revert ONE commit by applying its inverse patch, and author the result: git computes the inverse with --no-commit and safegit commits the staged result through its own pipeline -- so a revert safegit performed carries safegit's trailers, ran the repository's commit-msg hook, is reversible with 'safegit undo', and declares the INVERSE of every move record the reverted commit declared. YOU are recorded as both author and committer, because a revert is your own new change rather than the reverted author's; that is git's own division and the opposite of what a cherry-pick does. A revert git stops on a conflict parks, and 'safegit revert-continue' concludes it; 'safegit revert --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one commit named as a commit (a range or any other revision set is refused, because a range hands the operation to git's sequencer even when it holds one commit), no --edit, no --commit, no --cleanup and no signing. --abort and --quit stay plain passthroughs, because they author nothing and are the way out of a state safegit must not refuse over; --no-commit is forwarded to git too, but it COMPUTES, so it takes the same refusal the restructured form does over an operation git already has in flight",
       "effect": "mutating",
       "payload_schema": {
         "additionalProperties": false,
