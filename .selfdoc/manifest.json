@@ -921,8 +921,8 @@
         },
         {
           "level": 3,
-          "text": "Symlinks, and the targets that leave the repository",
-          "anchor": "symlinks-and-the-targets-that-leave-the-repository"
+          "text": "Symlinks, and the targets that will not resolve elsewhere",
+          "anchor": "symlinks-and-the-targets-that-will-not-resolve-elsewhere"
         },
         {
           "level": 3,
@@ -1561,6 +1561,11 @@
         },
         {
           "level": 2,
+          "text": "Unborn branches",
+          "anchor": "unborn-branches"
+        },
+        {
+          "level": 2,
           "text": "switch",
           "anchor": "switch"
         },
@@ -1608,6 +1613,11 @@
           "level": 3,
           "text": "What the command line may say",
           "anchor": "what-the-command-line-may-say"
+        },
+        {
+          "level": 3,
+          "text": "Unrelated histories",
+          "anchor": "unrelated-histories"
         },
         {
           "level": 3,
@@ -2508,6 +2518,21 @@
         },
         {
           "level": 3,
+          "text": "`EmptyTreeSHA`",
+          "anchor": "emptytreesha"
+        },
+        {
+          "level": 3,
+          "text": "`HeadTreeish`",
+          "anchor": "headtreeish"
+        },
+        {
+          "level": 3,
+          "text": "`HeadIsUnborn`",
+          "anchor": "headisunborn"
+        },
+        {
+          "level": 3,
           "text": "`ReadTree`",
           "anchor": "readtree"
         },
@@ -2600,6 +2625,16 @@
           "level": 3,
           "text": "`IsAncestorOf`",
           "anchor": "isancestorof"
+        },
+        {
+          "level": 3,
+          "text": "`HaveMergeBase`",
+          "anchor": "havemergebase"
+        },
+        {
+          "level": 3,
+          "text": "`IsShallowRepository`",
+          "anchor": "isshallowrepository"
         },
         {
           "level": 3,
@@ -3420,8 +3455,8 @@
         },
         {
           "level": 3,
-          "text": "A symlink whose target leaves the repository is refused",
-          "anchor": "a-symlink-whose-target-leaves-the-repository-is-refused"
+          "text": "A symlink target that will not resolve in another checkout is refused",
+          "anchor": "a-symlink-target-that-will-not-resolve-in-another-checkout-is-refused"
         },
         {
           "level": 3,
@@ -3605,8 +3640,18 @@
         },
         {
           "level": 3,
-          "text": "Merge strategies and strategy options are refused",
-          "anchor": "merge-strategies-and-strategy-options-are-refused"
+          "text": "Selecting a merge strategy is refused; tuning one is not",
+          "anchor": "selecting-a-merge-strategy-is-refused-tuning-one-is-not"
+        },
+        {
+          "level": 3,
+          "text": "The rerere auto-update flag is refused, and its config key is not",
+          "anchor": "the-rerere-auto-update-flag-is-refused-and-its-config-key-is-not"
+        },
+        {
+          "level": 3,
+          "text": "Merging unrelated histories is refused, flag and pre-flight both",
+          "anchor": "merging-unrelated-histories-is-refused-flag-and-pre-flight-both"
         },
         {
           "level": 3,
@@ -3637,6 +3682,11 @@
           "level": 3,
           "text": "A parked merge stays parked, even when it could have fast-forwarded",
           "anchor": "a-parked-merge-stays-parked-even-when-it-could-have-fast-forwarded"
+        },
+        {
+          "level": 3,
+          "text": "The friendly unborn pre-flight refusals",
+          "anchor": "the-friendly-unborn-pre-flight-refusals"
         },
         {
           "level": 3,
@@ -4679,6 +4729,11 @@
         },
         {
           "level": 3,
+          "text": "When a new code is warranted",
+          "anchor": "when-a-new-code-is-warranted"
+        },
+        {
+          "level": 3,
           "text": "What the framework owns",
           "anchor": "what-the-framework-owns"
         },
@@ -4829,8 +4884,8 @@
         },
         {
           "level": 3,
-          "text": "`EscapingSymlinkTarget`",
-          "anchor": "escapingsymlinktarget"
+          "text": "`NonPortableTarget`",
+          "anchor": "nonportabletarget"
         },
         {
           "level": 3,
@@ -5153,6 +5208,21 @@
         },
         {
           "level": 3,
+          "text": "`EmptyTreeSHA`",
+          "anchor": "emptytreesha"
+        },
+        {
+          "level": 3,
+          "text": "`HeadTreeish`",
+          "anchor": "headtreeish"
+        },
+        {
+          "level": 3,
+          "text": "`HeadIsUnborn`",
+          "anchor": "headisunborn"
+        },
+        {
+          "level": 3,
           "text": "`ReadTree`",
           "anchor": "readtree"
         },
@@ -5245,6 +5315,16 @@
           "level": 3,
           "text": "`IsAncestorOf`",
           "anchor": "isancestorof"
+        },
+        {
+          "level": 3,
+          "text": "`HaveMergeBase`",
+          "anchor": "havemergebase"
+        },
+        {
+          "level": 3,
+          "text": "`IsShallowRepository`",
+          "anchor": "isshallowrepository"
         },
         {
           "level": 3,
@@ -5769,6 +5849,11 @@
           "level": 3,
           "text": "`AttrSource`",
           "anchor": "attrsource"
+        },
+        {
+          "level": 3,
+          "text": "`MergeTreeStrategyOption`",
+          "anchor": "mergetreestrategyoption"
         },
         {
           "level": 3,
@@ -6864,6 +6949,11 @@
         },
         {
           "level": 3,
+          "text": "`InitUnbornRepo`",
+          "anchor": "initunbornrepo"
+        },
+        {
+          "level": 3,
           "text": "`InitBareRepo`",
           "anchor": "initbarerepo"
         },
@@ -7756,6 +7846,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-08-24T23:51:18.085718+00:00",
+  "last_gen": "2026-08-27T13:32:10.967758+00:00",
   "theme": "minimal"
 }

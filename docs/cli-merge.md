@@ -9,7 +9,7 @@ nav_order: 10
 
 # safegit merge
 
-merge one branch into the current one, and author the result: safegit decides the fast-forward itself and moves the ref under compare-and-swap, or runs git's merge machinery with --no-ff --no-commit and commits the staged result through its own pipeline -- so a merge safegit performed carries safegit's trailers, ran the repository's commit-msg hook and is reversible with 'safegit undo'. A merge git stops on a conflict parks, and 'safegit merge-continue' concludes it; 'safegit merge --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one branch (no octopus), no strategy selection, no --squash, no --edit and no --autostash. --no-commit computes the merge and leaves it parked even when it is clean
+merge one branch into the current one, and author the result: safegit decides the fast-forward itself and moves the ref under compare-and-swap, or runs git's merge machinery with --no-ff --no-commit and commits the staged result through its own pipeline -- so a merge safegit performed carries safegit's trailers, ran the repository's commit-msg hook and is reversible with 'safegit undo'. A merge git stops on a conflict parks, and 'safegit merge-continue' concludes it; 'safegit merge --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one branch (no octopus), no strategy selection, no --squash, no --edit and no --autostash. --no-commit computes the merge and leaves it parked even when it is clean. On an UNBORN branch -- one with no commits yet -- a merge can only be a fast-forward, so --no-ff and --no-commit are both refused there before git runs, with the reason
 
 **Effect:** mutating
 
