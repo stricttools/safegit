@@ -149,6 +149,64 @@ func TestPickAndRevertRefuseAnUnlistedOption(t *testing.T) {
 	}
 }
 
+// TestTheRerereAutoUpdateFlagIsRefusedOnAllThreeVerbs: asking git to stage a
+// remembered resolution during the compute step is refused on every verb that
+// computes, because what it stages is a resolution nobody made in this
+// operation -- and safegit's conclusion is built on the operator declaring each
+// conflicted path.
+func TestTheRerereAutoUpdateFlagIsRefusedOnAllThreeVerbs(t *testing.T) {
+	for _, tc := range []struct {
+		verb string
+		args []string
+	}{
+		{"merge", []string{"merge", "--rerere-autoupdate", "feature"}},
+		{"cherry-pick", []string{"cherry-pick", "--rerere-autoupdate", "HEAD"}},
+		{"revert", []string{"revert", "--rerere-autoupdate", "HEAD"}},
+	} {
+		t.Run(tc.verb, func(t *testing.T) {
+			dir := newMergeableRepo(t)
+			tip := testutil.Rev(t, dir, "HEAD")
+
+			stderr := assertSubsetRefusal(t, dir, tc.args...)
+			if !strings.Contains(stderr, "rerere") {
+				t.Errorf("the refusal does not name the capability:\n%s", stderr)
+			}
+			if !strings.Contains(stderr, "remembered resolution") {
+				t.Errorf("the refusal does not give the remembered-resolution reason:\n%s", stderr)
+			}
+			if head := testutil.Rev(t, dir, "HEAD"); head != tip {
+				t.Errorf("the refused %s moved HEAD to %s (was %s)", tc.verb, head, tip)
+			}
+		})
+	}
+}
+
+// TestTheNegativeRerereSpellingIsStillAllowed is the other half of the row
+// split, and the reason it looks confusing is worth stating: the NEGATIVE
+// spelling turns the objected-to mechanism OFF, and it is an operator's only
+// per-run switch against the `rerere.autoUpdate` config key, which safegit
+// still honors.
+func TestTheNegativeRerereSpellingIsStillAllowed(t *testing.T) {
+	t.Run("merge", func(t *testing.T) {
+		dir := newMergeableRepo(t)
+		if _, stderr, code := runSafegit(t, dir, "merge", "--no-rerere-autoupdate", "feature"); code != 0 {
+			t.Fatalf("merge --no-rerere-autoupdate was refused (code %d): %s", code, stderr)
+		}
+	})
+	t.Run("cherry-pick", func(t *testing.T) {
+		dir, first, _ := newPickableRepo(t)
+		if _, stderr, code := runSafegitEnv(t, dir, pickSession, "cherry-pick", "--no-rerere-autoupdate", first); code != 0 {
+			t.Fatalf("cherry-pick --no-rerere-autoupdate was refused (code %d): %s", code, stderr)
+		}
+	})
+	t.Run("revert", func(t *testing.T) {
+		dir, _, _ := newPickableRepo(t)
+		if _, stderr, code := runSafegitEnv(t, dir, pickSession, "revert", "--no-rerere-autoupdate", "HEAD"); code != 0 {
+			t.Fatalf("revert --no-rerere-autoupdate was refused (code %d): %s", code, stderr)
+		}
+	})
+}
+
 // TestResetRefusesThePathspecFormAndInteractiveSelection: a pathspec reset
 // manipulates the shared index safegit owns, and --patch is an editor session.
 // Both are outside the subset; the mode flags with a commit are inside it.

@@ -613,7 +613,18 @@ Every future change that introduces a decision of this kind adds its entry here.
   from every merge will find that the ones concluded through safegit taught it
   nothing. This is a scope decision rather than an argument against rerere.
   Writing `rr-cache` means producing git's own resolution records from outside
-  git, and safegit's conclusion engine does not do it. Two of the keywords would
+  git, and safegit's conclusion engine does not do it.
+
+  It is a different question from the one [the auto-update flag
+  answers](#the-rerere-auto-update-flag-is-refused-and-its-config-key-is-not),
+  and the two rulings do not pull against each other. That one refuses REPLAYING
+  a remembered resolution into the index, because it would arrive as if the
+  operator had declared it; this one is about not RECORDING one, and the reason
+  is only that safegit does not write git's cache format. Neither says rerere is
+  a bad idea. Together they say safegit's conclusion neither feeds the cache nor
+  eats from it.
+
+  Two of the keywords would
   be thin things to record anyway — `ours` and `theirs` name an index stage
   rather than merged text — but `--resolve path=worktree` commits exactly what
   the operator hand-edited into the file, which is precisely the case git's own
@@ -988,6 +999,44 @@ next to what is admitted.
   naming the floor.
 - **Ruling:** ours — deliberate
 
+### The rerere auto-update flag is refused, and its config key is not
+
+- **git's idiom:** with rerere enabled, `--rerere-autoupdate` tells git to STAGE
+  a remembered resolution as soon as it replays one, so a conflict git has seen
+  before arrives already resolved in the index. `rerere.autoUpdate = true` in
+  configuration says the same thing for every operation.
+- **safegit:** the FLAG is refused on `merge`, `cherry-pick` and `revert` alike.
+  What it stages is a resolution nobody made in this operation, arriving as if
+  somebody had — and safegit's conclusion is built on the opposite premise, that
+  the operator declares what every conflicted path resolves to. Cache-driven
+  auto-staging is remembered resolution coming in by the back door.
+
+  The NEGATIVE spelling `--no-rerere-autoupdate` stays ALLOWED, and the
+  asymmetry is deliberate however odd it looks in a table: it turns the
+  objected-to mechanism OFF, and it is an operator's only per-run switch against
+  the config key. Refusing the off-switch would leave somebody whose
+  configuration turns auto-staging on with no way to run one merge without it.
+
+  **The config route is open, and this entry says so rather than implying
+  otherwise.** `rerere.autoUpdate = true` produces exactly the auto-staging the
+  flag asks for, and safegit honors it: git reads it at the compute step, which
+  is git's own step, and safegit does not override the repository's git
+  configuration. So the flag refusal is a front-door refusal, not a guarantee.
+  An operator who wants the guarantee turns the key off, or passes
+  `--no-rerere-autoupdate` per run.
+
+  It is worth being precise about how unusual that is here, because the other
+  config keys in this neighborhood are NOT open in the same way. `merge.autostash`
+  and `rebase.autoStash` exist and are honored by git too — but they are INERT
+  through safegit, because the clean-tree check runs before git and there is
+  never anything to stash by the time git looks. That is the same reason the
+  `--autostash` flag is dead on `merge` (and genuinely allowed on `rebase`, where
+  git owns the whole operation). rerere's key has no such structural answer: it
+  really can change what a safegit operation stages. The full treatment of git
+  configuration keys that reach safegit's operations is deferred — see
+  `todo/git-config-audit-and-pin-table.md`.
+- **Ruling:** ours — deliberate
+
 ### Merging unrelated histories is refused, flag and pre-flight both
 
 - **git's idiom:** `git merge` refuses two histories that share no commit, and
@@ -1273,9 +1322,9 @@ allowlist tables hold.
 | Command | Arguments | Options it honors |
 |---|---|---|
 | `switch` | one existing branch name, or nothing with `-c` | `-c`/`--create` |
-| `merge` | exactly one commit-ish (branch, tag or object name) | `-m`/`--message`, `-F`/`--file`, `--no-edit`, `--ff`/`--no-ff`/`--ff-only`/`--no-commit` (safegit's own selectors; they never reach git), `--signoff`/`--no-signoff`, `--log`/`--no-log`, `--into-name`, `--stat`/`--no-stat`, `-X`/`--strategy-option`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
-| `cherry-pick` | exactly one commit | `-x`, `-s`/`--signoff`, `--no-edit`, `-m`/`--mainline`, `-X`/`--strategy-option`, `-n`/`--no-commit`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
-| `revert` | exactly one commit | `-s`/`--signoff`, `--no-edit`, `-m`/`--mainline`, `-X`/`--strategy-option`, `-n`/`--no-commit`, `--reference`, `--rerere-autoupdate`/`--no-rerere-autoupdate`, `--abort`, `--quit` |
+| `merge` | exactly one commit-ish (branch, tag or object name) | `-m`/`--message`, `-F`/`--file`, `--no-edit`, `--ff`/`--no-ff`/`--ff-only`/`--no-commit` (safegit's own selectors; they never reach git), `--signoff`/`--no-signoff`, `--log`/`--no-log`, `--into-name`, `--stat`/`--no-stat`, `-X`/`--strategy-option`, `--no-rerere-autoupdate`, `--abort`, `--quit` |
+| `cherry-pick` | exactly one commit | `-x`, `-s`/`--signoff`, `--no-edit`, `-m`/`--mainline`, `-X`/`--strategy-option`, `-n`/`--no-commit`, `--no-rerere-autoupdate`, `--abort`, `--quit` |
+| `revert` | exactly one commit | `-s`/`--signoff`, `--no-edit`, `-m`/`--mainline`, `-X`/`--strategy-option`, `-n`/`--no-commit`, `--reference`, `--no-rerere-autoupdate`, `--abort`, `--quit` |
 | `pull` | an optional remote and branch | `--merge-strategy ff\|ff-only\|no-ff` (required, no default) |
 | `rebase` | exactly one upstream | `--onto`, `-i`/`--interactive`, `--continue`/`--abort`/`--skip` (git's own, taking no argument), `--autostash` |
 | `reset` | one commit | `--soft`, `--mixed`, `--hard`, `--merge`, `--keep` |
@@ -1292,8 +1341,10 @@ Reaching the compute step is what makes an option ELIGIBLE, not what settles it:
 a compute-step option may still be refused for a reason of its own. Strategy
 SELECTION changes what the conclusion's checks would have to read, while
 strategy OPTIONS tune the same compute without changing what those checks see
-and are admitted. `--allow-unrelated-histories` is refused for a reason of a
-different kind — a footgun rather than a protection hole.
+and are admitted. Two more are refused for reasons of a different kind —
+`--allow-unrelated-histories` for a footgun rather than a protection hole, and
+`--rerere-autoupdate` because what it stages is a REMEMBERED resolution nobody
+made in this operation.
 
 One spelling in the code's tables is not in this one: `--continue` passes each
 command's option allowlist and is then refused by name further in, since

@@ -181,9 +181,11 @@ func refuseUnlistedOption(command, option string) int {
 // allowed: a compute-step option may still be refused for a reason of its own.
 // Strategy SELECTION is refused because the conclusion's checks cannot read what
 // another strategy stages, while strategy OPTIONS, which tune the same ort
-// compute without changing what those checks see, are honored; and
-// `--allow-unrelated-histories` is refused for a reason of a different kind
-// altogether -- a footgun, not a protection hole.
+// compute without changing what those checks see, are honored; and two more are
+// refused for reasons of a different kind altogether --
+// `--allow-unrelated-histories` for a footgun rather than a protection hole, and
+// `--rerere-autoupdate` because what it stages is a REMEMBERED resolution
+// nobody made in this operation.
 var mergeSubset = argvSubset{
 	command: "merge",
 	allowed: []string{
@@ -210,9 +212,16 @@ var mergeSubset = argvSubset{
 		// over the staged result sees what it sees today. Strategy SELECTION,
 		// which does change that, stays refused below.
 		"-X", "--strategy-option",
-		// rerere's remembered resolution is staged during the compute step, and
-		// what it stages is checked by the conclusion like anything else.
-		"--rerere-autoupdate", "--no-rerere-autoupdate",
+		// The NEGATIVE spelling only. The row is SPLIT, and the asymmetry is
+		// deliberate however odd it looks: --rerere-autoupdate is refused by
+		// name below, and --no-rerere-autoupdate -- which turns that same
+		// mechanism OFF -- is allowed here, because it is an operator's only
+		// per-run switch against the `rerere.autoUpdate` config key, which
+		// safegit still honors. Refusing the off-switch would leave an operator
+		// whose configuration turns auto-staging on with no way to run one merge
+		// without it. cherry-pick's and revert's rows carry the same split and
+		// point back at this comment.
+		"--no-rerere-autoupdate",
 		// The state-control forms, which author nothing. --continue is refused
 		// further in, by name, because concluding a merge is safegit's own job.
 		"--continue", "--abort", "--quit",
@@ -221,6 +230,14 @@ var mergeSubset = argvSubset{
 		{
 			[]string{"-s", "--strategy"},
 			"safegit's merge does not select a merge strategy: the conclusion's completeness and conflict-marker checks are written against what the default strategy stages, and a strategy they cannot read would be protected by nothing",
+		},
+		{
+			// DIVERGENCE: git stages a remembered resolution when asked;
+			// safegit refuses the request. Cataloged in docs/divergences.md as
+			// "The rerere auto-update flag is refused, and its config key is
+			// not". cherry-pick and revert refuse it in the same words.
+			[]string{"--rerere-autoupdate"},
+			"--rerere-autoupdate stages a remembered resolution from rerere's cache during the compute step, which is a resolution nobody made in this operation arriving as if somebody had; safegit's conclusion is built on the operator declaring what each conflicted path resolves to. The `rerere.autoUpdate` config key does the same thing and IS still honored -- see 'The rerere auto-update flag is refused, and its config key is not' in docs/divergences.md -- and --no-rerere-autoupdate is allowed, so a run can turn it off",
 		},
 		{
 			// DIVERGENCE: git refuses two unrelated histories by default and
@@ -296,7 +313,8 @@ var cherryPickSubset = argvSubset{
 		// refusal, and the state-control rows three lines below are exempt for the
 		// different reason spelled there.
 		"-n", "--no-commit",
-		"--rerere-autoupdate", "--no-rerere-autoupdate",
+		// The NEGATIVE spelling only -- the split mergeSubset's row explains.
+		"--no-rerere-autoupdate",
 		// The state-control forms, which author nothing AND are the way out of a
 		// parked operation -- so they are the ones that must not be refused over
 		// the state they exist to clear.
@@ -318,6 +336,10 @@ var cherryPickSubset = argvSubset{
 		{
 			[]string{"--strategy"},
 			"safegit's cherry-pick does not select a merge strategy: the conclusion's completeness and conflict-marker checks are written against what the default strategy stages -- a pick computed with another one parks a content conflict git recorded nowhere the checks can read -- so a strategy they cannot see would be protected by nothing",
+		},
+		{
+			[]string{"--rerere-autoupdate"},
+			"--rerere-autoupdate stages a remembered resolution from rerere's cache during the compute step, which is a resolution nobody made in this operation arriving as if somebody had; safegit's conclusion is built on the operator declaring what each conflicted path resolves to. The `rerere.autoUpdate` config key does the same thing and IS still honored -- see 'The rerere auto-update flag is refused, and its config key is not' in docs/divergences.md -- and --no-rerere-autoupdate is allowed, so a run can turn it off",
 		},
 		{
 			[]string{"--ff"},
@@ -354,7 +376,8 @@ var revertSubset = argvSubset{
 		// signoff here, exactly as it is on cherry-pick.
 		"-X", "--strategy-option",
 		"-n", "--no-commit",
-		"--rerere-autoupdate", "--no-rerere-autoupdate",
+		// The NEGATIVE spelling only -- the split mergeSubset's row explains.
+		"--no-rerere-autoupdate",
 		// The reference line git puts in the draft naming the reverted commit.
 		"--reference",
 		"--continue", "--abort", "--quit",
@@ -375,6 +398,10 @@ var revertSubset = argvSubset{
 		{
 			[]string{"--strategy"},
 			"safegit's revert does not select a merge strategy: the conclusion's completeness and conflict-marker checks are written against what the default strategy stages -- a revert computed with another one parks a content conflict git recorded nowhere the checks can read -- so a strategy they cannot see would be protected by nothing",
+		},
+		{
+			[]string{"--rerere-autoupdate"},
+			"--rerere-autoupdate stages a remembered resolution from rerere's cache during the compute step, which is a resolution nobody made in this operation arriving as if somebody had; safegit's conclusion is built on the operator declaring what each conflicted path resolves to. The `rerere.autoUpdate` config key does the same thing and IS still honored -- see 'The rerere auto-update flag is refused, and its config key is not' in docs/divergences.md -- and --no-rerere-autoupdate is allowed, so a run can turn it off",
 		},
 		{
 			[]string{"--commit"},
