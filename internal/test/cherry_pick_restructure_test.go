@@ -312,7 +312,12 @@ func TestCherryPickNoCommitStaysAPassthrough(t *testing.T) {
 
 // TestCherryPickOfAnAlreadyAppliedCommitIsRefused: a pick whose change the
 // branch already carries produces nothing to commit. safegit refuses rather
-// than making an empty commit, and names the way out of the state git left.
+// than making an empty commit, and says so in those words.
+//
+// It leaves no state behind to name a way out of: the compute step's park is
+// safegit's own and is cleaned up on this path. That half is pinned in
+// inflight_compute_refusal_test.go, which owns the cleaned-up assertions; what
+// is pinned here is the refusal itself.
 func TestCherryPickOfAnAlreadyAppliedCommitIsRefused(t *testing.T) {
 	dir, first, _ := newPickableRepo(t)
 

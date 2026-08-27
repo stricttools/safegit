@@ -51,9 +51,23 @@ func stateFilePresent(t *testing.T, dir, name string) bool {
 	return err == nil
 }
 
+// THE PARK IS RAW GIT'S, in both fixture builders below, and that is a
+// requirement rather than a preference. safegit's own compute no longer leaves
+// a no-change operation parked: when the result changes nothing it removes the
+// state it parked a moment earlier, which is what the two cleaned-up pins below
+// assert. A fixture that parked through safegit would therefore build nothing
+// at all.
+//
+// Raw git writes the state these tests need, probe-verified on both sides:
+// `git cherry-pick <already-applied>` stops at exit 1 with CHERRY_PICK_HEAD,
+// MERGE_MSG and AUTO_MERGE beside a clean working tree, and `git revert
+// --no-commit <already-reverted>` exits 0 leaving REVERT_HEAD, MERGE_MSG and
+// AUTO_MERGE beside one. Neither creates a `.git/sequencer` directory, so
+// neither is the queued shape safegit refuses to conclude.
+
 // newParkedRevertRepo builds a repository whose HEAD commit has been reverted,
-// and whose SECOND revert of the same commit stopped with nothing to do and
-// PARKED git's revert state over a clean working tree.
+// and over which RAW GIT has then parked a second revert of the same commit --
+// one with nothing left to undo, over a clean working tree.
 //
 // It returns the repository and the commit that was reverted twice. A `side`
 // branch diverges from before the reverted commit, so a merge run against this
@@ -77,16 +91,20 @@ func newParkedRevertRepo(t *testing.T) (dir, reverted string) {
 	if _, stderr, code := runSafegitEnv(t, dir, inflightSession, "revert", reverted); code != 0 {
 		t.Fatalf("the first revert failed (code %d): %s", code, stderr)
 	}
-	// The second revert has nothing to undo, so it stops -- and PARKS.
-	if _, _, code := runSafegitEnv(t, dir, inflightSession, "revert", reverted); code == 0 {
-		t.Fatalf("reverting an already-reverted commit succeeded; the fixture's premise is gone")
+	// The second revert has nothing to undo, so raw git stages nothing, exits 0
+	// and leaves its state parked.
+	if out, code := testutil.GitTry(t, dir, "revert", "--no-commit", reverted); code != 0 {
+		t.Fatalf("the raw-git revert park failed (code %d): %s", code, out)
+	}
+	if !stateFilePresent(t, dir, "REVERT_HEAD") {
+		t.Fatalf("the raw-git revert parked no REVERT_HEAD; the fixture's premise is gone")
 	}
 	return dir, reverted
 }
 
-// newParkedPickRepo builds a repository that has picked a side commit, and
-// whose SECOND pick of the same commit stopped with nothing to do and PARKED
-// git's cherry-pick state over a clean working tree.
+// newParkedPickRepo builds a repository that has picked a side commit, and over
+// which RAW GIT has then parked a second pick of the same commit -- one with
+// nothing left to apply, over a clean working tree.
 func newParkedPickRepo(t *testing.T) (dir, picked string) {
 	t.Helper()
 	dir, first, _ := newPickableRepo(t)
@@ -94,21 +112,32 @@ func newParkedPickRepo(t *testing.T) (dir, picked string) {
 	if _, stderr, code := runSafegitEnv(t, dir, inflightSession, "cherry-pick", first); code != 0 {
 		t.Fatalf("the first pick failed (code %d): %s", code, stderr)
 	}
-	if _, _, code := runSafegitEnv(t, dir, inflightSession, "cherry-pick", first); code == 0 {
-		t.Fatalf("picking an already-applied commit succeeded; the fixture's premise is gone")
+	// The second pick has nothing to apply, so raw git stops with its state
+	// parked and exits nonzero.
+	if out, code := testutil.GitTry(t, dir, "cherry-pick", first); code == 0 {
+		t.Fatalf("the raw-git pick of an already-applied commit succeeded: %s", out)
+	}
+	if !stateFilePresent(t, dir, "CHERRY_PICK_HEAD") {
+		t.Fatalf("the raw-git pick parked no CHERRY_PICK_HEAD; the fixture's premise is gone")
 	}
 	return dir, first
 }
 
-// TestANoChangeSecondPickParksItsState pins the fixture's premise rather than
-// leaving it accidental: a pick whose change the branch already carries exits
-// nonzero, leaves the working tree CLEAN, leaves git's pick state PARKED, and
-// names git's own abort as the way out of it.
+// TestANoChangeSecondPickCleansItsState: a pick whose change the branch already
+// carries produces no commit, and safegit REMOVES the state its own compute
+// step parked a moment earlier.
 //
-// The clean tree is what makes the state dangerous and is the reason the entry
-// check cannot be the dirty-tree guard: nothing about this repository looks
-// busy to anything that only asks `git diff HEAD`.
-func TestANoChangeSecondPickParksItsState(t *testing.T) {
+// The state was safegit's own: it ran `git cherry-pick --no-commit` and wrote
+// CHERRY_PICK_HEAD itself, then found nothing to commit. Leaving that behind
+// made a repository nobody was operating in refuse every later `safegit commit`
+// until somebody deleted the files by hand, and the refusal it printed advised
+// an abort of an operation the operator had never chosen to start. So the
+// refusal stands -- nothing is committed, the exit code is unchanged -- and the
+// park does not.
+//
+// The last assertion is the point of the whole ruling: the next commit just
+// works.
+func TestANoChangeSecondPickCleansItsState(t *testing.T) {
 	dir, first, _ := newPickableRepo(t)
 
 	if _, stderr, code := runSafegitEnv(t, dir, inflightSession, "cherry-pick", first); code != 0 {
@@ -120,8 +149,11 @@ func TestANoChangeSecondPickParksItsState(t *testing.T) {
 	if code != exitcode.General {
 		t.Fatalf("the no-change pick exited %d, want %d\nstdout=%s\nstderr=%s", code, exitcode.General, stdout, stderr)
 	}
-	if !strings.Contains(stderr, "git cherry-pick --abort") {
-		t.Errorf("the no-change pick does not name git's abort as the way out:\n%s", stderr)
+	if !strings.Contains(stderr, "no change") {
+		t.Errorf("the refusal does not say the pick produces no change:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "has been cleaned up") {
+		t.Errorf("the refusal does not say the parked state was cleaned up:\n%s", stderr)
 	}
 	if head := testutil.Rev(t, dir, "HEAD"); head != tip {
 		t.Errorf("the no-change pick moved HEAD to %s (was %s)", head, tip)
@@ -129,13 +161,14 @@ func TestANoChangeSecondPickParksItsState(t *testing.T) {
 	if status := testutil.Git(t, dir, "status", "--porcelain"); strings.TrimSpace(status) != "" {
 		t.Errorf("the no-change pick left the working tree dirty:\n%s", status)
 	}
-	if !stateFilePresent(t, dir, "CHERRY_PICK_HEAD") {
-		t.Errorf("the no-change pick left no CHERRY_PICK_HEAD; the parked state is the premise of the refusal tests")
-	}
+	assertNoSequencerResidue(t, dir, "a no-change cherry-pick")
+
+	testutil.WriteFile(t, dir, "after.txt", "after\n")
+	safegitCommitEnv(t, dir, inflightSession, "the commit after the no-change pick", "after.txt")
 }
 
-// TestANoChangeSecondRevertParksItsState is the same pin on the revert side.
-func TestANoChangeSecondRevertParksItsState(t *testing.T) {
+// TestANoChangeSecondRevertCleansItsState is the same pin on the revert side.
+func TestANoChangeSecondRevertCleansItsState(t *testing.T) {
 	dir := newRepo(t)
 	testutil.WriteFile(t, dir, "f.txt", "one\n")
 	safegitCommitEnv(t, dir, inflightSession, "the first change", "f.txt")
@@ -151,8 +184,11 @@ func TestANoChangeSecondRevertParksItsState(t *testing.T) {
 	if code != exitcode.General {
 		t.Fatalf("the no-change revert exited %d, want %d\nstdout=%s\nstderr=%s", code, exitcode.General, stdout, stderr)
 	}
-	if !strings.Contains(stderr, "git revert --abort") {
-		t.Errorf("the no-change revert does not name git's abort as the way out:\n%s", stderr)
+	if !strings.Contains(stderr, "no change") {
+		t.Errorf("the refusal does not say the revert produces no change:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "has been cleaned up") {
+		t.Errorf("the refusal does not say the parked state was cleaned up:\n%s", stderr)
 	}
 	if head := testutil.Rev(t, dir, "HEAD"); head != tip {
 		t.Errorf("the no-change revert moved HEAD to %s (was %s)", head, tip)
@@ -160,9 +196,10 @@ func TestANoChangeSecondRevertParksItsState(t *testing.T) {
 	if status := testutil.Git(t, dir, "status", "--porcelain"); strings.TrimSpace(status) != "" {
 		t.Errorf("the no-change revert left the working tree dirty:\n%s", status)
 	}
-	if !stateFilePresent(t, dir, "REVERT_HEAD") {
-		t.Errorf("the no-change revert left no REVERT_HEAD; the parked state is the premise of the refusal tests")
-	}
+	assertNoSequencerResidue(t, dir, "a no-change revert")
+
+	testutil.WriteFile(t, dir, "after.txt", "after\n")
+	safegitCommitEnv(t, dir, inflightSession, "the commit after the no-change revert", "after.txt")
 }
 
 // TestCherryPickRefusesOverAParkedRevert: a pick asked for while git holds a
@@ -348,14 +385,19 @@ func TestPullRefusesOverAParkedRevert(t *testing.T) {
 	dir := newDivergedFromRemoteRepo(t)
 
 	// Park a revert over a clean tree, the same way the fixtures above do:
-	// revert the local tip, then revert the same commit again, which has
-	// nothing left to undo and stops with its state parked.
+	// revert the local tip, then have RAW GIT revert the same commit again --
+	// nothing left to undo, and its state parked. (Raw git for the same reason
+	// the shared builders use it: safegit's own no-change revert cleans up after
+	// itself and parks nothing.)
 	target := testutil.Rev(t, dir, "HEAD")
 	if _, stderr, code := runSafegitEnv(t, dir, inflightSession, "revert", target); code != 0 {
 		t.Fatalf("the first revert failed (code %d): %s", code, stderr)
 	}
-	if _, _, code := runSafegitEnv(t, dir, inflightSession, "revert", target); code == 0 {
-		t.Fatalf("reverting an already-reverted commit succeeded; the fixture's premise is gone")
+	if out, code := testutil.GitTry(t, dir, "revert", "--no-commit", target); code != 0 {
+		t.Fatalf("the raw-git revert park failed (code %d): %s", code, out)
+	}
+	if !stateFilePresent(t, dir, "REVERT_HEAD") {
+		t.Fatalf("the raw-git revert parked no REVERT_HEAD; the fixture's premise is gone")
 	}
 	tip := testutil.Rev(t, dir, "HEAD")
 

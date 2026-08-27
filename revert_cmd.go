@@ -362,13 +362,24 @@ var revertPayloadSchema = strictcli.SchemaObject(
 // revertHelp is the command's registered help text.
 const revertHelp = "revert ONE commit by applying its inverse patch, and author the result: git computes the inverse with --no-commit and safegit commits the staged result through its own pipeline -- so a revert safegit performed carries safegit's trailers, ran the repository's commit-msg hook, is reversible with 'safegit undo', and declares the INVERSE of every move record the reverted commit declared. YOU are recorded as both author and committer, because a revert is your own new change rather than the reverted author's; that is git's own division and the opposite of what a cherry-pick does. A revert git stops on a conflict parks, and 'safegit revert-continue' concludes it; 'safegit revert --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one commit named as a commit (a range or any other revision set is refused, because a range hands the operation to git's sequencer even when it holds one commit), no --edit, no --commit, no --cleanup and no signing. --abort, --quit and --no-commit stay plain passthroughs, because they author nothing"
 
-// refuseEmptyRevert covers a revert whose inverse patch changes nothing --
-// the commit was already undone by something else. git refuses the same case,
-// and the state it left is still in flight, so the message names the ways out
-// that actually exist.
-func refuseEmptyRevert() int {
+// refuseEmptyRevert covers a revert whose inverse patch changes nothing -- the
+// commit was already undone by something else. git refuses the same case, and
+// safegit's own compute step has already been unparked by the time this is
+// called -- so the message says which of the two states the operator is left
+// in, and offers an abort only where there is still something to abort.
+//
+// The residue detail comes first and the advice last, so the line an operator
+// acts on is the one nearest their cursor.
+func refuseEmptyRevert(cleanup cleanEmptyParkOutcome) int {
+	cleanup.reportResidue()
 	fmt.Fprintf(os.Stderr, "error: this revert produces no change: the commit's effect is already absent from the tree\n")
-	fmt.Fprintf(os.Stderr, "  the revert is still in progress; drop it with:\n")
+	if cleanup.cleaned() {
+		fmt.Fprintf(os.Stderr, "  nothing was committed, and the revert state safegit parked has been cleaned up:\n")
+		fmt.Fprintf(os.Stderr, "  the branch, the index and the working tree stand where they did, and the next\n")
+		fmt.Fprintf(os.Stderr, "  safegit command just works.\n")
+		return exitcode.General
+	}
+	fmt.Fprintf(os.Stderr, "  nothing was committed, but the revert is STILL in progress; drop it with:\n")
 	fmt.Fprintf(os.Stderr, "    git revert --abort\n")
 	return exitcode.General
 }
