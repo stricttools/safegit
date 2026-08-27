@@ -174,6 +174,11 @@ func TestTheRerereAutoUpdateFlagIsRefusedOnAllThreeVerbs(t *testing.T) {
 			if !strings.Contains(stderr, "remembered resolution") {
 				t.Errorf("the refusal does not give the remembered-resolution reason:\n%s", stderr)
 			}
+			// And it names the catalog entry that states the whole answer,
+			// including the config route it does NOT close.
+			if !strings.Contains(stderr, "The rerere auto-update flag is refused, and its config key is not") {
+				t.Errorf("the refusal does not name the catalog entry:\n%s", stderr)
+			}
 			if head := testutil.Rev(t, dir, "HEAD"); head != tip {
 				t.Errorf("the refused %s moved HEAD to %s (was %s)", tc.verb, head, tip)
 			}
