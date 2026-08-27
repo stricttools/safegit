@@ -81,26 +81,24 @@ func (p mvPair) newPrefix() string { return strings.TrimSuffix(p.new, "/") }
 // pair is this move as the shared overlap check takes it.
 func (p mvPair) pair() trailer.Pair { return trailer.Pair{Old: p.old, New: p.new} }
 
-// mvMove is one performed move as the payload reports it.
-type mvMove struct {
-	ID  string `json:"id"`
-	Old string `json:"old"`
-	New string `json:"new"`
-}
-
 // mvPayload is what `mv` puts in the envelope's payload.
 //
-// moves are the records the commit carries, in the order the pairs were given;
+// MovedRecords is the member `commit` declares, in the shape `commit` declares
+// it: a move `mv` performed and one a `commit --moved` declared are the same
+// claim about the same repository, so a consumer reads one member name and one
+// entry shape whichever command made the commit. It is the records the COMMIT
+// carries, in the order the pairs were given, and it is never null.
+//
 // files are the repo-relative paths the commit actually changed, read off the
 // objects by the pipeline rather than counted from the arguments.
 type mvPayload struct {
-	Ref      string   `json:"ref"`
-	Parents  []string `json:"parents"`
-	Tree     string   `json:"tree"`
-	SHA      *string  `json:"sha"`
-	Moves    []mvMove `json:"moves"`
-	Files    []string `json:"files"`
-	Attempts int      `json:"attempts"`
+	Ref          string             `json:"ref"`
+	Parents      []string           `json:"parents"`
+	Tree         string             `json:"tree"`
+	SHA          *string            `json:"sha"`
+	MovedRecords []movedRecordEntry `json:"moved_records"`
+	Files        []string           `json:"files"`
+	Attempts     int                `json:"attempts"`
 	// Residue is every step this move owed AFTER its ref update and did not
 	// finish, never nil -- the same aftercare every commit-authoring route owes,
 	// reached through the same pipeline. An empty list is a move that finished
@@ -116,17 +114,11 @@ var mvPayloadSchema = strictcli.SchemaObject(
 		"parents": strictcli.SchemaArray(strictcli.SchemaType("string")),
 		"tree":    strictcli.SchemaType("string"),
 		"sha":     strictcli.SchemaType("string", "null"),
-		"moves": strictcli.SchemaArray(strictcli.SchemaObject(
-			map[string]interface{}{
-				"id":  strictcli.SchemaType("string"),
-				"old": strictcli.SchemaType("string"),
-				"new": strictcli.SchemaType("string"),
-			},
-			[]string{"id", "old", "new"},
-			false,
-		)),
-		"files":    strictcli.SchemaArray(strictcli.SchemaType("string")),
-		"attempts": strictcli.SchemaType("integer"),
+		// The ONE entry declaration, shared with `commit`'s schema -- see
+		// movedRecordEntrySchema.
+		"moved_records": strictcli.SchemaArray(movedRecordEntrySchema),
+		"files":         strictcli.SchemaArray(strictcli.SchemaType("string")),
+		"attempts":      strictcli.SchemaType("integer"),
 		"residue": strictcli.SchemaArray(strictcli.SchemaObject(
 			map[string]interface{}{
 				"step":   strictcli.SchemaType("string"),
@@ -137,7 +129,7 @@ var mvPayloadSchema = strictcli.SchemaObject(
 		)),
 		"dry_run": strictcli.SchemaType("boolean"),
 	},
-	[]string{"ref", "parents", "tree", "sha", "moves", "files", "attempts", "residue", "dry_run"},
+	[]string{"ref", "parents", "tree", "sha", "moved_records", "files", "attempts", "residue", "dry_run"},
 	false,
 )
 
@@ -739,34 +731,6 @@ func gitIgnoreCase(ctx context.Context) bool {
 	return strings.TrimSpace(out) == "true"
 }
 
-// movesTheCommitCarries narrows the pairs this `mv` minted to the records the
-// commit's own message ended up carrying.
-//
-// The two differ for exactly one reason, the same one the commit pipeline
-// narrows for: a commit-msg hook rewrites the message it is handed, and a
-// policy hook that keeps only the lines it recognizes strips every record. A
-// payload built from the pair list would then name records no reader can find
-// on the commit, and the human line beside it would count moves the commit does
-// not record.
-//
-// The narrowing is by ID, which is what a record is addressed by, and it
-// preserves the ORDER the pairs were given -- the order the payload documents.
-// Under --dry-run no hook runs, so every record survives and the preview reports
-// what the real run would write.
-func movesTheCommitCarries(declared []mvMove, carried []trailer.Record) []mvMove {
-	survived := make(map[string]bool, len(carried))
-	for _, r := range carried {
-		survived[r.ID] = true
-	}
-	out := make([]mvMove, 0, len(declared))
-	for _, m := range declared {
-		if survived[m.ID] {
-			out = append(out, m)
-		}
-	}
-	return out
-}
-
 // rollback unwinds every step taken so far, newest first. A step that cannot be
 // taken back is reported and the unwinding continues: the remaining steps are
 // independent of it, and stopping would leave more of the tree moved than
@@ -791,7 +755,6 @@ func commitMvMoves(flags globalFlags, gitDir, message string, pairs []mvPair) in
 
 	var edits []commit.IndexEdit
 	var records []string
-	var moves []mvMove
 	for _, p := range pairs {
 		record, err := trailer.NewRecord(p.old, p.new, trailer.OriginDeclared)
 		if err != nil {
@@ -799,7 +762,6 @@ func commitMvMoves(flags globalFlags, gitDir, message string, pairs []mvPair) in
 			return exitcode.Usage
 		}
 		records = append(records, trailer.RecordLine(record))
-		moves = append(moves, mvMove{ID: record.ID, Old: p.old, New: p.new})
 		for _, e := range p.entries {
 			edits = append(edits,
 				commit.IndexEdit{Kind: commit.IndexEditRemove, Path: e.old},
@@ -834,33 +796,39 @@ func commitMvMoves(flags globalFlags, gitDir, message string, pairs []mvPair) in
 		residue = reportAftercareFailure(residue, stepParentBump, err)
 	}
 
-	// What the COMMIT carries, not what the pair list said. The pipeline already
-	// narrowed its own records to the ones the committed message holds -- the
-	// records go on before the commit-msg hook runs, and a policy hook that
-	// rewrites the message is free to strip them -- and this member is that same
-	// claim, so it is answered from that same narrowing rather than from the
-	// arguments this command started with.
-	moves = movesTheCommitCarries(moves, result.MovedRecords)
+	// What the COMMIT carries, not what the pair list said -- read off the
+	// PIPELINE's own record list, which is already narrowed to the records the
+	// committed message holds. The two lists differ for exactly one reason: the
+	// records go on before the commit-msg hook runs, and a policy hook that keeps
+	// only the lines it recognizes strips every one of them. A member built from
+	// the pairs would then name records no reader can find on the commit, and the
+	// human line beside it would count moves the commit does not record. Under
+	// --dry-run no hook runs, so every record survives and the preview reports
+	// what the real run would write.
+	//
+	// Rendered through the ONE renderer `commit` uses, which is also what keeps
+	// the member an empty array rather than null when nothing survived.
+	moved := movedRecordEntries(result.MovedRecords)
 
 	flags.payload(mvPayload{
-		Ref:      result.Ref,
-		Parents:  orEmpty(result.Parents),
-		Tree:     result.Tree,
-		SHA:      realSHA(flags, result.SHA),
-		Moves:    moves,
-		Files:    orEmpty(result.Files),
-		Attempts: result.Attempts,
-		Residue:  orEmptyResidue(residue),
-		DryRun:   flags.dryRun,
+		Ref:          result.Ref,
+		Parents:      orEmpty(result.Parents),
+		Tree:         result.Tree,
+		SHA:          realSHA(flags, result.SHA),
+		MovedRecords: moved,
+		Files:        orEmpty(result.Files),
+		Attempts:     result.Attempts,
+		Residue:      orEmptyResidue(residue),
+		DryRun:       flags.dryRun,
 	})
 
 	if !flags.silent() {
 		if flags.dryRun {
 			fmt.Println(wouldWriteHeader(mvOplogOp, result.Ref, result.Tree, firstLine(message)))
-			fmt.Printf(" %d move(s) would be recorded, %d path(s) would change\n", len(moves), len(result.Files))
+			fmt.Printf(" %d move(s) would be recorded, %d path(s) would change\n", len(moved), len(result.Files))
 		} else {
 			fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(message))
-			fmt.Printf(" %d move(s) recorded, %d path(s) changed\n", len(moves), len(result.Files))
+			fmt.Printf(" %d move(s) recorded, %d path(s) changed\n", len(moved), len(result.Files))
 		}
 	}
 	return aftercareExit(residue)

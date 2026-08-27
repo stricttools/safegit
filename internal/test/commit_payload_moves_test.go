@@ -328,13 +328,31 @@ func TestRewordPayloadReportsOnlyTheRecordsTheCommittedMessageCarries(t *testing
 	}
 }
 
+// mvMovedRecordsDoc is the one member of mv's payload these two tests read,
+// spelled as a consumer sees it on the wire. The slice is a POINTER so the three
+// answers stay distinguishable: an absent member and a null one both decode to a
+// nil pointer and are failures, while the member the command owes -- present and
+// an array -- decodes to a non-nil pointer whatever its length.
+type mvMovedRecordsDoc struct {
+	MovedRecords *[]struct {
+		ID     string `json:"id"`
+		Old    string `json:"old"`
+		New    string `json:"new"`
+		Origin string `json:"origin"`
+	} `json:"moved_records"`
+}
+
 // The MV arm. `safegit mv` mints a record per pair and hands them to the same
-// pipeline, so the same hook strips them out of the same message -- but mv's
-// payload member is built from the PAIR LIST it was given rather than from what
-// the commit ended up with, which is the one place that answer can be wrong.
+// pipeline, so the same hook strips them out of the same message -- and mv's
+// payload member is the same member `commit` declares, rendered from the
+// pipeline's own record list, so the answer is the committed message's rather
+// than the pair list's.
 //
-// The human line is the same claim in prose ("N move(s) recorded"), so it is
-// pinned here too.
+// Three things are pinned at once, which is why the member is decoded through a
+// pointer: it is present under the name `commit` uses, it is an ARRAY rather
+// than null (the renderer's non-nil make -- a null here would be a second
+// renderer having crept in), and it is EMPTY, because the hook removed every
+// record from the message the commit ended up with.
 func TestMvPayloadReportsOnlyTheRecordsTheCommittedMessageCarries(t *testing.T) {
 	dir := newRepo(t)
 	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
@@ -346,13 +364,7 @@ func TestMvPayloadReportsOnlyTheRecordsTheCommittedMessageCarries(t *testing.T) 
 	if code != 0 {
 		t.Fatalf("safegit mv failed (%d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
-	var doc struct {
-		Moves []struct {
-			ID  string `json:"id"`
-			Old string `json:"old"`
-			New string `json:"new"`
-		} `json:"moves"`
-	}
+	var doc mvMovedRecordsDoc
 	if err := json.Unmarshal(decodeEnvelope(t, stdout).Payload, &doc); err != nil {
 		t.Fatalf("mv payload does not decode: %v\nstdout: %s", err, stdout)
 	}
@@ -361,13 +373,18 @@ func TestMvPayloadReportsOnlyTheRecordsTheCommittedMessageCarries(t *testing.T) 
 	if strings.Contains(msg, "Moved: ") {
 		t.Fatalf("the fixture's hook did not strip the records; message:\n%s", msg)
 	}
-	if len(doc.Moves) != 0 {
-		t.Errorf("moves = %+v, but the commit's message carries no record at all:\n%s", doc.Moves, msg)
+	if doc.MovedRecords == nil {
+		t.Fatalf("moved_records is absent or null; mv owes the member commit owes, and it is never null\nstdout: %s", stdout)
+	}
+	if len(*doc.MovedRecords) != 0 {
+		t.Errorf("moved_records = %+v, but the commit's message carries no record at all:\n%s", *doc.MovedRecords, msg)
 	}
 }
 
 // The mv preview runs no hook, so it still reports the record it would write --
-// the same honesty the commit arm's preview has.
+// the same honesty the commit arm's preview has -- and it reports the record's
+// ORIGIN with it: every pair `mv` is given is a person's statement, so the
+// entry says `declared`, the same word the commit arm's declarations carry.
 func TestMvPreviewStillReportsTheRecordItWouldMint(t *testing.T) {
 	dir := newRepo(t)
 	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
@@ -379,17 +396,20 @@ func TestMvPreviewStillReportsTheRecordItWouldMint(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("safegit mv --dry-run failed (%d): stdout=%s stderr=%s", code, stdout, stderr)
 	}
-	var doc struct {
-		Moves []struct {
-			Old string `json:"old"`
-			New string `json:"new"`
-		} `json:"moves"`
-	}
+	var doc mvMovedRecordsDoc
 	if err := json.Unmarshal(decodeEnvelope(t, stdout).Payload, &doc); err != nil {
 		t.Fatalf("mv payload does not decode: %v\nstdout: %s", err, stdout)
 	}
-	if len(doc.Moves) != 1 || doc.Moves[0].Old != "a.txt" || doc.Moves[0].New != "b.txt" {
-		t.Errorf("moves = %+v, want the record the preview would have written", doc.Moves)
+	if doc.MovedRecords == nil || len(*doc.MovedRecords) != 1 {
+		t.Fatalf("moved_records = %v, want the one record the preview would have written\nstdout: %s",
+			doc.MovedRecords, stdout)
+	}
+	got := (*doc.MovedRecords)[0]
+	if got.Old != "a.txt" || got.New != "b.txt" || got.Origin != "declared" {
+		t.Errorf("moved_records[0] = %+v, want a.txt -> b.txt (declared)", got)
+	}
+	if got.ID == "" {
+		t.Errorf("moved_records[0] carries no id: %+v", got)
 	}
 }
 
