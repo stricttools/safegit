@@ -1531,7 +1531,13 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   assumed harmless. Dirt is a diff of the working tree against `HEAD` — so
   a staged change counts too, and the shared `.git/index`, which a safegit commit
   deliberately leaves stale, is never consulted — **plus every untracked file
-  that is not ignored**. Untracked files are in scope because of the premise the
+  that is not ignored**. On an UNBORN branch, where there is no `HEAD` to
+  resolve, the comparison is against the EMPTY TREE instead: a repository with
+  no commits holds exactly that, so a staged addition is reported there exactly
+  as it is on a born branch. That substitution is what makes an unborn
+  repository usable at all — `git diff HEAD` is fatal in one, so the check
+  itself used to fail and every guarded command refused with git's "ambiguous
+  argument 'HEAD'" before its own handler decided anything. Untracked files are in scope because of the premise the
   whole tool rests on: safegit cannot tell an operator's half-finished scratch
   file from a file a concurrent session is about to name in its own commit, and
   the branch-switching commands are exactly where the second one gets lost. When
@@ -1539,7 +1545,7 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   relaxing — the dirt is then the conflict itself, so committing it is not advice
   anyone can follow, and the message names the operation and the commands that
   conclude or abandon it instead.
-- **Ruling:** ours — **provisional, newly cataloged, awaiting review**
+- **Ruling:** ours — deliberate
 
 ### `reset` is refused when the tree is dirty, in exactly the modes that write to it
 
