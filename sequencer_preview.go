@@ -157,21 +157,36 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs) int {
 		return exitcode.General
 	}
 
-	head, err := git.RevParse(ctx, "HEAD")
-	if err != nil {
-		// An UNBORN branch, and the answer is known without computing anything:
-		// a merge into a branch with no commits is a fast-forward by definition.
-		// It cannot be computed here in any case -- the ancestry questions below
-		// need a commit on both sides, and merge-tree rejects a side that is not
-		// one -- and the empty tree is no substitute, because a merge has no
-		// merge base to give it.
-		//
-		// This is reached only by the PLAIN unborn merge. `--no-ff` and
-		// `--no-commit` are refused before the preview runs, exactly as the real
-		// run refuses them, so no command line the real run would refuse is
-		// previewed as a fast-forward here.
+	// An UNBORN branch, and the answer is known without computing anything: a
+	// merge into a branch with no commits is a fast-forward by definition. It
+	// cannot be computed here in any case -- the ancestry questions below need a
+	// commit on both sides, and merge-tree rejects a side that is not one -- and
+	// the empty tree is no substitute, because a merge has no merge base to give
+	// it.
+	//
+	// The question asked is whether the branch is UNBORN, not whether HEAD
+	// happens to be unresolvable. They are not the same question: a HEAD that
+	// fails to resolve for some other reason would otherwise be answered with an
+	// unborn-branch sentence describing a repository state that is not the one
+	// in front of the operator. It is also the predicate every other unborn path
+	// in safegit asks, so the preview agrees with the refusals instead of
+	// carrying a second test of its own. A HEAD that is not unborn and still
+	// does not resolve falls through to the RevParse below and gets git's own
+	// error.
+	//
+	// This is reached only by the PLAIN unborn merge. `--no-ff` and
+	// `--no-commit` are refused before the preview runs, exactly as the real run
+	// refuses them, so no command line the real run would refuse is previewed as
+	// a fast-forward here.
+	if git.HeadIsUnborn(ctx) {
 		infof(flags, "would merge %s: a fast-forward onto an unborn branch, no merge commit and no merge to compute\n", short(other, otherSHA))
 		return exitcode.OK
+	}
+
+	head, err := git.RevParse(ctx, "HEAD")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return exitcode.General
 	}
 
 	upToDate, err := git.IsAncestorOf(ctx, otherSHA, head)
