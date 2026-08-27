@@ -52,11 +52,15 @@ import (
 
 // runRevert dispatches `safegit revert`.
 //
-// Two routes stay guarded passthroughs, and both for the same reason: they
-// author nothing. The state-control verbs act on an operation git already has
-// in flight, and `--no-commit` asks git to stage the inverse patch and stop.
-// `--continue` is refused inside, by name, because concluding a revert is
-// safegit's own job.
+// Two routes stay passthroughs, and both for the same reason: they author
+// nothing. They are NOT the same passthrough. The state-control verbs act on an
+// operation git already has in flight and are the way out of it, so they carry
+// the two worktree guards and nothing more. `--no-commit` asks git to COMPUTE
+// the inverse patch and stage it -- over a parked cherry-pick that wrote
+// REVERT_HEAD beside the pick's own state file and left two operations in flight
+// at once -- so it goes through the computing door, which adds the in-flight
+// entry refusal the restructured command already makes. `--continue` is refused
+// inside, by name, because concluding a revert is safegit's own job.
 func runRevert(flags globalFlags, args []string) int {
 	parsed := parseGitArgs("revert", args)
 
@@ -69,7 +73,7 @@ func runRevert(flags globalFlags, args []string) int {
 		return runGuardedPassthrough(flags, "revert", args)
 	}
 	if parsed.Has("-n", "--no-commit") {
-		return runGuardedPassthrough(flags, "revert", args)
+		return runComputingPassthrough(flags, "revert", args)
 	}
 	return runRestructuredRevert(flags, args, parsed)
 }
@@ -360,7 +364,7 @@ var revertPayloadSchema = strictcli.SchemaObject(
 )
 
 // revertHelp is the command's registered help text.
-const revertHelp = "revert ONE commit by applying its inverse patch, and author the result: git computes the inverse with --no-commit and safegit commits the staged result through its own pipeline -- so a revert safegit performed carries safegit's trailers, ran the repository's commit-msg hook, is reversible with 'safegit undo', and declares the INVERSE of every move record the reverted commit declared. YOU are recorded as both author and committer, because a revert is your own new change rather than the reverted author's; that is git's own division and the opposite of what a cherry-pick does. A revert git stops on a conflict parks, and 'safegit revert-continue' concludes it; 'safegit revert --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one commit named as a commit (a range or any other revision set is refused, because a range hands the operation to git's sequencer even when it holds one commit), no --edit, no --commit, no --cleanup and no signing. --abort, --quit and --no-commit stay plain passthroughs, because they author nothing"
+const revertHelp = "revert ONE commit by applying its inverse patch, and author the result: git computes the inverse with --no-commit and safegit commits the staged result through its own pipeline -- so a revert safegit performed carries safegit's trailers, ran the repository's commit-msg hook, is reversible with 'safegit undo', and declares the INVERSE of every move record the reverted commit declared. YOU are recorded as both author and committer, because a revert is your own new change rather than the reverted author's; that is git's own division and the opposite of what a cherry-pick does. A revert git stops on a conflict parks, and 'safegit revert-continue' concludes it; 'safegit revert --continue' is refused and names that command. The command line is a deliberate subset of git's: exactly one commit named as a commit (a range or any other revision set is refused, because a range hands the operation to git's sequencer even when it holds one commit), no --edit, no --commit, no --cleanup and no signing. --abort and --quit stay plain passthroughs, because they author nothing and are the way out of a state safegit must not refuse over; --no-commit is forwarded to git too, but it COMPUTES, so it takes the same refusal the restructured form does over an operation git already has in flight"
 
 // refuseEmptyRevert covers a revert whose inverse patch changes nothing -- the
 // commit was already undone by something else. git refuses the same case, and
