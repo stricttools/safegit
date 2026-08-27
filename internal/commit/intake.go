@@ -403,16 +403,25 @@ func nonPortableLinkTarget(repoRoot, rel string) (string, targetShape) {
 	return "", portableTarget
 }
 
-// The two remedies. They differ because the shapes do: an absolute target that
-// lands inside the repository has a portable spelling to be written in, while a
-// target that leaves the repository has nowhere portable to point at as it
-// stands. Both end at the same election, which is the only way to say the link
-// is meant as it is.
+// The two remedies. They differ because the shapes do: a relative target that
+// leaves the repository has nowhere portable to point at as it stands, while an
+// absolute one is a question about SPELLING first.
+//
+// The absolute remedy carries both halves of its own group, because the group
+// holds both cases and the judgment above deliberately does not tell them
+// apart: an absolute target pointing INSIDE the repository has a portable
+// spelling to be written in, and one pointing OUTSIDE has none -- for that one
+// the relative spelling would only produce the other refused shape, so the
+// remedy says outright that the link has to be pointed inside instead. Both
+// shapes end at the same election, which is the only way to say the link is
+// meant as it is.
 const (
 	absoluteTargetRemedy = "  a symlink is committed as its target TEXT, so an absolute one is recorded exactly\n" +
 		"  as it is spelled: a checkout at any other path resolves it to nothing, or to a file\n" +
-		"  the repository never carried. Spell the target relative to the link, or pass\n" +
-		"  --allow-non-portable-targets to record it as it is."
+		"  the repository never carried. Spell the target relative to the link when it points\n" +
+		"  inside the repository; when it points outside there is nothing portable to spell,\n" +
+		"  and the link has to be pointed inside instead. Either way,\n" +
+		"  --allow-non-portable-targets records it as it is."
 
 	outsideTargetRemedy = "  a symlink is committed as its target TEXT, so this records a reference to a place\n" +
 		"  only this machine has: in another checkout it resolves to nothing, or to a file the\n" +
@@ -429,12 +438,19 @@ const (
 // the line says what the recorded object will and will not resolve to. Each
 // shape says its own reason, and every line carries the same statement of what
 // is being recorded, so a control asserting silence has one phrase to name.
+//
+// The absolute line says what is true of EVERY absolute target, whether it
+// resolves inside this checkout or nowhere near it. It once said the target was
+// "an absolute path this checkout happens to sit at", which is a statement
+// about the in-repository case only and a plain falsehood printed over a link
+// to, say, a machine's own /etc: the notice does not resolve the target, and
+// neither does the judgment above.
 func noticeNonPortableLinks(repoRoot string, paths []string) {
 	for _, path := range paths {
 		target, shape := nonPortableLinkTarget(repoRoot, path)
 		switch shape {
 		case absoluteTarget:
-			fmt.Fprintf(os.Stderr, "notice: %s is a symlink to %s, an absolute path this checkout happens to sit at; the commit records the link text, which will not resolve in a checkout at another path\n", path, target)
+			fmt.Fprintf(os.Stderr, "notice: %s is a symlink to %s, an absolute path naming a location on this machine rather than a place in the repository; the commit records the link text, and another checkout resolves it against its own filesystem -- to nothing, or to a file the repository never carried\n", path, target)
 		case outsideTarget:
 			fmt.Fprintf(os.Stderr, "notice: %s is a symlink to %s, which is outside the repository; the commit records the link text, which will not resolve in another checkout\n", path, target)
 		}
