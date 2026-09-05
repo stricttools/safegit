@@ -243,10 +243,16 @@ const (
 	// MoveNotBorneOut means a claim about a move is contradicted by the
 	// repository.
 	//
-	// A declared move (--moved) reaches it when the old path is not tracked in
-	// the tree the commit is built on, when the old path is still sitting on
-	// disk, or when the new path is neither on disk nor in that tree. A
-	// retraction (--moved-retract) reaches it when the id names no record in
+	// A declared move (--moved) reaches it when the world it describes does not
+	// agree with it -- the old path not tracked in the tree the commit is built
+	// on, the old path still sitting on disk, the new path neither on disk nor
+	// in that tree -- and when the COMMIT ITSELF does not bear it out, which is
+	// the same two questions asked of the tree the commit writes: the old path
+	// still in it, or the new path missing from it. A declaration stages
+	// nothing, so a destination no argument named is a record pointing at a path
+	// the commit does not hold.
+	//
+	// A retraction (--moved-retract) reaches it when the id names no record in
 	// the history the commit is built on, or names one that is already
 	// retracted. Both are the same verdict: a record and a retraction are each
 	// a claim every later reader resolves against the repository, so writing
