@@ -404,7 +404,7 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	// same revision intake judged the file arguments against.
 	// No replaced message: a plain commit replaces nothing, so no record can be
 	// carried forward for a declaration to collide with.
-	movedTrailers, err := resolveMoved(ctx, repoRoot, baseRev(ctx, ref), "", req.Moved)
+	movedTrailers, declarations, err := resolveMoved(ctx, repoRoot, baseRev(ctx, ref), "", req.Moved)
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +443,7 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	maxAttempts := p.Config.Commit.CASMaxAttempts
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryCommit(ctx, ref, repoRoot, previewArea, files, movedTrailers, declaredMoves, req, hooks, inference, attempt)
+		result, retry, err := p.tryCommit(ctx, ref, repoRoot, previewArea, files, movedTrailers, declarations, declaredMoves, req, hooks, inference, attempt)
 		if err != nil {
 			// result is nil for every refusal and non-nil for the commit-stands
 			// verdict alone, which is the one error a caller has something to
@@ -514,6 +514,7 @@ func (p *Pipeline) tryCommit(
 	ref, repoRoot, previewArea string,
 	files *intake,
 	movedTrailers []string,
+	declarations []movedDeclaration,
 	declaredMoves []trailer.Pair,
 	req CommitRequest,
 	hooks *nativeHooks,
@@ -647,6 +648,17 @@ func (p *Pipeline) tryCommit(
 			Message: "nothing to commit (tree unchanged); use --allow-empty to override",
 			Err:     ErrTreeUnchanged,
 		}
+	}
+
+	// Step 3.54: the declared moves, against the tree this commit actually
+	// writes. Every question asked before the tree existed was asked of the
+	// working tree; this is the one that asks what the COMMIT holds, and it is
+	// what keeps a declaration from riding on a commit that carries neither side
+	// of it -- see verifyDeclaredMoves. It runs before the inference and before
+	// the message is composed, so a commit about to be refused infers nothing and
+	// sets no message hook running.
+	if err := verifyDeclaredMoves(ctx, treeSHA, declarations); err != nil {
+		return nil, false, err
 	}
 
 	// Step 3.55: the moves this commit's delta witnesses on its own, minted into

@@ -80,32 +80,36 @@ func movedRefusal(format string, args ...interface{}) error {
 // replacedMessage is the message of the commit an amend or a reword is
 // replacing, and is empty for a plain commit, which replaces nothing. It is
 // what the re-declaration question is asked of -- see supersedeRedeclaredPairs.
-func resolveMoved(ctx context.Context, repoRoot, parentRev, replacedMessage string, moved []string) ([]string, error) {
+//
+// The parsed declarations come back BESIDE the lines, because the checks that
+// can only be made against the tree this operation is about to write are made
+// later, once that tree exists -- see verifyDeclaredMoves.
+func resolveMoved(ctx context.Context, repoRoot, parentRev, replacedMessage string, moved []string) ([]string, []movedDeclaration, error) {
 	if len(moved) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	declarations, err := parseMovedArgs(repoRoot, moved)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := refuseOverlappingDeclarations(declarations); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	superseded, err := supersedeRedeclaredPairs(replacedMessage, declarations)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	tree := newTreeIndex(ctx, parentRev)
 	lines := make([]string, 0, len(declarations)+len(superseded))
 	for _, d := range declarations {
 		if err := validateMoved(ctx, repoRoot, parentRev, tree, d); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		record, err := trailer.NewRecord(d.old, d.new, trailer.OriginDeclared)
 		if err != nil {
-			return nil, &CommitError{Code: exitcode.Usage, Message: fmt.Sprintf("--moved %s: %v", d.arg, err)}
+			return nil, nil, &CommitError{Code: exitcode.Usage, Message: fmt.Sprintf("--moved %s: %v", d.arg, err)}
 		}
 		lines = append(lines, trailer.RecordLine(record))
 	}
@@ -113,7 +117,7 @@ func resolveMoved(ctx context.Context, repoRoot, parentRev, replacedMessage stri
 	// the records themselves: a replacement is a retraction plus a new record in
 	// one commit, and this is the same order every other replacement is written
 	// in.
-	return append(lines, superseded...), nil
+	return append(lines, superseded...), declarations, nil
 }
 
 // resolveMovedRetract turns the caller's --moved-retract ids into the
@@ -418,6 +422,96 @@ func validateMoved(ctx context.Context, repoRoot, parentRev string, tree *treeIn
 			d.arg, d.newPrefix(), where, describeBase(parentRev))
 	}
 	return nil
+}
+
+// verifyDeclaredMoves asks each declaration of the tree the operation is about
+// to record, which is the only tree that can bear the claim out.
+//
+// validateMoved above judges a declaration against the WORKING TREE and the
+// base: the old path tracked in the base and gone from disk, the new path
+// somewhere the commit could see it. Both questions are about where content
+// sits before the commit is built, and neither of them is a question about what
+// the commit CONTAINS -- so a declaration could pass every one of them and still
+// end up on a commit that carries neither side of it.
+//
+// It did, and in both directions. A destination the caller did not name, or one
+// a directory expansion passed over as gitignored, is not staged: the commit
+// recorded the old path's deletion, no addition at all, and a record pointing at
+// a path the commit does not hold -- half a rename, silently, exit 0. An old
+// path the caller did not name is not removed: the commit is a COPY and its
+// record says the content moved.
+//
+// So the tree the commit writes is asked directly, after it is written and
+// before the ref moves: the old side gone from it, the new side present in it.
+// Reading it off the object rather than off the arguments is what every other
+// count in this pipeline does (see Step 3.5 in tryCommit) and is what makes the
+// answer true whatever route a path took to be staged or skipped.
+//
+// It is NOT a licence to stage the destination. safegit stages the paths the
+// caller named and no others -- the rule stated at the top of this file -- and
+// staging a path off a declaration would make `--moved` a second way to add
+// files, one that would sweep in a gitignored destination that the same command
+// refuses when it is named outright. The refusal names the path to add to the
+// file list instead.
+//
+// Already-minted records (CommitRequest.MovedRecords) deliberately do not come
+// through here: `safegit mv` performs its own renames, and under a preview
+// records them rather than performing them, so the tree of a previewed mv does
+// not carry the destination and never could.
+func verifyDeclaredMoves(ctx context.Context, treeSHA string, declarations []movedDeclaration) error {
+	if len(declarations) == 0 {
+		return nil
+	}
+	tree := newTreeIndex(ctx, treeSHA)
+	for _, d := range declarations {
+		remaining, err := trackedPaths(tree, d)
+		if err != nil {
+			return err
+		}
+		if len(remaining) > 0 {
+			what := "still carries it"
+			if d.subtree() {
+				what = fmt.Sprintf("still carries %s", remaining[0])
+			}
+			return movedRefusal("--moved %s declares a move out of %s, but the commit's own tree %s: "+
+				"a declared move records where content WENT, so the commit has to record the old path's "+
+				"removal. Name %s among the paths to commit (or --untrack it), or drop the declaration",
+				d.arg, d.oldPrefix(), what, d.oldPrefix())
+		}
+
+		present, err := destinationInTree(tree, d)
+		if err != nil {
+			return err
+		}
+		if !present {
+			what := "does not carry it"
+			if d.subtree() {
+				what = "holds no path under it"
+			}
+			return movedRefusal("--moved %s declares a move into %s, but the commit's own tree %s: "+
+				"the destination is on disk and nothing this commit stages puts it in the tree, so the "+
+				"record would point at a path the commit does not hold. Name %s among the paths to commit "+
+				"-- safegit stages what the caller names and never a path a declaration merely mentions",
+				d.arg, d.newPrefix(), what, d.newPrefix())
+		}
+	}
+	return nil
+}
+
+// destinationInTree reports whether a tree holds a declaration's new side: the
+// path itself for the file form, anything under the prefix for the subtree
+// form. It is destinationPresent's question asked of ONE tree, with no
+// filesystem in it -- what a commit holds is not a matter of what is on disk.
+func destinationInTree(tree *treeIndex, d movedDeclaration) (bool, error) {
+	if d.subtree() {
+		under, err := tree.under(d.newPrefix())
+		if err != nil {
+			return false, err
+		}
+		return len(under) > 0, nil
+	}
+	_, ok, err := tree.entry(d.new)
+	return ok, err
 }
 
 // trackedPaths returns the parent-tree paths a declaration's old side covers:

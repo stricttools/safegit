@@ -450,12 +450,16 @@ func dirtyMoveReason(ctx context.Context, repoRoot string, p *mvPair) string {
 	}
 	// The two routes, in the order the intents divide: the edit is its own
 	// change, or the edit belongs with the move.
+	//
+	// The second route names BOTH paths, because a declared move is checked
+	// against the tree the commit writes: naming only the destination leaves the
+	// old path in that tree and the declaration is refused (verifyDeclaredMoves).
 	return fmt.Sprintf("%s\n"+
 		"       A move is a move: this command commits the move and nothing else, so the edit\n"+
 		"       would be left behind uncommitted at a path you did not name. Either commit the\n"+
 		"       content first and then move it, or move it on disk yourself and commit both at\n"+
-		"       once with: safegit commit --moved '%s' -- %s",
-		what, trailer.EncodePair(p.old, p.new), p.newPrefix())
+		"       once with: safegit commit --moved '%s' -- %s %s",
+		what, trailer.EncodePair(p.old, p.new), p.oldPrefix(), p.newPrefix())
 }
 
 // mvEntryIsDirty reports whether the working tree's copy of one moved path

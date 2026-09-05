@@ -1441,9 +1441,11 @@ rather than here, because what an operator meets is a refusal.
   route and the refusal names them: the edits belong in their own commit, so
   commit the content first and then move it; or the edits should ride along with
   the move, so move the files on disk yourself and
-  `safegit commit --moved 'old -> new' -- <new>`, which stages from disk and
-  commits the content and the move together. A flag would be a third answer to a
-  question that already has two.
+  `safegit commit --moved 'old -> new' -- <old> <new>`, which stages from disk
+  and commits the content and the move together. Both paths are named because a
+  declaration is checked against the tree the commit writes: naming only the
+  destination leaves the old path in that tree and the declaration is refused. A
+  flag would be a third answer to a question that already has two.
 
   The check is filter-aware: the disk bytes are hashed with `--path <newpath>`
   so the repository's own attributes decide, and a checkout that converted line
