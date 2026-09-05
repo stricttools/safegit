@@ -127,6 +127,39 @@ func TestDeclaredSubtreeMoveRefusesADestinationTheCommitDoesNotStage(t *testing.
 	assertNoCommitHappened(t, dir, "seed")
 }
 
+// TestDeclaredMoveRefusesADestinationTheCommitDELETES covers the second way a
+// declaration reaches the tree check: the destination was never on disk at all,
+// and passed the earlier check by being in the base tree -- a move recorded
+// after the fact. When the same commit stages that path's DELETION, the tree it
+// writes carries neither side, and the refusal must not tell the caller their
+// destination is sitting on disk, because it is not.
+func TestDeclaredMoveRefusesADestinationTheCommitDELETES(t *testing.T) {
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "a.txt", "a\n")
+	testutil.WriteFile(t, dir, "b.txt", "b\n")
+	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "seed", "--", "a.txt", "b.txt"); code != 0 {
+		t.Fatalf("seed commit failed (code %d): %s", code, stderr)
+	}
+	for _, name := range []string{"a.txt", "b.txt"} {
+		if err := os.Remove(filepath.Join(dir, name)); err != nil {
+			t.Fatalf("remove %s: %v", name, err)
+		}
+	}
+
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "delete both",
+		"--moved", "a.txt -> b.txt", "--", "a.txt", "b.txt")
+	if code != exitcode.MoveNotBorneOut {
+		t.Fatalf("exit %d, want %d: %s", code, exitcode.MoveNotBorneOut, stderr)
+	}
+	if !strings.Contains(stderr, "b.txt") {
+		t.Errorf("the refusal does not name the destination: %s", stderr)
+	}
+	if strings.Contains(stderr, "on disk") {
+		t.Errorf("the refusal claims the destination is on disk, and it is not: %s", stderr)
+	}
+	assertNoCommitHappened(t, dir, "seed")
+}
+
 // TestDeclaredMoveRefusesAnOldPathTheCommitStillCarries is the other side of
 // the same hole: the destination is staged, the old path is gone from disk, and
 // nobody named it -- so the commit is a COPY while its record says the content
