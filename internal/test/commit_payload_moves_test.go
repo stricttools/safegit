@@ -303,14 +303,19 @@ func TestRewordPayloadReportsOnlyTheRecordsTheCommittedMessageCarries(t *testing
 	dir := newRepo(t)
 	testutil.WriteFile(t, dir, "a.txt", "content nothing else holds\n")
 	safegitCommit(t, dir, "seed", "a.txt")
-	// The reword judges its declaration against the tip's FIRST PARENT, so the
-	// tip being reworded has to be a commit above the one that tracks a.txt.
-	testutil.WriteFile(t, dir, "other.txt", "unrelated\n")
-	safegitCommit(t, dir, "second", "other.txt")
+	// The reword judges its declaration against the tip's FIRST PARENT -- so the
+	// parent has to be the commit that tracks a.txt -- and the tip's OWN tree has
+	// to bear the move out, since a reword changes no tree and its record
+	// describes that tree. Both hold for exactly one fixture: the tip is the
+	// commit that PERFORMED the move, and the declaration is the record it was
+	// committed without. The content changes on the way, so that commit's own
+	// delta witnesses nothing and mints no record for the reword to collide with.
+	moveOnDisk(t, dir, "a.txt", "b.txt")
+	testutil.WriteFile(t, dir, "b.txt", "content that DID change\n")
+	safegitCommit(t, dir, "the move", "a.txt", "b.txt")
 
 	installHook(t, dir, "commit-msg", stripMovedLinesHook)
 
-	moveOnDisk(t, dir, "a.txt", "b.txt")
 	// No pathspec at all: that is what makes this a reword rather than an amend.
 	doc := commitPayloadOf(t, dir, "commit", "--amend", "-m", "reworded",
 		"--moved", "a.txt -> b.txt")

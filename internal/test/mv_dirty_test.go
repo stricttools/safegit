@@ -23,8 +23,11 @@ import (
 //
 //   - The edits belong in their own commit: commit the content first, then mv.
 //   - The edits should ride along with the move: move it on disk yourself, then
-//     `safegit commit --moved 'old -> new' -- <new>`, which stages from disk and
-//     commits the content and the move together.
+//     `safegit commit --moved 'old -> new' -- <old> <new>`, which stages from
+//     disk and commits the content and the move together. Both paths, because a
+//     declaration is checked against the tree the commit writes: naming only the
+//     destination leaves the old path in that tree and the declaration is
+//     refused.
 
 // mvDirtySeed builds mvSeed's repository and then edits a.txt on disk without
 // committing it, which is the whole condition under test.

@@ -158,7 +158,7 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	// NOT the base above: the tip being replaced already holds the result of the
 	// move, so the question "was the old path tracked" can only be asked of the
 	// tip's own first parent -- see movedParentRev.
-	movedTrailers, err := p.resolveAmendMoveTrailers(ctx, repoRoot, ref, req.Moved, req.MovedRetract)
+	movedTrailers, declarations, err := p.resolveAmendMoveTrailers(ctx, repoRoot, ref, req.Moved, req.MovedRetract)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +178,7 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	maxAttempts := p.Config.Commit.CASMaxAttempts
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryAmend(ctx, ref, repoRoot, previewArea, files, movedTrailers, req, hooks, inference, attempt)
+		result, retry, err := p.tryAmend(ctx, ref, repoRoot, previewArea, files, movedTrailers, declarations, req, hooks, inference, attempt)
 		if err != nil {
 			// Non-nil for the commit-stands verdict alone -- see PartialError.
 			return result, err
@@ -203,31 +203,34 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 // build a commit on the same parents, so a move declared on either describes
 // the same step out of that parent's tree. The two are resolved together
 // because they are judged against the same base, which is read once.
-func (p *Pipeline) resolveAmendMoveTrailers(ctx context.Context, repoRoot, ref string, moved, retract []string) ([]string, error) {
+//
+// The parsed declarations come back too, for the tree-side check both callers
+// make once the tree they write is resolved -- see verifyDeclaredMoves.
+func (p *Pipeline) resolveAmendMoveTrailers(ctx context.Context, repoRoot, ref string, moved, retract []string) ([]string, []movedDeclaration, error) {
 	if len(moved) == 0 && len(retract) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
 	tipSHA, err := git.RevParse(ctx, ref)
 	if err != nil {
-		return nil, fmt.Errorf("resolving %s: %w", ref, err)
+		return nil, nil, fmt.Errorf("resolving %s: %w", ref, err)
 	}
 	tip, err := git.ParseCommit(ctx, tipSHA)
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", tipSHA, err)
+		return nil, nil, fmt.Errorf("reading %s: %w", tipSHA, err)
 	}
 	parentRev := movedParentRev(tip.Parents)
 	// The tip's own message is what the re-declaration refusal is asked of: an
 	// amend reuses it, and a reword's -m carries its records forward, so a
 	// record on it is still on the commit these declarations would join.
-	lines, err := resolveMoved(ctx, repoRoot, parentRev, tip.Message, moved)
+	lines, declarations, err := resolveMoved(ctx, repoRoot, parentRev, tip.Message, moved)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	retractLines, err := resolveMovedRetract(ctx, parentRev, retract)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return append(lines, retractLines...), nil
+	return append(lines, retractLines...), declarations, nil
 }
 
 func (p *Pipeline) tryAmend(
@@ -235,6 +238,7 @@ func (p *Pipeline) tryAmend(
 	ref, repoRoot, previewArea string,
 	files *intake,
 	movedTrailers []string,
+	declarations []movedDeclaration,
 	req AmendRequest,
 	hooks *nativeHooks,
 	inference *moveInference,
@@ -304,6 +308,15 @@ func (p *Pipeline) tryAmend(
 	}
 	if unmatched := files.unmatchedSources(changed); len(unmatched) > 0 {
 		return nil, false, unmatchedSourceError(unmatched, ref)
+	}
+
+	// The declared moves against the tree THIS AMEND writes, which is the tree
+	// the amended commit's records will describe -- see verifyDeclaredMoves. An
+	// amend seeds from the tip it replaces, so a declaration whose old path the
+	// tip still carries and whose destination nothing staged is refused here
+	// rather than written onto a commit that bears out neither side.
+	if err := verifyDeclaredMoves(ctx, treeSHA, declarations); err != nil {
+		return nil, false, err
 	}
 
 	// The moves the AUTHORING EVENT witnesses. Not `changed` above, which
@@ -553,7 +566,7 @@ func (p *Pipeline) Reword(ctx context.Context, req RewordRequest) (*RewordResult
 	// The declared moves, checked and minted once, against the first parent of
 	// the commit being reworded -- the same base an amend uses, for the same
 	// reason.
-	movedTrailers, err := p.resolveAmendMoveTrailers(ctx, repoRoot, ref, req.Moved, req.MovedRetract)
+	movedTrailers, declarations, err := p.resolveAmendMoveTrailers(ctx, repoRoot, ref, req.Moved, req.MovedRetract)
 	if err != nil {
 		return nil, err
 	}
@@ -569,7 +582,7 @@ func (p *Pipeline) Reword(ctx context.Context, req RewordRequest) (*RewordResult
 	maxAttempts := p.Config.Commit.CASMaxAttempts
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		result, retry, err := p.tryReword(ctx, ref, movedTrailers, req, hooks, attempt)
+		result, retry, err := p.tryReword(ctx, ref, movedTrailers, declarations, req, hooks, attempt)
 		if err != nil {
 			// Non-nil for the commit-stands verdict alone -- see PartialError.
 			return result, err
@@ -590,6 +603,7 @@ func (p *Pipeline) tryReword(
 	ctx context.Context,
 	ref string,
 	movedTrailers []string,
+	declarations []movedDeclaration,
 	req RewordRequest,
 	hooks *nativeHooks,
 	attempt int,
@@ -607,6 +621,15 @@ func (p *Pipeline) tryReword(
 		return nil, false, fmt.Errorf("reading %s: %w", headSHA, err)
 	}
 	treeSHA, parents := tip.Tree, tip.Parents
+
+	// A reword changes no tree, so the tree its declarations describe is the
+	// tip's own -- and it has to bear them out just as an amend's does. A reword
+	// is how a move committed WITHOUT its record gets one, which is exactly the
+	// case where the tip already holds the result; a tip that holds neither side
+	// is one the record would be false about. See verifyDeclaredMoves.
+	if err := verifyDeclaredMoves(ctx, treeSHA, declarations); err != nil {
+		return nil, false, err
+	}
 
 	// A reword stages nothing, so the content the hooks inspect is the tip's own
 	// tree. It is materialized as an index only when a hook that would read one
