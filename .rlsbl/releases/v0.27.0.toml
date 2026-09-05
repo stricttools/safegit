@@ -27,3 +27,7 @@ remapping it drives from it.
 # blog = false
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "48a3915e478001bc62c48c3eee04ff5004a11af2"
+
+[tree_hashes]
+"." = "0efd388e9dc8e55edebbd5fd182332f175378e4c"

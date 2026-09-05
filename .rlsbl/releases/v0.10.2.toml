@@ -1,0 +1,21 @@
+# Materialized by `rlsbl release backfill`: this version shipped before
+# rlsbl archived a release file per version, so no archive existed.
+# Every reconstructed value names its source on the field below it. A
+# description is recovered from the first source that yields one: an
+# operator-reviewed --overrides file, then the version's GitHub Release
+# body, then its CHANGELOG.md section, then the commit subjects in its tag
+# range, and otherwise a placeholder naming the recovery obligation. bump
+# is derived by version arithmetic against the predecessor, and include
+# reflects the targets detected at backfill time (the historical target set
+# is not recoverable).
+# This archive's description came from: github-release:v0.10.2.
+# strictspec document version gate (do not remove)
+format_version = 1
+bump = "patch"
+include = ["go", "docker"]
+exclude = []
+description = "No user-facing changes."
+candidate_sha = "c20cdb9f82266a02c423732a1cb53081784c7d0a"
+
+[tree_hashes]
+"." = "4aff44ea9af2762f662d99f331b1312085ebd522"

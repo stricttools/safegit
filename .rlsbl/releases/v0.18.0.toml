@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "minor"
 # Short description of this release (required)
@@ -11,3 +13,7 @@ This unblocks rlsbl release scrub (upstream consumer). \
 Scrub commands now respect --quiet. All post-rewrite suggestions route through safegit push."""
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "4342fe604ce19212140acc033850355ccc838777"
+
+[tree_hashes]
+"." = "c35dcad13da69ca13f1dae27105f894a66ab558e"

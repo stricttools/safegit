@@ -1,3 +1,11 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 bump = "minor"
 include = ["go", "docs", "docker"]
 exclude = []
+# description reconstructed by `rlsbl release backfill` from github-release:v0.11.0
+description = "**New feature.** Auto-detect file moves on commit. When committing a file that was moved (via `mv`), safegit now automatically stages the deletion of the old path, so the commit records a proper rename. Works with both `commit` and `commit --amend`. Uses exact content matching (move+edit requires listing both paths explicitly)."
+candidate_sha = "116f008faed05c3d815250a349f66f69302981ef"
+
+[tree_hashes]
+"." = "7ff0f293a48e6c1b461ab994d06de4df67f5bec5"

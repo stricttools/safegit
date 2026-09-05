@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "minor"
 # Short description of this release (required)
@@ -12,3 +14,7 @@ Three scrub improvements:
 """
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "32ae9d3ee99d7d93b985f6426d311d024cf391e8"
+
+[tree_hashes]
+"." = "47747a69bd18c19dd3cec8b15d31fe81decacaa4"

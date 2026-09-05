@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "patch"
 # Short description of this release (required)
@@ -6,3 +8,7 @@ description = "Fix push test CI failure on ubuntu-latest."
 context = "Bare remotes in tests used system default branch (master on CI) while local repos used main. Fixed by setting --initial-branch=main on all bare inits."
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "6c675e0e716243ce0930e6ca960fea038363faf2"
+
+[tree_hashes]
+"." = "d628a9259f89f1a126342b415b7b2b95a2a2fbef"

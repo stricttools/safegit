@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, major, hotfix, or prerelease
 bump = "patch"
 # Short description of this release (required)
@@ -10,3 +12,7 @@ context = ""
 # blog = false
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "437ece082db4df62d2e5f0029d3c91c67cb7bbd6"
+
+[tree_hashes]
+"." = "a49fb1f688b82cb739e38cf2505d7ee7840f0111"

@@ -27,3 +27,7 @@ Also gone: the guard that killed `scrub` and `author rewrite` in any repository 
 # blog = false
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "4adbd67fd4ab838b43e991f49226791c92fcc129"
+
+[tree_hashes]
+"." = "92113768af9cb3c388b7d5278b8285b7ea5595c6"

@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "minor"
 # Short description of this release (required)
@@ -12,3 +14,7 @@ Scrub operations now sync the working tree after rewriting history, so secrets n
 New --mangle flag for scrub match replaces matched content with crypto-random printable ASCII of the same length."""
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "f87cff3e4c3d06b05f38b7a04df68ad614446a0f"
+
+[tree_hashes]
+"." = "e122089e44b3b293cd53d5cd82858ffe405964a3"

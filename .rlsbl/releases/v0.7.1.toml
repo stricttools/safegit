@@ -1,0 +1,21 @@
+# Materialized by `rlsbl release backfill`: this version shipped before
+# rlsbl archived a release file per version, so no archive existed.
+# Every reconstructed value names its source on the field below it. A
+# description is recovered from the first source that yields one: an
+# operator-reviewed --overrides file, then the version's GitHub Release
+# body, then its CHANGELOG.md section, then the commit subjects in its tag
+# range, and otherwise a placeholder naming the recovery obligation. bump
+# is derived by version arithmetic against the predecessor, and include
+# reflects the targets detected at backfill time (the historical target set
+# is not recoverable).
+# This archive's description came from: github-release:v0.7.1.
+# strictspec document version gate (do not remove)
+format_version = 1
+bump = "patch"
+include = ["go", "docker"]
+exclude = []
+description = "**Fix: `rewrite-author` now updates remote tracking refs.** Previously, `refs/remotes/` were walked during commit rewriting but not updated, causing the post-rewrite snapshot to see both old and new commits and failing verification with doubled commit counts."
+candidate_sha = "007fc5917ad7132dc928830fe287e07c9504ded6"
+
+[tree_hashes]
+"." = "c38d86e0f95d200393e1e49bb9a37d98b48cb023"

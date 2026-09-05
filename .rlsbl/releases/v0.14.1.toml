@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "patch"
 # Short description of this release (required)
@@ -6,3 +8,7 @@ description = "Rewrite-author lock, scrub match --scope flag, CLAUDE.md update."
 context = ""
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "c6732ba525274d3f72a8fbd7914eda432bde8279"
+
+[tree_hashes]
+"." = "8b6a7e334b3e916e02e3c219c85160c3cd936f86"

@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "minor"
 # Short description of this release (required)
@@ -9,3 +11,7 @@ rewrite-author --push bypassed safegit's push pipeline, and doctor --fix didn't 
 Also added integration tests for unlock (previously untested) and doctor stale lock cleanup."""
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "c4dce876a8e948d701be82e8b90ec81a5fa09eb4"
+
+[tree_hashes]
+"." = "44f3efd1d624e43e582220f42516a4c8e03de306"

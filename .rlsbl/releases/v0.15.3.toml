@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "patch"
 # Short description of this release (required)
@@ -6,3 +8,7 @@ description = "Fix macOS symlink path resolution in submodule discovery."
 context = ""
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "60f7e2b70b326a67a498b6b92530c710cee02c10"
+
+[tree_hashes]
+"." = "0751dc863100184b911e0f8add8414b15bfe6122"

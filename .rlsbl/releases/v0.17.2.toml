@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "patch"
 # Short description of this release (required)
@@ -6,3 +8,7 @@ description = "Sync submodule working trees after scrub history rewrites."
 context = "v0.17.1 added working-tree sync for the parent repo but missed submodule child repos. Submodule files on disk could still contain pre-scrub secrets."
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "ba992ce0be734e517e96f59bb9a842e3da184c52"
+
+[tree_hashes]
+"." = "d4d660d15fb426a18ba779e30ea008eaf6dab652"
