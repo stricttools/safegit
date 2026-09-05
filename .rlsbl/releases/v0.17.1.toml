@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "patch"
 # Short description of this release (required)
@@ -10,3 +12,7 @@ SyncMainIndexWithWorktree now saves and restores their content, then untracks th
 Also fixed doctor --fix --dry-run not reporting submodule state, and added --dry-run support to unlock."""
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "bdb154e89cd5890d208c777a0ab063498cc24002"
+
+[tree_hashes]
+"." = "a3d8cc3ad3445a16be61467e6d585c3ad1558132"

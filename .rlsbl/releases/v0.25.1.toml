@@ -23,3 +23,7 @@ This is a fix-forward rather than a retag: the tag on 0.25.0 sits on a tree the 
 # blog = false
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "217f3820c0fb3f2b6263b43a8cce09cb06231946"
+
+[tree_hashes]
+"." = "5d62cd24721a38aef173a0ab3c44a203bb86f9e5"

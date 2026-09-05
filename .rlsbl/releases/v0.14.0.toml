@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "minor"
 # Short description of this release (required)
@@ -14,3 +16,7 @@ Also: shared walkAndRewrite extraction, ParseCommit dedup in verification, branc
 """
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "0dde879bed7bbc42a5f4d855ba521ca529a74bde"
+
+[tree_hashes]
+"." = "ff79eebf7d3264bf9f8a386936a0fb6dbebfec46"

@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "patch"
 # Short description of this release (required)
@@ -10,3 +12,7 @@ die() emits JSON error objects when --json is active, and mustGitDir routes thro
 splitNonEmpty consolidated from two implementations into a single exported git.SplitNonEmpty."""
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "6d81721fcbe7530513513881b2bb65ed1b82769c"
+
+[tree_hashes]
+"." = "7906637ae260602d155421576d02fd6ea173feda"

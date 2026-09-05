@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "patch"
 # Short description of this release (required)
@@ -6,3 +8,7 @@ description = "Fix macOS CI: use portable GIT_CONFIG env vars instead of --globa
 context = ""
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "71f93d6fb4bc32e4e9464d4ee857bfec8ac163aa"
+
+[tree_hashes]
+"." = "277f06dcf8319628b73bd24ce132f1589b0a055c"

@@ -1,0 +1,21 @@
+# Materialized by `rlsbl release backfill`: this version shipped before
+# rlsbl archived a release file per version, so no archive existed.
+# Every reconstructed value names its source on the field below it. A
+# description is recovered from the first source that yields one: an
+# operator-reviewed --overrides file, then the version's GitHub Release
+# body, then its CHANGELOG.md section, then the commit subjects in its tag
+# range, and otherwise a placeholder naming the recovery obligation. bump
+# is derived by version arithmetic against the predecessor, and include
+# reflects the targets detected at backfill time (the historical target set
+# is not recoverable).
+# This archive's description came from: github-release:v0.9.0.
+# strictspec document version gate (do not remove)
+format_version = 1
+bump = "minor"
+include = ["go", "docker"]
+exclude = []
+description = "**Session trailers.** Commits made inside Claude Code automatically get a `Claude-Code-Session-Id` git trailer for agent session traceability. Read from the `CLAUDE_CODE_SESSION_ID` environment variable. Amending from a different session preserves both session IDs as an audit trail."
+candidate_sha = "064e4c343f6cbed3e6c6c13accf71f9bf355c9f9"
+
+[tree_hashes]
+"." = "aefa542f59641de8118fb929c70a0164046d2f11"

@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "patch"
 # Short description of this release (required)
@@ -6,3 +8,7 @@ description = "Fix submodule test infrastructure for CI environments with restri
 context = ""
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "9c5f7c14d63662c03e7f8c0e88d45bfa5000b449"
+
+[tree_hashes]
+"." = "9e46cebcada01ba101980e3310e218dee8aec7ca"

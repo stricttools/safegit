@@ -39,3 +39,7 @@ content hashes are tracked in the repo, matching the rest of the fleet.
 # blog = false
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "5faea1aaa67d5225afa7007a57e1d8e02501e948"
+
+[tree_hashes]
+"." = "7a6567bf2e43c24e0b4cb95efe145daec8a8ff17"

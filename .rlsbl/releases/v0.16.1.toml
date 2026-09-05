@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "patch"
 # Short description of this release (required)
@@ -9,3 +11,7 @@ causing filepath.Rel to produce incorrect relative paths on macOS where /var -> 
 This broke autobump and push-hook-cascade on macOS since v0.15.0."""
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "120f9f027cd3b7f0ff1ac3c8059d5d6dfee192ce"
+
+[tree_hashes]
+"." = "4c753c4e9710f7c0ea9c1e380d64f45d4a42930c"

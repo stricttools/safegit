@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "patch"
 # Short description of this release (required)
@@ -6,3 +8,7 @@ description = "Improved documentation descriptions for AI discoverability."
 context = ""
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "3a1de86c7ade718ceb67195883b86632e3da1aa7"
+
+[tree_hashes]
+"." = "2cf8620255abfae78f7b19855322ed65d523fec4"

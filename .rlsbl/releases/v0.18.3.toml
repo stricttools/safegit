@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "patch"
 # Short description of this release (required)
@@ -6,3 +8,7 @@ description = "Fix rewrite-author --quiet, add ScopeFilter to dry-run JSON, subm
 context = "Loose ends from v0.18.2: rewrite-author summary had unconverted fmt.Printf calls, dry-run JSON lost the --scope glob value, and ScanObjectsInRangeWithDir was added for future submodule range-scoping."
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "11808776361462736b5d818ac8c6a4f34d62bc1a"
+
+[tree_hashes]
+"." = "32a8b8812c233da9158385363e396a95ad459228"

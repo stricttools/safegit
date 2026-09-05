@@ -19,3 +19,7 @@ v0.28.0 shipped with known defects — scrub could destroy data when run from a 
 # blog = false
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "ba53a2a98db63e15fb103c1ac26e5f58de3e9bb2"
+
+[tree_hashes]
+"." = "4dbe96decb7fa63fb42ea8f4b022f05fe1cea740"

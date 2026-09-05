@@ -1,0 +1,21 @@
+# Materialized by `rlsbl release backfill`: this version shipped before
+# rlsbl archived a release file per version, so no archive existed.
+# Every reconstructed value names its source on the field below it. A
+# description is recovered from the first source that yields one: an
+# operator-reviewed --overrides file, then the version's GitHub Release
+# body, then its CHANGELOG.md section, then the commit subjects in its tag
+# range, and otherwise a placeholder naming the recovery obligation. bump
+# is derived by version arithmetic against the predecessor, and include
+# reflects the targets detected at backfill time (the historical target set
+# is not recoverable).
+# This archive's description came from: github-release:v0.7.0.
+# strictspec document version gate (do not remove)
+format_version = 1
+bump = "minor"
+include = ["go", "docker"]
+exclude = []
+description = "**`rewrite-author` command.** `safegit rewrite-author --old-name X --new-name Y` rewrites author/committer names across all repository history using native Go git plumbing (no external dependencies like git-filter-repo). Includes a 13-check verification framework comparing pre/post-rewrite state: commit count, tag count, branch names, tag names, old name absence, commit messages, author dates, committer dates, author emails, tree hashes, parent topology, working tree cleanliness, and tag-to-message mapping. Supports `--dry-run` for preview, `--push` for automatic force-push, annotated tag rewriting, merge commits, and multiple branches. Logged to oplog (not undoable)."
+candidate_sha = "e75151f6bba52f3f5abbb29e7f9680791fa6b3c3"
+
+[tree_hashes]
+"." = "eeb736c130609894f4f7ab270f257445c05e241b"

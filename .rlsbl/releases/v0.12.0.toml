@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "minor"
 # Short description of this release (required)
@@ -12,3 +14,7 @@ Three new features aimed at multi-session safety and sensitive content cleanup:
 """
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "055daaf2fb3b9a2a8c3c7e5df1c14daf4973168d"
+
+[tree_hashes]
+"." = "fc332585bd60251fb62d62c0eb82ca6b4959525a"

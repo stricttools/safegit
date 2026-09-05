@@ -35,3 +35,7 @@ code (2, or 70 for the unreachable-state refusals) and a framework parse error e
 # blog = false
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "c07d899296f2d05ac8d3d8403f3f0d776d11f3ef"
+
+[tree_hashes]
+"." = "2f4ad95f3dd126f497a9cdeb60a2af6d8b4018ac"

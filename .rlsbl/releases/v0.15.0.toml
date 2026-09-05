@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "minor"
 # Short description of this release (required)
@@ -6,3 +8,7 @@ description = "Full submodule support: commit/undo/redo inside submodules, auto-
 context = "safegit previously refused to operate in repos with submodules. This release removes that limitation and adds deep submodule integration across all commands."
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "aa9fd495bc66b988ddb4d7df71c11de5f140970d"
+
+[tree_hashes]
+"." = "b94dde0f7a5e047223bcb864134517d94e7ee2bf"

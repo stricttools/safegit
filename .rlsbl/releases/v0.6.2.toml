@@ -1,0 +1,21 @@
+# Materialized by `rlsbl release backfill`: this version shipped before
+# rlsbl archived a release file per version, so no archive existed.
+# Every reconstructed value names its source on the field below it. A
+# description is recovered from the first source that yields one: an
+# operator-reviewed --overrides file, then the version's GitHub Release
+# body, then its CHANGELOG.md section, then the commit subjects in its tag
+# range, and otherwise a placeholder naming the recovery obligation. bump
+# is derived by version arithmetic against the predecessor, and include
+# reflects the targets detected at backfill time (the historical target set
+# is not recoverable).
+# This archive's description came from: github-release:v0.6.2.
+# strictspec document version gate (do not remove)
+format_version = 1
+bump = "patch"
+include = ["go", "docker"]
+exclude = []
+description = "**Migrated rlsbl layout.** Hooks moved from `scripts/` to `.rlsbl/hooks/`. Experiment scripts and stress tests moved from `scripts/` to `testdata/`. Two-step pre-push hook (rlsbl changelog check + safegit stress tests)."
+candidate_sha = "be14f80733b4ca3d57faf69defa5d5f10a57c790"
+
+[tree_hashes]
+"." = "06307adb44dd8e93e9aa7b5e6c62fbbc8247b318"

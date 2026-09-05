@@ -1,3 +1,11 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 bump = "patch"
 include = ["go", "docs", "docker"]
 exclude = []
+# description reconstructed by `rlsbl release backfill` from github-release:v0.11.1
+description = "**Fix.** CI matrix updated to Go 1.25+1.26 to match go.mod requirement."
+candidate_sha = "629b26daeaac4c1eaf05d547492686a2876c566f"
+
+[tree_hashes]
+"." = "d43ce82817851063437faab8a67c0ee69f7f6a2e"

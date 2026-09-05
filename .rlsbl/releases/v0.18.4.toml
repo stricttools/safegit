@@ -1,3 +1,5 @@
+# strictspec document version gate (do not remove)
+format_version = 1
 # Version bump type: patch, minor, or major
 bump = "patch"
 # Short description of this release (required)
@@ -6,3 +8,7 @@ description = "Fix commit --amend on root commits."
 context = "amend.go rejected root commits (no parent) even though reword and CommitTree already supported them. One-line fix matching the existing reword pattern."
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "7a78aed5dbb3981e788e80841b43472e827f37b4"
+
+[tree_hashes]
+"." = "6378ab63ed981cd0a803280885bd7289727203f0"

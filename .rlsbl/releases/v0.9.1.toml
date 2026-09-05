@@ -1,0 +1,21 @@
+# Materialized by `rlsbl release backfill`: this version shipped before
+# rlsbl archived a release file per version, so no archive existed.
+# Every reconstructed value names its source on the field below it. A
+# description is recovered from the first source that yields one: an
+# operator-reviewed --overrides file, then the version's GitHub Release
+# body, then its CHANGELOG.md section, then the commit subjects in its tag
+# range, and otherwise a placeholder naming the recovery obligation. bump
+# is derived by version arithmetic against the predecessor, and include
+# reflects the targets detected at backfill time (the historical target set
+# is not recoverable).
+# This archive's description came from: github-release:v0.9.1.
+# strictspec document version gate (do not remove)
+format_version = 1
+bump = "patch"
+include = ["go", "docker"]
+exclude = []
+description = "**Fix: file paths from subdirectories.** `safegit commit` now resolves relative file paths against the current working directory, not the repo root. Previously, running `safegit commit -m \"msg\" -- file.txt` from a subdirectory would fail with \"does not exist and is not tracked.\""
+candidate_sha = "fe2c3c9f9f8bdbe4a99df119e122b746c007065e"
+
+[tree_hashes]
+"." = "48d402fe4bfedbd3ac23d4b22c611c373f4bfaac"
