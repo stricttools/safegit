@@ -488,10 +488,15 @@ func verifyDeclaredMoves(ctx context.Context, treeSHA string, declarations []mov
 			if d.subtree() {
 				what = "holds no path under it"
 			}
+			// The message does not say WHERE the destination is instead. It
+			// reached the earlier check by being on disk or by being in the base
+			// tree, and a commit that stages its deletion arrives here with the
+			// second -- so "it is on disk" would be a falsehood in one of the two
+			// shapes that get this far.
 			return movedRefusal("--moved %s declares a move into %s, but the commit's own tree %s: "+
-				"the destination is on disk and nothing this commit stages puts it in the tree, so the "+
-				"record would point at a path the commit does not hold. Name %s among the paths to commit "+
-				"-- safegit stages what the caller names and never a path a declaration merely mentions",
+				"the record would point at a path the commit does not hold. Name %s among the paths to "+
+				"commit -- safegit stages what the caller names and never a path a declaration merely "+
+				"mentions",
 				d.arg, d.newPrefix(), what, d.newPrefix())
 		}
 	}
