@@ -171,8 +171,8 @@ func parseResolveFile(path string) ([]resolution, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading the resolution file: %w", err)
 	}
-	var file resolveFile
-	if err := tomledit.Unmarshal(data, &file); err != nil {
+	file, err := tomledit.Unmarshal[resolveFile](data)
+	if err != nil {
 		return nil, fmt.Errorf("parsing the resolution file %s: %w", path, err)
 	}
 	if len(file.Resolutions) == 0 {
