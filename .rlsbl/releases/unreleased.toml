@@ -2,9 +2,9 @@
 format_version = 1
 # Version bump type: patch, minor, major, infra, or prerelease
 #   prerelease: advance an existing pre-release (0.6.0-beta.0 -> -beta.1)
-bump = ""
+bump = "infra"
 # Short description of this release (required)
-description = ""
+description = "Documentation frontmatter converted to TOML for the current selfdoc; no user-facing change."
 # Optional context explaining why these changes were made
 context = ""
 # Pre-release channel: alpha, beta, rc, or stable (ordered;
