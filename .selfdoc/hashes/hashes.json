@@ -1,7 +1,7 @@
 {
   "_hash_version": 3,
   "en/architecture.md": {
-    "content": "cbaa656aa3fea5e1c0a25d02c94f67545d19b4a8e71595d4e1bf2c947dc7d33d",
+    "content": "015d1164c4394d40e275970be92cdf973e8c58ef50778ee734416c486ebba2ca",
     "description": "4302e1fbd9dc3df27ac8753aee78d1c4300524fde901016abd3bf864fc8387c0"
   },
   "en/cli-author.md": {
@@ -142,16 +142,16 @@
     "schema_hash": "f2105f9f55d8554b738a036a02e5b6f400ec6eb0a97c5a8e4086f708c4391040"
   },
   "en/commands-guide.md": {
-    "content": "e5d39713ff45a0db308ae19779ea0a5053d3caab79fcaa8b64787674d0bb1f68",
+    "content": "9e087c9308103986dd172cf453e1d9d768b39e6f9a62daa71989479bfd96bcad",
     "description": "27132e78985f8d7ae789460ba3653d12b2231a6431b5c14454f990b643875045"
   },
   "en/concurrency-guide.md": {
     "content": "a822004eea024256cb197930bc2fcb2ff36194bf013fd0a25867c2853da44e17",
     "description": "c032f2092633fab41e3b84296ebb5bcf024fc7530d0cedee01a922293a4baa50",
-    "source_docstring": "2abf3c8c3d005782b193f551f456adca30f0421be98a7a9e248ed0147fe7a55a"
+    "source_docstring": "55a5b46c45005dde3222eaa639a1167bd610548d34ce0b320ff3c57360006c58"
   },
   "en/divergences.md": {
-    "content": "7489111045ce24db3c5eab26e43d01aecb812a0dcf7b0f91344bc8d4f1da5dcc",
+    "content": "31bb22be3be5c840f2a9ea1a0c51e1096b08a72d45293a0ca62e7db837cc724e",
     "description": "53fa9e8f521aaef698c6e43312c24195e53e88716b7eb351c180ec2228471952"
   },
   "en/gen-index.md": {
@@ -171,7 +171,7 @@
   "en/internal-commit.md": {
     "content": "213f1a5c7dc3b63f9530f93a459fd56d7fb51844d4b743b28a3c90360495e469",
     "description": "49337e9000b8d975eb9b46b4b5fb06c543b30faaf51402a84da9caa6a4fa9e45",
-    "source_docstring": "ca76cbfac58a46398072ea2f3318068897150badbb9914e2655f4ce00114ab00"
+    "source_docstring": "8331920dbc9bcfc149139f2a2a596c4558131e3a58e4e26da04f0e9c9a09a71f"
   },
   "en/internal-conflict.md": {
     "content": "a1f4999492d8a44380563bf2c6994da048ee1e7c32267c10d0ef73a2732ae699",
@@ -191,7 +191,7 @@
   "en/internal-filelock.md": {
     "content": "fbfc90291bd070b20f71d5779ae4fbfcec4e1963ea16cc7ee0b02100851bd3e7",
     "description": "64747f602401a7ccd16687611895d6e6a0fe6cc0fc78f218c7e7ab39e7a3ce25",
-    "source_docstring": "742a718b63178d343c8f7db611530cca3779656c63ed5cdfc444abf0a07e2f58"
+    "source_docstring": "56dad83dc1b4332a15b81f251eecc09b1062d786da1761a9d4bb3ed1f51f3c35"
   },
   "en/internal-git.md": {
     "content": "ec7dbceb377e4383d57c0f39c42b2bd951ccd90e9f061f594c556de55cf9e120",
@@ -211,7 +211,7 @@
   "en/internal-hooks.md": {
     "content": "f7f765bf9801250c7aaaeb982dfbd2f30d89189e6c9004906dc0a32a46722c3e",
     "description": "d7727b1195cbff521ff90e14ad4338a19843ab04583b7aaa320a04c21d7e1451",
-    "source_docstring": "742a718b63178d343c8f7db611530cca3779656c63ed5cdfc444abf0a07e2f58"
+    "source_docstring": "d7727b1195cbff521ff90e14ad4338a19843ab04583b7aaa320a04c21d7e1451"
   },
   "en/internal-index.md": {
     "content": "b9e32574edf33fdd19ae029e716e689197b3db3c5322a058bf45ae900a4c7382",
@@ -221,7 +221,7 @@
   "en/internal-lock.md": {
     "content": "d749c3f348f98ce4e85a83fea843c1bef4e70f1c7d468931ca82ff1d31a0c1c2",
     "description": "f962f13ae8703936ce73225daffd194ed31ed1e02fb70c199152e89f7cab87c9",
-    "source_docstring": "742a718b63178d343c8f7db611530cca3779656c63ed5cdfc444abf0a07e2f58"
+    "source_docstring": "6139ee9929e4e83f71c53ca89080a5f50ed835af79457436098fca3402c5a3a0"
   },
   "en/internal-oplog.md": {
     "content": "86e6afe2f0b7bd556b07e97753a94a3cb2e75b9aed2ce7371e9782c56fbf2d1e",
