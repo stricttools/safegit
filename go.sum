@@ -6,8 +6,8 @@ github.com/smm-h/go-toml-edit v0.4.0 h1:SewwlafoSSxp2O52Ro5S/xC74vutGoUo84Sa7Gcb
 github.com/smm-h/go-toml-edit v0.4.0/go.mod h1:S54Qz/7GFldPeR7Zdv16YtBgQjNwD2xai0i/KFMOQ0Q=
 github.com/smm-h/strictcli/go v0.34.0 h1:EgqXJ5eEQQ26C1Y5oI9QKaU/9ES24JuWOTRR6GrpVrg=
 github.com/smm-h/strictcli/go v0.34.0/go.mod h1:6mGIkQYXOG1UYkwBclbTmj8Rw9fP8jjEEDXSDsH0bNI=
-github.com/smm-h/stricttest/go v0.1.1 h1:z3N7RPoeLjrWTrcudxNJh2W5PVYZPJ/WsqX8ssXTkNE=
-github.com/smm-h/stricttest/go v0.1.1/go.mod h1:/rFaWmnLgp6wY9Ne+/kZIMUdOOGTPjjTHDgJjxyaYTs=
+github.com/smm-h/stricttest/go v0.2.0 h1:Yanc930kSovMdCMmB+KPbqbRZTdeWiivlOwvs0qBztM=
+github.com/smm-h/stricttest/go v0.2.0/go.mod h1:/rFaWmnLgp6wY9Ne+/kZIMUdOOGTPjjTHDgJjxyaYTs=
 github.com/toml-lang/toml-test/v2 v2.2.0 h1:q3ELZu7oPnpl9TClC6OOcAccXwj+jwAyFP8WvzBdK1M=
 github.com/toml-lang/toml-test/v2 v2.2.0/go.mod h1:TQdjhQItoZ0R+OODNiHUuxxxErtaE0Xsod2ENZbMvxI=
 golang.org/x/text v0.14.0 h1:ScX5w1eTa3QqT8oi6+ziP7dTV1S2+ALU0bI+0zXKWiQ=
