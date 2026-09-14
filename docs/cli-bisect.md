@@ -1,7 +1,8 @@
 +++
 title = "safegit bisect"
-description = "Reference for the safegit bisect command — usage, flags, arguments, and examples for the bisect subcommand of the safegit CLI."
+description = "binary search through commits to find a bug."
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 3
 +++

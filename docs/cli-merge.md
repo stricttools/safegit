@@ -1,7 +1,8 @@
 +++
 title = "safegit merge"
-description = "Reference for the safegit merge command — usage, flags, arguments, and examples for the merge subcommand of the safegit CLI."
+description = "merge one branch into the current one, and author the result: safegit decides the fast-forward itself and moves the ref under compare-and-swap, or runs git's merge machinery with --no-ff --no-commit and commits the staged result through its own pipeline -- so a merge safegit performed carries safegit's trailers, ran the repository's commit-msg hook and is reversible with 'safegit undo'."
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 10
 +++

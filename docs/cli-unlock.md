@@ -1,7 +1,8 @@
 +++
 title = "safegit unlock"
-description = "Reference for the safegit unlock command — usage, flags, arguments, and examples for the unlock subcommand of the safegit CLI."
+description = "release one of safegit's OWN lock files -- a per-ref lock, this worktree's operation lock, or the repository-wide rewrite lock -- left behind by a safegit process that was killed while holding it."
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 23
 +++

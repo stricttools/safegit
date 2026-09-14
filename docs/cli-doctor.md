@@ -1,7 +1,8 @@
 +++
 title = "safegit doctor"
-description = "Reference for the safegit doctor command — usage, flags, arguments, and examples for the doctor subcommand of the safegit CLI."
+description = "run diagnostic health checks on the repository and optionally repair issues"
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 8
 +++

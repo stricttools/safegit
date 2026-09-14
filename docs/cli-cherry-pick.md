@@ -1,7 +1,8 @@
 +++
 title = "safegit cherry-pick"
-description = "Reference for the safegit cherry-pick command — usage, flags, arguments, and examples for the cherry-pick subcommand of the safegit CLI."
+description = "apply ONE commit onto the current branch, and author the result: git computes the pick with --no-commit and safegit commits the staged result through its own pipeline -- so a pick safegit performed carries safegit's trailers, ran the repository's commit-msg hook and is reversible with 'safegit undo'."
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 4
 +++

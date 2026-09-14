@@ -1,7 +1,8 @@
 +++
 title = "safegit reset"
-description = "Reference for the safegit reset command — usage, flags, arguments, and examples for the reset subcommand of the safegit CLI."
+description = "reset HEAD with guards that prevent accidental data loss."
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 16
 +++

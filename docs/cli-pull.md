@@ -1,7 +1,8 @@
 +++
 title = "safegit pull"
-description = "Reference for the safegit pull command — usage, flags, arguments, and examples for the pull subcommand of the safegit CLI."
+description = "fetch from a remote and merge what was fetched, with the merge strategy stated explicitly: --merge-strategy is required and has no default, so a pull never depends on git's own configuration to decide whether it may create a merge commit."
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 13
 +++

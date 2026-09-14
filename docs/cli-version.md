@@ -1,7 +1,8 @@
 +++
 title = "safegit version"
-description = "Reference for the safegit version command — usage, flags, arguments, and examples for the version subcommand of the safegit CLI."
+description = "print safegit version, Go runtime version, and git version"
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 24
 +++
