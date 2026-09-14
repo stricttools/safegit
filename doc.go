@@ -1,2 +1,3 @@
-// Package main is the entry point for the safegit CLI, a concurrency-safe git wrapper that isolates commits via per-invocation temporary indexes.
+// Command safegit wraps git, giving each commit its own temporary index and
+// retrying ref updates on conflict, so concurrent agents share one repository.
 package main
