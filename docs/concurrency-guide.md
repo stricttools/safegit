@@ -1,8 +1,8 @@
----
-title: Concurrency Guide
-description: "How safegit enables multiple AI agent sessions to share a single git worktree without corrupting each other's commits or leaking files."
-order: 3
----
++++
+title = "Concurrency Guide"
+description = "How safegit enables multiple AI agent sessions to share a single git worktree without corrupting each other's commits or leaking files."
+nav_order = 3
++++
 
 # Concurrency Guide
 

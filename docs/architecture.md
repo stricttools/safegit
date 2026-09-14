@@ -1,8 +1,8 @@
----
-title: Architecture
-description: "Design rationale and architectural specification for safegit: why it exists, how the commit pipeline works, and how failure modes are handled."
-order: 2
----
++++
+title = "Architecture"
+description = "Design rationale and architectural specification for safegit: why it exists, how the commit pipeline works, and how failure modes are handled."
+nav_order = 2
++++
 
 # Architecture
 

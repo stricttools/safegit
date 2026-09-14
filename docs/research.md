@@ -1,6 +1,6 @@
----
-description: "Research survey of Git alternatives for AI-safe concurrent version control: Jujutsu, GitButler, Sapling, and go-git compared for multi-agent safety."
----
++++
+description = "Research survey of Git alternatives for AI-safe concurrent version control: Jujutsu, GitButler, Sapling, and go-git compared for multi-agent safety."
++++
 
 # Git Alternatives for AI-Safe Concurrency
 

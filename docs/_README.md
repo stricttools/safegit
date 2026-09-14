@@ -1,6 +1,6 @@
----
-title: README.md
----
++++
+title = "README.md"
++++
 # safegit
 
 safegit is a git wrapper CLI that gives each commit its own temporary index

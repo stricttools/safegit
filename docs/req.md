@@ -1,6 +1,6 @@
----
-description: "Requirements for safegit: multi-agent concurrency safety, lock-free design, standard Git compatibility, CLI and hooks support, and crash recovery."
----
++++
+description = "Requirements for safegit: multi-agent concurrency safety, lock-free design, standard Git compatibility, CLI and hooks support, and crash recovery."
++++
 
 # safegit Requirements
 

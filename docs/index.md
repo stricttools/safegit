@@ -1,6 +1,6 @@
----
-description: "safegit is a git wrapper CLI that gives each commit its own temporary index and retries ref updates on conflict, so concurrent agents share one repository."
----
++++
+description = "safegit is a git wrapper CLI that gives each commit its own temporary index and retries ref updates on conflict, so concurrent agents share one repository."
++++
 
 # safegit
 
