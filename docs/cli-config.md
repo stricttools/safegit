@@ -1,7 +1,8 @@
 +++
 title = "safegit config"
-description = "Reference for the safegit config command group — subcommands, flags, arguments, and usage details for the config group in the safegit CLI."
+description = "show, get, or set safegit configuration key-value pairs"
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 7
 +++

@@ -1,7 +1,8 @@
 +++
 title = "safegit push"
-description = "Reference for the safegit push command — usage, flags, arguments, and examples for the push subcommand of the safegit CLI."
+description = "push refs to remote with pre-pre-push hooks and automatic retry"
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 14
 +++

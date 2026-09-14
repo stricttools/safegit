@@ -1,7 +1,8 @@
 +++
 title = "safegit CLI Reference"
-description = "Index of all safegit CLI commands and command groups — commit, push, undo, doctor, config, hook, and guarded passthroughs with navigation links."
+description = "Complete CLI reference for safegit — all available commands, subcommands, flags, arguments, and usage examples with detailed descriptions."
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 91
 +++

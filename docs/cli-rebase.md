@@ -1,7 +1,8 @@
 +++
 title = "safegit rebase"
-description = "Reference for the safegit rebase command — usage, flags, arguments, and examples for the rebase subcommand of the safegit CLI."
+description = "rebase the current branch onto upstream, guarded before git runs: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- then a check for uncommitted work, and then a refusal to rebase over ANOTHER operation git already has in flight (a rebase over a parked revert exits 0 and strands that revert's state files behind it, blocking every later commit)."
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 15
 +++

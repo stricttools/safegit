@@ -1,7 +1,8 @@
 +++
 title = "safegit revert"
-description = "Reference for the safegit revert command — usage, flags, arguments, and examples for the revert subcommand of the safegit CLI."
+description = "revert ONE commit by applying its inverse patch, and author the result: git computes the inverse with --no-commit and safegit commits the staged result through its own pipeline -- so a revert safegit performed carries safegit's trailers, ran the repository's commit-msg hook, is reversible with 'safegit undo', and declares the INVERSE of every move record the reverted commit declared."
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 17
 +++

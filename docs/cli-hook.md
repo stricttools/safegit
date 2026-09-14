@@ -1,7 +1,8 @@
 +++
 title = "safegit hook"
-description = "Reference for the safegit hook command group — subcommands, flags, arguments, and usage details for the hook group in the safegit CLI."
+description = "manage pre-pre-push hook scripts that run before every push"
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 9
 +++

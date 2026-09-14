@@ -1,7 +1,8 @@
 +++
 title = "safegit commit"
-description = "Reference for the safegit commit command — usage, flags, arguments, and examples for the commit subcommand of the safegit CLI."
+description = "stage and commit specified files in a single atomic operation"
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 6
 +++

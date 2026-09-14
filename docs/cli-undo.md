@@ -1,7 +1,8 @@
 +++
 title = "safegit undo"
-description = "Reference for the safegit undo command — usage, flags, arguments, and examples for the undo subcommand of the safegit CLI."
+description = "reverse the last safegit-authored operation using the oplog -- a commit, an mv, an amend, a reword, a merge, pull, cherry-pick or revert safegit's own commit pipeline authored, or a conclusion (merge-continue, cherry-pick-continue, revert-continue)."
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 22
 +++

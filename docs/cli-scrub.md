@@ -1,7 +1,8 @@
 +++
 title = "safegit scrub"
-description = "Reference for the safegit scrub command group — subcommands, flags, arguments, and usage details for the scrub group in the safegit CLI."
+description = "surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store"
 generated = true
+seeded = true
 nav_group = "CLI Reference"
 nav_order = 20
 +++
