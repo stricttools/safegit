@@ -82,7 +82,7 @@
   },
   "project_id": "github.com/smm-h/safegit",
   "name": "safegit",
-  "version": "0.29.0",
+  "version": "dev",
   "help": "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
   "proc_observe_allowlist": [
     [
@@ -428,7 +428,7 @@
         },
         {
           "name": "moved",
-          "help": "declare that content moved, as 'old -> new' (repeatable, one pair each). End BOTH paths with a slash to declare a whole subtree. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. The old path must be tracked in the commit's parent and gone from disk, and the new one must exist. A declaration also SUPPRESSES safegit's own reading of the delta for the paths it names, and supersedes a record safegit already minted for the same pair on the commit an --amend replaces. Omitted means the commit declares no moves of its own, and safegit still records the ones its delta witnesses on its own",
+          "help": "declare that content moved, as 'old -> new' (repeatable, one pair each). End BOTH paths with a slash to declare a whole subtree. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. The old path must be tracked in the commit's parent and gone from disk, and the new one must exist -- and the COMMIT ITSELF must bear the move out, carrying the new path in its tree and no longer carrying the old one, which means naming both paths among the files to commit. A declaration also SUPPRESSES safegit's own reading of the delta for the paths it names, and supersedes a record safegit already minted for the same pair on the commit an --amend replaces. Omitted means the commit declares no moves of its own, and safegit still records the ones its delta witnesses on its own",
           "value_schema": {
             "type": "array",
             "items": {
