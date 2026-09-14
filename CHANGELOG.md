@@ -2,6 +2,14 @@
 
 # Changelog
 
+## 0.29.2
+
+Documentation frontmatter converted to TOML for the current selfdoc; no user-facing change.
+
+### Infrastructure
+
+- Documentation frontmatter converted to TOML for the current selfdoc; no user-facing change.
+
 ## 0.29.1
 
 Fixes to commit --moved, current go-toml-edit and strictcli dependencies with unknown recipe keys now refused, a consistent self-description, and the documentation base at the unified site.
