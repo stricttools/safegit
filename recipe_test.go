@@ -572,3 +572,23 @@ func compilePatterns(t *testing.T, patterns ...string) []*regexp.Regexp {
 func readBlob(ctx context.Context, sha string) ([]byte, error) {
 	return git.CatFileBlob(ctx, sha)
 }
+
+// TestParseRecipeUnknownKey locks the strict decode: a key the recipe schema
+// does not declare is refused by name rather than silently ignored, so a typo
+// can no longer hide an operation that never ran.
+func TestParseRecipeUnknownKey(t *testing.T) {
+	toml := `
+[[operations]]
+pattern = "secret"
+replace = "REDACTED"
+unknown_key = "oops"
+`
+	path := writeRecipeFile(t, toml)
+	_, err := parseRecipe(path)
+	if err == nil {
+		t.Fatal("expected error for an unknown recipe key")
+	}
+	if !strings.Contains(err.Error(), "unknown_key") {
+		t.Errorf("expected the unknown key to be named, got: %v", err)
+	}
+}

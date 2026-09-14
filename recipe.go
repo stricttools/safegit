@@ -42,8 +42,8 @@ func parseRecipe(path string) (*ParsedRecipe, error) {
 		return nil, fmt.Errorf("reading recipe file: %w", err)
 	}
 
-	var recipe Recipe
-	if err := tomledit.Unmarshal(data, &recipe); err != nil {
+	recipe, err := tomledit.Unmarshal[Recipe](data)
+	if err != nil {
 		return nil, fmt.Errorf("parsing recipe TOML: %w", err)
 	}
 
