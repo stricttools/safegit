@@ -2,6 +2,16 @@
 
 # Changelog
 
+## 0.29.1
+
+Fixes to commit --moved, current go-toml-edit and strictcli dependencies with unknown recipe keys now refused, a consistent self-description, and the documentation base at the unified site.
+
+### Fixes
+
+- **`safegit commit --moved` no longer commits half a rename.** A declared move was checked against the working tree only, so a destination the commit did not stage -- one not named at all, or one a directory expansion passed over as gitignored -- produced a commit carrying the old path's deletion, no addition, and a record pointing at a path the commit does not hold. The same hole on the other side committed a copy while declaring a move, and a reword could write a record about a tree that bears out neither side. The declaration is now checked against the tree the commit writes, on all three arms (commit, amend, reword): a commit that would not carry both sides of the move is refused (exit 19) naming the path to add to the file list, instead of committing silently.
+- **The project describes itself consistently in its README, package documentation and registries.** The README opening line, the root package doc comment, the documentation index and `selfdoc.json` each said something different about what safegit is, and `selfdoc.json` carried no description at all.
+- **A key safegit's TOML schema does not declare is now refused by name.** A scrub recipe or a conclusion `--resolve-file` carrying a misspelled or unrecognized key (`patern` for `pattern`, `choise` for `choice`) used to parse successfully with that key silently dropped, so an operation or a resolution the file meant to declare never ran. Both files now report the key, its table and its line -- `4:1: operations[0].unknown_key: unknown key "unknown_key"` -- and key matching is exact, so a key differing only in case is unknown too. TOML syntax diagnostics are also reworded: `expected value, got Newline` now reads `expected a value, got newline`.
+
 ## 0.29.0
 
 The two-campaign redesign: safegit authors every commit made under its name (clean merges, cherry-picks, reverts and pulls included), concludes parked operations itself, records file moves, supports unborn branches, and refuses with registered exit codes across a default-deny command subset.
@@ -838,6 +848,8 @@ Three new features aimed at multi-session safety and sensitive content cleanup:
 
 ## 0.11.1
 
+**Fix.** CI matrix updated to Go 1.25+1.26 to match go.mod requirement.
+
 ### Fixes
 
 - **Fix.** CI matrix updated to Go 1.25+1.26 to match go.mod requirement.
@@ -845,11 +857,15 @@ Three new features aimed at multi-session safety and sensitive content cleanup:
 
 ## 0.11.0
 
+**New feature.** Auto-detect file moves on commit. When committing a file that was moved (via `mv`), safegit now automatically stages the deletion of the old path, so the commit records a proper rename. Works with both `commit` and `commit --amend`. Uses exact content matching (move+edit requires listing both paths explicitly).
+
 ### Features
 
 - **New feature.** Auto-detect file moves on commit. When committing a file that was moved (via `mv`), safegit now automatically stages the deletion of the old path, so the commit records a proper rename. Works with both `commit` and `commit --amend`. Uses exact content matching (move+edit requires listing both paths explicitly).
 
 ## 0.10.3
+
+**Fix: docs deploy in post-release hook.** Environment variables are now exported so selfdoc/wrangler can read Cloudflare credentials.
 
 ### Fixes
 
@@ -857,15 +873,21 @@ Three new features aimed at multi-session safety and sensitive content cleanup:
 
 ## 0.10.2
 
+No user-facing changes.
+
 - No user-facing changes.
 
 ## 0.10.1
+
+**Fix: use published strictcli dependency.** Removed local replace directive so `go install` and CI work correctly.
 
 ### Fixes
 
 - **Fix: use published strictcli dependency.** Removed local replace directive so `go install` and CI work correctly.
 
 ## 0.10.0
+
+**Breaking: CLI restructured with strictcli.** Commands now use structured parsing with auto-generated help. `config` and `hook` are subcommand groups (`config set key value`, `hook list`). `pull` requires `--ff-only`, `--ff`, or `--no-ff`. `doctor` requires `--diagnose`, `--fix`, or `--uninstall`. `push --force` renamed to `--force-push`.
 
 ### Breaking
 

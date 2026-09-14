@@ -1,5 +1,5 @@
 {
-  "version": "0.29.0",
+  "version": "0.29.1",
   "description": "git wrapper CLI that gives each commit its own temporary index and retries ref updates on conflict, so concurrent agents share one repository",
   "repo": "https://github.com/smm-h/safegit",
   "source": [
@@ -21,7 +21,7 @@
   },
   "versions": [
     {
-      "version": "0.29.0"
+      "version": "0.29.1"
     }
   ],
   "locales": [
