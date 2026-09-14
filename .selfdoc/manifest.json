@@ -2,7 +2,7 @@
   "schema_version": 1,
   "name": "safegit",
   "slug": "safegit",
-  "version": "0.29.0",
+  "version": "0.29.1",
   "description": "git wrapper CLI that gives each commit its own temporary index and retries ref updates on conflict, so concurrent agents share one repository",
   "language": "go",
   "base_url": "https://safegit.smmh.dev",
@@ -7846,6 +7846,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-09-14T14:37:17.623823+00:00",
+  "last_gen": "2026-09-14T17:14:59.165822+00:00",
   "theme": "minimal"
 }
