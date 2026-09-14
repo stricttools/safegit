@@ -9,3 +9,4 @@
 {"format_version":1,"id":"18d28da518462321f1b840325ad34d4f87f2bf96343b6c6b","commits":["8f0b729887383a3d00ff774e61582dd006932079"],"user_facing":false}
 {"format_version":1,"id":"18d28dfc834401939eafc0ce1cbb429f9ac530495b756d81","commits":["c36ce4b5a64b0f9bff1ad71a2c4317d26f7b2441"],"user_facing":false}
 {"format_version":1,"id":"18d537127101d773a2b4d30ff9984de590b278b252eefd68","commits":["332b77ac08c58ff2c489c8db68cc484895744769"],"user_facing":true,"description":"**The project describes itself consistently in its README, package documentation and registries.** The README opening line, the root package doc comment, the documentation index and `selfdoc.json` each said something different about what safegit is, and `selfdoc.json` carried no description at all.","type":"fix"}
+{"format_version":1,"id":"18d5372f0a678a42dbb67d565d794bf58c683ac7e9a9a482","commits":["3868a874b17332c908cd02c8940162eec5816727"],"user_facing":false}
