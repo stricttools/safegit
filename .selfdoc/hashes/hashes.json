@@ -161,7 +161,7 @@
   },
   "en/index.md": {
     "content": "1dc0eb82bdf3e81469da3ab87dd3cbe804472f27f0a6d4978a09640e9b057d92",
-    "description": "02d2c249e890a0c850a75b884a1326c5bd34f5c78c300d106237f41cf9f1d78f",
+    "description": "10aa0589f475118d373f676c3698dfff17563c145a29abfae752407c027d6bf2",
     "source_docstring": "892f1e6aea65823063e664a07244d8635cb4b7da72f828209f73eda90822fda7"
   },
   "en/integration-guide.md": {
@@ -279,7 +279,8 @@
   },
   "en/safegit.md": {
     "content": "80cb93eec3ee18316f998c6e6e393c98c9062f3ab764f4b623fc831711eae75a",
-    "description": "892f1e6aea65823063e664a07244d8635cb4b7da72f828209f73eda90822fda7",
+    "description": "c27c69f4392a010965bf0a19f36af277b6d5552280fb05e07c985235ae4fb473",
+    "seed_hash": "c27c69f4392a010965bf0a19f36af277b6d5552280fb05e07c985235ae4fb473",
     "source_docstring": "892f1e6aea65823063e664a07244d8635cb4b7da72f828209f73eda90822fda7"
   },
   "en/scripts.md": {

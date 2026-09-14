@@ -2,8 +2,8 @@
 
 # safegit
 
-safegit is a git wrapper CLI that isolates each commit in its own temporary
-index and retries ref updates on conflict, so concurrent agents can share one
+safegit is a git wrapper CLI that gives each commit its own temporary index
+and retries ref updates on conflict, so concurrent agents share one
 repository. It is built for repositories that several AI agent sessions work in
 at the same time, where standard git races on `.git/index` and files leak
 between commits. Its output is ordinary git commits, so teammates, CI and code

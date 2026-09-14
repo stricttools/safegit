@@ -1,7 +1,8 @@
 ---
 title: safegit
-description: "Package main is the entry point for the safegit CLI, a concurrency-safe git wrapper that isolates commits via per-invocation temporary indexes."
+description: "Command safegit wraps git, giving each commit its own temporary index and retrying ref updates on conflict, so concurrent agents share one repository."
 generated: true
+seeded: true
 nav_group: "API Reference"
 nav_order: 1
 ---
