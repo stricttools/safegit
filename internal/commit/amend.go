@@ -447,7 +447,7 @@ func (p *Pipeline) tryAmend(
 	}
 
 	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
-		if err := git.ReconcileMainIndex(ctx, headSHA, "HEAD"); err != nil {
+		if err := git.ReconcileMainIndex(ctx, headSHA, "HEAD", files.stagedPaths()); err != nil {
 			// The commit-stands verdict, with the result beside it -- see
 			// PartialError.
 			return result, false, &PartialError{SHA: commitSHA, Step: StepIndexReconcile, Err: err}
@@ -728,7 +728,10 @@ func (p *Pipeline) tryReword(
 	}
 
 	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
-		if err := git.ReconcileMainIndex(ctx, headSHA, "HEAD"); err != nil {
+		// A reword stages nothing at all -- it changes only the message -- so it
+		// speaks for no path and every staged delta the index holds is somebody
+		// else's.
+		if err := git.ReconcileMainIndex(ctx, headSHA, "HEAD", nil); err != nil {
 			// The commit-stands verdict, with the result beside it -- see
 			// PartialError.
 			return result, false, &PartialError{SHA: commitSHA, Step: StepIndexReconcile, Err: err}
