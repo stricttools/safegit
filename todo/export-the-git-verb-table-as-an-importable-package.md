@@ -37,7 +37,7 @@ module's root package, whichever the module already uses for its public
 surface — with the same API and the same table, and have safegit's own
 callers import it from there. The package is pure data plus pure functions
 over argv: no execution, no repository access, so it carries no dependency
-on the rest of safegit. Export exactly what an external caller needs:
+on the rest of safegit. Export only what an external caller needs:
 
 - `Verbs()`, `Lookup(name)`, `EffectsOf(args)`, `IsObserveOnly(args)`,
   `ObservePrefixes()`.
