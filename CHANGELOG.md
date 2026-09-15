@@ -2,6 +2,24 @@
 
 # Changelog
 
+## 0.29.3
+
+A commit no longer leaves a deleted-then-recreated path pending in the shared index.
+
+<details>
+<summary>Context</summary>
+
+An archiving deletion tool stages the removal of a tracked file it takes away, so the next commit cannot resurrect it. When a new file was then written at that same path and committed, safegit recorded the new bytes and put the staged removal back into the shared index, because its reconciler reads "the pre-operation tip holds this path and the index has no slot for it" as another session's staged deletion worth preserving. It was the very path the commit had just answered, and the repository was left reporting it as deleted and untracked right after safegit reported it committed.
+
+Preserving another session's staged work was stated over the whole index; it now holds over the paths the operation did not speak for. Only the DERIVED removal is suppressed for a path a commit or amend staged: where the index really holds a slot for such a path, two real blobs exist and choosing between them is still not the reconciler's to do.
+
+</details>
+
+### Fixes
+
+- **The tool describes itself with one sentence everywhere, including `--help`.** The `--help` header, README, docs site and package metadata now carry the same line.
+- **A file deleted-then-recreated at the same path no longer stays pending after being committed.** When a deletion tool has staged the removal of a tracked file (`git rm --cached`) and a new file is written at that same path, `safegit commit` left the shared index still holding the deletion -- `git status` reported the path as both deleted and untracked right after safegit reported it committed, which was enough to block a release. Another session's staged work, including a staged blob `git mv` left on a committed path, still outlives the commit unchanged.
+
 ## 0.29.2
 
 Documentation frontmatter converted to TOML for the current selfdoc; no user-facing change.
