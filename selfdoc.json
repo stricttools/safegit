@@ -38,22 +38,7 @@
   "topology": {
     "slug": "safegit",
     "docs_base": "https://smmh.dev",
-    "posts_base": "https://blog.smmh.dev",
-    "projects": {
-      "pixelweaver": "https://docs.smmh.dev/pixelweaver",
-      "claudestream": "https://docs.smmh.dev/claudestream",
-      "claudewheel": "https://docs.smmh.dev/claudewheel",
-      "go-toml-edit": "https://docs.smmh.dev/go-toml-edit",
-      "howmuchleft": "https://docs.smmh.dev/howmuchleft",
-      "orxtra": "https://docs.smmh.dev/orxtra",
-      "pgdesign": "https://docs.smmh.dev/pgdesign",
-      "predraw": "https://docs.smmh.dev/predraw",
-      "rlsbl": "https://docs.smmh.dev/rlsbl",
-      "saferm": "https://docs.smmh.dev/saferm",
-      "selfdoc": "https://docs.smmh.dev/selfdoc",
-      "strictcli": "https://docs.smmh.dev/strictcli",
-      "wesktop": "https://docs.smmh.dev/wesktop"
-    }
+    "posts_base": "https://blog.smmh.dev"
   },
   "assembly": {
     "repo": "smm-h/selfdoc-cache"
