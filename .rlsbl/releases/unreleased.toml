@@ -2,11 +2,15 @@
 format_version = 1
 # Version bump type: patch, minor, major, infra, or prerelease
 #   prerelease: advance an existing pre-release (0.6.0-beta.0 -> -beta.1)
-bump = ""
+bump = "patch"
 # Short description of this release (required)
-description = ""
+description = "A commit no longer leaves a deleted-then-recreated path pending in the shared index."
 # Optional context explaining why these changes were made
-context = ""
+context = """
+An archiving deletion tool stages the removal of a tracked file it takes away, so the next commit cannot resurrect it. When a new file was then written at that same path and committed, safegit recorded the new bytes and put the staged removal back into the shared index, because its reconciler reads "the pre-operation tip holds this path and the index has no slot for it" as another session's staged deletion worth preserving. It was the very path the commit had just answered, and the repository was left reporting it as deleted and untracked right after safegit reported it committed.
+
+Preserving another session's staged work was stated over the whole index; it now holds over the paths the operation did not speak for. Only the DERIVED removal is suppressed for a path a commit or amend staged: where the index really holds a slot for such a path, two real blobs exist and choosing between them is still not the reconciler's to do.
+"""
 # Pre-release channel: alpha, beta, rc, or stable (ordered;
 # demotion is an error). With patch/minor/major it ENTERS the
 # channel (0.5.2 + minor + alpha -> 0.6.0-alpha.0); with
