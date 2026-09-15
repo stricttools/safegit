@@ -159,7 +159,7 @@
     "seed_hash": "5acc4282b09c1d81c28dbfe446c4f9d3b9d15417f277a85f3dfcb5828e4a0470"
   },
   "en/commands-guide.md": {
-    "content": "9e087c9308103986dd172cf453e1d9d768b39e6f9a62daa71989479bfd96bcad",
+    "content": "eeabb2f938f8698c664ae8b8ade711bdc2371815791c4970bfea8e1e3bc18f34",
     "description": "27132e78985f8d7ae789460ba3653d12b2231a6431b5c14454f990b643875045"
   },
   "en/concurrency-guide.md": {
@@ -182,7 +182,7 @@
     "source_docstring": "119de46e78dc35b9fd56e9d8244526d922d59ca0eecc9633e839fc4d08623e0d"
   },
   "en/integration-guide.md": {
-    "content": "f0139c1c11913bd1625a6009492e35591aa339a5b0aa07260a35237aa941d0ce",
+    "content": "587889bc912642f9b4ff5bd785245b0def83e804410c19a296b8cf204af402a2",
     "description": "b3773a857d7cbb6a90add0f1972d758fde1d1f78c2e0916af039105fedd3def5"
   },
   "en/internal-commit.md": {
