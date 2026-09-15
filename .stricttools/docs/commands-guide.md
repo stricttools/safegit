@@ -1392,7 +1392,7 @@ Each of these commands validates its argv against an explicit allowlist BEFORE t
 
 The direction is the point. A refusal LIST answers "is this one of the things we already thought about and decided against", and an option nobody has thought about slips through it into git, where it can change what git does while safegit's checks, its record of the operation and its report are still written for something else. An allowlist answers the other question -- "is this one of the things safegit can honor" -- which is the only honest one for a tool that implements a deliberate subset.
 
-Two refusals come out of one table: a capability the table NAMES carries its own reason ("safegit's merge does not select a merge strategy, and here is why"), and everything else carries the subset law itself. `docs/divergences.md` catalogs every refused capability, with what git would do and why safegit does not.
+Two refusals come out of one table: a capability the table NAMES carries its own reason ("safegit's merge does not select a merge strategy, and here is why"), and everything else carries the subset law itself. `.stricttools/docs/divergences.md` catalogs every refused capability, with what git would do and why safegit does not.
 
 **One argument is intercepted everywhere**, for the three operations safegit concludes itself. `safegit merge --continue`, `safegit cherry-pick --continue` and `safegit revert --continue` are refused and name `safegit merge-continue`, `safegit cherry-pick-continue` or `safegit revert-continue` instead -- see "The three conclusion commands". With an operation in flight the refusal is exit **5** and names the conclusion command; with NOTHING in flight the argv still never reaches git, because a forwarded `--continue` is exactly the shape the boundary refuses, and the refusal is safegit's (exit 1, its own reason) rather than git's "no merge in progress". A rebase's `--continue` is git's own and passes through untouched -- by construction rather than by exemption, because `safegit rebase`'s own in-flight refusal is scoped to state that is NOT a rebase, and mid-rebase state is a rebase; over any other in-flight state that refusal fires on `--continue` as on any other rebase command line. A mailbox application is concluded with `git am --continue`, which safegit never sees: there is no `safegit am`.
 
@@ -1433,7 +1433,7 @@ safegit treats it as an ordinary state rather than an edge case. The dirty-tree 
 - **`rebase`**: there are no commits to replay.
 - **`bisect start`**: there is no range of commits to search.
 
-Each refusal names the unborn branch and the way forward, and exits with the general code. See `docs/divergences.md`, "The friendly unborn pre-flight refusals" -- one of them is a deliberate divergence, since raw `git merge --no-commit` fast-forwards an unborn head at exit 0.
+Each refusal names the unborn branch and the way forward, and exits with the general code. See `.stricttools/docs/divergences.md`, "The friendly unborn pre-flight refusals" -- one of them is a deliberate divergence, since raw `git merge --no-commit` fast-forwards an unborn head at exit 0.
 
 **What is NOT refused, and reads badly:** a `merge` naming a ref that does not resolve. On an unborn branch it reaches the compute step, which safegit pins to `--no-ff --no-commit`, so the operator meets git's own "Non-fast-forward commit does not make sense into an empty head" -- an error about a flag they never typed rather than about the ref they got wrong.
 

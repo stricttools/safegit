@@ -28,7 +28,7 @@ small, opinionated subset of git's functionality, chosen for agent-heavy
 workflows. When a git feature, command, flag, or edge case is judged actively
 harmful or irrelevant for that workflow, safegit deliberately omits it and
 never looks back. Every such omission is recorded in
-[docs/divergences.md](docs/divergences.md), unapologetically. safegit is for
+[.stricttools/docs/divergences.md](.stricttools/docs/divergences.md), unapologetically. safegit is for
 agents, not for all humans.
 
 ## Install
@@ -110,7 +110,7 @@ order lets another session's commit land in between and produces a commit whose
 tree is based on the old tip but whose parent is the new one, silently dropping
 that session's files.
 
-See [docs/architecture.md](docs/architecture.md) for the full architecture specification.
+See [.stricttools/docs/architecture.md](.stricttools/docs/architecture.md) for the full architecture specification.
 
 ## Configuration
 

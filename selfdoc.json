@@ -8,8 +8,8 @@
       "language": "go"
     }
   ],
-  "docs": "docs/",
-  "output": "docs/_build/",
+  "docs": ".stricttools/docs/",
+  "output": ".stricttools/docs-cache/build/",
   "base_url": "https://safegit.smmh.dev",
   "search_engine": "pagefind",
   "author": {
@@ -32,8 +32,8 @@
     }
   ],
   "root_files": [
-    "docs/_README.md",
-    "docs/_CLAUDE.md"
+    ".stricttools/docs/_README.md",
+    ".stricttools/docs/_CLAUDE.md"
   ],
   "topology": {
     "slug": "safegit",
