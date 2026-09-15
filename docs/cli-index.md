@@ -10,7 +10,7 @@ nav_order = 91
 
 # safegit CLI Reference
 
-concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting
+The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood
 
 Version: :-: var key="project.version"
 

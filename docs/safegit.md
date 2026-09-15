@@ -1,6 +1,6 @@
 +++
 title = "safegit"
-description = "Command safegit wraps git, giving each commit its own temporary index and retrying ref updates on conflict, so concurrent agents share one repository."
+description = "Command safegit: The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood."
 generated = true
 seeded = true
 nav_group = "API Reference"
