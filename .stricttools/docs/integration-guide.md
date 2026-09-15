@@ -55,7 +55,7 @@ A third check covers the commands that COMPUTE an operation -- `merge`, `cherry-
 
 `switch`, `rebase`, `reset` and `bisect` forward the operator's arguments to git after those checks. `merge`, `cherry-pick`, `revert` and `pull` do NOT: git computes the result with `--no-commit` and safegit's own pipeline writes the commit, so it carries safegit's trailers, the repository's `commit-msg` hook runs against it, and `safegit undo` reverses it. Each of them applies ONE thing -- one merge side, one picked commit, one reverted commit -- and a multi-commit or revision-range command line is refused naming the sequential form. Only `safegit rebase` still lets git author commits, uniformly and by declaration.
 
-Every one of these commands validates its forwarded argv against an explicit ALLOWLIST before anything runs: an option safegit has not considered is refused (exit 2) rather than passed to git, where it could change what git does while safegit's checks and its record of the operation stayed written for something else. The refusals name what they refuse and why; `docs/divergences.md` catalogs them.
+Every one of these commands validates its forwarded argv against an explicit ALLOWLIST before anything runs: an option safegit has not considered is refused (exit 2) rather than passed to git, where it could change what git does while safegit's checks and its record of the operation stayed written for something else. The refusals name what they refuse and why; `.stricttools/docs/divergences.md` catalogs them.
 
 ### Concluding an operation git stopped
 
