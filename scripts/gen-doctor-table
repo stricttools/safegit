@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate the doctor health-check table in docs/commands-guide.md from the
+# Regenerate the doctor health-check table in .stricttools/docs/commands-guide.md from the
 # check registry in doctor.go. Run it after adding or changing a check.
 #
 # Unlike scripts/gen-exit-table, the generation runs THROUGH a test rather than

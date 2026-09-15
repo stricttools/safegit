@@ -17,7 +17,7 @@ const (
 	DocEndMarker = "<!-- END generated exit-code table -->"
 	// DocPath is the file that carries the generated table, relative to the
 	// repository root.
-	DocPath = "docs/commands-guide.md"
+	DocPath = ".stricttools/docs/commands-guide.md"
 )
 
 // RenderDocument returns doc with the region between the markers replaced by
