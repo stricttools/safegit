@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regenerate the exit-code reference table in docs/commands-guide.md from
+# Regenerate the exit-code reference table in .stricttools/docs/commands-guide.md from
 # internal/exitcode's registry. Run it after adding or changing a code.
 #
 # The matching freshness check lives in exit_table_test.go, so a registry
