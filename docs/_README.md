@@ -3,12 +3,7 @@ title = "README.md"
 +++
 # safegit
 
-safegit is a git wrapper CLI that gives each commit its own temporary index
-and retries ref updates on conflict, so concurrent agents share one
-repository. It is built for repositories that several AI agent sessions work in
-at the same time, where standard git races on `.git/index` and files leak
-between commits. Its output is ordinary git commits, so teammates, CI and code
-review tools see nothing unusual.
+The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood
 
 ## The problem
 

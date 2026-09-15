@@ -206,7 +206,7 @@ func newApp() *strictcli.App {
 	// finds it stale has been told something false by the tool about itself.
 	// `safegit --help` enumerates the commands, which is the answer that cannot
 	// go out of date. TestAppDescriptionStatesNoCommandCount pins the absence.
-	app := strictcli.NewApp("safegit", version, "concurrency-safe git wrapper for multi-agent use with atomic commits, oplog-based undo, and history rewriting",
+	app := strictcli.NewApp("safegit", version, "The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood",
 		strictcli.WithHandshakeEnv(sessionIDEnvVar, "Claude Code session identifier set by the invoking agent session; scopes 'safegit undo' to operations this session performed and is recorded as a commit trailer"),
 		// The observe authorization, GENERATED from the git argv classification
 		// table's read view (see gitexec.ObservePrefixes) rather than written

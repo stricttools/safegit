@@ -1,5 +1,5 @@
 +++
-description = "safegit is a git wrapper CLI that gives each commit its own temporary index and retries ref updates on conflict, so concurrent agents share one repository."
+description = "The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood"
 +++
 
 # safegit
