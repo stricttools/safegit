@@ -40,6 +40,13 @@ type treeEntry struct {
 // commit), so the whole index counts as delta. afterTreeish is the state to
 // sync to; empty means clear the index entirely (undoing a root commit).
 //
+// operationPaths names the canonical repo-relative paths the operation itself
+// spoke for: the ones a commit or amend staged into the new tip, including the
+// ones it removed from the index. It is what separates another session's staged
+// work from a claim this operation has already settled, and it is empty for
+// every operation that staged nothing of its own -- a reword, an undo, the
+// conclusion of a merge, which commits the shared index as it stands.
+//
 // What survives the sync:
 //
 //   - foreign staged work: a stage-0 entry that differs from beforeTip (a
@@ -51,6 +58,23 @@ type treeEntry struct {
 //   - skip-worktree flags, re-set on every flagged path still present at
 //     stage 0.
 //
+// operationPaths narrows exactly ONE of those, and nothing else: the staged
+// deletion, which is the only preserved delta with no index slot behind it. It is derived from the tip's
+// side -- "the tip holds this path and the index has no slot for it" -- and for
+// a path the operation staged, that derivation is wrong. An archiving deletion
+// tool runs `git rm --cached` on a tracked file it has taken away; a new file
+// is then written at the same path and committed; replaying the removal deletes
+// from the index the very bytes the commit recorded, so git reports the path as
+// untracked and pending right after safegit reported it committed, and the next
+// `git commit -a` would delete it for real.
+//
+// A SLOT the index really holds for an operation path is replayed like any
+// other, deliberately. There the operator staged one blob and the commit
+// recorded another, both of them real, and choosing between them is not the
+// reconciler's to do: the path stays tracked, `git diff HEAD` is empty, and
+// `safegit reset --mixed HEAD` drops the leftover entry. The absence of a slot
+// offers no such choice, which is why only the derivation is suppressed.
+//
 // The whole delta is replayed in ONE `git update-index --index-info` batch.
 // Within that batch an unmerged path is preceded by a zero-mode removal line,
 // because the read-tree wrote a stage-0 entry for it and git refuses to hold
@@ -59,7 +83,7 @@ type treeEntry struct {
 // Every failure is HARD. A half-replayed index is a corrupted view of somebody
 // else's staged work; reporting that as a warning and returning success is
 // exactly how staged state disappears silently.
-func ReconcileMainIndex(ctx context.Context, beforeTip, afterTreeish string) error {
+func ReconcileMainIndex(ctx context.Context, beforeTip, afterTreeish string, operationPaths []string) error {
 	before, err := readIndexSlots(ctx)
 	if err != nil {
 		return fmt.Errorf("reading the shared index before reconciling it: %w", err)
@@ -73,7 +97,12 @@ func ReconcileMainIndex(ctx context.Context, beforeTip, afterTreeish string) err
 		return fmt.Errorf("reading skip-worktree flags before reconciling the index: %w", err)
 	}
 
-	replay := indexReplayBatch(before, tip)
+	owned := make(map[string]struct{}, len(operationPaths))
+	for _, p := range operationPaths {
+		owned[p] = struct{}{}
+	}
+
+	replay := indexReplayBatch(before, tip, owned)
 
 	if afterTreeish == "" {
 		if _, _, err := Run(ctx, "read-tree", "--empty"); err != nil {
@@ -110,11 +139,15 @@ func afterTreeishName(treeish string) string {
 // `git update-index --index-info` input: the lines that, applied to an index
 // freshly read from any tree, put the delta back.
 //
+// owned holds the paths the operation staged itself. It suppresses the DERIVED
+// removal lines only -- see ReconcileMainIndex for why a slot the index really
+// holds is replayed for an owned path just like any other.
+//
 // The slots arrive in git's own index order (sorted by path, then stage), and
 // the output preserves it, with the staged deletions -- which have no slot to
 // order against -- appended in path order. The batch is therefore a pure
-// function of the index and the tip.
-func indexReplayBatch(slots []indexSlot, tip map[string]treeEntry) []string {
+// function of the index, the tip and owned.
+func indexReplayBatch(slots []indexSlot, tip map[string]treeEntry, owned map[string]struct{}) []string {
 	byPath := make(map[string][]indexSlot, len(slots))
 	var order []string
 	for _, s := range slots {
@@ -152,6 +185,14 @@ func indexReplayBatch(slots []indexSlot, tip map[string]treeEntry) []string {
 	// the tip's side and replayed as a removal.
 	var deleted []string
 	for path := range tip {
+		if _, mine := owned[path]; mine {
+			// The operation staged this path itself. There is no slot here to
+			// preserve -- only the absence of one -- and the tree just read is
+			// the operation's own answer for the path, so deriving a removal
+			// from the tip would delete from the index what the operation just
+			// put in it.
+			continue
+		}
 		if _, ok := byPath[path]; !ok {
 			deleted = append(deleted, path)
 		}

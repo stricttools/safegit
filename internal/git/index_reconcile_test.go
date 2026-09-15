@@ -157,7 +157,7 @@ func TestReconcileMainIndexPreservesUnmergedStages(t *testing.T) {
 		t.Fatalf("fixture: no stage-3 entry in the index:\n  %s", readableStaged(want))
 	}
 
-	if err := ReconcileMainIndex(ctx, tip, tip); err != nil {
+	if err := ReconcileMainIndex(ctx, tip, tip, nil); err != nil {
 		t.Fatalf("ReconcileMainIndex: %v", err)
 	}
 
@@ -226,7 +226,7 @@ func TestReconcileMainIndexPreservesForeignStagedWork(t *testing.T) {
 		fixtureRemoval("doomed.txt"),              // staged deletion
 	})
 
-	if err := ReconcileMainIndex(ctx, tip, next); err != nil {
+	if err := ReconcileMainIndex(ctx, tip, next, nil); err != nil {
 		t.Fatalf("ReconcileMainIndex: %v", err)
 	}
 
@@ -249,6 +249,76 @@ func TestReconcileMainIndexPreservesForeignStagedWork(t *testing.T) {
 	}
 	if got, ok := byPath["committed.txt"]; !ok || got.SHA != fromCommit {
 		t.Errorf("the commit's own path is missing from the reconciled index: %+v", got)
+	}
+}
+
+// A path the operation staged itself is left as the sync wrote it, whatever the
+// index held for it before. The staged deletion here is the shape an archiving
+// deletion tool leaves behind (`git rm --cached` on a tracked file), and the
+// operation then commits new bytes at that same path: replaying the deletion
+// would un-commit it in the index while HEAD carried it.
+func TestReconcileMainIndexDropsDeltaOfPathsTheOperationStaged(t *testing.T) {
+	dir := testutil.InitBareRepo(t)
+	testutil.Chdir(t, dir)
+	ctx := context.Background()
+
+	v1 := blob(t, ctx, "original\n")
+	v2 := blob(t, ctx, "regenerated\n")
+	other := blob(t, ctx, "theirs\n")
+
+	// Tip: the path the operation will re-commit, plus one it never names.
+	emptyIndex(t, ctx)
+	writeIndexInfo(t, ctx, []string{
+		fixtureLine("100644", v1, 0, "mine.txt"),
+		fixtureLine("100644", other, 0, "theirs.txt"),
+	})
+	tipTree, _, err := Run(ctx, "write-tree")
+	if err != nil {
+		t.Fatalf("write-tree: %v", err)
+	}
+	tip, err := CommitTree(ctx, strings.TrimSpace(tipTree), nil, "tip", nil)
+	if err != nil {
+		t.Fatalf("commit-tree: %v", err)
+	}
+
+	// The operation's commit: new bytes at mine.txt, theirs.txt untouched.
+	writeIndexInfo(t, ctx, []string{fixtureLine("100644", v2, 0, "mine.txt")})
+	nextTree, _, err := Run(ctx, "write-tree")
+	if err != nil {
+		t.Fatalf("write-tree: %v", err)
+	}
+	next, err := CommitTree(ctx, strings.TrimSpace(nextTree), []string{tip}, "next", nil)
+	if err != nil {
+		t.Fatalf("commit-tree: %v", err)
+	}
+
+	// The shared index as the deletion tool left it: both paths removed from
+	// the index, neither removed from the commit's tree.
+	if _, _, err := Run(ctx, "read-tree", tip); err != nil {
+		t.Fatalf("read-tree tip: %v", err)
+	}
+	writeIndexInfo(t, ctx, []string{
+		fixtureRemoval("mine.txt"),
+		fixtureRemoval("theirs.txt"),
+	})
+
+	if err := ReconcileMainIndex(ctx, tip, next, []string{"mine.txt"}); err != nil {
+		t.Fatalf("ReconcileMainIndex: %v", err)
+	}
+
+	slots, err := readIndexSlots(ctx)
+	if err != nil {
+		t.Fatalf("reading the index back: %v", err)
+	}
+	byPath := map[string]indexSlot{}
+	for _, s := range slots {
+		byPath[s.Path] = s
+	}
+	if got, ok := byPath["mine.txt"]; !ok || got.SHA != v2 {
+		t.Errorf("the operation's own path was left staged for deletion: %+v (want %s)", got, v2)
+	}
+	if got, ok := byPath["theirs.txt"]; ok {
+		t.Errorf("the staged deletion of a path the operation never named was undone: %+v", got)
 	}
 }
 
@@ -294,7 +364,7 @@ func TestReconcileMainIndexRestoresSkipWorktree(t *testing.T) {
 		t.Fatalf("setting skip-worktree: %v", err)
 	}
 
-	if err := ReconcileMainIndex(ctx, tip, next); err != nil {
+	if err := ReconcileMainIndex(ctx, tip, next, nil); err != nil {
 		t.Fatalf("ReconcileMainIndex: %v", err)
 	}
 
@@ -342,7 +412,7 @@ func TestReconcileMainIndexToEmptyTreeClearsEverything(t *testing.T) {
 		t.Fatalf("setting skip-worktree: %v", err)
 	}
 
-	if err := ReconcileMainIndex(ctx, tip, ""); err != nil {
+	if err := ReconcileMainIndex(ctx, tip, "", nil); err != nil {
 		t.Fatalf("ReconcileMainIndex onto the empty tree: %v", err)
 	}
 	if got := lsFilesStaged(t, ctx); got != "" {
@@ -374,7 +444,7 @@ func TestReconcileMainIndexWithNoPriorTipKeepsEverythingStaged(t *testing.T) {
 	emptyIndex(t, ctx)
 	writeIndexInfo(t, ctx, []string{fixtureLine("100644", staged, 0, "other.txt")})
 
-	if err := ReconcileMainIndex(ctx, "", root); err != nil {
+	if err := ReconcileMainIndex(ctx, "", root, nil); err != nil {
 		t.Fatalf("ReconcileMainIndex: %v", err)
 	}
 
@@ -552,7 +622,7 @@ func TestReconcileMainIndexRandomizedRoundTrip(t *testing.T) {
 			}
 		}
 
-		if err := ReconcileMainIndex(ctx, tip, tip); err != nil {
+		if err := ReconcileMainIndex(ctx, tip, tip, nil); err != nil {
 			t.Fatalf("iteration %d (seed %d): ReconcileMainIndex: %v\n  index was:\n  %s",
 				iter, iterSeed, err, readableStaged(want))
 		}

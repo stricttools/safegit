@@ -1406,7 +1406,7 @@ func finishConclusion(ctx context.Context, gitDir string, state sequencer.State,
 		return stands(stepIndexResolve, err)
 	}
 
-	if err := git.ReconcileMainIndex(ctx, firstParentOf(result), "HEAD"); err != nil {
+	if err := git.ReconcileMainIndex(ctx, firstParentOf(result), "HEAD", nil); err != nil {
 		return stands(commit.StepIndexReconcile, err)
 	}
 

@@ -472,7 +472,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		syncTreeish = ""
 	}
 	var residue []residueEntry
-	if err := git.ReconcileMainIndex(ctx, currentSHA, syncTreeish); err != nil {
+	if err := git.ReconcileMainIndex(ctx, currentSHA, syncTreeish, nil); err != nil {
 		detail := fmt.Sprintf("%s was undone, but reconciling the shared index failed: %v", currentSHA[:8], err)
 		fmt.Fprintf(os.Stderr, "error: %s\n", detail)
 		residue = recordAftercareFailure(residue, commit.StepIndexReconcile, detail)

@@ -848,7 +848,7 @@ func (p *Pipeline) tryCommit(
 	}
 
 	if headRef, herr := git.HeadRef(ctx); herr == nil && headRef == ref {
-		if err := git.ReconcileMainIndex(ctx, parentSHA, "HEAD"); err != nil {
+		if err := git.ReconcileMainIndex(ctx, parentSHA, "HEAD", files.stagedPaths()); err != nil {
 			// The RESULT travels with the error: the ref moved, so the caller
 			// has a commit to report and an outcome to report it as.
 			return result, false, &PartialError{SHA: commitSHA, Step: StepIndexReconcile, Err: err}
