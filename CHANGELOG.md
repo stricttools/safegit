@@ -18,7 +18,8 @@ Preserving another session's staged work was stated over the whole index; it now
 ### Fixes
 
 - **The tool describes itself with one sentence everywhere, including `--help`.** The `--help` header, README, docs site and package metadata now carry the same line.
-- **A file deleted-then-recreated at the same path no longer stays pending after being committed.** When a deletion tool has staged the removal of a tracked file (`git rm --cached`) and a new file is written at that same path, `safegit commit` left the shared index still holding the deletion -- `git status` reported the path as both deleted and untracked right after safegit reported it committed, which was enough to block a release. Another session's staged work, including a staged blob `git mv` left on a committed path, still outlives the commit unchanged.
+- **A file deleted-then-recreated at the same path no longer stays pending after being committed.** When a deletion tool has staged the removal of a tracked file (`git rm --cached`) and a new file is written at that same path, `safegit commit` left the shared index still holding the deletion -- `git status` reported the path as both deleted and untracked right after safegit reported it committed, which was enough to block a release. Another session's staged work at a path the commit never named still outlives the commit unchanged.
+- **A file renamed with `git mv` and then edited no longer stays pending after being committed.** `safegit commit` recorded the edited bytes at the new path and then put the rename's pre-edit blob back into the shared index, so `git status` reported `MM` on the file right after safegit reported it committed, and committing it again was refused as nothing to commit. The shared index now holds what the commit recorded on every path the commit staged; another session's staged work at a path the commit never named still outlives it unchanged.
 
 ## 0.29.2
 
