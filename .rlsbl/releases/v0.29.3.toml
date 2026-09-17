@@ -21,3 +21,7 @@ Preserving another session's staged work was stated over the whole index; it now
 # blog = false
 include = ["go", "docker"]
 exclude = []
+candidate_sha = "368f0f22617e8c8d57447e89f32527c299e9fb38"
+
+[tree_hashes]
+"." = "f853cdb179edfcbcaba03b64cdcd53fb317ccda4"
