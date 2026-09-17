@@ -262,13 +262,14 @@ func TestDeclaredMoveStandsWhenTheCommitCarriesBothSides(t *testing.T) {
 // it.
 //
 // safegit stages from DISK, so the commit carries the edited content -- that
-// half is not in question. What the shared index keeps afterwards is: git mv's
-// stage-0 entry differs from the pre-commit tip, which makes it foreign staged
-// work, and the reconciler preserves foreign staged work rather than deciding
-// for the operator which of two blobs they meant to stage. So `git status`
-// reports the path staged-and-modified while `git diff HEAD` is empty -- the
-// commit is complete and the leftover entry is the operator's own, undone with
-// `safegit reset --mixed HEAD`.
+// half was never in question. The shared index is the half that was: git mv's
+// stage-0 entry differs from the pre-commit tip, and the reconciler read that
+// as another session's staged work and replayed it over the tree it had just
+// synced. It was not another session's -- it was the new path, which this very
+// commit staged -- so the repository reported `MM new/p.py` for a file safegit
+// had reported as committed, and nothing the caller could type repaired it: the
+// tree of HEAD was already right, so committing the path again was refused as
+// nothing to commit. The index now holds what the commit recorded.
 //
 // This is not a --moved interaction: it is identical with the flag and without
 // it, which is why the test asserts both.
@@ -313,11 +314,14 @@ func TestGitMvStagedBlobSurvivesASafegitCommit(t *testing.T) {
 				t.Errorf("the working tree differs from the commit: %s", got)
 			}
 
-			// git mv's own staged entry is still there, preserved as foreign
-			// staged work. It is what makes `git status` say the path is both
-			// staged and modified.
-			if got := testutil.Git(t, dir, "status", "--porcelain"); !strings.Contains(got, "new/p.py") {
-				t.Errorf("the staged entry git mv wrote did not survive: %q", got)
+			// git mv's own staged entry is gone: the commit spoke for the new
+			// path, so the index holds the bytes the commit recorded there and
+			// the repository reports nothing pending at all.
+			if got := testutil.Git(t, dir, "status", "--porcelain"); got != "" {
+				t.Errorf("the pre-edit blob git mv staged was replayed over the commit's own:\n%s", got)
+			}
+			if got := testutil.Git(t, dir, "diff", "--cached"); got != "" {
+				t.Errorf("the shared index does not match HEAD after the commit:\n%s", got)
 			}
 		})
 	}
