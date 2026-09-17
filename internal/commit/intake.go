@@ -140,10 +140,10 @@ func (in *intake) untracked() map[string]bool {
 // and the --untrack targets.
 //
 // It is what the index reconciler is told the operation spoke for, and there it
-// decides one thing: whether the ABSENCE of an index slot for such a path is
-// another session's staged deletion to preserve, or -- because this commit has
-// just recorded bytes at that path -- a claim the commit already settled. See
-// git.ReconcileMainIndex.
+// bounds the whole preservation of another session's staged state: whatever the
+// shared index held at one of these paths -- a slot, or the absence of one --
+// is a claim this commit has just settled by recording bytes there, rather than
+// work to put back on top of what it recorded. See git.ReconcileMainIndex.
 func (in *intake) stagedPaths() []string {
 	out := make([]string, 0, len(in.entries))
 	for _, e := range in.entries {

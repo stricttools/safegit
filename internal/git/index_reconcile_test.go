@@ -322,6 +322,86 @@ func TestReconcileMainIndexDropsDeltaOfPathsTheOperationStaged(t *testing.T) {
 	}
 }
 
+// The other half of the same rule: a SLOT the index holds for a path the
+// operation staged is dropped too, not replayed on top of the sync. That slot
+// is the shape `git mv old new` leaves at the new path when the file is then
+// edited before being committed -- the pre-edit blob, which replaying would put
+// back over the edited one the commit recorded.
+func TestReconcileMainIndexDropsSlotOfPathsTheOperationStaged(t *testing.T) {
+	dir := testutil.InitBareRepo(t)
+	testutil.Chdir(t, dir)
+	ctx := context.Background()
+
+	original := blob(t, ctx, "original\n")
+	edited := blob(t, ctx, "edited\n")
+	theirs := blob(t, ctx, "theirs\n")
+	theirsStaged := blob(t, ctx, "their staged work\n")
+
+	// Tip: the path before the rename, plus one the operation never names.
+	emptyIndex(t, ctx)
+	writeIndexInfo(t, ctx, []string{
+		fixtureLine("100644", original, 0, "docs/a.md"),
+		fixtureLine("100644", theirs, 0, "theirs.txt"),
+	})
+	tipTree, _, err := Run(ctx, "write-tree")
+	if err != nil {
+		t.Fatalf("write-tree: %v", err)
+	}
+	tip, err := CommitTree(ctx, strings.TrimSpace(tipTree), nil, "tip", nil)
+	if err != nil {
+		t.Fatalf("commit-tree: %v", err)
+	}
+
+	// The operation's commit: the edited bytes at the new path, the old path
+	// gone, theirs.txt untouched.
+	emptyIndex(t, ctx)
+	writeIndexInfo(t, ctx, []string{
+		fixtureLine("100644", edited, 0, "docs/b.md"),
+		fixtureLine("100644", theirs, 0, "theirs.txt"),
+	})
+	nextTree, _, err := Run(ctx, "write-tree")
+	if err != nil {
+		t.Fatalf("write-tree: %v", err)
+	}
+	next, err := CommitTree(ctx, strings.TrimSpace(nextTree), []string{tip}, "next", nil)
+	if err != nil {
+		t.Fatalf("commit-tree: %v", err)
+	}
+
+	// The shared index as `git mv` left it, plus another session's staged work
+	// at a path the operation never named.
+	if _, _, err := Run(ctx, "read-tree", tip); err != nil {
+		t.Fatalf("read-tree tip: %v", err)
+	}
+	writeIndexInfo(t, ctx, []string{
+		fixtureRemoval("docs/a.md"),
+		fixtureLine("100644", original, 0, "docs/b.md"),
+		fixtureLine("100644", theirsStaged, 0, "theirs.txt"),
+	})
+
+	if err := ReconcileMainIndex(ctx, tip, next, []string{"docs/a.md", "docs/b.md"}); err != nil {
+		t.Fatalf("ReconcileMainIndex: %v", err)
+	}
+
+	slots, err := readIndexSlots(ctx)
+	if err != nil {
+		t.Fatalf("reading the index back: %v", err)
+	}
+	byPath := map[string]indexSlot{}
+	for _, s := range slots {
+		byPath[s.Path] = s
+	}
+	if got, ok := byPath["docs/b.md"]; !ok || got.SHA != edited {
+		t.Errorf("the pre-edit blob the rename staged was replayed over the commit's own: %+v (want %s)", got, edited)
+	}
+	if got, ok := byPath["docs/a.md"]; ok {
+		t.Errorf("the rename's old path came back into the index: %+v", got)
+	}
+	if got, ok := byPath["theirs.txt"]; !ok || got.SHA != theirsStaged {
+		t.Errorf("the staged work of a path the operation never named was lost: %+v (want %s)", got, theirsStaged)
+	}
+}
+
 // Skip-worktree flags are restored on paths the reconciled index still holds,
 // and a path the sync legitimately dropped is not an error.
 func TestReconcileMainIndexRestoresSkipWorktree(t *testing.T) {
