@@ -47,7 +47,7 @@ type treeEntry struct {
 // every operation that staged nothing of its own -- a reword, an undo, the
 // conclusion of a merge, which commits the shared index as it stands.
 //
-// What survives the sync:
+// What survives the sync, on the paths the operation did not speak for:
 //
 //   - foreign staged work: a stage-0 entry that differs from beforeTip (a
 //     staged modification or an addition beforeTip never had), and a path
@@ -58,22 +58,28 @@ type treeEntry struct {
 //   - skip-worktree flags, re-set on every flagged path still present at
 //     stage 0.
 //
-// operationPaths narrows exactly ONE of those, and nothing else: the staged
-// deletion, which is the only preserved delta with no index slot behind it. It is derived from the tip's
-// side -- "the tip holds this path and the index has no slot for it" -- and for
-// a path the operation staged, that derivation is wrong. An archiving deletion
-// tool runs `git rm --cached` on a tracked file it has taken away; a new file
-// is then written at the same path and committed; replaying the removal deletes
-// from the index the very bytes the commit recorded, so git reports the path as
-// untracked and pending right after safegit reported it committed, and the next
-// `git commit -a` would delete it for real.
+// operationPaths bounds all of that. A path the operation staged is answered by
+// the tree just read, and the index holds that answer afterwards: no slot of
+// its own replayed over it, and no removal derived for it. Whatever the index
+// held there beforehand is not another session's work to preserve -- it is the
+// state this very invocation was asked to supersede, and putting it back leaves
+// the repository reporting as pending the bytes safegit has just reported as
+// committed.
 //
-// A SLOT the index really holds for an operation path is replayed like any
-// other, deliberately. There the operator staged one blob and the commit
-// recorded another, both of them real, and choosing between them is not the
-// reconciler's to do: the path stays tracked, `git diff HEAD` is empty, and
-// `safegit reset --mixed HEAD` drops the leftover entry. The absence of a slot
-// offers no such choice, which is why only the derivation is suppressed.
+// Both halves of that have produced such a report. An archiving deletion tool
+// runs `git rm --cached` on a tracked file it has taken away, and a new file is
+// then written at the same path and committed: replaying the DERIVED removal
+// deletes from the index the very bytes the commit recorded, so git reports the
+// path as untracked and pending, and the next `git commit -a` would delete it
+// for real. And `git mv old new` stages a rename before the file is edited in
+// place: replaying that SLOT puts the pre-edit blob back over the edited one
+// the commit recorded, so git reports `MM new`, and nothing the caller types
+// repairs it -- the tree of HEAD is already right, so committing the path again
+// is refused as nothing to commit.
+//
+// An UNMERGED operation path cannot arise. Every caller that passes operation
+// paths refuses the commit outright when the shared index carries unmerged
+// entries, and the conclusions that do commit an unmerged index pass none.
 //
 // The whole delta is replayed in ONE `git update-index --index-info` batch.
 // Within that batch an unmerged path is preceded by a zero-mode removal line,
@@ -139,9 +145,10 @@ func afterTreeishName(treeish string) string {
 // `git update-index --index-info` input: the lines that, applied to an index
 // freshly read from any tree, put the delta back.
 //
-// owned holds the paths the operation staged itself. It suppresses the DERIVED
-// removal lines only -- see ReconcileMainIndex for why a slot the index really
-// holds is replayed for an owned path just like any other.
+// owned holds the paths the operation staged itself. Nothing is emitted for
+// such a path, in either direction: neither the slot the index holds for it nor
+// the removal derived from the tip's side. The tree the sync reads is the
+// operation's own answer for it -- see ReconcileMainIndex.
 //
 // The slots arrive in git's own index order (sorted by path, then stage), and
 // the output preserves it, with the staged deletions -- which have no slot to
@@ -159,6 +166,13 @@ func indexReplayBatch(slots []indexSlot, tip map[string]treeEntry, owned map[str
 
 	var lines []string
 	for _, path := range order {
+		if _, mine := owned[path]; mine {
+			// The operation staged this path itself, so the tree just read
+			// already holds what it recorded there. Replaying the slot the
+			// index held would put the superseded state back over it -- the
+			// pre-edit blob of a `git mv` the same commit carried, for one.
+			continue
+		}
 		group := byPath[path]
 		if len(group) == 1 && group[0].Stage == 0 {
 			// A resolved path the tip already explains is not delta: the
@@ -186,11 +200,9 @@ func indexReplayBatch(slots []indexSlot, tip map[string]treeEntry, owned map[str
 	var deleted []string
 	for path := range tip {
 		if _, mine := owned[path]; mine {
-			// The operation staged this path itself. There is no slot here to
-			// preserve -- only the absence of one -- and the tree just read is
-			// the operation's own answer for the path, so deriving a removal
-			// from the tip would delete from the index what the operation just
-			// put in it.
+			// The operation staged this path itself, so the tree just read is
+			// its own answer for it: deriving a removal from the tip would
+			// delete from the index what the operation just put in it.
 			continue
 		}
 		if _, ok := byPath[path]; !ok {
