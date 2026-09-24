@@ -8,7 +8,7 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// FINDING 1 (second-campaign adversarial review): the one-JSON-document promise
+// The one-JSON-document promise
 // is broken on the six guarded commands that hand git to the effects handle with
 // strictcli.Stream(true) -- checkout, merge, rebase, reset, bisect and pull.
 // Stream(true) wires the child's stdout to os.Stdout unconditionally, so git's

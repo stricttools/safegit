@@ -13,8 +13,7 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// FINDING 3 (second-campaign adversarial review), under the all-seven ruling:
-// six more commands change the world without leaving a single machine-readable
+// Six more commands change the world without leaving a single machine-readable
 // trace. Every one of them performs its mutation outside the effects handle --
 // a bare os.Remove, a direct git.Run, a dry-run branch that prints a sentence
 // and returns -- so `--json` answers preview:[] whether the run previewed the

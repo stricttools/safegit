@@ -516,7 +516,7 @@ func TestQueuedContinuePassthroughNamesGitInstead(t *testing.T) {
 // What a mid-rebase `safegit rebase --continue` gets today is the working-tree
 // guard's refusal, which names `git rebase --continue` -- pre-existing
 // behavior, and the reason this test asserts the message rather than success:
-// the rebase conclusion is a declared non-goal of this campaign, and the only
+// the rebase conclusion is a declared non-goal of safegit, and the only
 // property being pinned is that safegit does not start claiming it.
 func TestRebaseContinuePassthroughStillNamesGit(t *testing.T) {
 	dir := newRepo(t)

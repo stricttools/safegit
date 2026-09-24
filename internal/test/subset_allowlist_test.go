@@ -304,7 +304,7 @@ func TestRebaseRefusesTheApplyBackendAndItsOptions(t *testing.T) {
 }
 
 // TestRebasePassesAnAllowedForm is the control: an upstream, which is the door
-// the campaign deliberately keeps open.
+// the allowlist deliberately keeps open.
 func TestRebasePassesAnAllowedForm(t *testing.T) {
 	dir, _, _ := newPickableRepo(t)
 	if _, stderr, code := runSafegit(t, dir, "rebase", "side"); code != 0 {

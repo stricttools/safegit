@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Capture the campaign test baseline as a deterministic artifact.
+# Capture the test baseline as a deterministic artifact.
 #
 # The artifact records whatever the suite reports -- passes, failures and skips
 # alike -- and says nothing about which of those is expected. Refactors that are
@@ -90,7 +90,7 @@ guard_build_failures "$integration_json"
 guard_build_failures "$unit_json"
 
 baseline="$(
-	echo "# safegit campaign test baseline"
+	echo "# safegit test baseline"
 	echo "# integration: $integration_cmd"
 	echo "# unit: $unit_cmd"
 	echo "# git HEAD: $(git rev-parse HEAD)"

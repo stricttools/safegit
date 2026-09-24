@@ -99,7 +99,7 @@ func TestCommitSymlink_LinkToCommittedFile(t *testing.T) {
 
 // TestCommitSymlinkOutsideTargetIsCommittedWhenElected: a symlink whose target
 // leaves the repository is REFUSED (see
-// TestWave2CommitNonPortableSymlinkIsRefused) -- the object it would write is a
+// TestCommitNonPortableSymlinkIsRefused) -- the object it would write is a
 // reference to a place only this machine has. --allow-non-portable-targets is
 // the election, and it restores the one-line notice the refusal replaced: the
 // link text is what gets recorded, and it resolves to nothing in another

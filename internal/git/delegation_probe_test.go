@@ -134,11 +134,11 @@ func TestRevertContinueHonorsASubstitutedIndexFile(t *testing.T) {
 }
 
 // TestRebaseContinueHonorsASubstitutedIndexFile records the feasibility fact
-// for the rebase conclusion this campaign deliberately does not build: whether
+// for the rebase conclusion safegit deliberately does not build: whether
 // `git rebase --continue` can be pointed at an index copy the same way the
 // sequencer verbs can.
 //
-// Nothing in the campaign depends on the answer. It is probed here so that
+// Nothing in safegit depends on the answer. It is probed here so that
 // whoever picks up the rebase extension starts from an assertion instead of an
 // assumption.
 func TestRebaseContinueHonorsASubstitutedIndexFile(t *testing.T) {

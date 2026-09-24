@@ -5,11 +5,10 @@ import (
 	"testing"
 )
 
-// FINDING 4 (second-campaign adversarial review), ruled to ride the new plan:
-// the move-record grammar reserves three origin keywords.
+// The move-record grammar reserves three origin keywords.
 //
-// A record's value is `<id> <old> -> <new>` today, and the plan adds an ORIGIN
-// token to it: how the claim was established -- observed, declared, derived.
+// A record's value is `<id> <old> -> <new>` today, and an ORIGIN token is
+// reserved for it: how the claim was established -- observed, declared, derived.
 // That token goes in the slot immediately after the id, which is exactly where
 // a bare path token can also stand today. So the three words have to be
 // reserved BEFORE the slot exists, and reserved rather than guessed at:

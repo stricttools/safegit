@@ -403,7 +403,7 @@ func refuseEmptyRevert(cleanup cleanEmptyParkOutcome) int {
 //     a rebase): git's --continue is the right command, and the operator runs it
 //     THEMSELVES. safegit will not run it for them, because the commits it makes
 //     are git's and a safegit command that produced them would be the second
-//     authorship class this campaign deleted.
+//     authorship class safegit refuses to have.
 //
 // The dirty-tree guard already gives the first refusal most of the time, because
 // a repository mid-merge is dirty by construction -- but not always: a merge

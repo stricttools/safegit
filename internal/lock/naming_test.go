@@ -186,7 +186,7 @@ func TestReleaseLeavesAReplacedLockAlone(t *testing.T) {
 	// os.SameFile answers "ours" about somebody else's live lock. Whether that
 	// happens is the filesystem's choice -- ext4 reuses, btrfs never does -- so
 	// the sibling test above can only exercise this hazard where the machine
-	// happens to reuse, and passed for a whole campaign on a machine that does
+	// happens to reuse, and passed for a long time on a machine that does
 	// not while failing the moment CI ran it on one that does.
 	//
 	// This test removes the luck: it hands releaseIfOurs a publication whose

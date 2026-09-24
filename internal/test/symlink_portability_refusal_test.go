@@ -32,10 +32,10 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// TestWave2CommitNonPortableSymlinkIsRefused: a symlink whose target leaves the
+// TestCommitNonPortableSymlinkIsRefused: a symlink whose target leaves the
 // repository must be refused, the refusal must name that target, and HEAD must
 // not move.
-func TestWave2CommitNonPortableSymlinkIsRefused(t *testing.T) {
+func TestCommitNonPortableSymlinkIsRefused(t *testing.T) {
 	dir := newRepo(t)
 
 	const target = "../elsewhere/secret.txt"
@@ -60,10 +60,10 @@ func TestWave2CommitNonPortableSymlinkIsRefused(t *testing.T) {
 	}
 }
 
-// TestWave2CommitPortableSymlinkStillCommits is the control: the rule is about
+// TestCommitPortableSymlinkStillCommits is the control: the rule is about
 // target texts that will not resolve elsewhere, so a relative symlink pointing
 // at an in-repository path must still commit, as the link object itself.
-func TestWave2CommitPortableSymlinkStillCommits(t *testing.T) {
+func TestCommitPortableSymlinkStillCommits(t *testing.T) {
 	dir := newRepo(t)
 
 	// seed.txt is created and committed by newRepo, so the target exists and

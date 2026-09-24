@@ -437,7 +437,7 @@ var resetSubset = argvSubset{
 
 // rebaseSubset is `safegit rebase`'s slice of `git rebase`.
 //
-// A rebase is the campaign's one declared exception: git performs the replay
+// A rebase is safegit's one declared exception: git performs the replay
 // and AUTHORS the replayed commits, uniformly. What the allowlist keeps is the
 // forms of that one door -- an upstream, a new base, the interactive session,
 // the autostash, the topology of the range being replayed, and git's own

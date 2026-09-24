@@ -7,7 +7,7 @@ import (
 	"github.com/smm-h/safegit/internal/testutil"
 )
 
-// FINDING 2 (second-campaign adversarial review): undo's effects record is
+// Undo's effects record is
 // empty in BOTH modes.
 //
 //   - `undo --json --dry-run` answers preview:[] while its human line promises
