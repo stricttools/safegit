@@ -499,7 +499,7 @@ func argvHas(args []string, subcommand, tok string) bool {
 }
 
 // WritesObjects reports whether an argv can change the object store. This is
-// the view Phase 3.1's object quarantine reads. An argv the table does not
+// the view the object quarantine reads. An argv the table does not
 // declare reports true: an unknown invocation is never assumed harmless.
 func WritesObjects(args []string) bool {
 	eff, err := EffectsOf(args)

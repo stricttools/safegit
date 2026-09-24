@@ -49,7 +49,7 @@ func unmergedCount(t *testing.T, indexPath string) int {
 	return len(entries)
 }
 
-// TestRevertContinueHonorsASubstitutedIndexFile is Phase 6.4's premise, probed
+// TestRevertContinueHonorsASubstitutedIndexFile is the revert-continue premise, probed
 // rather than assumed: a queued revert stopped on a conflict is finished by
 // `git revert --continue` reading safegit's own index copy.
 //

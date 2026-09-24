@@ -523,7 +523,7 @@ func TestRevertNoCommitRefusesOverAParkedPick(t *testing.T) {
 // safegit's own restructured merge parking deliberately, so it reaches the
 // restructured command's entry check rather than a passthrough. The pin exists
 // because the merge arm's other pins exercise only the PLAIN form, and the
-// enumeration is what this subphase changed.
+// enumeration is what decides the refusal.
 func TestMergeNoCommitRefusesOverAParkedRevert(t *testing.T) {
 	dir, _ := newParkedRevertRepo(t)
 	tip := testutil.Rev(t, dir, "HEAD")

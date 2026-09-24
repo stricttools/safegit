@@ -12,8 +12,8 @@ import (
 	"github.com/smm-h/safegit/internal/repo"
 )
 
-// TestDoctorCheckRegistryIsWellFormed pins the registry's own rules, so a later
-// subphase that adds a check gets told immediately when its entry is
+// TestDoctorCheckRegistryIsWellFormed pins the registry's own rules, so a
+// change that adds a check gets told immediately when its entry is
 // malformed rather than producing a silently mis-reported finding.
 func TestDoctorCheckRegistryIsWellFormed(t *testing.T) {
 	if len(doctorChecks) == 0 {

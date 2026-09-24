@@ -35,7 +35,7 @@ import (
 // triggered by membership in it, and the parser refuses a bare member where a
 // path token is expected.
 //
-// SANCTIONED AND DONE (plan subphase 6.4): the origin-token work made
+// SANCTIONED AND DONE: the origin-token work made
 // `observed` VALID in the post-id slot, so the `keyword before a pair` subtest
 // below now expects a RECORD for it and a refusal for the other two. The rest
 // of the reservation is untouched: `declared` and `derived` are refused exactly

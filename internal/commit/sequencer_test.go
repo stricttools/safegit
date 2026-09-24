@@ -110,7 +110,7 @@ func TestPipelineRefusesEveryEntryPointMidMerge(t *testing.T) {
 	commitLandsOnBranch(t, "refs/heads/main", tip)
 }
 
-// The declared context is the seam Phase 6's conclusion commands commit
+// The declared context is the seam the sequencer conclusion commands commit
 // through: with it, the same request the pipeline just refused runs.
 func TestPipelineHonorsADeclaredSequencerContext(t *testing.T) {
 	sgDir, tip := conflictedMergeRepo(t)

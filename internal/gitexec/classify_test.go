@@ -165,7 +165,7 @@ func TestConditionalTokenNeverMatchesTheVerbItself(t *testing.T) {
 	}
 }
 
-// TestWritesObjectsView is the view Phase 3.1's object quarantine reads.
+// TestWritesObjectsView is the view the object quarantine reads.
 func TestWritesObjectsView(t *testing.T) {
 	writes := [][]string{
 		{"hash-object", "-w", "--stdin"},
@@ -207,7 +207,7 @@ func TestUnknownArgvIsNeverAssumedHarmless(t *testing.T) {
 	}
 }
 
-// TestObserveOnlyView is the view Phase 3.3's observe allowlist reads.
+// TestObserveOnlyView is the view the observe allowlist reads.
 func TestObserveOnlyView(t *testing.T) {
 	for _, argv := range [][]string{
 		{"status", "--porcelain"},

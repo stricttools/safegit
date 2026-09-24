@@ -30,13 +30,13 @@
 // written as a literal. A signal exit says nothing about what the command was
 // doing: it says the process was ended from outside, with its locks released.
 //
-// # Standing rule for the redesign campaign
+// # Standing rule for new exit codes
 //
-// Every later campaign phase that introduces a new hard error registers its
-// exit code HERE, in the same subphase that introduces it -- a new constant
-// with a doc comment saying what the code means and which commands produce it,
-// plus its row in All(). A phase that ships a new refusal without its registry
-// entry is incomplete. exitcode_test.go enforces the half of this that a test
+// Every change that introduces a new hard error registers its exit code HERE,
+// in the same change that introduces it -- a new constant with a doc comment
+// saying what the code means and which commands produce it, plus its row in
+// All(). A change that ships a new refusal without its registry entry is
+// incomplete. exitcode_test.go enforces the half of this that a test
 // can see: a constant declared and left out of All() (or the reverse) fails.
 // The documentation table in docs/commands-guide.md is generated from All() by
 // `scripts/gen-exit-table`, so it cannot drift from the registry.

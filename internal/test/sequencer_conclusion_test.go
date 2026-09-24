@@ -559,8 +559,8 @@ func TestEmptyPickConclusionIsRefused(t *testing.T) {
 	}
 }
 
-// TestConclusionLeavesNoSequencerResidue is the guarantee the whole subphase
-// exists for: after ANY conclusion, none of git's operation state survives AND
+// TestConclusionLeavesNoSequencerResidue is the guarantee the conclusion
+// commands exist for: after ANY conclusion, none of git's operation state survives AND
 // an ordinary `safegit commit` works again. A leftover state file is not
 // cosmetic -- it makes every later commit refuse.
 func TestConclusionLeavesNoSequencerResidue(t *testing.T) {

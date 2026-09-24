@@ -159,7 +159,7 @@ func lsTreeNames(t *testing.T, dir string) map[string]bool {
 	return names
 }
 
-// Phase 0.4: Commit a new file in the parent while a submodule exists.
+// Commit a new file in the parent while a submodule exists.
 // Verify the file appears in HEAD tree and the submodule gitlink entry SHA is unchanged.
 func TestSubmoduleParentFiles(t *testing.T) {
 	parentDir, _ := newRepoWithSubmodule(t)
@@ -192,7 +192,7 @@ func TestSubmoduleParentFiles(t *testing.T) {
 	}
 }
 
-// Phase 0.5: Make a commit inside the submodule, then use safegit to commit
+// Make a commit inside the submodule, then use safegit to commit
 // the submodule pointer update in the parent.
 // Verify git ls-tree HEAD mysub shows the new SHA.
 func TestSubmodulePointerBump(t *testing.T) {
@@ -255,7 +255,7 @@ func TestSubmodulePointerBump(t *testing.T) {
 	}
 }
 
-// Phase 0.6: One concurrent safegit bumps the submodule pointer while another
+// One concurrent safegit bumps the submodule pointer while another
 // commits a parent file. Verify both land, pointer is correct, total commits = 4.
 func TestSubmoduleConcurrentBump(t *testing.T) {
 	parentDir, _ := newRepoWithSubmodule(t)
@@ -345,7 +345,7 @@ func TestSubmoduleConcurrentBump(t *testing.T) {
 
 var submoduleEnv = []string{"CLAUDE_CODE_SESSION_ID=submodule-test"}
 
-// Phase 1.4: Scrub a file in the parent repo while a submodule exists.
+// Scrub a file in the parent repo while a submodule exists.
 // Verify the submodule gitlink SHA is identical before and after scrub.
 func TestScrubFilePreservesGitlink(t *testing.T) {
 	parentDir, _ := newRepoWithSubmodule(t)
@@ -395,7 +395,7 @@ func TestScrubFilePreservesGitlink(t *testing.T) {
 	}
 }
 
-// Phase 1.5: Scrub match in the parent repo while a submodule exists.
+// Scrub match in the parent repo while a submodule exists.
 // Verify the submodule gitlink SHA is identical before and after, and the
 // file content is replaced.
 func TestScrubMatchPreservesGitlink(t *testing.T) {
@@ -449,7 +449,7 @@ func TestScrubMatchPreservesGitlink(t *testing.T) {
 	}
 }
 
-// Phase 1.6: Attempt to scrub a path that starts with a gitlink (mysub/somefile.txt).
+// Attempt to scrub a path that starts with a gitlink (mysub/somefile.txt).
 // The operation should either no-op cleanly (exit 0, no changes) or error meaningfully.
 // It must not crash or corrupt the tree.
 func TestScrubFileGitlinkPath(t *testing.T) {
@@ -528,7 +528,7 @@ func TestScrubFileGitlinkPath(t *testing.T) {
 	}
 }
 
-// Phase 0.7: Two concurrent safegit commits adding different files to the parent
+// Two concurrent safegit commits adding different files to the parent
 // while submodule exists. Verify both files in tree, submodule entry unchanged,
 // total commits = 4.
 func TestSubmoduleConcurrentParent(t *testing.T) {
@@ -621,7 +621,7 @@ func prepSubmoduleForCommit(t *testing.T, parentDir string) string {
 	return subDir
 }
 
-// Phase 0.8: Commit a new file inside the submodule using safegit.
+// Commit a new file inside the submodule using safegit.
 // Verify the commit lands on the submodule's branch and the parent is unaffected.
 func TestSubmoduleCommitInside(t *testing.T) {
 	parentDir, _ := newRepoWithSubmodule(t)
@@ -665,7 +665,7 @@ func TestSubmoduleCommitInside(t *testing.T) {
 	}
 }
 
-// Phase 0.9: safegit commit should refuse to operate in a detached HEAD state.
+// safegit commit should refuse to operate in a detached HEAD state.
 // Submodules are often in detached HEAD after checkout; this documents that
 // safegit commit does not support detached HEAD.
 func TestSubmoduleCommitDetachedHead(t *testing.T) {
@@ -708,7 +708,7 @@ func TestSubmoduleCommitDetachedHead(t *testing.T) {
 	}
 }
 
-// Phase 0.10: Undo inside a submodule reverts the submodule HEAD to the
+// Undo inside a submodule reverts the submodule HEAD to the
 // pre-commit SHA. The parent repo's recorded pointer to the submodule is
 // unchanged (undo only touches the submodule's own refs).
 func TestSubmoduleUndo(t *testing.T) {
@@ -752,7 +752,7 @@ func TestSubmoduleUndo(t *testing.T) {
 	}
 }
 
-// Phase 0.12: Concurrent safegit commits in the parent and submodule should
+// Concurrent safegit commits in the parent and submodule should
 // not block each other. Their .git directories are separate, so lock files
 // are independent.
 func TestSubmoduleLockIsolation(t *testing.T) {
@@ -809,7 +809,7 @@ func TestSubmoduleLockIsolation(t *testing.T) {
 	}
 }
 
-// Phase 2.4: Doctor --fix cleans up orphan tmp dirs and stale locks inside
+// Doctor --fix cleans up orphan tmp dirs and stale locks inside
 // submodule safegit directories.
 func TestDoctorCleansSubmoduleState(t *testing.T) {
 	parentDir, _ := newRepoWithSubmodule(t)
@@ -901,7 +901,7 @@ func TestDoctorCleansSubmoduleState(t *testing.T) {
 	}
 }
 
-// Phase 0.1: Doctor --fix --dry-run reports stale locks inside submodule
+// Doctor --fix --dry-run reports stale locks inside submodule
 // safegit directories without removing them.
 func TestDoctorDryRunReportsSubmodules(t *testing.T) {
 	parentDir, _ := newRepoWithSubmodule(t)
@@ -979,7 +979,7 @@ func TestDoctorDryRunReportsSubmodules(t *testing.T) {
 	}
 }
 
-// Phase 0.13: Amending a commit in the parent preserves the submodule's
+// Amending a commit in the parent preserves the submodule's
 // gitlink entry. The recorded submodule SHA must not change when only a
 // regular file is amended.
 func TestSubmoduleAmendPreservesGitlink(t *testing.T) {
@@ -1026,7 +1026,7 @@ func TestSubmoduleAmendPreservesGitlink(t *testing.T) {
 	}
 }
 
-// Phase 3.3: Push from a submodule should run parent's pre-pre-push hooks first.
+// Push from a submodule should run parent's pre-pre-push hooks first.
 // Install a hook in the parent that writes a marker file, push from the submodule,
 // verify the marker exists.
 func TestPushHookCascadeFromParent(t *testing.T) {
@@ -1088,7 +1088,7 @@ func TestPushHookCascadeFromParent(t *testing.T) {
 	}
 }
 
-// Phase 3.4: Parent hook failure should block submodule push with exit code 20.
+// Parent hook failure should block submodule push with exit code 20.
 func TestPushHookCascadeRejectsOnParentHookFailure(t *testing.T) {
 	parentDir, _ := newRepoWithSubmodule(t)
 	subDir := prepSubmoduleForCommit(t, parentDir)
@@ -1164,7 +1164,7 @@ func TestPushHookCascadeRejectsOnParentHookFailure(t *testing.T) {
 	}
 }
 
-// --- Phase 4: Scrub auto-recurse into submodules ---
+// --- Scrub auto-recurse into submodules ---
 
 // newRepoWithSubmoduleSecret creates a parent repo with a submodule that has
 // a file containing a secret. The submodule is on the "main" branch (not
@@ -1362,7 +1362,7 @@ func newRepoWithTwoSubmoduleSecrets(t *testing.T, secret, filename string) (pare
 	return parentDir, sub1Dir, sub2Dir
 }
 
-// Phase 4.9: scrub match auto-recurses into a submodule, replacing the secret
+// scrub match auto-recurses into a submodule, replacing the secret
 // in the submodule's history and updating the parent's gitlink pointer.
 func TestScrubMatchRecursesIntoSubmodule(t *testing.T) {
 	parentDir, _, subDir := newRepoWithSubmoduleSecret(t, "TOPSECRET_ABC123", "secret.txt")
@@ -1403,7 +1403,7 @@ func TestScrubMatchRecursesIntoSubmodule(t *testing.T) {
 	}
 }
 
-// Phase 4.10: scrub match replaces secrets in both parent and submodule.
+// scrub match replaces secrets in both parent and submodule.
 func TestScrubMatchBothParentAndSubmodule(t *testing.T) {
 	parentDir, _, subDir := newRepoWithSubmoduleSecret(t, "TOPSECRET_XYZ789", "secret.txt")
 
@@ -1472,7 +1472,7 @@ func TestScrubMatchBothParentAndSubmodule(t *testing.T) {
 	}
 }
 
-// Phase 4.11: scrub match with two submodules scrubs both.
+// scrub match with two submodules scrubs both.
 func TestScrubMatchTwoSubmodules(t *testing.T) {
 	parentDir, sub1Dir, sub2Dir := newRepoWithTwoSubmoduleSecrets(t, "TOPSECRET_MULTI", "secret.txt")
 
@@ -1521,7 +1521,7 @@ func TestScrubMatchTwoSubmodules(t *testing.T) {
 	}
 }
 
-// Phase 4.12: scrub file with a path inside a submodule rewrites the submodule
+// scrub file with a path inside a submodule rewrites the submodule
 // history and updates the parent gitlink.
 func TestScrubFileInSubmodule(t *testing.T) {
 	parentDir, _, subDir := newRepoWithSubmoduleSecret(t, "SENSITIVE_DATA_HERE", "secret.txt")
@@ -1593,7 +1593,7 @@ func TestScrubFileInSubmodule(t *testing.T) {
 	}
 }
 
-// Phase 4.13: scrub match with --scope limits scrub to specific submodule paths.
+// scrub match with --scope limits scrub to specific submodule paths.
 func TestScrubMatchScopeSubmodule(t *testing.T) {
 	parentDir, sub1Dir, sub2Dir := newRepoWithTwoSubmoduleSecrets(t, "SECRET_SCOPED", "secret.txt")
 
@@ -1658,7 +1658,7 @@ func TestScrubMatchScopeSubmodule(t *testing.T) {
 	}
 }
 
-// Phase 4.15: scrub match --dry-run reports submodule findings without changing anything.
+// scrub match --dry-run reports submodule findings without changing anything.
 func TestScrubMatchDryRunWithSubmodules(t *testing.T) {
 	parentDir, _, _ := newRepoWithSubmoduleSecret(t, "SECRET_DRYRUN", "secret.txt")
 
@@ -1697,7 +1697,7 @@ func TestScrubMatchDryRunWithSubmodules(t *testing.T) {
 	}
 }
 
-// --- Phase 5: Auto-bump integration tests ---
+// --- Auto-bump integration tests ---
 
 // enableAutoBump sets commit.autoBumpParent=true in the parent repo.
 func enableAutoBump(t *testing.T, parentDir string) {
@@ -2282,7 +2282,7 @@ func TestAutoBumpNoopWhenCurrent(t *testing.T) {
 	}
 }
 
-// Phase 4.16: scrub match with a pattern that appears only in a binary blob
+// scrub match with a pattern that appears only in a binary blob
 // inside a submodule. Binary blobs are skipped, so the submodule should remain
 // unchanged and the operation should succeed cleanly.
 func TestScrubMatchPartialFailure(t *testing.T) {
