@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/smm-h/safegit/internal/testutil"
-	"github.com/smm-h/stricttest/go/hygiene"
+	"github.com/stricttools/testisolation/go/hygiene"
 )
 
 // safegitBin is the path to the built safegit binary, set in TestMain.
@@ -128,7 +128,7 @@ func newRepo(t *testing.T) string {
 	return dir
 }
 
-// isolate binds stricttest's environment floor for this test process: a
+// isolate binds testisolation's environment floor for this test process: a
 // throwaway HOME and XDG tree, an empty git global/system config with a
 // throwaway identity, transports locked to file://, and every ambient
 // credential variable stripped. controlledEnv already builds a deliberate

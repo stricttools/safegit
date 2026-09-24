@@ -12,10 +12,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/smm-h/stricttest/go/hygiene"
+	"github.com/stricttools/testisolation/go/hygiene"
 )
 
-// isolate binds stricttest's environment floor for the duration of t: a
+// isolate binds testisolation's environment floor for the duration of t: a
 // throwaway HOME and XDG tree, an empty git global/system config with a
 // throwaway identity, transports locked to file://, and every ambient
 // credential variable stripped. Every repo constructor in this package calls

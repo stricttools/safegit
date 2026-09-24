@@ -7,4 +7,4 @@ require (
 	github.com/smm-h/strictcli/go v0.34.0
 )
 
-require github.com/smm-h/stricttest/go v0.2.0
+require github.com/stricttools/testisolation/go v0.3.0

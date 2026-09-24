@@ -102,7 +102,7 @@ func TestRunSafegitEnvUsesOnlyExplicitOverrides(t *testing.T) {
 	}
 }
 
-// TestFloorIsBoundInThisProcess pins that stricttest's environment floor is
+// TestFloorIsBoundInThisProcess pins that testisolation's environment floor is
 // actually in effect for the TEST process, not only for the safegit processes
 // it spawns. Before the floor was adopted, the test process inherited the
 // developer's HOME, git config and credentials wholesale, so a direct `git`

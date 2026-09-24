@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/smm-h/strictcli/go/strictcli"
-	"github.com/smm-h/stricttest/go/hygiene"
+	"github.com/stricttools/testisolation/go/hygiene"
 )
 
 // This file pins safegit's CLI surface: every command's strictcli effect
