@@ -110,13 +110,51 @@ jobs:
             # numeric id as tiebreak for retries within the same second) BEFORE the
             # pending / not-success logic runs. This way the newest run decides: still
             # running -> wait; genuinely red -> hard fail.
+            # Recency alone cannot decide a SKIP, though. A `run_all` router dispatch
+            # deliberately puts two check runs of the same name on one commit: "skipped"
+            # from the push-triggered suite whose paths filter found nothing, and a real
+            # conclusion from the dispatched suite. The push suite stamps its skip only
+            # when its `detect` job finally releases the job, routinely AFTER the
+            # dispatched run concluded -- so the latest-per-name run is the skip, and a
+            # commit whose jobs all ran would be refused. When the latest check for a
+            # name is skipped it is therefore replaced by the latest COMPLETED
+            # non-skipped check of that same name, in whichever suite: success passes,
+            # failure fails, and a name that is only ever skipped still blocks.
+            # Then one more collapse, for the one case a per-name grouping cannot see:
+            # GitHub does not expand a matrix for a job its `if` skipped, so the whole job
+            # becomes ONE check run under the unsuffixed name ("cli-ci / test"), while the
+            # run that actually executes it emits one per leg ("cli-ci / test (3.12)").
+            # They never share a name, so the skip would outlive the run that answered it
+            # -- exactly the state a `run_all` router dispatch leaves behind. A skipped
+            # check is dropped when a COMPLETED, non-skipped check for the SAME job (its
+            # matrix expansion, by name) exists; the legs are then judged on their own
+            # conclusions, so a red leg still fails. Nothing else covers a skip: not a
+            # sibling job, not a merely prefix-sharing name, and not a leg that was
+            # itself skipped.
+            # Mirrors rlsbl.ci_checks.latest_check_runs -- the two gates answer the same
+            # question and must never diverge.
             runs="$(jq -s --arg re "$CI_CHECK_REGEX" --arg run_id "$GITHUB_RUN_ID" '
               [ .[].check_runs[]
                 | select(.name | test($re))
                 | select((.details_url // "") | contains("/actions/runs/" + $run_id + "/") | not)
                 | {name, status, conclusion, id, started_at} ]
               | group_by(.name)
-              | map(sort_by(.started_at, .id) | last)' <<< "$resp")"
+              | map(
+                  . as $g
+                  | ($g | sort_by(.started_at, .id) | last) as $newest
+                  | (if $newest.conclusion == "skipped"
+                     then ([ $g[] | select(.status == "completed" and .conclusion != "skipped") ]
+                           | sort_by(.started_at, .id) | last // $newest)
+                     else $newest end))
+              | . as $latest
+              | map(. as $c
+                  | select(
+                      $c.conclusion != "skipped"
+                      or ([ $latest[]
+                            | select((.name | startswith($c.name + " ("))
+                                     and .status == "completed"
+                                     and .conclusion != "skipped") ]
+                          | length) == 0))' <<< "$resp")"
             total="$(jq 'length' <<< "$runs")"
 
             if [ "$total" -eq 0 ]; then
@@ -191,9 +229,6 @@ jobs:
         run: |
           GITLEAKS_VERSION=8.24.3
           curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar xz -C /usr/local/bin gitleaks
-      - name: Scan source for secrets
-        run: |
-          gitleaks dir .
       - name: Check if already published
         id: check-go
         run: |
@@ -224,18 +259,47 @@ jobs:
           # Strip any "<name>@" / "<path>/" prefix: keep the trailing vX.Y.Z[-pre].
           BARE=$(printf '%s' "${RELEASE_TAG}" | sed -E 's/^.*(v[0-9]+\.[0-9]+\.[0-9]+.*)$/\1/')
           echo "tag=${BARE}" >> "$GITHUB_OUTPUT"
+          # goreleaser reads GORELEASER_CURRENT_TAG's tag contents while getting
+          # git state, BEFORE --skip=validate can excuse anything, so a name no
+          # tag carries aborts the run: `couldn't get tag contents: unexpected
+          # git tag output for "v0.2.4": ""`. A monorepo repository carries only
+          # the prefixed tags, so create the bare one locally at the released
+          # commit. It is a lightweight tag (an annotated one needs a tagger
+          # identity no CI checkout sets) and nothing pushes it: goreleaser runs
+          # --skip=publish, and the upload step below attaches the archives to
+          # the prefixed tag. In a repository whose tags are already bare this
+          # is a no-op.
+          if ! git rev-parse -q --verify "refs/tags/${BARE}" >/dev/null; then
+            git tag "${BARE}" "$(git rev-parse HEAD)"
+          fi
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-      - uses: goreleaser/goreleaser-action@v7
+      - uses: goreleaser/goreleaser-action@v7.2.3
         if: steps.check-go.outputs.skip != 'true'
         with:
-          version: ~> v2
+          # Pinned exactly, from rlsbl's action-version table. A floating
+          # "~> v2" silently adopts each new goreleaser on the next release:
+          # 2.18.1 arrived that way and broke every prefixed-tag repository.
+          version: v2.18.1
           args: release --clean --skip=publish,announce,validate
         env:
           # A prefixed tag is not parseable as semver, and validation would
           # compare the stripped tag against a git tag that does not exist.
           GORELEASER_CURRENT_TAG: ${{ steps.bare-tag.outputs.tag }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Scan artifacts for secrets
+        # Scoped to what goreleaser just built and is about to upload. A
+        # whole-tree scan flags files that never ship (fixtures, docs, sample
+        # configs, public identifiers) and has blocked a release mid-flight.
+        # gitleaks only auto-loads .gitleaks.toml from the directory it scans,
+        # so the project's allowlist is passed explicitly.
+        if: steps.check-go.outputs.skip != 'true'
+        run: |
+          CONFIG_ARGS=""
+          if [ -f .gitleaks.toml ]; then
+            CONFIG_ARGS="--config ${PWD}/.gitleaks.toml"
+          fi
+          gitleaks dir dist/ ${CONFIG_ARGS}
       - name: Upload release assets to the release tag
         if: steps.check-go.outputs.skip != 'true'
         run: |
@@ -264,13 +328,12 @@ jobs:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.tag || github.event.release.tag_name }}
-      - name: Install gitleaks
-        run: |
-          GITLEAKS_VERSION=8.24.3
-          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" | tar xz -C /usr/local/bin gitleaks
-      - name: Scan source for secrets
-        run: |
-          gitleaks dir .
+      # No secret scan here: build-push-action builds and pushes the image in
+      # one step, so there is no pre-publish artifact on disk to scan. The
+      # scan this workflow used to run was a whole-tree `gitleaks dir .`,
+      # which flags files that never ship and has blocked a release
+      # mid-flight. Artifact-scoped scanning is the rule; scanning the tree is
+      # not an acceptable stand-in.
       - name: Check if already published
         id: check-docker
         env:

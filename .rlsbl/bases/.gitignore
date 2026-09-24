@@ -11,6 +11,10 @@ target/
 .rlsbl-notes-*.tmp
 .rlsbl/lock
 .rlsbl-monorepo/lock
+.rlsbl/releases/in-progress.json
+.rlsbl/releases/scrub-result.json
+.rlsbl-monorepo/releasables/*/releases/in-progress.json
+.rlsbl-monorepo/releasables/*/releases/scrub-result.json
 .credentials.json
 .*-cache.json
 .env

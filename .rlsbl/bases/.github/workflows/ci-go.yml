@@ -18,7 +18,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      # go.mod: go 1.25.7
+      # setup-go reads go.mod's `toolchain` line first, then its `go` directive.
+      # Declare the development Go in `toolchain` (go mod edit -toolchain=goX.Y.Z)
+      # so CI tests with it; `go` stays the consumers' floor.
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
