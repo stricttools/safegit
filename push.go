@@ -310,9 +310,17 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 			fmt.Sprintf("SAFEGIT_HOOK_TIMEOUT_S=%d", timeoutSec),
 		}
 
-		hookResults, err = runHooksInterruptibly(ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
+		var sigExit int
+		hookResults, sigExit, err = runHooksInterruptibly(ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
 			return hooks.RunAll(hctx, hookPaths, hookStdin, timeoutSec, hookEnv)
 		})
+		if sigExit != 0 {
+			// Interrupted: nothing is pushed, the hook runs so far are
+			// recorded -- the interrupted one with no exit status -- and the
+			// signal's code is the verdict.
+			flags.payload(buildPushPayload(flags, remote, nil, forceFlag, pushIsAtomic(validated), hookResults, hooksSkipped))
+			return sigExit
+		}
 		if err != nil {
 			// safegit could not run a hook under containment. The runs before
 			// it are facts all the same, so the payload records them; the

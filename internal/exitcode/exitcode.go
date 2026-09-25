@@ -21,9 +21,10 @@
 // docs/commands-guide.md states the same split above the generated table.
 //
 // The second: a signal. When a SIGINT or a SIGTERM reaches a safegit process
-// that holds a lock or is running pre-pre-push hooks, internal/lock's handler
-// (after the running hook is stopped) releases the lock and exits
-// 128 + the signal number -- 130 for SIGINT, 143 for SIGTERM -- which is the
+// that holds a lock, internal/lock's handler releases the lock and exits
+// 128 + the signal number -- 130 for SIGINT, 143 for SIGTERM; when it reaches
+// `push` or `hook run` while pre-pre-push hooks run, the command stops the
+// running hook, emits its payload and exits the same number itself -- which is the
 // Unix shell convention every shell, supervisor and CI runner already reads
 // that way. Those numbers are the convention's, not safegit's, and registering
 // them would claim ownership of a number safegit does not choose; the exit-site

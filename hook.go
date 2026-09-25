@@ -168,7 +168,7 @@ func hookRun(flags globalFlags, name string) int {
 
 		outf(flags, "running hook: %s\n", name)
 		var r hooks.HookResult
-		_, rErr := runHooksInterruptibly(ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
+		ran, sigExit, rErr := runHooksInterruptibly(ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
 			var err error
 			r, err = hooks.RunSingle(hctx, hookPath, hookStdin, timeoutSec, hookEnv)
 			if err != nil {
@@ -176,6 +176,10 @@ func hookRun(flags globalFlags, name string) int {
 			}
 			return []hooks.HookResult{r}, nil
 		})
+		if sigExit != 0 {
+			flags.payload(hookRunPayload{Hooks: hookRecords(ran)})
+			return sigExit
+		}
 		if rErr != nil {
 			// safegit could not run the hook under containment, so there is no
 			// run to record; the payload still answers, with an empty list.
@@ -198,9 +202,15 @@ func hookRun(flags globalFlags, name string) int {
 	if dErr != nil {
 		return hookDiscoveryExit(dErr)
 	}
-	results, rErr := runHooksInterruptibly(ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
+	results, sigExit, rErr := runHooksInterruptibly(ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
 		return hooks.RunAll(hctx, hookPaths, hookStdin, timeoutSec, hookEnv)
 	})
+	if sigExit != 0 {
+		// Interrupted: the runs so far are recorded, the interrupted one
+		// with no exit status, and the signal's code is the verdict.
+		flags.payload(hookRunPayload{Hooks: hookRecords(results)})
+		return sigExit
+	}
 	if rErr != nil {
 		// safegit could not run a hook under containment. The runs before it
 		// are facts all the same, so the payload records them; the error text
@@ -262,10 +272,16 @@ func hookEnding(r hooks.HookResult) string {
 // to the signal's default, safegit would exit and the hook, and everything it
 // started, would keep running. Under the hold the signal cancels the run: the
 // running hook is stopped the same way the timeout stops it, and what it left
-// behind is swept. Then what it left is named on stderr and safegit exits
-// through the signal exit every command shares (128 + the signal number),
-// without a payload. It returns only when no signal arrived.
-func runHooksInterruptibly(ctx context.Context, run func(context.Context) ([]hooks.HookResult, error)) ([]hooks.HookResult, error) {
+// behind is swept; a second signal meanwhile is ignored.
+//
+// When a signal arrived, what the hooks left is named on stderr and the second
+// result is the signal exit every command shares (128 + the signal number).
+// The caller emits its payload -- every hook run so far, the interrupted one
+// with no exit status -- and returns that code, which the framework exits
+// with. The hold is deliberately never released then: a release would let the
+// signal handler exit the process before the payload is written. With no
+// signal, the second result is 0.
+func runHooksInterruptibly(ctx context.Context, run func(context.Context) ([]hooks.HookResult, error)) ([]hooks.HookResult, int, error) {
 	hctx, hold := lock.HoldInterrupts(ctx)
 	results, err := run(hctx)
 	if sig, interrupted := hold.Interrupted(); interrupted {
@@ -273,10 +289,10 @@ func runHooksInterruptibly(ctx context.Context, run func(context.Context) ([]hoo
 			printLeftovers(r)
 		}
 		fmt.Fprintf(os.Stderr, "error: interrupted (%v) while the pre-pre-push hooks ran; the running hook was stopped\n", sig)
-		lock.ExitOnSignal(sig)
+		return results, lock.SignalExitStatus(sig), err
 	}
 	hold.Release()
-	return results, err
+	return results, 0, err
 }
 
 // printLeftovers writes one error line to stderr per process a hook left
@@ -320,7 +336,8 @@ func hookRunsExit(results []hooks.HookResult) int {
 type hookRecord struct {
 	Name string `json:"name"`
 	// ExitCode is the hook's own exit status, and null when the hook has
-	// none: it could not be started, or the timeout killed it.
+	// none: it could not be started, or the timeout or an interruption
+	// killed it.
 	ExitCode *int `json:"exit_code"`
 	// StartError says why the hook could not be started at all, and is null
 	// for a hook that started.

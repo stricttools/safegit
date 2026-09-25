@@ -25,6 +25,10 @@ var (
 	stderr io.Writer = os.Stderr
 )
 
+// notices is where safegit's own lines about a hook run go -- stderr, beside
+// the hook's output, and never stdout, for the same reason.
+var notices io.Writer = os.Stderr
+
 // beforeStdoutRead runs in the reader just before it starts reading a hook's
 // stdout. It does nothing in production; a test replaces it to delay the
 // reader and prove that output is never lost to a slow reader.
@@ -283,6 +287,16 @@ const killGrace = 5 * time.Second
 // never trips it, so a slow reader loses nothing.
 const readGrace = time.Second
 
+// InterruptStopBudget is the longest an interruption's stop of a running hook
+// can take, derived from the graces the stop runs under rather than stated: the
+// hook's process group gets killGrace between SIGTERM and SIGKILL; the sweep
+// then gives the group's other members killGrace to act on that signal, and
+// every leftover it finds killGrace after SIGTERM and killGrace more to die of
+// SIGKILL; and the output still held after that gets readGrace.
+func InterruptStopBudget() time.Duration {
+	return 4*killGrace + readGrace
+}
+
 // runOne executes a single hook, forwarding its stdout and stderr to the
 // package-level writers, and enforces two rules on it.
 //
@@ -382,6 +396,10 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 	case <-ctx.Done():
 		// A cancellation -- safegit itself was interrupted -- stops the hook
 		// the same way the timeout does, and the sweep below stops what it left.
+		// The stop can take a while and a second interruption is ignored
+		// meanwhile, so the operator is told what is happening and for how long
+		// at most.
+		fmt.Fprintf(notices, "stopping hook %s and the processes it started; this can take up to %v\n", name, InterruptStopBudget())
 		stop()
 	}
 

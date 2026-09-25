@@ -65,6 +65,13 @@ func ExitOnSignal(sig os.Signal) {
 	os.Exit(signalExitStatus(sig))
 }
 
+// SignalExitStatus is the exit status ExitOnSignal ends the process with: 128 +
+// the signal number. It is for a section that ends the process through its own
+// exit path instead, so that it can still write its answer (see InterruptHold).
+func SignalExitStatus(sig os.Signal) int {
+	return signalExitStatus(sig)
+}
+
 var (
 	holdMu   sync.Mutex
 	holdCond = sync.NewCond(&holdMu)
@@ -76,7 +83,13 @@ var (
 // InterruptHold is a section of work that a SIGINT or SIGTERM must interrupt
 // rather than cut short: the signal cancels the section's context, and the
 // process does not exit until the section is released or ends the process
-// itself with ExitOnSignal.
+// itself. Any further signal meanwhile is ignored: the handler has already
+// taken the first one and is waiting on the section.
+//
+// A section ends the process itself either with ExitOnSignal or by returning
+// SignalExitStatus through the command's own exit path, which is how it writes
+// an answer first. It must then NOT release the hold: a release lets the
+// handler exit under it before the answer is written.
 //
 // It exists for work that starts processes the signal never reaches -- a
 // pre-pre-push hook runs in its own process group, so a terminal's Ctrl-C goes
@@ -109,7 +122,8 @@ func (h *InterruptHold) Interrupted() (os.Signal, bool) {
 }
 
 // Release ends the section. A signal that arrived meanwhile then ends the
-// process through the handler.
+// process through the handler, so a section that was interrupted and means to
+// end the process through its own exit path does not call it.
 func (h *InterruptHold) Release() {
 	holdMu.Lock()
 	delete(holds, h)
