@@ -1425,7 +1425,7 @@
     },
     "push": {
       "name": "push",
-      "help": "push refs to remote with pre-pre-push hooks and automatic retry. A hook that exits nonzero, times out, or leaves any process running when it ends aborts the push before any network contact, and every process it left is named on stderr; a hook's output, stdout included, goes to stderr, so it never mixes into safegit's own stdout",
+      "help": "push refs to remote with pre-pre-push hooks and automatic retry. A hook that exits nonzero, times out, or leaves any process running when it ends aborts the push before any network contact, and every process it left is named on stderr; a hook's output, stdout included, goes to stderr, so it never mixes into safegit's own stdout. The first hook that does not pass decides the exit code: 21 when it timed out, 20 otherwise. Under --json the payload's hooks list records every hook that ran, in run order -- name, exit_code, timed_out, duration_ms and leftover_processes (pid, command, killed) -- and a push a hook stopped still emits its payload, with refs empty and the hooks list up to the hook that stopped it; the exit code and stderr say which hook did not pass and why",
       "effect": "mutating",
       "payload_schema": {
         "additionalProperties": false,
@@ -1438,6 +1438,57 @@
           },
           "force_with_lease": {
             "type": "boolean"
+          },
+          "hooks": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "duration_ms": {
+                  "type": "integer"
+                },
+                "exit_code": {
+                  "type": "integer"
+                },
+                "leftover_processes": {
+                  "items": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "command": {
+                        "type": "string"
+                      },
+                      "killed": {
+                        "type": "boolean"
+                      },
+                      "pid": {
+                        "type": "integer"
+                      }
+                    },
+                    "required": [
+                      "pid",
+                      "command",
+                      "killed"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "timed_out": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "name",
+                "exit_code",
+                "timed_out",
+                "duration_ms",
+                "leftover_processes"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           },
           "pre_pre_push_hooks_run": {
             "type": "integer"
@@ -1494,6 +1545,7 @@
           "refs",
           "force_with_lease",
           "atomic",
+          "hooks",
           "pre_pre_push_hooks_run",
           "pre_pre_push_hooks_skipped",
           "dry_run"

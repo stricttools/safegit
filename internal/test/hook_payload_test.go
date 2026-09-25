@@ -1,0 +1,222 @@
+package test
+
+import (
+	"encoding/json"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/smm-h/safegit/internal/exitcode"
+)
+
+// The machine payload is the record of the hook runs: `push` carries a `hooks`
+// list on every run that ran hooks, passing or failing, and `hook run` carries
+// the same list. Each entry holds facts about one run -- its name, exit code,
+// whether it timed out, how long it took, and the processes it left behind.
+// Whether the run passed is carried by the exit code and the error text on
+// stderr, never by a payload field.
+
+// hookEntry is one element of a payload's `hooks` list.
+type hookEntry struct {
+	Name              *string          `json:"name"`
+	ExitCode          *int             `json:"exit_code"`
+	TimedOut          *bool            `json:"timed_out"`
+	DurationMS        *int64           `json:"duration_ms"`
+	LeftoverProcesses []leftoverRecord `json:"leftover_processes"`
+}
+
+type leftoverRecord struct {
+	PID     int    `json:"pid"`
+	Command string `json:"command"`
+	Killed  bool   `json:"killed"`
+}
+
+// hookEntryMembers is the closed set of members an entry may carry. A verdict
+// member (a status, a reason, a pass/fail flag) is refused by this set.
+var hookEntryMembers = map[string]bool{
+	"name": true, "exit_code": true, "timed_out": true, "duration_ms": true, "leftover_processes": true,
+}
+
+// payloadHooks decodes the `hooks` list out of a machine-mode run's payload and
+// checks every entry carries all of its members and nothing else.
+func payloadHooks(t *testing.T, stdout string) []hookEntry {
+	t.Helper()
+	raw := decodeEnvelope(t, stdout).Payload
+	if len(raw) == 0 || string(raw) == "null" {
+		t.Fatalf("the payload is null; a run that ran hooks must record them\nstdout: %s", stdout)
+	}
+	var generic struct {
+		Hooks []map[string]json.RawMessage `json:"hooks"`
+	}
+	if err := json.Unmarshal(raw, &generic); err != nil {
+		t.Fatalf("payload does not decode: %v\n%s", err, raw)
+	}
+	if generic.Hooks == nil {
+		t.Fatalf("the payload has no `hooks` list:\n%s", raw)
+	}
+	for i, e := range generic.Hooks {
+		for k := range e {
+			if !hookEntryMembers[k] {
+				t.Errorf("hooks[%d] carries %q, which is not a fact about the run; the verdict is the exit code:\n%s", i, k, raw)
+			}
+		}
+		for k := range hookEntryMembers {
+			if _, ok := e[k]; !ok {
+				t.Errorf("hooks[%d] lacks %q:\n%s", i, k, raw)
+			}
+		}
+		if lp, ok := e["leftover_processes"]; ok && string(lp) == "null" {
+			t.Errorf("hooks[%d].leftover_processes is null; it is a list, empty when nothing was left:\n%s", i, raw)
+		}
+	}
+	var typed struct {
+		Hooks []hookEntry `json:"hooks"`
+	}
+	if err := json.Unmarshal(raw, &typed); err != nil {
+		t.Fatalf("payload does not decode: %v\n%s", err, raw)
+	}
+	return typed.Hooks
+}
+
+// assertNoVerdictMember refuses a payload top-level member that states a
+// verdict about the run rather than a fact.
+func assertNoVerdictMember(t *testing.T, stdout string) {
+	t.Helper()
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(decodeEnvelope(t, stdout).Payload, &top); err != nil {
+		t.Fatalf("payload is not an object: %v", err)
+	}
+	for k := range top {
+		for _, bad := range []string{"status", "reason", "verdict", "failed", "passed", "error"} {
+			if strings.Contains(k, bad) {
+				t.Errorf("the payload carries %q, a verdict; the exit code carries it", k)
+			}
+		}
+	}
+}
+
+// checkEntry asserts one hook entry's facts.
+func checkEntry(t *testing.T, e hookEntry, name string, exitCode int, timedOut bool) {
+	t.Helper()
+	if e.Name == nil || *e.Name != name {
+		t.Errorf("entry name = %v, want %q", e.Name, name)
+	}
+	if e.ExitCode == nil || *e.ExitCode != exitCode {
+		t.Errorf("entry %s exit_code = %v, want %d", name, e.ExitCode, exitCode)
+	}
+	if e.TimedOut == nil || *e.TimedOut != timedOut {
+		t.Errorf("entry %s timed_out = %v, want %v", name, e.TimedOut, timedOut)
+	}
+	if e.DurationMS == nil || *e.DurationMS < 0 {
+		t.Errorf("entry %s duration_ms = %v, want a non-negative number", name, e.DurationMS)
+	}
+}
+
+// installDirHook writes an executable hook into the live store's
+// pre-pre-push.d directory, so hooks run in name order.
+func installDirHook(t *testing.T, dir, name, body string) {
+	t.Helper()
+	writeHookScript(t, filepath.Join(localHookDir(dir), "pre-pre-push.d", name), body)
+}
+
+func setHookTimeout(t *testing.T, dir, seconds string) {
+	t.Helper()
+	if _, stderr, code := runSafegit(t, dir, "config", "set", "hooks.preprepush.timeoutSeconds", seconds); code != 0 {
+		t.Fatalf("config set failed (code %d): %s", code, stderr)
+	}
+}
+
+func TestPushPayloadRecordsAPassingHook(t *testing.T) {
+	dir, _ := newRepoWithRemote(t)
+	installDirHook(t, dir, "10-lint", "true")
+
+	stdout, stderr, code := runSafegit(t, dir, "--json", "push", "--refs", "head", "origin")
+	if code != 0 {
+		t.Fatalf("push --json failed (code %d): %s", code, stderr)
+	}
+	hooks := payloadHooks(t, stdout)
+	if len(hooks) != 1 {
+		t.Fatalf("hooks = %d entries, want 1", len(hooks))
+	}
+	checkEntry(t, hooks[0], "10-lint", 0, false)
+	if len(hooks[0].LeftoverProcesses) != 0 {
+		t.Errorf("a hook that left nothing must record no leftover processes: %+v", hooks[0].LeftoverProcesses)
+	}
+	assertNoVerdictMember(t, stdout)
+}
+
+func TestPushPayloadRecordsNoHooksWhenNoneRan(t *testing.T) {
+	dir, _ := newRepoWithRemote(t)
+	installDirHook(t, dir, "10-lint", "true")
+
+	for _, args := range [][]string{
+		{"--json", "--dry-run", "push", "--refs", "head", "origin"},
+		{"--json", "push", "--refs", "head", "--no-pre-push-hook", "origin"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			stdout, stderr, code := runSafegit(t, dir, args...)
+			if code != 0 {
+				t.Fatalf("%v failed (code %d): %s", args, code, stderr)
+			}
+			if hooks := payloadHooks(t, stdout); len(hooks) != 0 {
+				t.Errorf("no hook ran, so the list must be empty: %+v", hooks)
+			}
+		})
+	}
+}
+
+func TestPushPayloadEmittedWhenAHookFails(t *testing.T) {
+	dir, remote := newRepoWithRemote(t)
+	installDirHook(t, dir, "10-lint", "true")
+	installDirHook(t, dir, "20-test", "exit 3")
+
+	stdout, stderr, code := runSafegit(t, dir, "--json", "push", "--refs", "head", "origin")
+	if code != exitcode.PushHookFailed {
+		t.Fatalf("exit = %d, want %d; stderr: %s", code, exitcode.PushHookFailed, stderr)
+	}
+	if !strings.Contains(stderr, "hook 20-test failed (exit 3)") {
+		t.Errorf("the verdict must be on stderr:\n%s", stderr)
+	}
+	hooks := payloadHooks(t, stdout)
+	if len(hooks) != 2 {
+		t.Fatalf("hooks = %d entries, want 2", len(hooks))
+	}
+	checkEntry(t, hooks[0], "10-lint", 0, false)
+	checkEntry(t, hooks[1], "20-test", 3, false)
+	assertNoVerdictMember(t, stdout)
+
+	var p struct {
+		Refs []json.RawMessage `json:"refs"`
+	}
+	if err := json.Unmarshal(decodeEnvelope(t, stdout).Payload, &p); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Refs) != 0 {
+		t.Errorf("nothing was pushed, so refs must be empty: %d entries", len(p.Refs))
+	}
+	if branches := remoteBranches(t, remote); len(branches) != 0 {
+		t.Errorf("a failed hook must push nothing; the remote has %v", branches)
+	}
+}
+
+func TestPushPayloadEmittedWhenAHookTimesOut(t *testing.T) {
+	dir, _ := newRepoWithRemote(t)
+	setHookTimeout(t, dir, "1")
+	installDirHook(t, dir, "10-lint", "exec sleep 30")
+
+	stdout, stderr, code := runSafegit(t, dir, "--json", "push", "--refs", "head", "origin")
+	if code != exitcode.PushHookTimeout {
+		t.Fatalf("exit = %d, want %d; stderr: %s", code, exitcode.PushHookTimeout, stderr)
+	}
+	hooks := payloadHooks(t, stdout)
+	if len(hooks) != 1 {
+		t.Fatalf("hooks = %d entries, want 1", len(hooks))
+	}
+	if hooks[0].TimedOut == nil || !*hooks[0].TimedOut {
+		t.Errorf("timed_out must be true: %+v", hooks[0])
+	}
+	if hooks[0].DurationMS == nil || *hooks[0].DurationMS < 1000 {
+		t.Errorf("duration_ms = %v, want at least the 1s budget", hooks[0].DurationMS)
+	}
+	assertNoVerdictMember(t, stdout)
+}

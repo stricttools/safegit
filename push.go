@@ -59,11 +59,16 @@ type pushPayloadRef struct {
 
 // pushPayload is what `push` puts in the envelope's payload.
 //
-// The hook members are the reason it exists. A dry run does NOT run the
-// pre-pre-push hooks -- a hook is an arbitrary script, so running one is a
-// mutation a preview may not perform -- and a machine consumer reading a
-// preview would otherwise have no way to tell "the hooks passed" from "the
-// hooks were never asked".
+// It is emitted on a push the pre-pre-push hooks stopped, too (exit 20 or 21):
+// `refs` is then empty, because nothing was pushed, and `hooks` records the
+// runs up to and including the one that stopped it. Which run stopped it, and
+// why, is the exit code's and stderr's to say; no member states a verdict.
+//
+// A dry run does NOT run the pre-pre-push hooks -- a hook is an arbitrary
+// script, so running one is a mutation a preview may not perform -- and a
+// machine consumer reading a preview would otherwise have no way to tell "the
+// hooks passed" from "the hooks were never asked". pre_pre_push_hooks_skipped
+// is what tells them apart.
 type pushPayload struct {
 	Remote string           `json:"remote"`
 	Refs   []pushPayloadRef `json:"refs"`
@@ -72,7 +77,11 @@ type pushPayload struct {
 	// Atomic reports that the push was all-or-nothing, which safegit turns on
 	// for every multi-ref push.
 	Atomic bool `json:"atomic"`
-	// PrePrePushHooksRun is how many pre-pre-push hooks actually ran.
+	// Hooks records every pre-pre-push hook that ran, in run order, and is
+	// empty when none ran.
+	Hooks []hookRecord `json:"hooks"`
+	// PrePrePushHooksRun is how many pre-pre-push hooks actually ran: always
+	// the length of Hooks.
 	PrePrePushHooksRun int `json:"pre_pre_push_hooks_run"`
 	// PrePrePushHooksSkipped says WHY none ran: "dry-run" when the run is a
 	// preview, "disabled" when --no-pre-push-hook was passed, and null when the
@@ -100,11 +109,12 @@ var pushPayloadSchema = strictcli.SchemaObject(
 		)),
 		"force_with_lease":           strictcli.SchemaType("boolean"),
 		"atomic":                     strictcli.SchemaType("boolean"),
+		"hooks":                      strictcli.SchemaArray(hookRecordSchema),
 		"pre_pre_push_hooks_run":     strictcli.SchemaType("integer"),
 		"pre_pre_push_hooks_skipped": strictcli.SchemaType("string", "null"),
 		"dry_run":                    strictcli.SchemaType("boolean"),
 	},
-	[]string{"remote", "refs", "force_with_lease", "atomic", "pre_pre_push_hooks_run", "pre_pre_push_hooks_skipped", "dry_run"},
+	[]string{"remote", "refs", "force_with_lease", "atomic", "hooks", "pre_pre_push_hooks_run", "pre_pre_push_hooks_skipped", "dry_run"},
 	false,
 )
 
@@ -116,7 +126,8 @@ var pushPayloadSchema = strictcli.SchemaObject(
 const hookSkipDryRun = "dry-run"
 
 // buildPushPayload renders what actually happened into the machine payload.
-func buildPushPayload(flags globalFlags, remote string, refs []pushRefInfo, force bool, hooksRun int, hooksSkipped *string) pushPayload {
+// refs is what was pushed: nil when the hooks stopped the push.
+func buildPushPayload(flags globalFlags, remote string, refs []pushRefInfo, force bool, hookResults []hooks.HookResult, hooksSkipped *string) pushPayload {
 	out := make([]pushPayloadRef, 0, len(refs))
 	for _, r := range refs {
 		entry := pushPayloadRef{LocalRef: r.LocalRef, LocalSHA: r.LocalSHA, RemoteRef: r.RemoteRef}
@@ -135,7 +146,8 @@ func buildPushPayload(flags globalFlags, remote string, refs []pushRefInfo, forc
 		Refs:                   out,
 		ForceWithLease:         force,
 		Atomic:                 pushIsAtomic(refs),
-		PrePrePushHooksRun:     hooksRun,
+		Hooks:                  hookRecords(hookResults),
+		PrePrePushHooksRun:     len(hookResults),
 		PrePrePushHooksSkipped: hooksSkipped,
 		DryRun:                 flags.dryRun,
 	}
@@ -306,23 +318,19 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 			return exitcode.General
 		}
 
-		// Check hook results
 		for _, hr := range hookResults {
 			if flags.verbose {
 				fmt.Fprintf(os.Stderr, "  hook %s: exit=%d (%v)\n", hr.Name, hr.ExitCode, hr.Duration)
 			}
 			printLeftovers(hr)
-			if hr.TimedOut {
-				fmt.Fprintf(os.Stderr, "hook %s timed out after %v\n", hr.Name, hr.Duration)
-				return exitcode.PushHookTimeout
-			}
-			if hr.ExitCode != 0 {
-				fmt.Fprintf(os.Stderr, "hook %s failed (exit %d)\n", hr.Name, hr.ExitCode)
-				return exitcode.PushHookFailed
-			}
-			if hr.Failed() {
-				return exitcode.PushHookFailed
-			}
+		}
+		// A hook that did not pass stops the push before any network contact.
+		// The payload is still emitted -- nothing pushed, the hook runs
+		// recorded -- so a machine consumer reads what ran next to the exit
+		// code that says it stopped the push.
+		if code := hookRunsExit(hookResults); code != 0 {
+			flags.payload(buildPushPayload(flags, remote, nil, forceFlag, hookResults, hooksSkipped))
+			return code
 		}
 	}
 
@@ -430,7 +438,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		})
 	}
 
-	flags.payload(buildPushPayload(flags, remote, refs, forceFlag, len(hookResults), hooksSkipped))
+	flags.payload(buildPushPayload(flags, remote, refs, forceFlag, hookResults, hooksSkipped))
 
 	// Output result
 	if !flags.dryRun {

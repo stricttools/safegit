@@ -234,6 +234,94 @@ func printLeftovers(r hooks.HookResult) {
 	}
 }
 
+// hookRunsExit is the rule for turning hook runs into an exit code, and
+// `push` uses it: the code of the FIRST run, in run order, that did not
+// pass -- PushHookTimeout when it timed out, PushHookFailed when it exited
+// nonzero or left a process behind -- and 0 when every run passed. It writes
+// that run's verdict to stderr, which is where the verdict lives: the payload
+// records the runs, never whether they passed.
+func hookRunsExit(results []hooks.HookResult) int {
+	for _, r := range results {
+		switch {
+		case r.TimedOut:
+			fmt.Fprintf(os.Stderr, "hook %s timed out after %v\n", r.Name, r.Duration)
+			return exitcode.PushHookTimeout
+		case r.ExitCode != 0:
+			fmt.Fprintf(os.Stderr, "hook %s failed (exit %d)\n", r.Name, r.ExitCode)
+			return exitcode.PushHookFailed
+		case r.Failed():
+			// A run that exited 0 and still failed left something behind;
+			// printLeftovers has already named each process.
+			return exitcode.PushHookFailed
+		}
+	}
+	return 0
+}
+
+// hookRecord is one hook run as a machine payload records it: facts about the
+// run only. Whether it passed is the exit code's to say, not a member's.
+type hookRecord struct {
+	Name     string `json:"name"`
+	ExitCode int    `json:"exit_code"`
+	TimedOut bool   `json:"timed_out"`
+	// DurationMS is the run's wall-clock time in whole milliseconds.
+	DurationMS int64 `json:"duration_ms"`
+	// LeftoverProcesses are the processes the hook left running when it
+	// ended; an empty list when it left none.
+	LeftoverProcesses []hookLeftoverRecord `json:"leftover_processes"`
+}
+
+// hookLeftoverRecord is one process a hook left behind.
+type hookLeftoverRecord struct {
+	PID     int    `json:"pid"`
+	Command string `json:"command"`
+	// Killed is true when safegit stopped the process, false when it is
+	// still running.
+	Killed bool `json:"killed"`
+}
+
+// hookRecordSchema declares one hookRecord, as `push` embeds it.
+var hookRecordSchema = strictcli.SchemaObject(
+	map[string]interface{}{
+		"name":        strictcli.SchemaType("string"),
+		"exit_code":   strictcli.SchemaType("integer"),
+		"timed_out":   strictcli.SchemaType("boolean"),
+		"duration_ms": strictcli.SchemaType("integer"),
+		"leftover_processes": strictcli.SchemaArray(strictcli.SchemaObject(
+			map[string]interface{}{
+				"pid":     strictcli.SchemaType("integer"),
+				"command": strictcli.SchemaType("string"),
+				"killed":  strictcli.SchemaType("boolean"),
+			},
+			[]string{"pid", "command", "killed"},
+			false,
+		)),
+	},
+	[]string{"name", "exit_code", "timed_out", "duration_ms", "leftover_processes"},
+	false,
+)
+
+// hookRecords renders hook runs into their payload records, in run order. It
+// never returns nil, so a run that ran no hooks records an empty list rather
+// than null.
+func hookRecords(results []hooks.HookResult) []hookRecord {
+	out := make([]hookRecord, 0, len(results))
+	for _, r := range results {
+		left := make([]hookLeftoverRecord, 0, len(r.Leftovers))
+		for _, l := range r.Leftovers {
+			left = append(left, hookLeftoverRecord{PID: l.PID, Command: l.Command, Killed: l.Killed})
+		}
+		out = append(out, hookRecord{
+			Name:              r.Name,
+			ExitCode:          r.ExitCode,
+			TimedOut:          r.TimedOut,
+			DurationMS:        r.Duration.Milliseconds(),
+			LeftoverProcesses: left,
+		})
+	}
+	return out
+}
+
 // hookInstall copies a hook file into the tool-owned store and makes it
 // executable.
 func hookInstall(flags globalFlags, srcPath string) int {
