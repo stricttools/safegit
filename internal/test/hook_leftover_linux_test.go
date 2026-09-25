@@ -91,6 +91,8 @@ func TestHookLeftoverProcessIsRecordedInThePayload(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"--json", "push", "--refs", "head", "origin"},
+		{"--json", "hook", "run"},
+		{"--json", "hook", "run", "10-lint"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			if err := os.Remove(pidFile); err != nil && !os.IsNotExist(err) {

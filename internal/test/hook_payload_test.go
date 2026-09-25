@@ -220,3 +220,54 @@ func TestPushPayloadEmittedWhenAHookTimesOut(t *testing.T) {
 	}
 	assertNoVerdictMember(t, stdout)
 }
+
+func TestHookRunPayloadRecordsTheHooks(t *testing.T) {
+	dir := newRepo(t)
+	installDirHook(t, dir, "10-lint", "true")
+	installDirHook(t, dir, "20-test", "true")
+
+	stdout, stderr, code := runSafegit(t, dir, "--json", "hook", "run")
+	if code != 0 {
+		t.Fatalf("hook run --json failed (code %d): %s", code, stderr)
+	}
+	hooks := payloadHooks(t, stdout)
+	if len(hooks) != 2 {
+		t.Fatalf("hooks = %d entries, want 2", len(hooks))
+	}
+	checkEntry(t, hooks[0], "10-lint", 0, false)
+	checkEntry(t, hooks[1], "20-test", 0, false)
+	assertNoVerdictMember(t, stdout)
+
+	stdout, stderr, code = runSafegit(t, dir, "--json", "hook", "run", "20-test")
+	if code != 0 {
+		t.Fatalf("hook run 20-test --json failed (code %d): %s", code, stderr)
+	}
+	hooks = payloadHooks(t, stdout)
+	if len(hooks) != 1 {
+		t.Fatalf("hooks = %d entries, want 1", len(hooks))
+	}
+	checkEntry(t, hooks[0], "20-test", 0, false)
+}
+
+func TestHookRunPayloadRecordsAFailingHook(t *testing.T) {
+	dir := newRepo(t)
+	installDirHook(t, dir, "10-lint", "exit 4")
+
+	for _, args := range [][]string{
+		{"--json", "hook", "run"},
+		{"--json", "hook", "run", "10-lint"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			stdout, stderr, code := runSafegit(t, dir, args...)
+			if code != exitcode.PushHookFailed {
+				t.Fatalf("exit = %d, want %d; stderr: %s", code, exitcode.PushHookFailed, stderr)
+			}
+			hooks := payloadHooks(t, stdout)
+			if len(hooks) != 1 {
+				t.Fatalf("hooks = %d entries, want 1", len(hooks))
+			}
+			checkEntry(t, hooks[0], "10-lint", 4, false)
+			assertNoVerdictMember(t, stdout)
+		})
+	}
+}

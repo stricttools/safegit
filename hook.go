@@ -171,17 +171,11 @@ func hookRun(flags globalFlags, name string) int {
 			die(exitcode.General, fmt.Sprintf("running hooks: %v", rErr))
 			return exitcode.General
 		}
+		results := []hooks.HookResult{r}
+		flags.payload(hookRunPayload{Hooks: hookRecords(results)})
 		printLeftovers(r)
-		if r.TimedOut {
-			fmt.Fprintf(os.Stderr, "hook %s timed out\n", name)
-			return exitcode.PushHookTimeout
-		}
-		if r.ExitCode != 0 {
-			fmt.Fprintf(os.Stderr, "hook %s failed (exit %d)\n", name, r.ExitCode)
-			return exitcode.PushHookFailed
-		}
-		if r.Failed() {
-			return exitcode.PushHookFailed
+		if code := hookRunsExit(results); code != 0 {
+			return code
 		}
 		outf(flags, "hook %s passed (%v)\n", name, r.Duration)
 		return 0
@@ -197,6 +191,8 @@ func hookRun(flags globalFlags, name string) int {
 		die(exitcode.General, fmt.Sprintf("running hooks: %v", rErr))
 		return exitcode.General
 	}
+
+	flags.payload(hookRunPayload{Hooks: hookRecords(results)})
 
 	if len(results) == 0 {
 		outf(flags, "no hooks to run\n")
@@ -234,8 +230,8 @@ func printLeftovers(r hooks.HookResult) {
 	}
 }
 
-// hookRunsExit is the rule for turning hook runs into an exit code, and
-// `push` uses it: the code of the FIRST run, in run order, that did not
+// hookRunsExit is the one rule `push` and `hook run` share for turning hook
+// runs into an exit code: the code of the FIRST run, in run order, that did not
 // pass -- PushHookTimeout when it timed out, PushHookFailed when it exited
 // nonzero or left a process behind -- and 0 when every run passed. It writes
 // that run's verdict to stderr, which is where the verdict lives: the payload
@@ -280,7 +276,8 @@ type hookLeftoverRecord struct {
 	Killed bool `json:"killed"`
 }
 
-// hookRecordSchema declares one hookRecord, as `push` embeds it.
+// hookRecordSchema declares one hookRecord. `push` and `hook run` both embed
+// it, so the two payloads describe a hook run the same way.
 var hookRecordSchema = strictcli.SchemaObject(
 	map[string]interface{}{
 		"name":        strictcli.SchemaType("string"),
@@ -321,6 +318,21 @@ func hookRecords(results []hooks.HookResult) []hookRecord {
 	}
 	return out
 }
+
+// hookRunPayload is what `hook run` puts in the envelope's payload, for the
+// single-hook and the all-hooks form alike.
+type hookRunPayload struct {
+	Hooks []hookRecord `json:"hooks"`
+}
+
+// hookRunPayloadSchema declares hookRunPayload.
+var hookRunPayloadSchema = strictcli.SchemaObject(
+	map[string]interface{}{
+		"hooks": strictcli.SchemaArray(hookRecordSchema),
+	},
+	[]string{"hooks"},
+	false,
+)
 
 // hookInstall copies a hook file into the tool-owned store and makes it
 // executable.
