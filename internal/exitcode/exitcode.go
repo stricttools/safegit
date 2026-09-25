@@ -279,9 +279,9 @@ const (
 	// commit family exits.
 	MoveNotBorneOut = 19
 
-	// PushHookFailed means a pre-pre-push hook exited nonzero, or left a
-	// process running when it ended, so no network I/O was attempted. Produced
-	// by push and by `hook run`.
+	// PushHookFailed means a pre-pre-push hook could not be started, exited
+	// nonzero, or left a process running when it ended, so no network I/O was
+	// attempted. Produced by push and by `hook run`.
 	PushHookFailed = 20
 
 	// PushHookTimeout means a pre-pre-push hook exceeded

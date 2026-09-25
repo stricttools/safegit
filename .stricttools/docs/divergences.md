@@ -202,7 +202,8 @@ Every future change that introduces a decision of this kind adds its entry here.
   on the target and infer which one was meant — the same command line meant
   opposite things from different directories, and a mistyped path was a silent
   deletion from history. A trailing slash, not the filesystem, is what says
-  whether an argument names a symlink or the directory it points at.
+  whether an argument names a symlink or the directory it points at, and it
+  follows the final component only: a path under a link is read as spelled.
 - **Ruling:** ours — deliberate
 
 ### Committing in a submodule refuses until the parent has decided about the gitlink
@@ -1568,9 +1569,12 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   it. On Linux safegit is a child subreaper while a hook runs, so a process that
   detaches with `setsid` or a double fork is found and stopped too; on macOS,
   which has no subreaper, a process that left the hook's process group is named
-  from `lsof` and reported as still running. A check that leaves a server or a
-  watcher behind would otherwise keep running after the push, with nothing
-  saying so.
+  from `lsof` and reported as still running, and one it killed in the group is
+  named with the same partial-containment note. A check that leaves a server or
+  a watcher behind would otherwise keep running after the push, with nothing
+  saying so. The hook runs in its own process group, so a terminal's Ctrl-C
+  reaches safegit and not the hook; an interrupted safegit stops the running
+  hook and what it started, as the timeout does, before it exits.
 - **Ruling:** ours — deliberate
 
 ### Hooks the checkout provides are executed on push
@@ -1696,10 +1700,13 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   handle all three: an envelope WITH a payload (exit 26, where the payload names
   the commit that stands and the aftercare that did not finish; and exits 20
   and 21 from `push` and `hook run`, where the payload's `hooks` list records the
-  hook runs, and a stopped push's `refs` is empty), an envelope
+  hook runs, and a stopped push's `refs` is empty -- and their exit 1 when
+  safegit could not run a hook under containment, recording the runs before
+  it), an envelope
   with `payload: null` (a refusal that reached dispatch — a payload schema
   describes a performed operation, and there is no error-payload channel), or
-  nothing at all where the path exits before dispatch. The human-readable reason
+  nothing at all where the path exits before dispatch or a signal ends the
+  process (128 + the signal number). The human-readable reason
   is on stderr in all three.
 - **Ruling:** ours — deliberate
 
@@ -1888,7 +1895,8 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   refused ref leaves the others published.
 - **safegit:** `--atomic` goes on every multi-ref push, forced or not, and the
   payload reports it from the same predicate that put it on the command line, so
-  the argv and the machine document cannot disagree about what the push was.
+  the argv and the machine document cannot disagree about what the push was. A
+  push a hook stopped reports it too, for the refs it set out to push.
 - **Ruling:** ours — deliberate
 
 ### A push retries a transport failure, never a verdict
