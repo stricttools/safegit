@@ -374,3 +374,81 @@ func TestMvDirectoryFormBeyondALinkIsRefused(t *testing.T) {
 		}
 	})
 }
+
+// commitThroughLinkFixture tracks logs/sub/f.txt and real/sub/f.txt, replaces
+// logs/ on disk with a symlink to real, and changes real/sub/f.txt on disk. It
+// returns the repository and HEAD.
+func commitThroughLinkFixture(t *testing.T) (dir, before string) {
+	t.Helper()
+	dir = newRepo(t)
+	testutil.WriteFile(t, dir, "logs/sub/f.txt", "under logs\n")
+	testutil.WriteFile(t, dir, "real/sub/f.txt", "under real\n")
+	testutil.Git(t, dir, "add", "logs/sub/f.txt", "real/sub/f.txt")
+	testutil.Git(t, dir, "commit", "-m", "track logs/sub and real/sub")
+	if err := os.RemoveAll(filepath.Join(dir, "logs")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("real", filepath.Join(dir, "logs")); err != nil {
+		t.Fatal(err)
+	}
+	testutil.WriteFile(t, dir, "real/sub/f.txt", "changed under real\n")
+	return dir, testutil.Rev(t, dir, "HEAD")
+}
+
+// TestCommitTrailingSlashUnderALinkIsReadAsSpelled: a trailing slash follows
+// at most the final component, and only when nothing above it is a link.
+// `logs/sub/` with `logs` a link is a path beyond the link, so it is absent
+// from the working tree as git sees it: what it tracks is deleted, and the
+// directory the link leads to (real/sub) is never read or committed.
+func TestCommitTrailingSlashUnderALinkIsReadAsSpelled(t *testing.T) {
+	dir, before := commitThroughLinkFixture(t)
+	stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "logs/sub is gone", "--", "logs/sub/")
+	if code != 0 {
+		t.Fatalf("commit failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	if parents := testutil.Parents(t, dir, "HEAD"); len(parents) != 1 || parents[0] != before {
+		t.Fatalf("expected exactly one new commit on top of %s, got parents %v", before, parents)
+	}
+	if _, ok := testutil.Show(t, dir, "HEAD", "logs/sub/f.txt"); ok {
+		t.Error("logs/sub/f.txt is still in HEAD; the path under the link is absent and must be deleted")
+	}
+	if got, ok := testutil.Show(t, dir, "HEAD", "real/sub/f.txt"); !ok || got != "under real\n" {
+		t.Errorf("real/sub/f.txt in HEAD = %q (present %v), want the unchanged %q: the commit read through the link",
+			got, ok, "under real\n")
+	}
+}
+
+// TestCommitTrailingSlashUnderALinkUntrackedIsRefused: the same spelling over a
+// directory the commit's parent does not track under the link names nothing
+// in the repository, and is refused rather than read through the link.
+func TestCommitTrailingSlashUnderALinkUntrackedIsRefused(t *testing.T) {
+	dir, before := commitThroughLinkFixture(t)
+	testutil.WriteFile(t, dir, "real/other/g.txt", "untracked under real\n")
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "reach through", "--", "logs/other/")
+	if code != exitcode.PathMatchedNothing {
+		t.Fatalf("exit %d, want %d (PathMatchedNothing); stderr:\n%s", code, exitcode.PathMatchedNothing, stderr)
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("HEAD moved: %s -> %s", before, after)
+	}
+}
+
+// TestCommitUntrackedPathUnderAnInRepoLinkIsRefused: an untracked file named
+// through a link that leads to a directory inside the repository is not a path
+// in the working tree, as git sees it, and it is tracked nowhere, so it is
+// refused -- the file the link's target holds is never committed under either
+// name.
+func TestCommitUntrackedPathUnderAnInRepoLinkIsRefused(t *testing.T) {
+	dir, before := commitThroughLinkFixture(t)
+	testutil.WriteFile(t, dir, "real/new.txt", "untracked under real\n")
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "reach through", "--", "logs/new.txt")
+	if code != exitcode.PathMatchedNothing {
+		t.Fatalf("exit %d, want %d (PathMatchedNothing); stderr:\n%s", code, exitcode.PathMatchedNothing, stderr)
+	}
+	if !strings.Contains(stderr, "file logs/new.txt does not exist and is not tracked") {
+		t.Errorf("the refusal must name the path as absent and untracked; stderr:\n%s", stderr)
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("HEAD moved: %s -> %s", before, after)
+	}
+}

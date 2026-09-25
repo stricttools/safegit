@@ -299,7 +299,8 @@ func CanonicalRel(repoRoot, arg string) (string, error) {
 // followFinal comes from namesThroughLink: with it false the FINAL component is
 // never resolved, so a symlink named on the command line stays that symlink and
 // is committed as the 120000 object it is rather than collapsing into whatever
-// it points at.
+// it points at. With it true only the final component is followed (see
+// followFinalLink); the components above it are read as spelled either way.
 func canonicalRel(repoRoot, arg string, followFinal bool) (string, error) {
 	var absPath string
 	if filepath.IsAbs(arg) {
@@ -321,9 +322,7 @@ func canonicalRel(repoRoot, arg string, followFinal bool) (string, error) {
 	absPath = resolveParentSymlinks(repoRoot, absPath)
 
 	if followFinal {
-		if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
-			absPath = resolved
-		}
+		absPath = followFinalLink(repoRoot, absPath)
 	}
 
 	rel, err := filepath.Rel(repoRoot, absPath)
@@ -337,6 +336,39 @@ func canonicalRel(repoRoot, arg string, followFinal bool) (string, error) {
 		return "", nil
 	}
 	return rel, nil
+}
+
+// followFinalLink reads a path spelled with a trailing separator THROUGH its
+// final component, and through nothing else.
+//
+// Inside the repository the final component is followed only when it is itself
+// a symlink and no directory above it is a link: a path beyond a link is
+// absent from the working tree (underLink), and following it would read a
+// resolution of the WHOLE path -- `logs/sub/` with `logs` a link turning into
+// the link target's `sub` -- which is how a commit used to take in content from
+// wherever the link led. Such a path is returned as spelled, so it is a
+// deletion of what the commit's parent tracks there, or a refusal when it
+// tracks nothing. A path outside the repository keeps the whole resolution:
+// it can only be inside by way of a link from outside, and the containment
+// check in canonicalRel refuses everything else.
+func followFinalLink(repoRoot, absPath string) string {
+	if insideRoot(repoRoot, absPath) {
+		rel, err := filepath.Rel(repoRoot, absPath)
+		if err != nil || rel == "." {
+			return absPath
+		}
+		if underLink(repoRoot, filepath.ToSlash(rel)) {
+			return absPath
+		}
+		info, err := os.Lstat(absPath)
+		if err != nil || info.Mode()&os.ModeSymlink == 0 {
+			return absPath
+		}
+	}
+	if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
+		return resolved
+	}
+	return absPath
 }
 
 // resolveParentSymlinks reconciles every component ABOVE the final one with
