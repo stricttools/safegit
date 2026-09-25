@@ -5,8 +5,11 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -283,4 +286,150 @@ func TestDiscoverWritesNoWarningOfItsOwn(t *testing.T) {
 	if got := outBuf.String() + errBuf.String(); got != "" {
 		t.Errorf("discovery wrote %q; its answer is the returned error, not output", got)
 	}
+}
+
+// TestSlowReaderLosesNoHookOutput: a hook that prints and exits at once must
+// have every byte forwarded, however late the reader gets to the pipe. The
+// process finishing is not the output finishing: the pipe is read to its end
+// before the process is waited on, because waiting closes the read end and
+// drops whatever was still in it (os/exec forbids Wait before the reads
+// complete).
+func TestSlowReaderLosesNoHookOutput(t *testing.T) {
+	var outBuf, errBuf bytes.Buffer
+	restore := SetOutput(&outBuf, &errBuf)
+	defer restore()
+
+	prev := beforeStdoutRead
+	beforeStdoutRead = func() { time.Sleep(500 * time.Millisecond) }
+	defer func() { beforeStdoutRead = prev }()
+
+	gitDir := setupGitDir(t)
+	hookPath := filepath.Join(LocalDir(gitDir), "pre-pre-push")
+	writeHook(t, hookPath, "#!/bin/sh\necho hello-from-hook\n")
+
+	results, err := Run(context.Background(), store(gitDir), nil, 30, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].ExitCode != 0 {
+		t.Fatalf("unexpected result: %+v", results)
+	}
+	if got := outBuf.String(); got != "hello-from-hook\n" {
+		t.Errorf("hook stdout = %q, want %q", got, "hello-from-hook\n")
+	}
+}
+
+// TestTimeoutStopsHookWhoseBackgroundChildHoldsStdout: a hook that exits while
+// a background child it started still holds its stdout keeps running, as far
+// as safegit is concerned, until that output ends. The configured timeout is
+// what ends it: the hook's whole process group is signalled, the child dies,
+// the read ends, and the result is a timeout.
+//
+// The child's stderr goes to /dev/null so that stdout is the only stream it
+// holds: the test's stderr is a buffer, which os/exec itself waits on.
+func TestTimeoutStopsHookWhoseBackgroundChildHoldsStdout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping timeout test in short mode")
+	}
+	var outBuf, errBuf bytes.Buffer
+	restore := SetOutput(&outBuf, &errBuf)
+	defer restore()
+
+	gitDir := setupGitDir(t)
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	hookPath := filepath.Join(LocalDir(gitDir), "pre-pre-push")
+	writeHook(t, hookPath, "#!/bin/sh\nsleep 60 2>/dev/null &\necho $! > '"+pidFile+"'\necho started\nexit 0\n")
+
+	start := time.Now()
+	results, err := Run(context.Background(), store(gitDir), nil, 1, nil)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(results))
+	}
+	if !results[0].TimedOut {
+		t.Errorf("a hook whose background child holds stdout open must run until the timeout, got %+v", results[0])
+	}
+	if elapsed > 8*time.Second {
+		t.Errorf("timeout took too long: %v", elapsed)
+	}
+	if got := outBuf.String(); got != "started\n" {
+		t.Errorf("hook stdout = %q, want %q", got, "started\n")
+	}
+
+	pid := readPid(t, pidFile)
+	defer syscall.Kill(pid, syscall.SIGKILL)
+	if !waitGone(pid, 5*time.Second) {
+		t.Errorf("the background child %d outlived the timeout; the process group was not signalled", pid)
+	}
+}
+
+// TestTimeoutStopsHookWhoseEscapedChildHoldsStdout: a child that left the
+// hook's process group (setsid) is out of reach of the group signal, and
+// still holds stdout. The timeout must return anyway: once the group has been
+// killed, safegit stops reading rather than waiting on a process it cannot
+// signal.
+func TestTimeoutStopsHookWhoseEscapedChildHoldsStdout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping timeout test in short mode")
+	}
+	if _, err := exec.LookPath("setsid"); err != nil {
+		t.Skip("setsid is not installed")
+	}
+	var outBuf, errBuf bytes.Buffer
+	restore := SetOutput(&outBuf, &errBuf)
+	defer restore()
+
+	gitDir := setupGitDir(t)
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	hookPath := filepath.Join(LocalDir(gitDir), "pre-pre-push")
+	writeHook(t, hookPath, "#!/bin/sh\nsetsid sh -c 'echo $$ > \""+pidFile+"\"; exec sleep 60' 2>/dev/null &\n"+
+		"while [ ! -s '"+pidFile+"' ]; do sleep 0.05; done\necho started\nexit 0\n")
+
+	start := time.Now()
+	results, err := Run(context.Background(), store(gitDir), nil, 1, nil)
+	elapsed := time.Since(start)
+	pid := readPid(t, pidFile)
+	defer syscall.Kill(pid, syscall.SIGKILL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || !results[0].TimedOut {
+		t.Fatalf("expected one timed-out result, got %+v", results)
+	}
+	// timeout + grace + margin
+	if elapsed > 10*time.Second {
+		t.Errorf("timeout took too long: %v", elapsed)
+	}
+	if got := outBuf.String(); got != "started\n" {
+		t.Errorf("hook stdout = %q, want %q", got, "started\n")
+	}
+}
+
+func readPid(t *testing.T, path string) int {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pid
+}
+
+// waitGone reports whether pid stops existing within d. An orphan is reparented
+// and reaped asynchronously, so a signalled child can linger briefly.
+func waitGone(pid int, d time.Duration) bool {
+	deadline := time.Now().Add(d)
+	for time.Now().Before(deadline) {
+		if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+			return true
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return false
 }

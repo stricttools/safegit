@@ -22,6 +22,11 @@ var (
 	stderr io.Writer = os.Stderr
 )
 
+// beforeStdoutRead runs in the reader just before it starts reading a hook's
+// stdout. It does nothing in production; a test replaces it to delay the
+// reader and prove that output is never lost to a slow reader.
+var beforeStdoutRead = func() {}
+
 // SetOutput overrides the package-level stdout and stderr writers.
 // Returns a restore function that resets them to their previous values.
 func SetOutput(out, err io.Writer) func() {
@@ -226,24 +231,24 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		return HookResult{Name: name, ExitCode: 1, Duration: time.Since(start)}
 	}
 
-	// Stream stdout in a goroutine, so a hook that writes a lot is never
-	// blocked on a full pipe while this function waits on the clock.
-	ioDone := make(chan struct{})
+	// The hook's stdout is read to its end BEFORE the process is waited on:
+	// Wait closes the read end of the pipe once the process exits, so waiting
+	// first drops whatever output was not yet read (os/exec forbids calling
+	// Wait before the reads complete). The consequence is deliberate: a hook
+	// whose background child still holds stdout open counts as running until
+	// that child exits or the timeout fires. Both happen in one goroutine, so
+	// the clock below keeps running over a hook that writes a lot, one that
+	// never closes its output, and one that closed it and kept running.
+	done := make(chan error, 1)
 	go func() {
-		defer close(ioDone)
+		beforeStdoutRead()
 		io.Copy(stdout, stdoutPipe)
-	}()
-
-	// Wait for process completion with timeout
-	procDone := make(chan error, 1)
-	go func() {
-		procDone <- cmd.Wait()
+		done <- cmd.Wait()
 	}()
 
 	timeout := time.Duration(timeoutSec) * time.Second
 	select {
-	case err := <-procDone:
-		<-ioDone // wait for IO streaming to finish
+	case err := <-done:
 		duration := time.Since(start)
 		if err != nil {
 			if exitErr, ok := err.(*exec.ExitError); ok {
@@ -254,23 +259,19 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		return HookResult{Name: name, ExitCode: 0, Duration: duration}
 
 	case <-time.After(timeout):
-		// Timeout: SIGTERM the process group
-		if cmd.Process != nil {
-			killGroup(cmd, syscall.SIGTERM)
-		}
+		// Timeout: SIGTERM the whole process group, so a background child
+		// holding stdout dies with the hook and the read ends. The hook is
+		// not reaped before this point, so its pid -- the group id -- cannot
+		// have been reused.
+		killGroup(cmd, syscall.SIGTERM)
 
 		// Grace period: 5 seconds
 		select {
-		case <-procDone:
+		case <-done:
 			// Terminated gracefully
 		case <-time.After(5 * time.Second):
-			// SIGKILL the process group
-			if cmd.Process != nil {
-				killGroup(cmd, syscall.SIGKILL)
-			}
-			<-procDone
+			killAndFinish(cmd, stdoutPipe, done)
 		}
-		<-ioDone
 
 		// ExitCode is the HOOK's status, not safegit's. A killed hook has no
 		// status of its own, so the marker is deliberately chosen to READ the
@@ -282,12 +283,22 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 
 	case <-ctx.Done():
 		// Parent context cancelled
-		if cmd.Process != nil {
-			killGroup(cmd, syscall.SIGKILL)
-		}
-		<-procDone
-		<-ioDone
+		killAndFinish(cmd, stdoutPipe, done)
 		return HookResult{Name: name, ExitCode: 1, Duration: time.Since(start)}
+	}
+}
+
+// killAndFinish SIGKILLs the hook's process group and waits for the reader
+// to finish. A child that left the group (setsid) is out of reach of the
+// signal and may still hold stdout, so the read end is closed after the kill:
+// safegit stops reading rather than waiting on a process it cannot signal.
+func killAndFinish(cmd *exec.Cmd, stdoutPipe io.Closer, done <-chan error) {
+	killGroup(cmd, syscall.SIGKILL)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		stdoutPipe.Close()
+		<-done
 	}
 }
 
