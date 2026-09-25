@@ -160,7 +160,7 @@ func TestAtomicIsDecidedInOnePlace(t *testing.T) {
 			if inArgv != tc.want {
 				t.Errorf("--atomic in argv = %v, want %v; argv: %v", inArgv, tc.want, argv)
 			}
-			if got := buildPushPayload(globalFlags{}, "origin", tc.refs, false, nil, nil).Atomic; got != tc.want {
+			if got := buildPushPayload(globalFlags{}, "origin", tc.refs, false, pushIsAtomic(tc.refs), nil, nil).Atomic; got != tc.want {
 				t.Errorf("payload Atomic = %v, want %v", got, tc.want)
 			}
 		})

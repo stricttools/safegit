@@ -11,7 +11,7 @@ import (
 // TestPushPayloadHasNoHookCount: the number of hooks that ran is the length of
 // the hooks list, and the payload carries no second member restating it.
 func TestPushPayloadHasNoHookCount(t *testing.T) {
-	raw, err := json.Marshal(buildPushPayload(globalFlags{}, "origin", nil, false, []hooks.HookResult{{Name: "10-lint"}}, nil))
+	raw, err := json.Marshal(buildPushPayload(globalFlags{}, "origin", nil, false, false, []hooks.HookResult{{Name: "10-lint"}}, nil))
 	if err != nil {
 		t.Fatal(err)
 	}

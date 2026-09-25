@@ -122,8 +122,11 @@ var pushPayloadSchema = strictcli.SchemaObject(
 const hookSkipDryRun = "dry-run"
 
 // buildPushPayload renders what actually happened into the machine payload.
-// refs is what was pushed: nil when the hooks stopped the push.
-func buildPushPayload(flags globalFlags, remote string, refs []pushRefInfo, force bool, hookResults []hooks.HookResult, hooksSkipped *string) pushPayload {
+// refs is what was pushed: nil when the hooks stopped the push. force and
+// atomic echo the invocation, so they hold for a push that never reached git
+// too: atomic is decided from the refs the invocation set out to push, never
+// from the empty list a stopped push reports.
+func buildPushPayload(flags globalFlags, remote string, refs []pushRefInfo, force, atomic bool, hookResults []hooks.HookResult, hooksSkipped *string) pushPayload {
 	out := make([]pushPayloadRef, 0, len(refs))
 	for _, r := range refs {
 		entry := pushPayloadRef{LocalRef: r.LocalRef, LocalSHA: r.LocalSHA, RemoteRef: r.RemoteRef}
@@ -141,7 +144,7 @@ func buildPushPayload(flags globalFlags, remote string, refs []pushRefInfo, forc
 		Remote:                 remote,
 		Refs:                   out,
 		ForceWithLease:         force,
-		Atomic:                 pushIsAtomic(refs),
+		Atomic:                 atomic,
 		Hooks:                  hookRecords(hookResults),
 		PrePrePushHooksSkipped: hooksSkipped,
 		DryRun:                 flags.dryRun,
@@ -324,7 +327,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		// recorded -- so a machine consumer reads what ran next to the exit
 		// code that says it stopped the push.
 		if code := hookRunsExit(hookResults); code != 0 {
-			flags.payload(buildPushPayload(flags, remote, nil, forceFlag, hookResults, hooksSkipped))
+			flags.payload(buildPushPayload(flags, remote, nil, forceFlag, pushIsAtomic(validated), hookResults, hooksSkipped))
 			return code
 		}
 	}
@@ -433,7 +436,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		})
 	}
 
-	flags.payload(buildPushPayload(flags, remote, refs, forceFlag, hookResults, hooksSkipped))
+	flags.payload(buildPushPayload(flags, remote, refs, forceFlag, pushIsAtomic(refs), hookResults, hooksSkipped))
 
 	// Output result
 	if !flags.dryRun {
@@ -662,9 +665,10 @@ func localRefsMoved(before, after []pushRefInfo) (localRefMove, bool) {
 // makes every multi-ref push atomic, so one refused ref leaves the remote
 // exactly as it was rather than half-published.
 //
-// buildGitPushArgs asks it before adding --atomic, and buildPushPayload asks it
-// before reporting the fact, so the argv git ran and the payload a machine
-// consumer reads cannot disagree about what the push was.
+// buildGitPushArgs asks it before adding --atomic, and runPush asks it of the
+// same refs before handing the fact to buildPushPayload, so the argv git ran
+// and the payload a machine consumer reads cannot disagree about what the push
+// was. A push the hooks stopped asks it of the refs it set out to push.
 func pushIsAtomic(refs []pushRefInfo) bool { return len(refs) > 1 }
 
 // leaseExpectation is the value safegit pins a ref's lease to: the SHA it

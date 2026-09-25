@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/smm-h/safegit/internal/exitcode"
+	"github.com/smm-h/safegit/internal/testutil"
 )
 
 // The machine payload is the record of the hook runs: `push` carries a `hooks`
@@ -332,5 +333,33 @@ func TestHookRunAllReturnsTimeoutCodeForATimedOutHook(t *testing.T) {
 	// The text form answers the same code.
 	if _, stderr, code := runSafegit(t, dir, "hook", "run"); code != exitcode.PushHookTimeout {
 		t.Errorf("text-mode exit = %d, want %d; stderr: %s", code, exitcode.PushHookTimeout, stderr)
+	}
+}
+
+// A multi-ref push is atomic, and the payload says so whether or not it got as
+// far as git: `atomic`, like `force_with_lease`, echoes what the invocation was
+// going to push. A hook that stops the push leaves `refs` empty, and the atomic
+// fact must not be recomputed from that empty list.
+func TestPushPayloadStatesAtomicWhenAHookStopsAMultiRefPush(t *testing.T) {
+	dir, _ := newRepoWithRemote(t)
+	testutil.Git(t, dir, "branch", "feature")
+	installDirHook(t, dir, "10-lint", "exit 3")
+
+	stdout, stderr, code := runSafegit(t, dir, "--json", "push", "--refs", "branches", "origin")
+	if code != exitcode.PushHookFailed {
+		t.Fatalf("exit = %d, want %d; stderr: %s", code, exitcode.PushHookFailed, stderr)
+	}
+	var p struct {
+		Refs   []json.RawMessage `json:"refs"`
+		Atomic *bool             `json:"atomic"`
+	}
+	if err := json.Unmarshal(decodeEnvelope(t, stdout).Payload, &p); err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Refs) != 0 {
+		t.Errorf("nothing was pushed, so refs must be empty: %d entries", len(p.Refs))
+	}
+	if p.Atomic == nil || !*p.Atomic {
+		t.Errorf("atomic = %v, want true: the stopped push was a two-branch push, which safegit makes atomic", p.Atomic)
 	}
 }
