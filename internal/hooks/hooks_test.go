@@ -289,10 +289,9 @@ func TestDiscoverWritesNoWarningOfItsOwn(t *testing.T) {
 
 // TestSlowReaderLosesNoHookOutput: a hook that prints and exits at once must
 // have every byte forwarded, however late the reader gets to the pipe. The
-// process finishing is not the output finishing: the pipe is read to its end
-// before the process is waited on, because waiting closes the read end and
-// drops whatever was still in it (os/exec forbids Wait before the reads
-// complete).
+// process finishing is not the output finishing: the read ends are safegit's
+// own pipes rather than os/exec's, so waiting on the process closes nothing,
+// and the output is read to its end before the hook counts as finished.
 func TestSlowReaderLosesNoHookOutput(t *testing.T) {
 	var outBuf, errBuf bytes.Buffer
 	restore := SetOutput(&outBuf, &errBuf)
@@ -359,6 +358,45 @@ func TestHookWhoseBackgroundChildHoldsStdoutFailsWithoutWaiting(t *testing.T) {
 	}
 	if !waitGone(pid, 5*time.Second) {
 		t.Errorf("the background child %d is still running", pid)
+	}
+}
+
+// slowWriter counts what it is given and takes its time over every write, like
+// a destination that drains slowly.
+type slowWriter struct {
+	n     int
+	delay time.Duration
+}
+
+func (w *slowWriter) Write(b []byte) (int, error) {
+	time.Sleep(w.delay)
+	w.n += len(b)
+	return len(b), nil
+}
+
+// TestSlowDestinationLosesNoHookOutput: once the hook has ended, the output
+// still in the pipe is forwarded in full however slowly the destination takes
+// it. Only a pipe nobody is writing to and nobody has closed -- a process safegit
+// could not reach holding it -- is given up on, never a slow reader.
+func TestSlowDestinationLosesNoHookOutput(t *testing.T) {
+	out := &slowWriter{delay: 400 * time.Millisecond}
+	restore := SetOutput(out, &bytes.Buffer{})
+	defer restore()
+
+	gitDir := setupGitDir(t)
+	const size = 256 * 1024
+	writeHook(t, filepath.Join(LocalDir(gitDir), "pre-pre-push"),
+		"#!/bin/sh\nhead -c "+strconv.Itoa(size)+" /dev/zero | tr '\\0' a\n")
+
+	results, err := Run(context.Background(), store(gitDir), nil, 60, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Failed() {
+		t.Fatalf("unexpected result: %+v", results)
+	}
+	if out.n != size {
+		t.Errorf("forwarded %d bytes of the hook's %d", out.n, size)
 	}
 }
 

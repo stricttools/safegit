@@ -251,10 +251,12 @@ func RunSingle(ctx context.Context, hookPath string, stdin []byte, timeoutSec in
 // killGrace is how long a signalled process gets between SIGTERM and SIGKILL.
 const killGrace = 5 * time.Second
 
-// readGrace bounds how long safegit keeps reading a hook's output once every
-// process it could find has been stopped. A process that still holds the pipes
-// after it is one safegit could not reach, and the read ends are closed so that
-// safegit can never hang on it.
+// readGrace bounds how long a read of a hook's output may wait for data once
+// every process safegit could find has been stopped. A pipe that stays open
+// and silent that long is held by a process safegit could not reach, and the
+// read ends are closed so that safegit can never hang on it. Only waiting for
+// data counts: a destination that takes its time over the output already read
+// never trips it, so a slow reader loses nothing.
 const readGrace = time.Second
 
 // runOne executes a single hook, forwarding its stdout and stderr to the
@@ -325,7 +327,7 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		p.inW.Close()
 	}()
 
-	readDone := p.forward(stdout, stderr)
+	fwd := p.forward(stdout, stderr)
 
 	waited := make(chan error, 1)
 	go func() { waited <- cmd.Wait() }()
@@ -359,18 +361,27 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 	// running is left behind.
 	result.Leftovers, result.LeftoverUnknown = c.sweep(signalled)
 
-	// Every process safegit could find is stopped, so the output ends now --
-	// unless something it could not reach still holds a pipe.
-	select {
-	case <-readDone:
-	case <-time.After(readGrace):
-		holders, unknown := c.outputHolders(p.readFds())
-		result.Leftovers = append(result.Leftovers, holders...)
-		if unknown != "" && result.LeftoverUnknown == "" {
-			result.LeftoverUnknown = unknown
+	// Every process safegit could find is stopped, so the output ends once
+	// what is left in the pipes is read -- unless something it could not reach
+	// still holds a pipe, which shows as a read waiting for data that never
+	// comes.
+	swept := time.Now()
+	for waiting := true; waiting; {
+		select {
+		case <-fwd.done:
+			waiting = false
+		case <-time.After(20 * time.Millisecond):
+			if fwd.starved(readGrace, swept) {
+				holders, unknown := c.outputHolders(p.readFds())
+				result.Leftovers = append(result.Leftovers, holders...)
+				if unknown != "" && result.LeftoverUnknown == "" {
+					result.LeftoverUnknown = unknown
+				}
+				p.closeParentEnds()
+				<-fwd.done
+				waiting = false
+			}
 		}
-		p.closeParentEnds()
-		<-readDone
 	}
 	p.inW.Close()
 	p.closeParentEnds()
@@ -446,26 +457,96 @@ func (p *hookPipes) closeAll() {
 	p.closeParentEnds()
 }
 
-// forward copies the hook's stdout and stderr to the given writers and closes
-// the returned channel once both have ended.
-func (p *hookPipes) forward(out, errw io.Writer) <-chan struct{} {
+// forward copies the hook's stdout and stderr to the given writers; done is
+// closed once both have ended.
+func (p *hookPipes) forward(out, errw io.Writer) *forwarding {
+	f := &forwarding{done: make(chan struct{})}
+	outStream, errStream := &stream{}, &stream{}
+	f.streams = []*stream{outStream, errStream}
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		beforeStdoutRead()
-		io.Copy(out, p.outR)
+		outStream.copy(out, p.outR)
 	}()
 	go func() {
 		defer wg.Done()
-		io.Copy(errw, p.errR)
+		errStream.copy(errw, p.errR)
 	}()
-	done := make(chan struct{})
 	go func() {
 		wg.Wait()
-		close(done)
+		close(f.done)
 	}()
-	return done
+	return f
+}
+
+// forwarding is the copying of a hook's two output streams.
+type forwarding struct {
+	done    chan struct{}
+	streams []*stream
+}
+
+// starved reports whether a stream has been waiting for data for at least d,
+// counting from no earlier than since: a wait that began while the hook was
+// still running and silent says nothing about who holds the pipe now.
+func (f *forwarding) starved(d time.Duration, since time.Time) bool {
+	for _, s := range f.streams {
+		if s.waitingFor(since) >= d {
+			return true
+		}
+	}
+	return false
+}
+
+// stream copies one pipe and records when it is blocked waiting for data, as
+// opposed to handing data to a destination that is slow to take it.
+type stream struct {
+	mu           sync.Mutex
+	waitingSince time.Time
+}
+
+func (s *stream) waitingFor(since time.Time) time.Duration {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.waitingSince.IsZero() {
+		return 0
+	}
+	if s.waitingSince.After(since) {
+		since = s.waitingSince
+	}
+	return time.Since(since)
+}
+
+func (s *stream) setWaiting(on bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if on {
+		s.waitingSince = time.Now()
+	} else {
+		s.waitingSince = time.Time{}
+	}
+}
+
+// copy reads r to its end and writes what it reads to w. After a write error
+// it keeps reading and discards, so that the hook is never blocked on a full
+// pipe nobody drains.
+func (s *stream) copy(w io.Writer, r io.Reader) {
+	buf := make([]byte, 32*1024)
+	writeFailed := false
+	for {
+		s.setWaiting(true)
+		n, err := r.Read(buf)
+		s.setWaiting(false)
+		if n > 0 && !writeFailed {
+			if _, werr := w.Write(buf[:n]); werr != nil {
+				writeFailed = true
+			}
+		}
+		if err != nil {
+			return
+		}
+	}
 }
 
 // readFds returns the descriptor numbers of safegit's read ends of the hook's
