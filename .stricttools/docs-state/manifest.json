@@ -2218,6 +2218,11 @@
         },
         {
           "level": 3,
+          "text": "`SignalExitStatus`",
+          "anchor": "signalexitstatus"
+        },
+        {
+          "level": 3,
           "text": "`HoldInterrupts`",
           "anchor": "holdinterrupts"
         },
@@ -6084,6 +6089,11 @@
         },
         {
           "level": 3,
+          "text": "`InterruptStopBudget`",
+          "anchor": "interruptstopbudget"
+        },
+        {
+          "level": 3,
           "text": "`PlanInstall`",
           "anchor": "planinstall"
         },
@@ -6240,6 +6250,11 @@
           "level": 3,
           "text": "`ExitOnSignal`",
           "anchor": "exitonsignal"
+        },
+        {
+          "level": 3,
+          "text": "`SignalExitStatus`",
+          "anchor": "signalexitstatus"
         },
         {
           "level": 3,
@@ -7951,6 +7966,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-09-25T22:30:37.399967+00:00",
+  "last_gen": "2026-09-25T22:57:36.416917+00:00",
   "theme": "minimal"
 }
