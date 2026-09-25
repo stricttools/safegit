@@ -1484,6 +1484,12 @@
                 "name": {
                   "type": "string"
                 },
+                "start_error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "timed_out": {
                   "type": "boolean"
                 },
@@ -1494,6 +1500,7 @@
               "required": [
                 "name",
                 "exit_code",
+                "start_error",
                 "timed_out",
                 "duration_ms",
                 "leftover_processes",
@@ -2767,6 +2774,12 @@
                     "name": {
                       "type": "string"
                     },
+                    "start_error": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
                     "timed_out": {
                       "type": "boolean"
                     },
@@ -2777,6 +2790,7 @@
                   "required": [
                     "name",
                     "exit_code",
+                    "start_error",
                     "timed_out",
                     "duration_ms",
                     "leftover_processes",
