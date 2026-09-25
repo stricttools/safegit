@@ -17,8 +17,14 @@ import (
 // group, and names every process still holding the hook's output pipes, which
 // it cannot stop, from lsof.
 
-// uncontainedNote ends the message for a process safegit could not stop.
+// uncontainedNote ends the message for a process safegit could not stop, and
+// for one it killed too (containmentPartial): either way a process that left
+// the group may be running where safegit cannot see it.
 const uncontainedNote = "safegit cannot contain detached processes on macOS"
+
+// containmentPartial is true: a process that leaves the hook's process group is
+// out of safegit's reach.
+const containmentPartial = true
 
 // runLsof and runPs are the seams the tests of the parsers stand in for.
 var (

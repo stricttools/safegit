@@ -80,11 +80,21 @@ func (r HookResult) Failed() bool {
 // LeftoverMessages returns the error lines naming what the hook left behind:
 // one per process, and one more when something could not be named.
 func (r HookResult) LeftoverMessages() []string {
+	return leftoverMessages(r, containmentPartial)
+}
+
+// leftoverMessages words the lines for a platform whose containment is
+// partial or complete. Where it is partial, a killed process carries the same
+// note as one still running: safegit stopped what it found, and cannot say the
+// same of a process that got out of its reach.
+func leftoverMessages(r HookResult, partial bool) []string {
 	var msgs []string
 	for _, l := range r.Leftovers {
 		fate := "it was killed"
 		if !l.Killed {
 			fate = "it is still running; " + uncontainedNote
+		} else if partial {
+			fate += "; " + uncontainedNote
 		}
 		msgs = append(msgs, fmt.Sprintf("hook %s left process %d (%s) running after it ended; %s", r.Name, l.PID, l.Command, fate))
 	}

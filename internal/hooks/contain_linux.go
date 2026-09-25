@@ -32,6 +32,9 @@ const (
 // stop.
 const uncontainedNote = "safegit could not kill it"
 
+// containmentPartial is false: every process a hook starts stays findable.
+const containmentPartial = false
+
 type container struct {
 	self int
 	// wasSubreaper is the subreaper flag before this hook run, restored at end.

@@ -139,3 +139,22 @@ func TestPsGroupMembersNamesTheGroupsProcesses(t *testing.T) {
 		}
 	}
 }
+
+// TestKilledLeftoverCarriesThePartialContainmentNote: where containment is
+// partial (macOS), a process safegit found in the hook's group and killed is
+// named with the same note as one still running -- that it was killed says
+// nothing about a process that left the group, which safegit cannot reach.
+// Where containment is complete (Linux), a killed process carries no note.
+func TestKilledLeftoverCarriesThePartialContainmentNote(t *testing.T) {
+	r := HookResult{Name: "release-check", Leftovers: []LeftoverProcess{{PID: 48213, Command: "node", Killed: true}}}
+	base := "hook release-check left process 48213 (node) running after it ended; it was killed"
+
+	msgs := leftoverMessages(r, true)
+	if len(msgs) != 1 || msgs[0] != base+"; "+uncontainedNote {
+		t.Errorf("partial containment: messages = %q, want [%q]", msgs, base+"; "+uncontainedNote)
+	}
+	msgs = leftoverMessages(r, false)
+	if len(msgs) != 1 || msgs[0] != base {
+		t.Errorf("complete containment: messages = %q, want [%q]", msgs, base)
+	}
+}
