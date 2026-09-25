@@ -382,7 +382,8 @@ safegit push [<remote>]
   -> for each discovered hook in order:
        run hook with stdin, output to stderr
        enforce timeout: hooks.preprepush.timeoutSeconds (default 1800 = 30 min)
-       if exit != 0: abort, exit code 20 (timeout: exit code 21)
+       if exit != 0, or it left a process running: abort, exit code 20
+         (timeout: exit code 21)
   -> git push, with git's output CAPTURED (classification needs its stderr)
        retry on a transport error only: re-read the remote, re-pin every lease,
        and refuse (exit 40) if a LOCAL ref moved since the hooks saw it
@@ -409,7 +410,20 @@ If both phases are needed, the user splits expensive checks (smoke tests) into `
 - Default: 1800s (30 min) per hook.
 - Configurable globally: `hooks.preprepush.timeoutSeconds`, and handed to the hook in `SAFEGIT_HOOK_TIMEOUT_S` so a script can monitor itself against it.
 - There is NO per-hook override. A hook cannot raise or lower its own limit: a configured limit the limited script can rewrite for itself is a limit that is not one, and the repository's configuration is the single authority. A hook that genuinely needs longer says so by having `hooks.preprepush.timeoutSeconds` raised.
-- On timeout: `SIGTERM` to the hook's whole process group, then 5s grace, then `SIGKILL`. Exit code 21 ("hook timed out").
+- On timeout: `SIGTERM` to the hook's whole process group, then 5s grace, then `SIGKILL`. Exit code 21 ("hook timed out"). Whatever the hook started that outlives it is then handled as a process left behind, below.
+
+### Processes a hook leaves behind
+
+A hook that leaves any process running when it ends -- by exiting, or by being killed at the timeout -- is a failed hook run. A hook that exits 0 and leaves one behind fails the push with exit code 20, the hook-failure code; a timed-out hook keeps exit code 21. Each process left behind is named on stderr, by PID and command:
+
+```
+error: hook release-check left process 48213 (node) running after it ended; it was killed
+```
+
+- **Linux:** safegit makes itself a child subreaper (`prctl(PR_SET_CHILD_SUBREAPER)`) for the duration of each hook run, so every process the hook starts -- including one that leaves its session with `setsid` or is orphaned by a double fork -- is reparented to safegit rather than to init and stays findable as safegit's descendant. When the hook process has ended, safegit walks `/proc` for its remaining descendants: the processes reparented to it that started no earlier than the hook (safegit starts nothing else while a hook runs), and their children. Each gets `SIGTERM`, then `SIGKILL` after a 5s grace, and is reaped. The flag is restored when the run ends.
+- **macOS:** there is no subreaper, so containment is partial. safegit stops whatever is still in the hook's process group (named from `ps`), then names every process still holding the hook's output pipes, from `lsof`, and says that it is still running: `... running after it ended; it is still running; safegit cannot contain detached processes on macOS`. When `lsof` is missing or fails, the error says that something was left behind, that it could not be named, and why.
+
+The hook's stdin, stdout and stderr are pipes safegit hands to the hook as files, so the hook process ending is what safegit waits for, however long another process holds a pipe. Once everything it could find is stopped, safegit reads the output for at most one more second and then closes its ends of the pipes: a process it could not reach (on macOS, one that left the process group) can never make safegit hang.
 
 ### Bypass
 
@@ -467,6 +481,12 @@ safegit supports same-machine concurrency only. Cross-machine concurrency on a s
 - **Symptom:** hook process doesn't exit within `hooks.preprepush.timeoutSeconds`.
 - **Detection:** Go context timeout fires.
 - **Recovery:** `SIGTERM`, 5s grace, `SIGKILL`. The push aborts with exit code 21, and no oplog entry is written at all -- the oplog records pushes that happened. No partial state: the transport was never opened.
+
+### Pre-pre-push hook leaves a process running
+
+- **Symptom:** a hook exits (0 or otherwise) while a process it started -- a backgrounded server, a daemonized watcher -- is still running.
+- **Detection:** after the hook process ends, safegit looks for its remaining descendants (Linux: through its child-subreaper status; macOS: the hook's process group, and `lsof` on the hook's output pipes). See "Processes a hook leaves behind".
+- **Recovery:** each is named on stderr and stopped with `SIGTERM`, 5s grace, `SIGKILL` where safegit can reach it. The push aborts with exit code 20 (21 when the hook had timed out) before any network contact.
 
 ### Raw-git bypass
 

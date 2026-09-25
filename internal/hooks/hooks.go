@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -44,6 +45,44 @@ type HookResult struct {
 	ExitCode int           `json:"exitCode"`
 	Duration time.Duration `json:"duration"`
 	TimedOut bool          `json:"timedOut,omitempty"`
+	// Leftovers are the processes the hook left running when it ended.
+	Leftovers []LeftoverProcess `json:"leftover_processes,omitempty"`
+	// LeftoverUnknown is non-empty when something the hook started was still
+	// holding its output after it ended and safegit could not name it; it says
+	// why.
+	LeftoverUnknown string `json:"leftover_unknown,omitempty"`
+}
+
+// LeftoverProcess is one process a hook left running when it ended.
+type LeftoverProcess struct {
+	PID     int    `json:"pid"`
+	Command string `json:"command"`
+	// Killed reports that safegit stopped it. False means it is still running.
+	Killed bool `json:"killed"`
+}
+
+// Failed reports whether the run failed: a nonzero status, a timeout, or any
+// process left behind.
+func (r HookResult) Failed() bool {
+	return r.ExitCode != 0 || r.TimedOut || len(r.Leftovers) > 0 || r.LeftoverUnknown != ""
+}
+
+// LeftoverMessages returns the error lines naming what the hook left behind:
+// one per process, and one more when something could not be named.
+func (r HookResult) LeftoverMessages() []string {
+	var msgs []string
+	for _, l := range r.Leftovers {
+		fate := "it was killed"
+		if !l.Killed {
+			fate = "it is still running; " + uncontainedNote
+		}
+		msgs = append(msgs, fmt.Sprintf("hook %s left process %d (%s) running after it ended; %s", r.Name, l.PID, l.Command, fate))
+	}
+	if r.LeftoverUnknown != "" {
+		msgs = append(msgs, fmt.Sprintf("hook %s left a process holding its output after it ended, and safegit could not name it: %s; it may still be running; %s",
+			r.Name, r.LeftoverUnknown, uncontainedNote))
+	}
+	return msgs
 }
 
 // LegacyLocationError reports hooks still sitting in the pre-migration
@@ -172,7 +211,7 @@ func DiscoverMulti(stores []Store) ([]string, error) {
 }
 
 // Run executes all discovered hooks sequentially with the given stdin.
-// On non-zero exit, remaining hooks are skipped. On timeout: SIGTERM, 5s grace, SIGKILL.
+// The first failed run (see HookResult.Failed) skips the remaining hooks.
 func Run(ctx context.Context, s Store, stdin []byte, timeoutSec int, env []string) ([]HookResult, error) {
 	hooks, err := Discover(s)
 	if err != nil {
@@ -182,7 +221,9 @@ func Run(ctx context.Context, s Store, stdin []byte, timeoutSec int, env []strin
 }
 
 // RunAll executes the given hook paths sequentially with the given stdin.
-// On non-zero exit, remaining hooks are skipped. On timeout: SIGTERM, 5s grace, SIGKILL.
+// The first failed run (see HookResult.Failed) skips the remaining hooks. The
+// error is safegit's own -- a hook it could not contain -- never a hook's
+// verdict, which is in the results.
 func RunAll(ctx context.Context, hookPaths []string, stdin []byte, timeoutSec int, env []string) ([]HookResult, error) {
 	if len(hookPaths) == 0 {
 		return nil, nil
@@ -190,9 +231,12 @@ func RunAll(ctx context.Context, hookPaths []string, stdin []byte, timeoutSec in
 
 	var results []HookResult
 	for _, hookPath := range hookPaths {
-		result := runOne(ctx, hookPath, stdin, timeoutSec, env)
+		result, err := runOne(ctx, hookPath, stdin, timeoutSec, env)
+		if err != nil {
+			return results, err
+		}
 		results = append(results, result)
-		if result.ExitCode != 0 {
+		if result.Failed() {
 			break // abort on first failure
 		}
 	}
@@ -200,19 +244,57 @@ func RunAll(ctx context.Context, hookPaths []string, stdin []byte, timeoutSec in
 }
 
 // RunSingle executes a single hook by path.
-func RunSingle(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, env []string) HookResult {
+func RunSingle(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, env []string) (HookResult, error) {
 	return runOne(ctx, hookPath, stdin, timeoutSec, env)
 }
 
-// runOne executes a single hook, streaming stdout/stderr to the package-level writers.
-// Respects timeout: SIGTERM then SIGKILL after 5s grace.
-func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, env []string) HookResult {
+// killGrace is how long a signalled process gets between SIGTERM and SIGKILL.
+const killGrace = 5 * time.Second
+
+// readGrace bounds how long safegit keeps reading a hook's output once every
+// process it could find has been stopped. A process that still holds the pipes
+// after it is one safegit could not reach, and the read ends are closed so that
+// safegit can never hang on it.
+const readGrace = time.Second
+
+// runOne executes a single hook, forwarding its stdout and stderr to the
+// package-level writers, and enforces two rules on it.
+//
+// The configured timeout is the only budget. On timeout the hook's process
+// group gets SIGTERM, then SIGKILL after killGrace.
+//
+// A hook that leaves any process running when it ends -- normally or by the
+// timeout -- is a failed run. Once the hook process itself has exited, the
+// platform's containment (contain_linux.go, contain_other.go) finds what it
+// left behind, stops it where it can, and names it in Leftovers.
+//
+// The hook's three standard streams are pipes safegit creates itself and hands
+// to the child as files, so os/exec starts no copying goroutine of its own and
+// Wait returns when the hook process exits, whoever else still holds a pipe.
+// Nothing a hook writes is inspected, and nothing a hook writes can change the
+// budget it runs under: a hook that needs a different timeout reads
+// SAFEGIT_HOOK_TIMEOUT_S from its environment and is configured, never
+// self-declared on stdout.
+func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, env []string) (HookResult, error) {
 	name := filepath.Base(hookPath)
 	start := time.Now()
+	result := HookResult{Name: name}
+
+	c, err := beginContainment()
+	if err != nil {
+		return result, fmt.Errorf("hook %s: %w", name, err)
+	}
+	defer c.end()
+
+	p, err := newHookPipes()
+	if err != nil {
+		return result, fmt.Errorf("hook %s: %w", name, err)
+	}
 
 	cmd := exec.Command(hookPath)
-	cmd.Stdin = strings.NewReader(string(stdin))
-	cmd.Stderr = stderr
+	cmd.Stdin = p.inR
+	cmd.Stdout = p.outW
+	cmd.Stderr = p.errW
 	cmd.Dir = filepath.Dir(hookPath)
 	if len(env) > 0 {
 		cmd.Env = append(os.Environ(), env...)
@@ -220,89 +302,186 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 	// Set process group so we can signal the entire group (Unix only)
 	setProcGroup(cmd)
 
-	// Hook stdout is forwarded verbatim, every line of it. Nothing a hook
-	// writes is inspected, and nothing a hook writes can change the budget it
-	// runs under: the configured timeout is the only timeout, and a hook that
-	// needs a different one reads SAFEGIT_HOOK_TIMEOUT_S from its environment
-	// and is configured, never self-declared on stdout.
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return HookResult{Name: name, ExitCode: 1, Duration: time.Since(start)}
-	}
-
 	if err := cmd.Start(); err != nil {
-		return HookResult{Name: name, ExitCode: 1, Duration: time.Since(start)}
+		p.closeAll()
+		result.ExitCode = 1
+		result.Duration = time.Since(start)
+		return result, nil
+	}
+	p.closeChildEnds()
+
+	if err := c.started(cmd.Process.Pid); err != nil {
+		killGroup(cmd, syscall.SIGKILL)
+		cmd.Wait()
+		p.closeParentEnds()
+		return result, fmt.Errorf("hook %s: %w", name, err)
 	}
 
-	// The hook's stdout is read to its end BEFORE the process is waited on:
-	// Wait closes the read end of the pipe once the process exits, so waiting
-	// first drops whatever output was not yet read (os/exec forbids calling
-	// Wait before the reads complete). The consequence is deliberate: a hook
-	// whose background child still holds stdout open counts as running until
-	// that child exits or the timeout fires. Both happen in one goroutine, so
-	// the clock below keeps running over a hook that writes a lot, one that
-	// never closes its output, and one that closed it and kept running.
-	done := make(chan error, 1)
+	// stdin is written by a goroutine nobody waits on: a hook that never reads
+	// it, while a process it left behind holds the read end, must not stall
+	// safegit. Closing the write end below unblocks it.
 	go func() {
-		beforeStdoutRead()
-		io.Copy(stdout, stdoutPipe)
-		done <- cmd.Wait()
+		p.inW.Write(stdin)
+		p.inW.Close()
 	}()
 
-	timeout := time.Duration(timeoutSec) * time.Second
+	readDone := p.forward(stdout, stderr)
+
+	waited := make(chan error, 1)
+	go func() { waited <- cmd.Wait() }()
+
+	var waitErr error
+	signalled := false
+	timer := time.NewTimer(time.Duration(timeoutSec) * time.Second)
+	defer timer.Stop()
 	select {
-	case err := <-done:
-		duration := time.Since(start)
-		if err != nil {
-			if exitErr, ok := err.(*exec.ExitError); ok {
-				return HookResult{Name: name, ExitCode: exitErr.ExitCode(), Duration: duration}
-			}
-			return HookResult{Name: name, ExitCode: 1, Duration: duration}
-		}
-		return HookResult{Name: name, ExitCode: 0, Duration: duration}
-
-	case <-time.After(timeout):
-		// Timeout: SIGTERM the whole process group, so a background child
-		// holding stdout dies with the hook and the read ends. The hook is
-		// not reaped before this point, so its pid -- the group id -- cannot
-		// have been reused.
+	case waitErr = <-waited:
+	case <-timer.C:
+		// Timeout: SIGTERM the whole process group, then SIGKILL after the
+		// grace. The hook is not reaped before the signals, so its pid -- the
+		// group id -- cannot have been reused.
+		result.TimedOut = true
+		signalled = true
 		killGroup(cmd, syscall.SIGTERM)
-
-		// Grace period: 5 seconds
 		select {
-		case <-done:
-			// Terminated gracefully
-		case <-time.After(5 * time.Second):
-			killAndFinish(cmd, stdoutPipe, done)
+		case waitErr = <-waited:
+		case <-time.After(killGrace):
+			killGroup(cmd, syscall.SIGKILL)
+			waitErr = <-waited
 		}
+	case <-ctx.Done():
+		signalled = true
+		killGroup(cmd, syscall.SIGKILL)
+		waitErr = <-waited
+	}
 
+	// The hook has exited and is reaped. Whatever it started that is still
+	// running is left behind.
+	result.Leftovers, result.LeftoverUnknown = c.sweep(signalled)
+
+	// Every process safegit could find is stopped, so the output ends now --
+	// unless something it could not reach still holds a pipe.
+	select {
+	case <-readDone:
+	case <-time.After(readGrace):
+		holders, unknown := c.outputHolders(p.readFds())
+		result.Leftovers = append(result.Leftovers, holders...)
+		if unknown != "" && result.LeftoverUnknown == "" {
+			result.LeftoverUnknown = unknown
+		}
+		p.closeParentEnds()
+		<-readDone
+	}
+	p.inW.Close()
+	p.closeParentEnds()
+
+	result.Duration = time.Since(start)
+	switch {
+	case result.TimedOut:
 		// ExitCode is the HOOK's status, not safegit's. A killed hook has no
 		// status of its own, so the marker is deliberately chosen to READ the
 		// same as safegit's own hook-timeout code in the "exit=%d" line callers
 		// print -- which is why it is taken from the registry rather than
 		// written as a bare 21 that duplicates the constant by value. Nothing
 		// branches on it: TimedOut is what decides the caller's exit code.
-		return HookResult{Name: name, ExitCode: exitcode.PushHookTimeout, Duration: time.Since(start), TimedOut: true}
+		result.ExitCode = exitcode.PushHookTimeout
+	case signalled:
+		result.ExitCode = 1
+	case waitErr != nil:
+		result.ExitCode = 1
+		if exitErr, ok := waitErr.(*exec.ExitError); ok {
+			result.ExitCode = exitErr.ExitCode()
+		}
+	}
+	return result, nil
+}
 
-	case <-ctx.Done():
-		// Parent context cancelled
-		killAndFinish(cmd, stdoutPipe, done)
-		return HookResult{Name: name, ExitCode: 1, Duration: time.Since(start)}
+// hookPipes are the three pipes a hook's standard streams run over. The child
+// ends are handed to the hook as files; the parent ends are safegit's.
+type hookPipes struct {
+	inR, inW   *os.File
+	outR, outW *os.File
+	errR, errW *os.File
+}
+
+func newHookPipes() (*hookPipes, error) {
+	var p hookPipes
+	var err error
+	if p.inR, p.inW, err = os.Pipe(); err != nil {
+		return nil, fmt.Errorf("creating the stdin pipe: %w", err)
+	}
+	if p.outR, p.outW, err = os.Pipe(); err != nil {
+		p.closeAll()
+		return nil, fmt.Errorf("creating the stdout pipe: %w", err)
+	}
+	if p.errR, p.errW, err = os.Pipe(); err != nil {
+		p.closeAll()
+		return nil, fmt.Errorf("creating the stderr pipe: %w", err)
+	}
+	return &p, nil
+}
+
+// closeChildEnds closes safegit's copies of the ends the hook now holds, so
+// that the hook's exit (and its descendants') is what ends the output.
+func (p *hookPipes) closeChildEnds() {
+	for _, f := range []*os.File{p.inR, p.outW, p.errW} {
+		if f != nil {
+			f.Close()
+		}
 	}
 }
 
-// killAndFinish SIGKILLs the hook's process group and waits for the reader
-// to finish. A child that left the group (setsid) is out of reach of the
-// signal and may still hold stdout, so the read end is closed after the kill:
-// safegit stops reading rather than waiting on a process it cannot signal.
-func killAndFinish(cmd *exec.Cmd, stdoutPipe io.Closer, done <-chan error) {
-	killGroup(cmd, syscall.SIGKILL)
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		stdoutPipe.Close()
-		<-done
+// closeParentEnds closes safegit's own ends; a read or write blocked on one
+// returns. Closing twice is harmless.
+func (p *hookPipes) closeParentEnds() {
+	for _, f := range []*os.File{p.inW, p.outR, p.errR} {
+		if f != nil {
+			f.Close()
+		}
 	}
+}
+
+func (p *hookPipes) closeAll() {
+	p.closeChildEnds()
+	p.closeParentEnds()
+}
+
+// forward copies the hook's stdout and stderr to the given writers and closes
+// the returned channel once both have ended.
+func (p *hookPipes) forward(out, errw io.Writer) <-chan struct{} {
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		beforeStdoutRead()
+		io.Copy(out, p.outR)
+	}()
+	go func() {
+		defer wg.Done()
+		io.Copy(errw, p.errR)
+	}()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	return done
+}
+
+// readFds returns the descriptor numbers of safegit's read ends of the hook's
+// stdout and stderr pipes. It goes through SyscallConn rather than Fd, which
+// would switch the descriptors to blocking mode and stop a Close from
+// unblocking a read.
+func (p *hookPipes) readFds() []int {
+	var fds []int
+	for _, f := range []*os.File{p.outR, p.errR} {
+		rc, err := f.SyscallConn()
+		if err != nil {
+			continue
+		}
+		rc.Control(func(fd uintptr) { fds = append(fds, int(fd)) })
+	}
+	return fds
 }
 
 // isExecutable checks if a file has any execute permission bit set.

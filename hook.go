@@ -166,7 +166,12 @@ func hookRun(flags globalFlags, name string) int {
 		}
 
 		outf(flags, "running hook: %s\n", name)
-		r := hooks.RunSingle(ctx, hookPath, hookStdin, timeoutSec, hookEnv)
+		r, rErr := hooks.RunSingle(ctx, hookPath, hookStdin, timeoutSec, hookEnv)
+		if rErr != nil {
+			die(exitcode.General, fmt.Sprintf("running hooks: %v", rErr))
+			return exitcode.General
+		}
+		printLeftovers(r)
 		if r.TimedOut {
 			fmt.Fprintf(os.Stderr, "hook %s timed out\n", name)
 			return exitcode.PushHookTimeout
@@ -175,14 +180,22 @@ func hookRun(flags globalFlags, name string) int {
 			fmt.Fprintf(os.Stderr, "hook %s failed (exit %d)\n", name, r.ExitCode)
 			return exitcode.PushHookFailed
 		}
+		if r.Failed() {
+			return exitcode.PushHookFailed
+		}
 		outf(flags, "hook %s passed (%v)\n", name, r.Duration)
 		return 0
 	}
 
 	// No name -- run all hooks
-	results, rErr := hooks.Run(ctx, store, hookStdin, timeoutSec, hookEnv)
+	hookPaths, dErr := hooks.Discover(store)
+	if dErr != nil {
+		return hookDiscoveryExit(dErr)
+	}
+	results, rErr := hooks.RunAll(ctx, hookPaths, hookStdin, timeoutSec, hookEnv)
 	if rErr != nil {
-		return hookDiscoveryExit(rErr)
+		die(exitcode.General, fmt.Sprintf("running hooks: %v", rErr))
+		return exitcode.General
 	}
 
 	if len(results) == 0 {
@@ -192,12 +205,16 @@ func hookRun(flags globalFlags, name string) int {
 
 	failed := false
 	for _, r := range results {
+		printLeftovers(r)
 		status := "passed"
 		if r.TimedOut {
 			status = "timed out"
-			failed = true
 		} else if r.ExitCode != 0 {
 			status = fmt.Sprintf("failed (exit %d)", r.ExitCode)
+		} else if r.Failed() {
+			status = "failed (left processes running)"
+		}
+		if r.Failed() {
 			failed = true
 		}
 		outf(flags, "  %s: %s (%v)\n", r.Name, status, r.Duration)
@@ -207,6 +224,14 @@ func hookRun(flags globalFlags, name string) int {
 		return exitcode.PushHookFailed
 	}
 	return 0
+}
+
+// printLeftovers writes one error line to stderr per process a hook left
+// running when it ended. Such a run is a failure even when the hook exited 0.
+func printLeftovers(r hooks.HookResult) {
+	for _, msg := range r.LeftoverMessages() {
+		fmt.Fprintf(os.Stderr, "error: %s\n", msg)
+	}
 }
 
 // hookInstall copies a hook file into the tool-owned store and makes it

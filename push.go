@@ -311,12 +311,16 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 			if flags.verbose {
 				fmt.Fprintf(os.Stderr, "  hook %s: exit=%d (%v)\n", hr.Name, hr.ExitCode, hr.Duration)
 			}
+			printLeftovers(hr)
 			if hr.TimedOut {
 				fmt.Fprintf(os.Stderr, "hook %s timed out after %v\n", hr.Name, hr.Duration)
 				return exitcode.PushHookTimeout
 			}
 			if hr.ExitCode != 0 {
 				fmt.Fprintf(os.Stderr, "hook %s failed (exit %d)\n", hr.Name, hr.ExitCode)
+				return exitcode.PushHookFailed
+			}
+			if hr.Failed() {
 				return exitcode.PushHookFailed
 			}
 		}

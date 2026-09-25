@@ -637,7 +637,7 @@ safegit push --refs both
 
 ### Safety Guarantees
 
-- **Pre-pre-push hooks**: Hooks in the live store under the repository's common `.git/safegit/hooks/`, and hooks the checkout provides in `.safegit/hooks/`, run before any network I/O. A failing hook aborts the push (exit code 20). A timed-out hook aborts with exit code 21. A hook without its execute bit is a refusal (exit code 25) in BOTH stores: a hook is disabled by removing it, never by dropping its mode, and a lost mode bit -- a filesystem without modes, a patch tool that dropped it -- would otherwise turn into checks that quietly stopped running. Hooks still sitting in the pre-migration location, `.git/hooks/pre-pre-push` and `.git/hooks/pre-pre-push.d/`, do **not** run at all: every push and every `hook run` refuses with exit code 24 until `safegit hook migrate` moves them.
+- **Pre-pre-push hooks**: Hooks in the live store under the repository's common `.git/safegit/hooks/`, and hooks the checkout provides in `.safegit/hooks/`, run before any network I/O. A failing hook aborts the push (exit code 20). A timed-out hook aborts with exit code 21. A hook that leaves any process running when it ends -- a backgrounded server, a detached watcher -- has failed even if it exited 0: the push aborts with exit code 20, each process is named on stderr by PID and command, and safegit stops it (on macOS, where safegit cannot contain a process that left the hook's process group, such a process is named and reported as still running). A hook's output, stdout included, goes to stderr, so under `--json` stdout carries only the envelope. A hook without its execute bit is a refusal (exit code 25) in BOTH stores: a hook is disabled by removing it, never by dropping its mode, and a lost mode bit -- a filesystem without modes, a patch tool that dropped it -- would otherwise turn into checks that quietly stopped running. Hooks still sitting in the pre-migration location, `.git/hooks/pre-pre-push` and `.git/hooks/pre-pre-push.d/`, do **not** run at all: every push and every `hook run` refuses with exit code 24 until `safegit hook migrate` moves them.
 - **Where hooks run from, and who can put one there**: the live store is keyed on the **common** git dir, so a hook installed from a linked worktree is the hook every worktree of the repository runs -- the same anchor the ref locks use. The checkout-provided store is per-worktree, because it is checkout content: a file is in it because it sits in `.safegit/hooks/`, whether or not git tracks it, so an uncommitted script there runs on the next push. That means **cloning a repository and pushing from that checkout runs the repository's committed scripts**. Execution happens only on `safegit push` and `safegit hook run` -- an operator action with push intent -- never on clone, fetch, checkout or any inspection command, and `safegit hook list` names every location with its origin so the set can be read before anything is pushed.
 - **Submodule hook cascading**: When pushing from inside a submodule, hooks from the parent repo are discovered and run first, then the submodule's own hooks.
 - **Automatic retry**: Transport errors (connection refused, DNS failure, TLS errors, broken pipe) are classified from git's own stderr and trigger automatic retries with exponential backoff (1s, 2s, 4s). Every retry re-reads the remote and re-pins the leases, so an expectation is never carried over from a failed attempt. Non-transport errors (non-fast-forward, permission denied, a stale lease) are not retried. Default: 3 attempts, configurable via `push.retryAttempts`.
@@ -1846,6 +1846,13 @@ pre-migration `.git/hooks` location, and exit **25** when a discovered hook is
 not executable, in either store. Neither is a quiet skip and neither reports "no
 hooks to run": a command whose whole purpose is to say whether the checks pass
 must not exit 0 because a check was passed over.
+
+### A hook that leaves a process running fails
+
+A hook that exits 0 but leaves a process running when it ends is a failure, as
+it is on a push: exit **20**, with each process named on stderr, for example
+`error: hook release-check left process 48213 (node) running after it ended; it was killed`.
+A hook's output, stdout included, goes to stderr.
 
 ### `--dry-run` is refused
 

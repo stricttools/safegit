@@ -1557,6 +1557,22 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   script must not be able to write into it.
 - **Ruling:** ours — deliberate
 
+### A hook that leaves a process running fails
+
+- **git's idiom:** git waits for the hook process and reads its exit status;
+  anything the hook started in the background keeps running, unobserved, after
+  the hook returns.
+- **safegit:** a pre-pre-push hook that leaves any process running when it ends
+  is a failed hook run, even when it exits 0: the push aborts with the
+  hook-failure exit code, each process is named on stderr, and safegit stops
+  it. On Linux safegit is a child subreaper while a hook runs, so a process that
+  detaches with `setsid` or a double fork is found and stopped too; on macOS,
+  which has no subreaper, a process that left the hook's process group is named
+  from `lsof` and reported as still running. A check that leaves a server or a
+  watcher behind would otherwise keep running after the push, with nothing
+  saying so.
+- **Ruling:** ours — deliberate
+
 ### Hooks the checkout provides are executed on push
 
 - **git's idiom:** hooks live in `.git/hooks`, are never cloned, and git will not
