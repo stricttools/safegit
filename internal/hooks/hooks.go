@@ -308,7 +308,7 @@ func RunSingle(ctx context.Context, hookPath string, stdin []byte, timeoutSec in
 // SIGTERM at once and the SIGTERM grace to shut down cleanly; what is still
 // alive then gets SIGKILL and killWindow to die and be reaped; and the output
 // still arriving gets readGrace. A process alive at the end is named as not
-// stoppable and left: a process in uninterruptible sleep survives SIGKILL, and
+// stoppable and left: a process in uninterruptible sleep outlives SIGKILL, and
 // waiting for it would make the cap a lie.
 const (
 	// DefaultStopCap is the cap when SAFEGIT_HOOK_KILL_CAP_S is not set.

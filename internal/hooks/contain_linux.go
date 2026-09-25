@@ -260,7 +260,7 @@ func pidfdOpen(pid int) (int, syscall.Errno) {
 }
 
 // signalProcess is how the sweep signals the process at pid through its pidfd;
-// a test stands in for it to play a process that survives SIGKILL.
+// a test stands in for it to play a process that outlives SIGKILL.
 var signalProcess = func(pid, fd int, sig syscall.Signal) { pidfdSendSignal(fd, sig) }
 
 func pidfdSendSignal(fd int, sig syscall.Signal) syscall.Errno {
@@ -335,7 +335,7 @@ func (c *container) outputHolders(readFds []int) ([]LeftoverProcess, string) {
 //
 // The roots are safegit's children that started no earlier than the hook: the
 // hook's orphans, reparented here. The hook is ordinarily reaped before a
-// sweep's scans, and its surviving children are orphans by then too; while it
+// sweep's scans, and its remaining children are orphans by then too; while it
 // is still running -- a stop's first SIGTERM, or a hook that outlived SIGKILL
 // -- its own children are roots as well. The hook is recognized by its start
 // time, so a reused pid never lends its children.

@@ -19,7 +19,7 @@ func killGroup(cmd *exec.Cmd, sig syscall.Signal) error {
 }
 
 // signalGroup is how killGroup signals a process group; a test stands in for
-// it to play a process that survives SIGKILL.
+// it to play a process that outlives SIGKILL.
 var signalGroup = func(pgid int, sig syscall.Signal) error {
 	return syscall.Kill(-pgid, sig)
 }

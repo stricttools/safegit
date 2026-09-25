@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// A process that survives SIGKILL -- one in uninterruptible sleep, state D --
+// A process that outlives SIGKILL -- one in uninterruptible sleep, state D --
 // cannot be produced on demand, so these tests play one: the seams that send
 // SIGKILL drop it, and the process ignores SIGTERM, so nothing safegit sends
 // can end it. The stop must still end at its cap, name the process as not
@@ -94,7 +94,7 @@ func findLeftover(t *testing.T, r HookResult, pid int) LeftoverProcess {
 // A hook exits 0 and leaves behind a process nothing can kill. The sweep gives
 // it the SIGTERM grace, then SIGKILL, and at the cap names it as still running,
 // with its state, and returns.
-func TestLeftoverThatSurvivesSIGKILLIsNamedAtTheCap(t *testing.T) {
+func TestLeftoverThatOutlivesSIGKILLIsNamedAtTheCap(t *testing.T) {
 	dropSIGKILL(t)
 	var errBuf bytes.Buffer
 	restore := SetOutput(&bytes.Buffer{}, &errBuf)
@@ -121,7 +121,7 @@ func TestLeftoverThatSurvivesSIGKILLIsNamedAtTheCap(t *testing.T) {
 	r := results[0]
 	l := findLeftover(t, r, pid)
 	if l.Killed {
-		t.Errorf("leftover %d is reported as killed; it survived SIGKILL", pid)
+		t.Errorf("leftover %d is reported as killed; it outlived SIGKILL", pid)
 	}
 	if !r.Failed() {
 		t.Errorf("a hook that left a process behind must be a failed run: %+v", r)
@@ -137,7 +137,7 @@ func TestLeftoverThatSurvivesSIGKILLIsNamedAtTheCap(t *testing.T) {
 // A hook that ignores SIGTERM times out, and SIGKILL does not end it either.
 // The timeout's stop runs under the same cap: at the cap the hook itself is
 // named as still running, with its state, and the run returns.
-func TestTimedOutHookThatSurvivesSIGKILLIsNamedAtTheCap(t *testing.T) {
+func TestTimedOutHookThatOutlivesSIGKILLIsNamedAtTheCap(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping timeout test in short mode")
 	}
@@ -169,7 +169,7 @@ func TestTimedOutHookThatSurvivesSIGKILLIsNamedAtTheCap(t *testing.T) {
 	}
 	l := findLeftover(t, r, pid)
 	if l.Killed {
-		t.Errorf("the hook process %d is reported as killed; it survived SIGKILL", pid)
+		t.Errorf("the hook process %d is reported as killed; it outlived SIGKILL", pid)
 	}
 	msgs := strings.Join(r.LeftoverMessages(), "\n")
 	want := "hook pre-pre-push (process " + strconv.Itoa(pid) + ") is still running: " +
