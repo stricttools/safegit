@@ -318,7 +318,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 
 		for _, hr := range hookResults {
 			if flags.verbose {
-				fmt.Fprintf(os.Stderr, "  hook %s: exit=%d (%v)\n", hr.Name, hr.ExitCode, hr.Duration)
+				fmt.Fprintf(os.Stderr, "  hook %s: %s (%v)\n", hr.Name, hookEnding(hr), hr.Duration)
 			}
 			printLeftovers(hr)
 		}

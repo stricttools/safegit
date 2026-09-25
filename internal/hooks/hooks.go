@@ -13,7 +13,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/smm-h/safegit/internal/exitcode"
 )
 
 // stdout and stderr are where a hook's stdout and its stderr are forwarded.
@@ -44,8 +43,10 @@ func SetOutput(out, err io.Writer) func() {
 // through the caller's own record type, whose member names are the one
 // documented form.
 type HookResult struct {
-	Name     string
-	ExitCode int
+	Name string
+	// ExitCode is the hook's own exit status, and nil when it has none: the
+	// timeout, or an interruption, killed it.
+	ExitCode *int
 	Duration time.Duration
 	TimedOut bool
 	// Leftovers are the processes the hook left running when it ended.
@@ -64,10 +65,10 @@ type LeftoverProcess struct {
 	Killed bool
 }
 
-// Failed reports whether the run failed: a nonzero status, a timeout, or any
-// process left behind.
+// Failed reports whether the run failed: a nonzero status, no status at all
+// (the hook was killed), a timeout, or any process left behind.
 func (r HookResult) Failed() bool {
-	return r.ExitCode != 0 || r.TimedOut || len(r.Leftovers) > 0 || r.LeftoverUnknown != ""
+	return r.ExitCode == nil || *r.ExitCode != 0 || r.TimedOut || len(r.Leftovers) > 0 || r.LeftoverUnknown != ""
 }
 
 // LeftoverMessages returns the error lines naming what the hook left behind:
@@ -309,7 +310,8 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 
 	if err := cmd.Start(); err != nil {
 		p.closeAll()
-		result.ExitCode = 1
+		one := 1
+		result.ExitCode = &one
 		result.Duration = time.Since(start)
 		return result, nil
 	}
@@ -390,24 +392,18 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 	p.closeParentEnds()
 
 	result.Duration = time.Since(start)
-	switch {
-	case result.TimedOut:
-		// ExitCode is the HOOK's status, not safegit's. A killed hook has no
-		// status of its own, so the marker is deliberately chosen to READ the
-		// same as safegit's own hook-timeout code in the "exit=%d" line callers
-		// print -- which is why it is taken from the registry rather than
-		// written as a bare 21 that duplicates the constant by value. The
-		// machine payload does not carry it: a timed-out run's exit_code is
-		// null there. Nothing branches on it: TimedOut is what decides the
-		// caller's exit code.
-		result.ExitCode = exitcode.PushHookTimeout
-	case signalled:
-		result.ExitCode = 1
-	case waitErr != nil:
-		result.ExitCode = 1
-		if exitErr, ok := waitErr.(*exec.ExitError); ok {
-			result.ExitCode = exitErr.ExitCode()
+	// ExitCode is the HOOK's own status, never safegit's. A hook safegit
+	// killed -- the timeout, or a cancellation -- has none, so it stays nil;
+	// TimedOut is what decides the caller's exit code for a timeout.
+	if !signalled {
+		code := 0
+		if waitErr != nil {
+			code = 1
+			if exitErr, ok := waitErr.(*exec.ExitError); ok {
+				code = exitErr.ExitCode()
+			}
 		}
+		result.ExitCode = &code
 	}
 	return result, nil
 }

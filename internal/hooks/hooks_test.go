@@ -164,8 +164,8 @@ func TestRunSuccess(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
-	if results[0].ExitCode != 0 {
-		t.Errorf("expected exit code 0, got %d", results[0].ExitCode)
+	if !exitedWith(results[0], 0) {
+		t.Errorf("expected exit code 0, got %v", results[0].ExitCode)
 	}
 	if results[0].TimedOut {
 		t.Error("should not have timed out")
@@ -191,8 +191,8 @@ func TestRunFailure(t *testing.T) {
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result (abort on failure), got %d", len(results))
 	}
-	if results[0].ExitCode != 1 {
-		t.Errorf("expected exit code 1, got %d", results[0].ExitCode)
+	if !exitedWith(results[0], 1) {
+		t.Errorf("expected exit code 1, got %v", results[0].ExitCode)
 	}
 }
 
@@ -219,8 +219,8 @@ func TestRunTimeout(t *testing.T) {
 	if !results[0].TimedOut {
 		t.Error("expected hook to time out")
 	}
-	if results[0].ExitCode != 21 {
-		t.Errorf("expected exit code 21, got %d", results[0].ExitCode)
+	if results[0].ExitCode != nil {
+		t.Errorf("a hook the timeout killed has no exit status, got %d", *results[0].ExitCode)
 	}
 	// Should complete within timeout + grace + some slack (1s + 5s + 2s margin)
 	if elapsed > 8*time.Second {
@@ -242,7 +242,7 @@ func TestSetOutputCapturesHookOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].ExitCode != 0 {
+	if len(results) != 1 || !exitedWith(results[0], 0) {
 		t.Fatalf("unexpected result: %+v", results)
 	}
 
@@ -309,7 +309,7 @@ func TestSlowReaderLosesNoHookOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(results) != 1 || results[0].ExitCode != 0 {
+	if len(results) != 1 || !exitedWith(results[0], 0) {
 		t.Fatalf("unexpected result: %+v", results)
 	}
 	if got := outBuf.String(); got != "hello-from-hook\n" {
@@ -424,4 +424,9 @@ func waitGone(pid int, d time.Duration) bool {
 		time.Sleep(50 * time.Millisecond)
 	}
 	return false
+}
+
+// exitedWith reports whether a run ended with the hook's own exit status code.
+func exitedWith(r HookResult, code int) bool {
+	return r.ExitCode != nil && *r.ExitCode == code
 }

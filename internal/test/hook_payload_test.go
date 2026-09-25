@@ -363,3 +363,23 @@ func TestPushPayloadStatesAtomicWhenAHookStopsAMultiRefPush(t *testing.T) {
 		t.Errorf("atomic = %v, want true: the stopped push was a two-branch push, which safegit makes atomic", p.Atomic)
 	}
 }
+
+// A hook the timeout killed has no exit status of its own, so the verbose line
+// for it says it timed out rather than printing safegit's own timeout code as
+// if the hook had exited with it.
+func TestPushVerboseSaysATimedOutHookTimedOut(t *testing.T) {
+	dir, _ := newRepoWithRemote(t)
+	setHookTimeout(t, dir, "1")
+	installDirHook(t, dir, "10-lint", "exec sleep 30")
+
+	_, stderr, code := runSafegit(t, dir, "--verbose", "push", "--refs", "head", "origin")
+	if code != exitcode.PushHookTimeout {
+		t.Fatalf("exit = %d, want %d; stderr: %s", code, exitcode.PushHookTimeout, stderr)
+	}
+	if !strings.Contains(stderr, "hook 10-lint: timed out (") {
+		t.Errorf("the verbose line must say the hook timed out; stderr:\n%s", stderr)
+	}
+	if strings.Contains(stderr, "exit=") {
+		t.Errorf("a timed-out hook has no exit status, and the verbose line printed one; stderr:\n%s", stderr)
+	}
+}

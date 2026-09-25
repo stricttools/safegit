@@ -93,8 +93,8 @@ func TestHookThatSetsidsASleepAndExitsZeroFails(t *testing.T) {
 	if r.TimedOut {
 		t.Fatalf("the hook exited on its own and must not be reported as timed out: %+v", r)
 	}
-	if r.ExitCode != 0 {
-		t.Errorf("ExitCode is the hook's own status, want 0, got %d", r.ExitCode)
+	if !exitedWith(r, 0) {
+		t.Errorf("ExitCode is the hook's own status, want 0, got %v", r.ExitCode)
 	}
 	if elapsed > 10*time.Second {
 		t.Errorf("the run took %v; a leftover must be killed, not waited for", elapsed)

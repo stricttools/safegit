@@ -65,9 +65,9 @@ func TestHookRecordStatesIdentifiedLeftoversAsFalse(t *testing.T) {
 
 // TestHookRecordOfATimedOutHookHasNoExitCode: a timed-out hook was killed, so it
 // has no exit status of its own. Its record carries exit_code null and
-// timed_out true; safegit's own exit code 21 is not the hook's.
+// timed_out true, and nothing stands in for the missing status.
 func TestHookRecordOfATimedOutHookHasNoExitCode(t *testing.T) {
-	m := decodeRecord(t, hooks.HookResult{Name: "10-lint", Duration: time.Second, TimedOut: true, ExitCode: 21})
+	m := decodeRecord(t, hooks.HookResult{Name: "10-lint", Duration: time.Second, TimedOut: true})
 	if got, ok := m["exit_code"]; !ok || string(got) != "null" {
 		t.Errorf("exit_code = %q (present %v), want null", got, ok)
 	}
@@ -75,7 +75,8 @@ func TestHookRecordOfATimedOutHookHasNoExitCode(t *testing.T) {
 		t.Errorf("timed_out = %s, want true", got)
 	}
 
-	m = decodeRecord(t, hooks.HookResult{Name: "20-test", Duration: time.Second, ExitCode: 3})
+	three := 3
+	m = decodeRecord(t, hooks.HookResult{Name: "20-test", Duration: time.Second, ExitCode: &three})
 	if got := string(m["exit_code"]); got != "3" {
 		t.Errorf("exit_code of a hook that exited 3 = %s, want 3", got)
 	}

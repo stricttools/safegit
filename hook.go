@@ -204,8 +204,8 @@ func hookRun(flags globalFlags, name string) int {
 		status := "passed"
 		if r.TimedOut {
 			status = "timed out"
-		} else if r.ExitCode != 0 {
-			status = fmt.Sprintf("failed (exit %d)", r.ExitCode)
+		} else if r.ExitCode != nil && *r.ExitCode != 0 {
+			status = fmt.Sprintf("failed (exit %d)", *r.ExitCode)
 		} else if r.Failed() {
 			status = "failed (left processes running)"
 		}
@@ -215,6 +215,20 @@ func hookRun(flags globalFlags, name string) int {
 	// The same rule push uses: the first run that did not pass decides the
 	// code, so a timeout answers 21 rather than the generic 20.
 	return hookRunsExit(results)
+}
+
+// hookEnding says how a hook run ended, for the text output: "exit=N" for a
+// hook that exited, and "timed out" for one the timeout killed, which has no
+// exit status of its own.
+func hookEnding(r hooks.HookResult) string {
+	switch {
+	case r.TimedOut:
+		return "timed out"
+	case r.ExitCode == nil:
+		return "killed"
+	default:
+		return fmt.Sprintf("exit=%d", *r.ExitCode)
+	}
 }
 
 // printLeftovers writes one error line to stderr per process a hook left
@@ -237,8 +251,8 @@ func hookRunsExit(results []hooks.HookResult) int {
 		case r.TimedOut:
 			fmt.Fprintf(os.Stderr, "hook %s timed out after %v\n", r.Name, r.Duration)
 			return exitcode.PushHookTimeout
-		case r.ExitCode != 0:
-			fmt.Fprintf(os.Stderr, "hook %s failed (exit %d)\n", r.Name, r.ExitCode)
+		case r.ExitCode != nil && *r.ExitCode != 0:
+			fmt.Fprintf(os.Stderr, "hook %s failed (exit %d)\n", r.Name, *r.ExitCode)
 			return exitcode.PushHookFailed
 		case r.Failed():
 			// A run that exited 0 and still failed left something behind;
@@ -253,8 +267,8 @@ func hookRunsExit(results []hooks.HookResult) int {
 // run only. Whether it passed is the exit code's to say, not a member's.
 type hookRecord struct {
 	Name string `json:"name"`
-	// ExitCode is the hook's own exit status, and null when the hook timed
-	// out: the timeout killed it, so it has no status of its own.
+	// ExitCode is the hook's own exit status, and null when the hook has
+	// none: the timeout killed it.
 	ExitCode *int `json:"exit_code"`
 	TimedOut bool `json:"timed_out"`
 	// DurationMS is the run's wall-clock time in whole milliseconds.
@@ -320,8 +334,8 @@ func hookRecords(results []hooks.HookResult) []hookRecord {
 			LeftoverProcesses:     left,
 			UnidentifiedLeftovers: r.LeftoverUnknown != "",
 		}
-		if !r.TimedOut {
-			code := r.ExitCode
+		if r.ExitCode != nil {
+			code := *r.ExitCode
 			rec.ExitCode = &code
 		}
 		if r.LeftoverUnknown != "" {
