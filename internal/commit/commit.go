@@ -913,6 +913,16 @@ func (p *Pipeline) stageAll(ctx context.Context, indexPath, repoRoot string, fil
 			}
 			continue
 		}
+		if underLink(repoRoot, entry.path) {
+			// The path is absent from the working tree: a link now stands
+			// where one of its directories was, and whatever the filesystem
+			// shows beneath it is the link target's, not this path's. What is
+			// left to record is its removal.
+			if err := git.DropFromIndex(ctx, indexPath, entry.path); err != nil {
+				return fmt.Errorf("staging the removal of %s: %w", entry.path, err)
+			}
+			continue
+		}
 		if err := p.stageFile(ctx, indexPath, absPath); err != nil {
 			return fmt.Errorf("staging %s: %w", entry.path, err)
 		}

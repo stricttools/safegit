@@ -1,0 +1,269 @@
+package test
+
+// A tracked directory replaced on disk by a symlink.
+//
+// The tree holds `logs/.gitignore`; the working tree now holds `logs` as a
+// symlink. The commit that records this deletes `logs/.gitignore` from the tree
+// and adds `logs` as a 120000 entry holding the link text -- which is what plain
+// git records for `git add logs/.gitignore logs`. Two things must hold on the
+// way there. A path under the link is still a path IN the repository: whether
+// `logs/.gitignore` is inside is decided on its spelling, never by resolving it
+// through the link to wherever the link points. And the link is one object: it
+// is never expanded into the files of the directory it points at, and nothing
+// underneath it is ever read from disk, because on disk "underneath it" is the
+// target's own content, which the repository never carried.
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/smm-h/safegit/internal/exitcode"
+	"github.com/smm-h/safegit/internal/testutil"
+)
+
+// trackedDirReplacedByLink commits logs/.gitignore, then replaces logs/ on disk
+// with a symlink holding target. It returns the repository and the tip before
+// the commit under test.
+func trackedDirReplacedByLink(t *testing.T, target string) (dir, before string) {
+	t.Helper()
+	dir = newRepo(t)
+	testutil.WriteFile(t, dir, "logs/.gitignore", "*\n!.gitignore\n")
+	testutil.Git(t, dir, "add", "logs/.gitignore")
+	testutil.Git(t, dir, "commit", "-m", "track logs/")
+
+	if err := os.RemoveAll(filepath.Join(dir, "logs")); err != nil {
+		t.Fatalf("removing logs/: %v", err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, "logs")); err != nil {
+		t.Fatalf("creating the logs symlink: %v", err)
+	}
+	return dir, testutil.Rev(t, dir, "HEAD")
+}
+
+// outsideLogTarget builds a directory outside the repository shaped like a
+// machine's log directory: subdirectories and a file, and optionally a
+// .gitignore of its own, which is what a read through the link would find at
+// logs/.gitignore.
+func outsideLogTarget(t *testing.T, withGitignore bool) string {
+	t.Helper()
+	outside := evalTempDir(t)
+	testutil.WriteFileAt(t, filepath.Join(outside, "events", "a.log"), "event\n")
+	testutil.WriteFileAt(t, filepath.Join(outside, "telemetry", "b.log"), "telemetry\n")
+	testutil.WriteFileAt(t, filepath.Join(outside, "shutdown.log"), "shutdown\n")
+	if withGitignore {
+		testutil.WriteFileAt(t, filepath.Join(outside, ".gitignore"), "machine-local\n")
+	}
+	return outside
+}
+
+// assertLinkReplacedDirectory checks the one commit the operation must make:
+// logs/.gitignore gone, logs a 120000 entry holding target, nothing from the
+// link's target in the tree, and exactly one commit on top of before.
+func assertLinkReplacedDirectory(t *testing.T, dir, before, target string) {
+	t.Helper()
+	if parents := testutil.Parents(t, dir, "HEAD"); len(parents) != 1 || parents[0] != before {
+		t.Fatalf("expected exactly one new commit on top of %s, got parents %v", before, parents)
+	}
+	if mode := treeEntryMode(t, dir, "logs"); mode != "120000" {
+		t.Errorf("expected HEAD entry \"logs\" with mode 120000, got %q; tree:\n%s", mode, lsTreeHEAD(t, dir))
+	}
+	if got := catFileBlob(t, dir, "logs"); got != target {
+		t.Errorf("symlink blob = %q, want the link text %q", got, target)
+	}
+	for _, p := range testutil.TreePaths(t, dir, "HEAD") {
+		if strings.HasPrefix(p, "logs/") {
+			t.Errorf("HEAD still holds %s under the link; tree:\n%s", p, lsTreeHEAD(t, dir))
+		}
+	}
+	info, err := os.Lstat(filepath.Join(dir, "logs"))
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("logs must still be a symlink on disk (err %v)", err)
+	}
+}
+
+// TestCommitLinkReplacingTrackedDirectory covers both spellings of the commit
+// -- naming the deleted path and the link, and naming the link alone -- over an
+// absolute target outside the repository, with and without a .gitignore in the
+// target that a read through the link would mistake for the tracked one.
+func TestCommitLinkReplacingTrackedDirectory(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		args          []string
+		withGitignore bool
+	}{
+		{"deleted path and link named", []string{"logs/.gitignore", "logs"}, false},
+		{"link alone named", []string{"logs"}, false},
+		{"deleted path and link named, target has a .gitignore", []string{"logs/.gitignore", "logs"}, true},
+		{"link alone named, target has a .gitignore", []string{"logs"}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			target := outsideLogTarget(t, tc.withGitignore)
+			dir, before := trackedDirReplacedByLink(t, target)
+
+			// The target is absolute, so without the election the commit is the
+			// non-portable-target refusal -- and only that: the path under the
+			// link is in the repository and the link is not expanded.
+			args := append([]string{"commit", "-m", "logs becomes a link", "--"}, tc.args...)
+			_, stderr, code := runSafegit(t, dir, args...)
+			if code != exitcode.NonPortableTarget {
+				t.Fatalf("without the election, exit %d, want %d (NonPortableTarget); stderr:\n%s",
+					code, exitcode.NonPortableTarget, stderr)
+			}
+			if !strings.Contains(stderr, "logs -> "+target) {
+				t.Errorf("the refusal must name the link and its target; stderr:\n%s", stderr)
+			}
+
+			args = append([]string{"commit", "--allow-non-portable-targets", "-m", "logs becomes a link", "--"}, tc.args...)
+			stdout, stderr, code := runSafegit(t, dir, args...)
+			if code != 0 {
+				t.Fatalf("commit failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+			}
+			assertLinkReplacedDirectory(t, dir, before, target)
+		})
+	}
+}
+
+// TestCommitLinkReplacingTrackedDirectoryPointsInside: the link points at a
+// directory inside the repository. The link is still committed as a link, and
+// the directory it points at contributes nothing.
+func TestCommitLinkReplacingTrackedDirectoryPointsInside(t *testing.T) {
+	for _, args := range [][]string{{"logs/.gitignore", "logs"}, {"logs"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			dir := newRepo(t)
+			testutil.WriteFile(t, dir, "logs/.gitignore", "*.log\n")
+			testutil.WriteFile(t, dir, "real/kept.txt", "kept\n")
+			testutil.Git(t, dir, "add", "logs/.gitignore", "real/kept.txt")
+			testutil.Git(t, dir, "commit", "-m", "track logs/ and real/")
+			testutil.WriteFile(t, dir, "real/untracked.txt", "not named\n")
+			if err := os.RemoveAll(filepath.Join(dir, "logs")); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink("real", filepath.Join(dir, "logs")); err != nil {
+				t.Fatal(err)
+			}
+			before := testutil.Rev(t, dir, "HEAD")
+
+			stdout, stderr, code := runSafegit(t, dir, append([]string{"commit", "-m", "logs becomes a link", "--"}, args...)...)
+			if code != 0 {
+				t.Fatalf("commit failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+			}
+			assertLinkReplacedDirectory(t, dir, before, "real")
+			if _, ok := testutil.Show(t, dir, "HEAD", "real/untracked.txt"); ok {
+				t.Error("a file in the link's target was committed; naming the link must not reach through it")
+			}
+		})
+	}
+}
+
+// TestCommitLinkReplacingTrackedDirectoryDangling: the link's target does not
+// exist at all.
+func TestCommitLinkReplacingTrackedDirectoryDangling(t *testing.T) {
+	for _, args := range [][]string{{"logs/.gitignore", "logs"}, {"logs"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			dir, before := trackedDirReplacedByLink(t, "not-there")
+			stdout, stderr, code := runSafegit(t, dir, append([]string{"commit", "-m", "logs becomes a link", "--"}, args...)...)
+			if code != 0 {
+				t.Fatalf("commit failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+			}
+			assertLinkReplacedDirectory(t, dir, before, "not-there")
+		})
+	}
+}
+
+// TestAmendLinkReplacingTrackedDirectory: --amend resolves its files through
+// the same intake, so it records the same change.
+func TestAmendLinkReplacingTrackedDirectory(t *testing.T) {
+	dir, _ := trackedDirReplacedByLink(t, "not-there")
+	parent := testutil.Rev(t, dir, "HEAD~1")
+	stdout, stderr, code := runSafegit(t, dir, "commit", "--amend", "-m", "logs is a link", "--", "logs/.gitignore", "logs")
+	if code != 0 {
+		t.Fatalf("amend failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	assertLinkReplacedDirectory(t, dir, parent, "not-there")
+}
+
+// TestCommitPathOutsideTheRepositoryIsStillRefused: judging containment on the
+// spelling must not let a path that really is outside through.
+func TestCommitPathOutsideTheRepositoryIsStillRefused(t *testing.T) {
+	parent := evalTempDir(t)
+	dir := filepath.Join(parent, "repo")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	testutil.Git(t, dir, "init", "--initial-branch=main")
+	testutil.Git(t, dir, "config", "user.email", "test@test.com")
+	testutil.Git(t, dir, "config", "user.name", "Test")
+	testutil.WriteFile(t, dir, "seed.txt", "seed\n")
+	testutil.Git(t, dir, "add", "seed.txt")
+	testutil.Git(t, dir, "commit", "-m", "initial")
+	testutil.WriteFileAt(t, filepath.Join(parent, "elsewhere", "file"), "outside\n")
+	before := testutil.Rev(t, dir, "HEAD")
+
+	_, stderr, code := runSafegit(t, dir, "commit", "-m", "reach outside", "--", "../elsewhere/file")
+	if code == 0 {
+		t.Fatal("a path outside the repository was committed")
+	}
+	if !strings.Contains(stderr, "file ../elsewhere/file is outside the repository") {
+		t.Errorf("expected the outside-the-repository refusal; stderr:\n%s", stderr)
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("HEAD moved: %s -> %s", before, after)
+	}
+}
+
+// TestCommitLinkReplacingTrackedDirectoryFromALinkedSpellingOfTheRoot: the
+// caller's working directory is a link to the repository root (the macOS
+// /var -> /private/var shape), so the absolute path of an argument does not
+// start with the root git reports. The root is still found by resolving the
+// ancestor that IS the root, and everything below it is still read as spelled.
+func TestCommitLinkReplacingTrackedDirectoryFromALinkedSpellingOfTheRoot(t *testing.T) {
+	dir, before := trackedDirReplacedByLink(t, "not-there")
+	alias := filepath.Join(evalTempDir(t), "alias")
+	if err := os.Symlink(dir, alias); err != nil {
+		t.Fatal(err)
+	}
+	stdout, stderr, code := runSafegitEnv(t, alias, []string{"PWD=" + alias},
+		"commit", "-m", "logs becomes a link", "--", "logs/.gitignore", "logs")
+	if code != 0 {
+		t.Fatalf("commit from the linked spelling failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	assertLinkReplacedDirectory(t, dir, before, "not-there")
+}
+
+// TestMvDoesNotMoveAFileOutOfALinkTarget: `safegit mv` resolves the components
+// above a path's final one, so a tracked path whose directory has become a link
+// leading out of the repository is refused as outside it. What must never
+// happen is the move itself: the file the filesystem shows under the link
+// belongs to the link's target, and moving it would pull it out of there and
+// into the repository -- even when its content matches the tracked blob.
+func TestMvDoesNotMoveAFileOutOfALinkTarget(t *testing.T) {
+	outside := evalTempDir(t)
+	testutil.WriteFileAt(t, filepath.Join(outside, "a.txt"), "tracked\n")
+	dir := newRepo(t)
+	testutil.WriteFile(t, dir, "logs/a.txt", "tracked\n")
+	testutil.Git(t, dir, "add", "logs/a.txt")
+	testutil.Git(t, dir, "commit", "-m", "track logs/a.txt")
+	if err := os.RemoveAll(filepath.Join(dir, "logs")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "logs")); err != nil {
+		t.Fatal(err)
+	}
+	before := testutil.Rev(t, dir, "HEAD")
+
+	_, stderr, code := runSafegit(t, dir, "mv", "-m", "move it", "logs/a.txt -> b.txt")
+	if code == 0 {
+		t.Fatalf("mv moved a path under a link that leaves the repository; stderr:\n%s", stderr)
+	}
+	if !testutil.FileExists(filepath.Join(outside, "a.txt")) {
+		t.Error("the file in the link's target was moved away")
+	}
+	if testutil.FileExists(filepath.Join(dir, "b.txt")) {
+		t.Error("b.txt appeared in the repository")
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("HEAD moved: %s -> %s", before, after)
+	}
+}
