@@ -381,7 +381,7 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		stop()
 	case <-ctx.Done():
 		// A cancellation -- safegit itself was interrupted -- stops the hook
-		// exactly as the timeout does, and the sweep below stops what it left.
+		// the same way the timeout does, and the sweep below stops what it left.
 		stop()
 	}
 

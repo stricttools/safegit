@@ -391,7 +391,7 @@ func TestPushVerboseSaysATimedOutHookTimedOut(t *testing.T) {
 	}
 }
 
-// writeRawHook writes a hook file with exactly the given content and mode into
+// writeRawHook writes a hook file with the given content and mode into
 // the live store's pre-pre-push.d directory.
 func writeRawHook(t *testing.T, dir, name, content string) {
 	t.Helper()

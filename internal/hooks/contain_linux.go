@@ -54,7 +54,7 @@ func beginContainment() (*container, error) {
 	// sweep unable to stop anything.
 	fd, errno := pidfdOpen(c.self)
 	if errno != 0 {
-		return nil, fmt.Errorf("opening a pidfd, which is how safegit signals exactly the processes a hook left behind: %v", errno)
+		return nil, fmt.Errorf("opening a pidfd, which is how safegit signals only the processes a hook left behind: %v", errno)
 	}
 	syscall.Close(fd)
 	var flag int32

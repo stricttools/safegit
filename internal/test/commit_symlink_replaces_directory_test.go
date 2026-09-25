@@ -407,7 +407,7 @@ func TestCommitTrailingSlashUnderALinkIsReadAsSpelled(t *testing.T) {
 		t.Fatalf("commit failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 	if parents := testutil.Parents(t, dir, "HEAD"); len(parents) != 1 || parents[0] != before {
-		t.Fatalf("expected exactly one new commit on top of %s, got parents %v", before, parents)
+		t.Fatalf("expected one new commit on top of %s, got parents %v", before, parents)
 	}
 	if _, ok := testutil.Show(t, dir, "HEAD", "logs/sub/f.txt"); ok {
 		t.Error("logs/sub/f.txt is still in HEAD; the path under the link is absent and must be deleted")

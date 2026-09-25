@@ -261,7 +261,7 @@ func hookEnding(r hooks.HookResult) string {
 // process group, so a terminal's Ctrl-C reaches safegit and not the hook; left
 // to the signal's default, safegit would exit and the hook, and everything it
 // started, would keep running. Under the hold the signal cancels the run: the
-// running hook is stopped exactly as the timeout stops it, and what it left
+// running hook is stopped the same way the timeout stops it, and what it left
 // behind is swept. Then what it left is named on stderr and safegit exits
 // through the signal exit every command shares (128 + the signal number),
 // without a payload. It returns only when no signal arrived.

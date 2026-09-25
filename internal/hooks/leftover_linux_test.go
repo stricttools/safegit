@@ -207,7 +207,7 @@ func TestNoZombieRemainsAfterADoubleForkHook(t *testing.T) {
 // the signal that stops it, the leftover can exit and its pid can be given to
 // an unrelated process. The seam replays that: the first scan reports a
 // leftover at the pid of a process this test started before the hook, with a
-// start time that is not that process's. The unrelated process must survive:
+// start time that is not that process's. The unrelated process must still be running:
 // safegit signals the process it found, never whatever holds the number now.
 func TestAReusedPidIsNeverSignalled(t *testing.T) {
 	bystander := exec.Command("sleep", "60")

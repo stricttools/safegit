@@ -49,7 +49,7 @@ func processGone(pid int, within time.Duration) bool {
 // An interrupted safegit does not leave the hook it was running behind. The
 // hook runs in its own process group, so a terminal's Ctrl-C never reaches it;
 // the signal reaches safegit, which stops the hook and everything it started
-// exactly as a timeout does, names what the hook left behind, and exits the
+// the same way a timeout does, names what the hook left behind, and exits the
 // conventional 128 + the signal number.
 func TestInterruptedSafegitStopsTheRunningHook(t *testing.T) {
 	if _, err := exec.LookPath("setsid"); err != nil {

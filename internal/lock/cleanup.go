@@ -57,9 +57,9 @@ func installSignalHandler() {
 // ExitOnSignal ends a process a signal interrupted: it releases every lock the
 // process still holds and exits 128 + the signal number, which is the
 // convention every shell, supervisor and CI runner already reads (a SIGTERM is
-// 143, a SIGINT 130). The number is not safegit's to choose, so it is a
-// carve-out from the exit-code registry rather than a row in it -- stated in
-// internal/exitcode's package doc beside the git-passthrough carve-out.
+// 143, a SIGINT 130). The number is not safegit's to choose, so it is an
+// exception to the exit-code registry rather than a row in it -- stated in
+// internal/exitcode's package doc beside the git-passthrough exception.
 func ExitOnSignal(sig os.Signal) {
 	ReleasePending()
 	os.Exit(signalExitStatus(sig))
