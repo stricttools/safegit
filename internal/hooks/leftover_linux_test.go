@@ -5,10 +5,12 @@ package hooks
 import (
 	"bytes"
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -156,5 +158,47 @@ func TestHookThatLeavesNothingHasNoLeftovers(t *testing.T) {
 	}
 	if len(results) != 1 || results[0].Failed() || len(results[0].Leftovers) != 0 {
 		t.Fatalf("an ordinary hook must pass with nothing left behind: %+v", results)
+	}
+}
+
+// TestNoZombieRemainsAfterADoubleForkHook: a leftover whose parent was also a
+// leftover is reparented to safegit only when that parent exits, so it can
+// become safegit's zombie after the scan that reaped the parent -- a /proc
+// snapshot reads each process at its own moment, and one read before its
+// parent's exit still shows it under that parent. The seam here reports every
+// process under the parent it was first seen with, which is that stale read
+// made permanent; every leftover must still be reaped before the run returns.
+func TestNoZombieRemainsAfterADoubleForkHook(t *testing.T) {
+	var mu sync.Mutex
+	firstParent := map[int]int{}
+	prev := readProcStats
+	readProcStats = func() map[int]procStat {
+		all := prev()
+		mu.Lock()
+		defer mu.Unlock()
+		for pid, st := range all {
+			if ppid, seen := firstParent[pid]; seen {
+				st.ppid = ppid
+				all[pid] = st
+			} else {
+				firstParent[pid] = st.ppid
+			}
+		}
+		return all
+	}
+	defer func() { readProcStats = prev }()
+
+	r, pid, _ := runLeftoverHook(t,
+		"sh -c 'sleep 60 & echo $! > PIDFILE; wait' </dev/null >/dev/null 2>&1 &", 30)
+	if !r.Failed() || len(r.Leftovers) != 2 {
+		t.Errorf("expected the run to fail naming both leftovers (sh and sleep): %+v", r)
+	}
+	if st, err := readStat(pid); err == nil {
+		if st.state == "Z" && st.ppid == os.Getpid() {
+			var ws syscall.WaitStatus
+			syscall.Wait4(pid, &ws, 0, nil)
+			t.Fatalf("leftover %d (the grandchild) is a zombie of this process: it was killed and never reaped", pid)
+		}
+		t.Errorf("leftover %d is still there in state %s", pid, st.state)
 	}
 }

@@ -106,6 +106,7 @@ func (c *container) sweep(signalledGroup bool) ([]LeftoverProcess, string) {
 
 	live := c.scan()
 	if len(live) == 0 {
+		c.reapZombies()
 		return nil, ""
 	}
 	record(live)
@@ -131,10 +132,59 @@ func (c *container) sweep(signalledGroup bool) ([]LeftoverProcess, string) {
 	for _, pid := range order {
 		l := *found[pid]
 		_, stillLive := live[pid]
-		l.Killed = !stillLive
+		l.Killed = !stillLive && c.reap(pid)
 		out = append(out, l)
 	}
+	c.reapZombies()
 	return out, ""
+}
+
+// reap waits for a leftover the sweep stopped, and reports whether it is gone.
+//
+// A leftover whose parent was also a leftover is reparented to safegit only
+// when that parent exits, which can come after the scan that reaped the parent:
+// the scan reads each process at its own moment, so the leftover may have been
+// read under its parent just before the parent's exit handed it over. Waiting
+// for it by pid does not depend on that read. A leftover that is safegit's child
+// and has not exited yet is killed here and waited for, up to the grace; one
+// that is not safegit's child (ECHILD) was already reaped, or belongs to a
+// parent outside safegit's tree that the scans would have reported as live.
+func (c *container) reap(pid int) bool {
+	deadline := time.Now().Add(killGrace)
+	for {
+		var ws syscall.WaitStatus
+		wpid, err := syscall.Wait4(pid, &ws, syscall.WNOHANG, nil)
+		if wpid == pid || err != nil {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		syscall.Kill(pid, syscall.SIGKILL)
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// reapZombies reaps, from a fresh read of the process table, every zombie
+// child of safegit that the hook started -- descendants that exited before any
+// scan named them and were handed to safegit when their parent exited -- until
+// a read finds none left.
+func (c *container) reapZombies() {
+	for {
+		reaped := false
+		for pid, st := range readProcStats() {
+			if st.ppid != c.self || st.state != "Z" || pid == c.hookPid || st.ticks < c.hookTicks {
+				continue
+			}
+			var ws syscall.WaitStatus
+			if wpid, _ := syscall.Wait4(pid, &ws, syscall.WNOHANG, nil); wpid == pid {
+				reaped = true
+			}
+		}
+		if !reaped {
+			return
+		}
+	}
 }
 
 // outputHolders has nothing to name on Linux: every descendant was found by the
@@ -151,7 +201,7 @@ func (c *container) outputHolders(readFds []int) ([]LeftoverProcess, string) {
 // hook's orphans, reparented here. The hook itself is reaped before any scan,
 // and its surviving children are orphans by then too.
 func (c *container) scan() map[int]procStat {
-	all := readAllStats()
+	all := readProcStats()
 	children := map[int][]int{}
 	for pid, st := range all {
 		children[st.ppid] = append(children[st.ppid], pid)
@@ -200,6 +250,10 @@ type procStat struct {
 	pgrp  int
 	ticks uint64
 }
+
+// readProcStats is how a scan reads the process table; a test stands in for it
+// to replay a stale read.
+var readProcStats = readAllStats
 
 func readAllStats() map[int]procStat {
 	out := map[int]procStat{}
