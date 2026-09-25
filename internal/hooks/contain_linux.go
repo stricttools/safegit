@@ -51,10 +51,12 @@ func beginContainment() (*container, error) {
 	// Every signal the sweep sends goes through a pidfd, so the kernel has to
 	// have them (Linux 5.3); asked of safegit's own process before the hook
 	// starts, so a kernel without them refuses the run instead of leaving the
-	// sweep unable to stop anything.
-	fd, errno := pidfdOpen(c.self)
+	// sweep unable to stop anything. There is no fallback to bare pids: a pid
+	// can be reused by an unrelated process between a scan and a signal.
+	fd, errno := openPidfd(c.self)
 	if errno != 0 {
-		return nil, fmt.Errorf("opening a pidfd, which is how safegit signals only the processes a hook left behind: %v", errno)
+		return nil, fmt.Errorf("this system has no pidfd support (pidfd_open: %v); safegit signals the processes a hook leaves behind only through pidfds, "+
+			"so running a pre-pre-push hook needs Linux 5.3 or later", errno)
 	}
 	syscall.Close(fd)
 	var flag int32
@@ -204,6 +206,10 @@ func openHandle(pid int, ticks uint64) (int, bool) {
 	}
 	return fd, true
 }
+
+// openPidfd is how beginContainment asks for pidfd support; a test stands in
+// for it to play a kernel that has none.
+var openPidfd = pidfdOpen
 
 func pidfdOpen(pid int) (int, syscall.Errno) {
 	fd, _, errno := syscall.Syscall(sysPidfdOpen, uintptr(pid), 0, 0)
