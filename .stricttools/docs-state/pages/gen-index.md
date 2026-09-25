@@ -1,6 +1,6 @@
 +++
 title = "API Reference"
-description = "API reference index for safegit covering 22 modules"
+description = "API reference index for safegit covering 23 modules"
 generated = true
 seeded = true
 nav_group = "API Reference"
@@ -10,6 +10,7 @@ nav_order = 90
 
 # API Reference
 
+- [experiments/snap](../experiments-snap/)
 - [internal/commit](../internal-commit/)
 - [internal/conflict](../internal-conflict/)
 - [internal/coord](../internal-coord/)

@@ -9,7 +9,7 @@ nav_order = 14
 
 # safegit push
 
-push refs to remote with pre-pre-push hooks and automatic retry. A hook that exits nonzero, times out, or leaves any process running when it ends aborts the push before any network contact, and every process it left is named on stderr; a hook's output, stdout included, goes to stderr, so it never mixes into safegit's own stdout
+push refs to remote with pre-pre-push hooks and automatic retry. A hook that exits nonzero, times out, or leaves any process running when it ends aborts the push before any network contact, and every process it left is named on stderr; a hook's output, stdout included, goes to stderr, so it never mixes into safegit's own stdout. The first hook that does not pass decides the exit code: 21 when it timed out, 20 otherwise. Under --json the payload's hooks list records every hook that ran, in run order -- name, exit_code, timed_out, duration_ms and leftover_processes (pid, command, killed) -- and a push a hook stopped still emits its payload, with refs empty and the hooks list up to the hook that stopped it; the exit code and stderr say which hook did not pass and why
 
 **Effect:** mutating
 

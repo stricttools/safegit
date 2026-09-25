@@ -174,6 +174,11 @@
         },
         {
           "level": 3,
+          "text": "What the machine payload records",
+          "anchor": "what-the-machine-payload-records"
+        },
+        {
+          "level": 3,
           "text": "Bypass",
           "anchor": "bypass"
         },
@@ -1858,6 +1863,11 @@
           "level": 3,
           "text": "A hook that leaves a process running fails",
           "anchor": "a-hook-that-leaves-a-process-running-fails"
+        },
+        {
+          "level": 3,
+          "text": "Exit code and machine payload",
+          "anchor": "exit-code-and-machine-payload"
         },
         {
           "level": 3,
@@ -3932,6 +3942,23 @@
           "level": 3,
           "text": "`scan` reads what git's own search cannot reach",
           "anchor": "scan-reads-what-gits-own-search-cannot-reach"
+        }
+      ]
+    },
+    {
+      "path": "experiments-snap.md",
+      "title": "experiments/snap",
+      "type": "doc",
+      "headings": [
+        {
+          "level": 1,
+          "text": "experiments/snap",
+          "anchor": "experimentssnap"
+        },
+        {
+          "level": 2,
+          "text": "`experiments/snap`",
+          "anchor": "experimentssnap"
         }
       ]
     },
@@ -7891,6 +7918,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-09-25T20:54:48.384956+00:00",
+  "last_gen": "2026-09-25T21:30:44.020869+00:00",
   "theme": "minimal"
 }
