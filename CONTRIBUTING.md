@@ -33,9 +33,9 @@ go test ./internal/test/ -race -count=5 -timeout=40m --stress
 sized for.
 
 `-short` is a separate and much smaller thing, and neither run above needs it:
-exactly two tests key on it — internal/hooks' wall-clock hook-timeout test,
-which it skips, and internal/git's index-reconcile property test, which it
-shortens from 200 generated cases to 40. `scripts/test-baseline` passes it
+internal/hooks' wall-clock hook-timeout tests skip under it, and
+internal/git's index-reconcile property test shortens from 200 generated cases
+to 40. `scripts/test-baseline` passes it
 deliberately, to keep its artifact deterministic.
 
 ## Commit

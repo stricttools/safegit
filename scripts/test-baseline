@@ -18,11 +18,11 @@
 # -short is always passed, and it no longer has anything to do with the stress
 # scenarios: those are opt-in behind the test binary's --stress flag and are
 # excluded here simply because this script does not pass it. What -short still
-# does is keep the artifact deterministic. TWO tests key on testing.Short():
-# internal/hooks' wall-clock hook-timeout test, which it SKIPS because the
-# result depends on timing rather than on the code under test, and
-# internal/git's index-reconcile property test, which it SHORTENS from 200
-# generated cases to 40 -- the same one test line either way, over fewer cases.
+# does is keep the artifact deterministic: internal/hooks' wall-clock
+# hook-timeout tests SKIP under it, because their result depends on timing
+# rather than on the code under test, and internal/git's index-reconcile
+# property test SHORTENS from 200 generated cases to 40 -- the same one test
+# line either way, over fewer cases.
 set -euo pipefail
 
 root="$(git rev-parse --show-toplevel)"
