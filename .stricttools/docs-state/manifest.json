@@ -2198,6 +2198,11 @@
         },
         {
           "level": 3,
+          "text": "`InterruptHold`",
+          "anchor": "interrupthold"
+        },
+        {
+          "level": 3,
           "text": "`RefLock`",
           "anchor": "reflock"
         },
@@ -2205,6 +2210,16 @@
           "level": 3,
           "text": "`TimeoutError`",
           "anchor": "timeouterror"
+        },
+        {
+          "level": 3,
+          "text": "`ExitOnSignal`",
+          "anchor": "exitonsignal"
+        },
+        {
+          "level": 3,
+          "text": "`HoldInterrupts`",
+          "anchor": "holdinterrupts"
         },
         {
           "level": 3,
@@ -2260,6 +2275,16 @@
           "level": 3,
           "text": "`ReclaimIfStale`",
           "anchor": "reclaimifstale"
+        },
+        {
+          "level": 3,
+          "text": "`InterruptHold.Interrupted`",
+          "anchor": "interruptholdinterrupted"
+        },
+        {
+          "level": 3,
+          "text": "`InterruptHold.Release`",
+          "anchor": "interruptholdrelease"
         },
         {
           "level": 3,
@@ -6198,6 +6223,11 @@
         },
         {
           "level": 3,
+          "text": "`InterruptHold`",
+          "anchor": "interrupthold"
+        },
+        {
+          "level": 3,
           "text": "`RefLock`",
           "anchor": "reflock"
         },
@@ -6205,6 +6235,16 @@
           "level": 3,
           "text": "`TimeoutError`",
           "anchor": "timeouterror"
+        },
+        {
+          "level": 3,
+          "text": "`ExitOnSignal`",
+          "anchor": "exitonsignal"
+        },
+        {
+          "level": 3,
+          "text": "`HoldInterrupts`",
+          "anchor": "holdinterrupts"
         },
         {
           "level": 3,
@@ -6260,6 +6300,16 @@
           "level": 3,
           "text": "`ReclaimIfStale`",
           "anchor": "reclaimifstale"
+        },
+        {
+          "level": 3,
+          "text": "`InterruptHold.Interrupted`",
+          "anchor": "interruptholdinterrupted"
+        },
+        {
+          "level": 3,
+          "text": "`InterruptHold.Release`",
+          "anchor": "interruptholdrelease"
         },
         {
           "level": 3,
@@ -7901,6 +7951,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-09-25T21:56:36.640214+00:00",
+  "last_gen": "2026-09-25T22:30:37.399967+00:00",
   "theme": "minimal"
 }
