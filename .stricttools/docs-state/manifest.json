@@ -5994,6 +5994,26 @@
         },
         {
           "level": 3,
+          "text": "`DefaultStopCap`",
+          "anchor": "defaultstopcap"
+        },
+        {
+          "level": 3,
+          "text": "`MaxStopCap`",
+          "anchor": "maxstopcap"
+        },
+        {
+          "level": 3,
+          "text": "`MinStopCap`",
+          "anchor": "minstopcap"
+        },
+        {
+          "level": 3,
+          "text": "`StopCapVariable`",
+          "anchor": "stopcapvariable"
+        },
+        {
+          "level": 3,
           "text": "`OriginTracked`",
           "anchor": "origintracked"
         },
@@ -6089,8 +6109,13 @@
         },
         {
           "level": 3,
-          "text": "`InterruptStopBudget`",
-          "anchor": "interruptstopbudget"
+          "text": "`StopCapFromEnvironment`",
+          "anchor": "stopcapfromenvironment"
+        },
+        {
+          "level": 3,
+          "text": "`FormatStopCap`",
+          "anchor": "formatstopcap"
         },
         {
           "level": 3,
@@ -7966,6 +7991,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-09-25T22:57:36.416917+00:00",
+  "last_gen": "2026-09-25T23:45:55.267817+00:00",
   "theme": "minimal"
 }
