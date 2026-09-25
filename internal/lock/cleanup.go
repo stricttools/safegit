@@ -1,6 +1,7 @@
 package lock
 
 import (
+	"context"
 	"os"
 	"os/signal"
 	"sync"
@@ -26,21 +27,95 @@ func registerCleanup(path string, published publication) {
 	pendingLocks = append(pendingLocks, heldLock{path: path, published: published})
 	cleanupMu.Unlock()
 
+	installSignalHandler()
+}
+
+// installSignalHandler installs this process's one SIGINT/SIGTERM handler: it
+// cancels every InterruptHold, waits until each has been released, then
+// releases the locks and exits. It is installed the first time a lock is taken
+// or an interruptible section begins, and stays for the life of the process.
+func installSignalHandler() {
 	sigOnce.Do(func() {
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, cleanupSignals()...)
 		go func() {
 			sig := <-c
-			ReleasePending()
-			// A process a signal ended exits 128 + the signal number, which is
-			// the convention every shell, supervisor and CI runner already reads
-			// (a SIGTERM is 143, a SIGINT 130). The number is not safegit's to
-			// choose, so it is a carve-out from the exit-code registry rather
-			// than a row in it -- stated in internal/exitcode's package doc
-			// beside the git-passthrough carve-out.
-			os.Exit(signalExitStatus(sig))
+			holdMu.Lock()
+			received = sig
+			for h := range holds {
+				h.cancel()
+			}
+			for len(holds) > 0 {
+				holdCond.Wait()
+			}
+			holdMu.Unlock()
+			ExitOnSignal(sig)
 		}()
 	})
+}
+
+// ExitOnSignal ends a process a signal interrupted: it releases every lock the
+// process still holds and exits 128 + the signal number, which is the
+// convention every shell, supervisor and CI runner already reads (a SIGTERM is
+// 143, a SIGINT 130). The number is not safegit's to choose, so it is a
+// carve-out from the exit-code registry rather than a row in it -- stated in
+// internal/exitcode's package doc beside the git-passthrough carve-out.
+func ExitOnSignal(sig os.Signal) {
+	ReleasePending()
+	os.Exit(signalExitStatus(sig))
+}
+
+var (
+	holdMu   sync.Mutex
+	holdCond = sync.NewCond(&holdMu)
+	holds    = map[*InterruptHold]struct{}{}
+	// received is the signal that interrupted this process, nil until one does.
+	received os.Signal
+)
+
+// InterruptHold is a section of work that a SIGINT or SIGTERM must interrupt
+// rather than cut short: the signal cancels the section's context, and the
+// process does not exit until the section is released or ends the process
+// itself with ExitOnSignal.
+//
+// It exists for work that starts processes the signal never reaches -- a
+// pre-pre-push hook runs in its own process group, so a terminal's Ctrl-C goes
+// to safegit alone -- and that must therefore be stopped by safegit before it
+// exits, not left running behind it.
+type InterruptHold struct {
+	cancel context.CancelFunc
+}
+
+// HoldInterrupts begins an interruptible section. The returned context is
+// cancelled by a SIGINT or SIGTERM, including one that arrived earlier.
+func HoldInterrupts(parent context.Context) (context.Context, *InterruptHold) {
+	installSignalHandler()
+	ctx, cancel := context.WithCancel(parent)
+	h := &InterruptHold{cancel: cancel}
+	holdMu.Lock()
+	holds[h] = struct{}{}
+	if received != nil {
+		cancel()
+	}
+	holdMu.Unlock()
+	return ctx, h
+}
+
+// Interrupted returns the signal that interrupted the process, if one did.
+func (h *InterruptHold) Interrupted() (os.Signal, bool) {
+	holdMu.Lock()
+	defer holdMu.Unlock()
+	return received, received != nil
+}
+
+// Release ends the section. A signal that arrived meanwhile then ends the
+// process through the handler.
+func (h *InterruptHold) Release() {
+	holdMu.Lock()
+	delete(holds, h)
+	h.cancel()
+	holdCond.Broadcast()
+	holdMu.Unlock()
 }
 
 // ReleasePending removes every lock this process still holds.

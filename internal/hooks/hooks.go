@@ -251,6 +251,10 @@ func RunAll(ctx context.Context, hookPaths []string, stdin []byte, timeoutSec in
 
 	var results []HookResult
 	for _, hookPath := range hookPaths {
+		if ctx.Err() != nil {
+			// Cancelled between two hooks: the next one is not started.
+			break
+		}
 		result, err := runOne(ctx, hookPath, stdin, timeoutSec, env)
 		if err != nil {
 			return results, err
@@ -282,8 +286,9 @@ const readGrace = time.Second
 // runOne executes a single hook, forwarding its stdout and stderr to the
 // package-level writers, and enforces two rules on it.
 //
-// The configured timeout is the only budget. On timeout the hook's process
-// group gets SIGTERM, then SIGKILL after killGrace.
+// The configured timeout is the only budget. On timeout, and when ctx is
+// cancelled, the hook's process group gets SIGTERM, then SIGKILL after
+// killGrace.
 //
 // A hook that leaves any process running when it ends -- normally or by the
 // timeout -- is a failed run. Once the hook process itself has exited, the
@@ -354,15 +359,10 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 
 	var waitErr error
 	signalled := false
-	timer := time.NewTimer(time.Duration(timeoutSec) * time.Second)
-	defer timer.Stop()
-	select {
-	case waitErr = <-waited:
-	case <-timer.C:
-		// Timeout: SIGTERM the whole process group, then SIGKILL after the
-		// grace. The hook is not reaped before the signals, so its pid -- the
-		// group id -- cannot have been reused.
-		result.TimedOut = true
+	// stop ends the hook from outside: SIGTERM to the whole process group,
+	// then SIGKILL after the grace. The hook is not reaped before the signals,
+	// so its pid -- the group id -- cannot have been reused.
+	stop := func() {
 		signalled = true
 		killGroup(cmd, syscall.SIGTERM)
 		select {
@@ -371,10 +371,18 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 			killGroup(cmd, syscall.SIGKILL)
 			waitErr = <-waited
 		}
+	}
+	timer := time.NewTimer(time.Duration(timeoutSec) * time.Second)
+	defer timer.Stop()
+	select {
+	case waitErr = <-waited:
+	case <-timer.C:
+		result.TimedOut = true
+		stop()
 	case <-ctx.Done():
-		signalled = true
-		killGroup(cmd, syscall.SIGKILL)
-		waitErr = <-waited
+		// A cancellation -- safegit itself was interrupted -- stops the hook
+		// exactly as the timeout does, and the sweep below stops what it left.
+		stop()
 	}
 
 	// The hook has exited and is reaped. Whatever it started that is still

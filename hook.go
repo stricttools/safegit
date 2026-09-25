@@ -11,6 +11,7 @@ import (
 	"github.com/smm-h/safegit/internal/exitcode"
 	"github.com/smm-h/safegit/internal/git"
 	"github.com/smm-h/safegit/internal/hooks"
+	"github.com/smm-h/safegit/internal/lock"
 	"github.com/smm-h/safegit/internal/repo"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
@@ -166,7 +167,15 @@ func hookRun(flags globalFlags, name string) int {
 		}
 
 		outf(flags, "running hook: %s\n", name)
-		r, rErr := hooks.RunSingle(ctx, hookPath, hookStdin, timeoutSec, hookEnv)
+		var r hooks.HookResult
+		_, rErr := runHooksInterruptibly(ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
+			var err error
+			r, err = hooks.RunSingle(hctx, hookPath, hookStdin, timeoutSec, hookEnv)
+			if err != nil {
+				return nil, err
+			}
+			return []hooks.HookResult{r}, nil
+		})
 		if rErr != nil {
 			// safegit could not run the hook under containment, so there is no
 			// run to record; the payload still answers, with an empty list.
@@ -189,7 +198,9 @@ func hookRun(flags globalFlags, name string) int {
 	if dErr != nil {
 		return hookDiscoveryExit(dErr)
 	}
-	results, rErr := hooks.RunAll(ctx, hookPaths, hookStdin, timeoutSec, hookEnv)
+	results, rErr := runHooksInterruptibly(ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
+		return hooks.RunAll(hctx, hookPaths, hookStdin, timeoutSec, hookEnv)
+	})
 	if rErr != nil {
 		// safegit could not run a hook under containment. The runs before it
 		// are facts all the same, so the payload records them; the error text
@@ -243,6 +254,29 @@ func hookEnding(r hooks.HookResult) string {
 	default:
 		return fmt.Sprintf("exit=%d", *r.ExitCode)
 	}
+}
+
+// runHooksInterruptibly runs pre-pre-push hooks so that a SIGINT or SIGTERM
+// interrupts the run instead of cutting it short. A hook runs in its own
+// process group, so a terminal's Ctrl-C reaches safegit and not the hook; left
+// to the signal's default, safegit would exit and the hook, and everything it
+// started, would keep running. Under the hold the signal cancels the run: the
+// running hook is stopped exactly as the timeout stops it, and what it left
+// behind is swept. Then what it left is named on stderr and safegit exits
+// through the signal exit every command shares (128 + the signal number),
+// without a payload. It returns only when no signal arrived.
+func runHooksInterruptibly(ctx context.Context, run func(context.Context) ([]hooks.HookResult, error)) ([]hooks.HookResult, error) {
+	hctx, hold := lock.HoldInterrupts(ctx)
+	results, err := run(hctx)
+	if sig, interrupted := hold.Interrupted(); interrupted {
+		for _, r := range results {
+			printLeftovers(r)
+		}
+		fmt.Fprintf(os.Stderr, "error: interrupted (%v) while the pre-pre-push hooks ran; the running hook was stopped\n", sig)
+		lock.ExitOnSignal(sig)
+	}
+	hold.Release()
+	return results, err
 }
 
 // printLeftovers writes one error line to stderr per process a hook left

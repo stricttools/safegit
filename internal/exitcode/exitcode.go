@@ -21,14 +21,16 @@
 // docs/commands-guide.md states the same split above the generated table.
 //
 // The second: a signal. When a SIGINT or a SIGTERM reaches a safegit process
-// that holds a lock, internal/lock's handler releases the lock and exits
+// that holds a lock or is running pre-pre-push hooks, internal/lock's handler
+// (after the running hook is stopped) releases the lock and exits
 // 128 + the signal number -- 130 for SIGINT, 143 for SIGTERM -- which is the
 // Unix shell convention every shell, supervisor and CI runner already reads
 // that way. Those numbers are the convention's, not safegit's, and registering
 // them would claim ownership of a number safegit does not choose; the exit-site
 // guard does not see them either, because the status is computed rather than
 // written as a literal. A signal exit says nothing about what the command was
-// doing: it says the process was ended from outside, with its locks released.
+// doing: it says the process was ended from outside, with its locks released
+// and no hook it started left running.
 //
 // # Standing rule for new exit codes
 //
