@@ -125,3 +125,85 @@ func TestHookLeftoverProcessIsRecordedInThePayload(t *testing.T) {
 		})
 	}
 }
+
+// A process outside safegit's process tree that still holds a hook's output
+// after the hook ended cannot be named by safegit. The run fails with exit 20,
+// and the entry records that as a fact: unidentified_leftovers true and the
+// reason identification failed in leftover_identification_error. The outside
+// holder is this test process, which opens the hook's stdout pipe through
+// /proc while the hook runs.
+func TestHookUnidentifiedLeftoverIsRecordedInThePayload(t *testing.T) {
+	dir, _ := newRepoWithRemote(t)
+
+	tmp := t.TempDir()
+	pidFile := filepath.Join(tmp, "hook.pid")
+	readyFile := filepath.Join(tmp, "ready")
+	installDirHook(t, dir, "10-lint", strings.Join([]string{
+		"echo $$ > " + pidFile + ".tmp && mv " + pidFile + ".tmp " + pidFile,
+		"while [ ! -e " + readyFile + " ]; do sleep 0.05; done",
+	}, "\n"))
+
+	for _, args := range [][]string{
+		{"--json", "push", "--refs", "head", "origin"},
+		{"--json", "hook", "run"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			for _, f := range []string{pidFile, readyFile} {
+				if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
+					t.Fatal(err)
+				}
+			}
+			// Hold the hook's stdout pipe from outside safegit's tree, then let
+			// the hook end.
+			held := make(chan *os.File, 1)
+			go func() {
+				defer os.WriteFile(readyFile, nil, 0o644)
+				deadline := time.Now().Add(30 * time.Second)
+				for time.Now().Before(deadline) {
+					data, err := os.ReadFile(pidFile)
+					if err == nil {
+						if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil {
+							f, err := os.OpenFile("/proc/"+strconv.Itoa(pid)+"/fd/1", os.O_WRONLY, 0)
+							if err == nil {
+								held <- f
+							}
+							close(held)
+							return
+						}
+					}
+					time.Sleep(20 * time.Millisecond)
+				}
+				close(held)
+			}()
+
+			stdout, stderr, code := runSafegit(t, dir, args...)
+			f, ok := <-held
+			if !ok || f == nil {
+				t.Fatalf("could not hold the hook's output pipe; stderr:\n%s", stderr)
+			}
+			defer f.Close()
+
+			if code != exitcode.PushHookFailed {
+				t.Errorf("exit code = %d, want %d; stderr:\n%s", code, exitcode.PushHookFailed, stderr)
+			}
+			hooks := payloadHooks(t, stdout)
+			if len(hooks) != 1 {
+				t.Fatalf("hooks = %d entries, want 1", len(hooks))
+			}
+			e := hooks[0]
+			if e.ExitCode == nil || *e.ExitCode != 0 {
+				t.Errorf("exit_code = %v, want 0: the hook itself exited 0", e.ExitCode)
+			}
+			if len(e.LeftoverProcesses) != 0 {
+				t.Errorf("leftover_processes = %+v, want none: the holder could not be named", e.LeftoverProcesses)
+			}
+			if e.UnidentifiedLeftovers == nil || !*e.UnidentifiedLeftovers {
+				t.Errorf("unidentified_leftovers = %v, want true", e.UnidentifiedLeftovers)
+			}
+			if e.LeftoverIdentificationError == nil || !strings.Contains(*e.LeftoverIdentificationError, "outside safegit's process tree") {
+				t.Errorf("leftover_identification_error = %v, want the reason naming a holder outside safegit's process tree", e.LeftoverIdentificationError)
+			}
+			assertNoVerdictMember(t, stdout)
+		})
+	}
+}

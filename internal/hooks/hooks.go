@@ -392,9 +392,11 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		// ExitCode is the HOOK's status, not safegit's. A killed hook has no
 		// status of its own, so the marker is deliberately chosen to READ the
 		// same as safegit's own hook-timeout code in the "exit=%d" line callers
-		// print and in the machine payload's exit_code -- which is why it is taken from the registry rather than
-		// written as a bare 21 that duplicates the constant by value. Nothing
-		// branches on it: TimedOut is what decides the caller's exit code.
+		// print -- which is why it is taken from the registry rather than
+		// written as a bare 21 that duplicates the constant by value. The
+		// machine payload does not carry it: a timed-out run's exit_code is
+		// null there. Nothing branches on it: TimedOut is what decides the
+		// caller's exit code.
 		result.ExitCode = exitcode.PushHookTimeout
 	case signalled:
 		result.ExitCode = 1

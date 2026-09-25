@@ -252,14 +252,22 @@ func hookRunsExit(results []hooks.HookResult) int {
 // hookRecord is one hook run as a machine payload records it: facts about the
 // run only. Whether it passed is the exit code's to say, not a member's.
 type hookRecord struct {
-	Name     string `json:"name"`
-	ExitCode int    `json:"exit_code"`
-	TimedOut bool   `json:"timed_out"`
+	Name string `json:"name"`
+	// ExitCode is the hook's own exit status, and null when the hook timed
+	// out: the timeout killed it, so it has no status of its own.
+	ExitCode *int `json:"exit_code"`
+	TimedOut bool `json:"timed_out"`
 	// DurationMS is the run's wall-clock time in whole milliseconds.
 	DurationMS int64 `json:"duration_ms"`
 	// LeftoverProcesses are the processes the hook left running when it
 	// ended; an empty list when it left none.
 	LeftoverProcesses []hookLeftoverRecord `json:"leftover_processes"`
+	// UnidentifiedLeftovers is true when something still held the hook's
+	// output after it ended and safegit could not name it, which fails the
+	// run; LeftoverIdentificationError then says why naming it failed, and is
+	// null otherwise.
+	UnidentifiedLeftovers       bool    `json:"unidentified_leftovers"`
+	LeftoverIdentificationError *string `json:"leftover_identification_error"`
 }
 
 // hookLeftoverRecord is one process a hook left behind.
@@ -276,7 +284,7 @@ type hookLeftoverRecord struct {
 var hookRecordSchema = strictcli.SchemaObject(
 	map[string]interface{}{
 		"name":        strictcli.SchemaType("string"),
-		"exit_code":   strictcli.SchemaType("integer"),
+		"exit_code":   strictcli.SchemaType("integer", "null"),
 		"timed_out":   strictcli.SchemaType("boolean"),
 		"duration_ms": strictcli.SchemaType("integer"),
 		"leftover_processes": strictcli.SchemaArray(strictcli.SchemaObject(
@@ -288,8 +296,10 @@ var hookRecordSchema = strictcli.SchemaObject(
 			[]string{"pid", "command", "killed"},
 			false,
 		)),
+		"unidentified_leftovers":        strictcli.SchemaType("boolean"),
+		"leftover_identification_error": strictcli.SchemaType("string", "null"),
 	},
-	[]string{"name", "exit_code", "timed_out", "duration_ms", "leftover_processes"},
+	[]string{"name", "exit_code", "timed_out", "duration_ms", "leftover_processes", "unidentified_leftovers", "leftover_identification_error"},
 	false,
 )
 
@@ -303,13 +313,22 @@ func hookRecords(results []hooks.HookResult) []hookRecord {
 		for _, l := range r.Leftovers {
 			left = append(left, hookLeftoverRecord{PID: l.PID, Command: l.Command, Killed: l.Killed})
 		}
-		out = append(out, hookRecord{
-			Name:              r.Name,
-			ExitCode:          r.ExitCode,
-			TimedOut:          r.TimedOut,
-			DurationMS:        r.Duration.Milliseconds(),
-			LeftoverProcesses: left,
-		})
+		rec := hookRecord{
+			Name:                  r.Name,
+			TimedOut:              r.TimedOut,
+			DurationMS:            r.Duration.Milliseconds(),
+			LeftoverProcesses:     left,
+			UnidentifiedLeftovers: r.LeftoverUnknown != "",
+		}
+		if !r.TimedOut {
+			code := r.ExitCode
+			rec.ExitCode = &code
+		}
+		if r.LeftoverUnknown != "" {
+			reason := r.LeftoverUnknown
+			rec.LeftoverIdentificationError = &reason
+		}
+		out = append(out, rec)
 	}
 	return out
 }
