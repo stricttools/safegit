@@ -430,3 +430,63 @@ func waitGone(pid int, d time.Duration) bool {
 func exitedWith(r HookResult, code int) bool {
 	return r.ExitCode != nil && *r.ExitCode == code
 }
+
+// TestHookThatCannotStartRecordsTheStartError: a hook exec refuses to start
+// never ran, so it has no exit status; the run records why it could not start
+// and fails. Each case is a file exec itself refuses: one without an execute
+// bit (discovery refuses those before a run, so this reaches the runner
+// directly), one whose #! line names an interpreter that does not exist, and
+// one that is neither a script with a #! line nor a program.
+func TestHookThatCannotStartRecordsTheStartError(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		content string
+		mode    os.FileMode
+		want    string
+	}{
+		{"not executable", "#!/bin/sh\nexit 0\n", 0o644, "exec: permission denied"},
+		{"missing interpreter", "#!/nonexistent/interpreter\nexit 0\n", 0o755, "exec: no such file or directory"},
+		{"malformed", "\x00\x01\x02 not a program\n", 0o755, "exec: exec format error"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "pre-pre-push")
+			if err := os.WriteFile(path, []byte(tc.content), tc.mode); err != nil {
+				t.Fatal(err)
+			}
+			r, err := RunSingle(context.Background(), path, nil, 30, nil)
+			if err != nil {
+				t.Fatalf("RunSingle: %v", err)
+			}
+			if r.StartError != tc.want {
+				t.Errorf("StartError = %q, want %q", r.StartError, tc.want)
+			}
+			if r.ExitCode != nil {
+				t.Errorf("a hook that never started has no exit status, got %d", *r.ExitCode)
+			}
+			if !r.Failed() {
+				t.Error("a hook that could not start must fail the run")
+			}
+		})
+	}
+}
+
+// TestHookWhoseInterpreterExitsNonzeroIsNotAStartError: `#!/usr/bin/env
+// missingprog` starts -- env runs, fails to find the program, and exits 127 --
+// so it is an ordinary nonzero exit, not a start error.
+func TestHookWhoseInterpreterExitsNonzeroIsNotAStartError(t *testing.T) {
+	if _, err := os.Stat("/usr/bin/env"); err != nil {
+		t.Skip("/usr/bin/env is not present")
+	}
+	path := filepath.Join(t.TempDir(), "pre-pre-push")
+	writeHook(t, path, "#!/usr/bin/env safegit-test-missing-program\nexit 0\n")
+	r, err := RunSingle(context.Background(), path, nil, 30, nil)
+	if err != nil {
+		t.Fatalf("RunSingle: %v", err)
+	}
+	if r.StartError != "" {
+		t.Errorf("StartError = %q, want none: env started and exited", r.StartError)
+	}
+	if !exitedWith(r, 127) {
+		t.Errorf("ExitCode = %v, want 127", r.ExitCode)
+	}
+}

@@ -3,6 +3,7 @@ package hooks
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,7 +13,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
 )
 
 // stdout and stderr are where a hook's stdout and its stderr are forwarded.
@@ -44,11 +44,16 @@ func SetOutput(out, err io.Writer) func() {
 // documented form.
 type HookResult struct {
 	Name string
-	// ExitCode is the hook's own exit status, and nil when it has none: the
-	// timeout, or an interruption, killed it.
+	// ExitCode is the hook's own exit status, and nil when it has none: it
+	// could not be started (StartError), or the timeout or an interruption
+	// killed it.
 	ExitCode *int
-	Duration time.Duration
-	TimedOut bool
+	// StartError is non-empty when the hook could not be started at all --
+	// exec refused the file -- and says why, e.g. "exec: permission denied".
+	// A hook that started and exited nonzero is never a start error.
+	StartError string
+	Duration   time.Duration
+	TimedOut   bool
 	// Leftovers are the processes the hook left running when it ended.
 	Leftovers []LeftoverProcess
 	// LeftoverUnknown is non-empty when something the hook started was still
@@ -66,7 +71,8 @@ type LeftoverProcess struct {
 }
 
 // Failed reports whether the run failed: a nonzero status, no status at all
-// (the hook was killed), a timeout, or any process left behind.
+// (the hook could not be started, or was killed), a timeout, or any process
+// left behind.
 func (r HookResult) Failed() bool {
 	return r.ExitCode == nil || *r.ExitCode != 0 || r.TimedOut || len(r.Leftovers) > 0 || r.LeftoverUnknown != ""
 }
@@ -310,8 +316,7 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 
 	if err := cmd.Start(); err != nil {
 		p.closeAll()
-		one := 1
-		result.ExitCode = &one
+		result.StartError = startError(err)
 		result.Duration = time.Since(start)
 		return result, nil
 	}
@@ -406,6 +411,22 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		result.ExitCode = &code
 	}
 	return result, nil
+}
+
+// startError words why exec refused a hook: the system's reason, without the
+// path, which the hook's name already carries -- "exec: permission denied",
+// "exec: no such file or directory" (the file, or the interpreter its #! line
+// names, is missing), "exec: exec format error".
+func startError(err error) string {
+	var pathErr *os.PathError
+	if errors.As(err, &pathErr) {
+		return "exec: " + pathErr.Err.Error()
+	}
+	var execErr *exec.Error
+	if errors.As(err, &execErr) {
+		return "exec: " + execErr.Err.Error()
+	}
+	return "exec: " + err.Error()
 }
 
 // hookPipes are the three pipes a hook's standard streams run over. The child

@@ -202,7 +202,9 @@ func hookRun(flags globalFlags, name string) int {
 	for _, r := range results {
 		printLeftovers(r)
 		status := "passed"
-		if r.TimedOut {
+		if r.StartError != "" {
+			status = fmt.Sprintf("could not be started (%s)", r.StartError)
+		} else if r.TimedOut {
 			status = "timed out"
 		} else if r.ExitCode != nil && *r.ExitCode != 0 {
 			status = fmt.Sprintf("failed (exit %d)", *r.ExitCode)
@@ -218,10 +220,12 @@ func hookRun(flags globalFlags, name string) int {
 }
 
 // hookEnding says how a hook run ended, for the text output: "exit=N" for a
-// hook that exited, and "timed out" for one the timeout killed, which has no
-// exit status of its own.
+// hook that exited, "timed out" for one the timeout killed, which has no exit
+// status of its own, and the reason for one that could not be started.
 func hookEnding(r hooks.HookResult) string {
 	switch {
+	case r.StartError != "":
+		return "could not be started: " + r.StartError
 	case r.TimedOut:
 		return "timed out"
 	case r.ExitCode == nil:
@@ -241,13 +245,17 @@ func printLeftovers(r hooks.HookResult) {
 
 // hookRunsExit is the one rule `push` and `hook run` share for turning hook
 // runs into an exit code: the code of the FIRST run, in run order, that did not
-// pass -- PushHookTimeout when it timed out, PushHookFailed when it exited
-// nonzero or left a process behind -- and 0 when every run passed. It writes
+// pass -- PushHookTimeout when it timed out, PushHookFailed when it could not
+// be started, exited nonzero or left a process behind -- and 0 when every run
+// passed. It writes
 // that run's verdict to stderr, which is where the verdict lives: the payload
 // records the runs, never whether they passed.
 func hookRunsExit(results []hooks.HookResult) int {
 	for _, r := range results {
 		switch {
+		case r.StartError != "":
+			fmt.Fprintf(os.Stderr, "hook %s could not be started: %s\n", r.Name, r.StartError)
+			return exitcode.PushHookFailed
 		case r.TimedOut:
 			fmt.Fprintf(os.Stderr, "hook %s timed out after %v\n", r.Name, r.Duration)
 			return exitcode.PushHookTimeout
@@ -268,9 +276,12 @@ func hookRunsExit(results []hooks.HookResult) int {
 type hookRecord struct {
 	Name string `json:"name"`
 	// ExitCode is the hook's own exit status, and null when the hook has
-	// none: the timeout killed it.
+	// none: it could not be started, or the timeout killed it.
 	ExitCode *int `json:"exit_code"`
-	TimedOut bool `json:"timed_out"`
+	// StartError says why the hook could not be started at all, and is null
+	// for a hook that started.
+	StartError *string `json:"start_error"`
+	TimedOut   bool    `json:"timed_out"`
 	// DurationMS is the run's wall-clock time in whole milliseconds.
 	DurationMS int64 `json:"duration_ms"`
 	// LeftoverProcesses are the processes the hook left running when it
@@ -312,8 +323,9 @@ var hookRecordSchema = strictcli.SchemaObject(
 		)),
 		"unidentified_leftovers":        strictcli.SchemaType("boolean"),
 		"leftover_identification_error": strictcli.SchemaType("string", "null"),
+		"start_error":                   strictcli.SchemaType("string", "null"),
 	},
-	[]string{"name", "exit_code", "timed_out", "duration_ms", "leftover_processes", "unidentified_leftovers", "leftover_identification_error"},
+	[]string{"name", "exit_code", "start_error", "timed_out", "duration_ms", "leftover_processes", "unidentified_leftovers", "leftover_identification_error"},
 	false,
 )
 
@@ -341,6 +353,10 @@ func hookRecords(results []hooks.HookResult) []hookRecord {
 		if r.LeftoverUnknown != "" {
 			reason := r.LeftoverUnknown
 			rec.LeftoverIdentificationError = &reason
+		}
+		if r.StartError != "" {
+			reason := r.StartError
+			rec.StartError = &reason
 		}
 		out = append(out, rec)
 	}

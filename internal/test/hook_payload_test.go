@@ -2,6 +2,7 @@ package test
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -31,6 +32,9 @@ type hookEntry struct {
 	// something still held the hook's output and could not be named, and why.
 	UnidentifiedLeftovers       *bool   `json:"unidentified_leftovers"`
 	LeftoverIdentificationError *string `json:"leftover_identification_error"`
+	// StartError says why a hook could not be started at all, and is null
+	// for a hook that started.
+	StartError *string `json:"start_error"`
 }
 
 type leftoverRecord struct {
@@ -43,7 +47,7 @@ type leftoverRecord struct {
 // member (a status, a reason, a pass/fail flag) is refused by this set.
 var hookEntryMembers = map[string]bool{
 	"name": true, "exit_code": true, "timed_out": true, "duration_ms": true, "leftover_processes": true,
-	"unidentified_leftovers": true, "leftover_identification_error": true,
+	"unidentified_leftovers": true, "leftover_identification_error": true, "start_error": true,
 }
 
 // payloadHooks decodes the `hooks` list out of a machine-mode run's payload and
@@ -135,6 +139,9 @@ func checkIdentified(t *testing.T, e hookEntry) {
 	}
 	if e.LeftoverIdentificationError != nil {
 		t.Errorf("entry %s leftover_identification_error = %q, want null", name, *e.LeftoverIdentificationError)
+	}
+	if e.StartError != nil {
+		t.Errorf("entry %s start_error = %q, want null: the hook started", name, *e.StartError)
 	}
 }
 
@@ -382,4 +389,81 @@ func TestPushVerboseSaysATimedOutHookTimedOut(t *testing.T) {
 	if strings.Contains(stderr, "exit=") {
 		t.Errorf("a timed-out hook has no exit status, and the verbose line printed one; stderr:\n%s", stderr)
 	}
+}
+
+// writeRawHook writes a hook file with exactly the given content and mode into
+// the live store's pre-pre-push.d directory.
+func writeRawHook(t *testing.T, dir, name, content string) {
+	t.Helper()
+	path := filepath.Join(localHookDir(dir), "pre-pre-push.d", name)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A hook that cannot be started at all -- its #! line names an interpreter that
+// does not exist, or it is neither a script nor a program -- fails the run with
+// exit 20, and its entry records why as start_error, with exit_code null: it
+// never ran, so it has no exit status.
+func TestHookThatCannotStartIsRecordedAsAStartError(t *testing.T) {
+	for _, tc := range []struct {
+		name, content, want string
+	}{
+		{"missing interpreter", "#!/nonexistent/interpreter\nexit 0\n", "exec: no such file or directory"},
+		{"malformed", "\x00\x01\x02 not a program\n", "exec: exec format error"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, remote := newRepoWithRemote(t)
+			writeRawHook(t, dir, "10-lint", tc.content)
+			for _, args := range [][]string{
+				{"--json", "push", "--refs", "head", "origin"},
+				{"--json", "hook", "run"},
+				{"--json", "hook", "run", "10-lint"},
+			} {
+				t.Run(strings.Join(args, " "), func(t *testing.T) {
+					stdout, stderr, code := runSafegit(t, dir, args...)
+					if code != exitcode.PushHookFailed {
+						t.Fatalf("exit = %d, want %d; stderr: %s", code, exitcode.PushHookFailed, stderr)
+					}
+					if !strings.Contains(stderr, "hook 10-lint could not be started: "+tc.want) {
+						t.Errorf("the verdict must be on stderr; stderr:\n%s", stderr)
+					}
+					hooks := payloadHooks(t, stdout)
+					if len(hooks) != 1 {
+						t.Fatalf("hooks = %d entries, want 1", len(hooks))
+					}
+					e := hooks[0]
+					if e.StartError == nil || *e.StartError != tc.want {
+						t.Errorf("start_error = %v, want %q", e.StartError, tc.want)
+					}
+					if e.ExitCode != nil {
+						t.Errorf("exit_code = %d, want null: the hook never ran", *e.ExitCode)
+					}
+					assertNoVerdictMember(t, stdout)
+				})
+			}
+			if branches := remoteBranches(t, remote); len(branches) != 0 {
+				t.Errorf("a hook that could not start must push nothing; the remote has %v", branches)
+			}
+		})
+	}
+}
+
+// A hook whose #! line runs env on a program that does not exist DID start:
+// env ran and exited 127. That is a nonzero exit, and start_error is null.
+func TestHookWhoseInterpreterExitsNonzeroIsNotAStartError(t *testing.T) {
+	dir := newRepo(t)
+	writeRawHook(t, dir, "10-lint", "#!/usr/bin/env safegit-test-missing-program\nexit 0\n")
+	stdout, stderr, code := runSafegit(t, dir, "--json", "hook", "run")
+	if code != exitcode.PushHookFailed {
+		t.Fatalf("exit = %d, want %d; stderr: %s", code, exitcode.PushHookFailed, stderr)
+	}
+	hooks := payloadHooks(t, stdout)
+	if len(hooks) != 1 {
+		t.Fatalf("hooks = %d entries, want 1", len(hooks))
+	}
+	checkEntry(t, hooks[0], "10-lint", 127, false)
 }
