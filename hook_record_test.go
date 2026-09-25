@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -76,5 +78,59 @@ func TestHookRecordOfATimedOutHookHasNoExitCode(t *testing.T) {
 	m = decodeRecord(t, hooks.HookResult{Name: "20-test", Duration: time.Second, ExitCode: 3})
 	if got := string(m["exit_code"]); got != "3" {
 		t.Errorf("exit_code of a hook that exited 3 = %s, want 3", got)
+	}
+}
+
+// snakeCase matches a JSON member name in the repository's convention.
+var snakeCase = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
+
+// TestHookRecordMembersAreSnakeCase: every member of the emitted hook record,
+// its leftover entries included, is snake_case and declared by the schema, and
+// the internal run result carries no JSON spelling of its own -- hookRecord is
+// the one form a hook run is emitted in, so a second set of member names on
+// hooks.HookResult could only ever disagree with it.
+func TestHookRecordMembersAreSnakeCase(t *testing.T) {
+	recs := hookRecords([]hooks.HookResult{{
+		Name:      "10-lint",
+		Leftovers: []hooks.LeftoverProcess{{PID: 1, Command: "sleep"}},
+	}})
+	raw, err := json.Marshal(recs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		t.Fatal(err)
+	}
+	var left []map[string]json.RawMessage
+	if err := json.Unmarshal(rec["leftover_processes"], &left); err != nil || len(left) != 1 {
+		t.Fatalf("leftover_processes = %s (%v)", rec["leftover_processes"], err)
+	}
+	for _, m := range []map[string]json.RawMessage{rec, left[0]} {
+		for k := range m {
+			if !snakeCase.MatchString(k) {
+				t.Errorf("emitted member %q is not snake_case", k)
+			}
+		}
+	}
+	var required []string
+	for _, k := range hookRecordSchema["required"].([]interface{}) {
+		required = append(required, k.(string))
+	}
+	if len(required) != len(rec) {
+		t.Errorf("the record emits %d members and the schema requires %d: %s", len(rec), len(required), raw)
+	}
+	for _, k := range required {
+		if _, ok := rec[k]; !ok {
+			t.Errorf("the schema requires %q and the record does not emit it: %s", k, raw)
+		}
+	}
+
+	for _, typ := range []reflect.Type{reflect.TypeOf(hooks.HookResult{}), reflect.TypeOf(hooks.LeftoverProcess{})} {
+		for i := 0; i < typ.NumField(); i++ {
+			if tag, ok := typ.Field(i).Tag.Lookup("json"); ok {
+				t.Errorf("%s.%s carries json tag %q; the emitted form is hookRecord alone", typ.Name(), typ.Field(i).Name, tag)
+			}
+		}
 	}
 }

@@ -39,26 +39,29 @@ func SetOutput(out, err io.Writer) func() {
 	return func() { stdout, stderr = prevOut, prevErr }
 }
 
-// HookResult holds the outcome of running a single hook.
+// HookResult holds the outcome of running a single hook. It is never emitted
+// as it stands, so it carries no JSON spelling: a machine payload records a run
+// through the caller's own record type, whose member names are the one
+// documented form.
 type HookResult struct {
-	Name     string        `json:"name"`
-	ExitCode int           `json:"exitCode"`
-	Duration time.Duration `json:"duration"`
-	TimedOut bool          `json:"timedOut,omitempty"`
+	Name     string
+	ExitCode int
+	Duration time.Duration
+	TimedOut bool
 	// Leftovers are the processes the hook left running when it ended.
-	Leftovers []LeftoverProcess `json:"leftover_processes,omitempty"`
+	Leftovers []LeftoverProcess
 	// LeftoverUnknown is non-empty when something the hook started was still
 	// holding its output after it ended and safegit could not name it; it says
 	// why.
-	LeftoverUnknown string `json:"leftover_unknown,omitempty"`
+	LeftoverUnknown string
 }
 
 // LeftoverProcess is one process a hook left running when it ended.
 type LeftoverProcess struct {
-	PID     int    `json:"pid"`
-	Command string `json:"command"`
+	PID     int
+	Command string
 	// Killed reports that safegit stopped it. False means it is still running.
-	Killed bool `json:"killed"`
+	Killed bool
 }
 
 // Failed reports whether the run failed: a nonzero status, a timeout, or any
