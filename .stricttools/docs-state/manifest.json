@@ -2,7 +2,7 @@
   "schema_version": 1,
   "name": "safegit",
   "slug": "safegit",
-  "version": "0.29.3",
+  "version": "0.29.4",
   "description": "The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood",
   "language": "go",
   "base_url": "https://safegit.smmh.dev",
@@ -169,6 +169,11 @@
         },
         {
           "level": 3,
+          "text": "Processes a hook leaves behind",
+          "anchor": "processes-a-hook-leaves-behind"
+        },
+        {
+          "level": 3,
           "text": "Bypass",
           "anchor": "bypass"
         },
@@ -211,6 +216,11 @@
           "level": 3,
           "text": "Pre-pre-push hook hangs",
           "anchor": "pre-pre-push-hook-hangs"
+        },
+        {
+          "level": 3,
+          "text": "Pre-pre-push hook leaves a process running",
+          "anchor": "pre-pre-push-hook-leaves-a-process-running"
         },
         {
           "level": 3,
@@ -1843,6 +1853,11 @@
           "level": 3,
           "text": "Discovery's refusals reach here too",
           "anchor": "discoverys-refusals-reach-here-too"
+        },
+        {
+          "level": 3,
+          "text": "A hook that leaves a process running fails",
+          "anchor": "a-hook-that-leaves-a-process-running-fails"
         },
         {
           "level": 3,
@@ -3782,6 +3797,11 @@
           "level": 3,
           "text": "Hook output goes to stderr, whatever the hook wrote it to",
           "anchor": "hook-output-goes-to-stderr-whatever-the-hook-wrote-it-to"
+        },
+        {
+          "level": 3,
+          "text": "A hook that leaves a process running fails",
+          "anchor": "a-hook-that-leaves-a-process-running-fails"
         },
         {
           "level": 3,
@@ -5954,6 +5974,11 @@
         },
         {
           "level": 3,
+          "text": "`LeftoverProcess`",
+          "anchor": "leftoverprocess"
+        },
+        {
+          "level": 3,
           "text": "`LegacyLocationError`",
           "anchor": "legacylocationerror"
         },
@@ -6056,6 +6081,16 @@
           "level": 3,
           "text": "`Legacy`",
           "anchor": "legacy"
+        },
+        {
+          "level": 3,
+          "text": "`HookResult.Failed`",
+          "anchor": "hookresultfailed"
+        },
+        {
+          "level": 3,
+          "text": "`HookResult.LeftoverMessages`",
+          "anchor": "hookresultleftovermessages"
         },
         {
           "level": 3,
@@ -7856,6 +7891,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-09-25T14:38:22.606495+00:00",
+  "last_gen": "2026-09-25T20:54:48.384956+00:00",
   "theme": "minimal"
 }
