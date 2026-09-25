@@ -1,7 +1,7 @@
 {
   "_hash_version": 3,
   "en/architecture.md": {
-    "content": "015d1164c4394d40e275970be92cdf973e8c58ef50778ee734416c486ebba2ca",
+    "content": "9e4cbeac2bd0d7b3d4573eb6bc22c55089ce8c479eee4316471a3f5f43003a11",
     "description": "4302e1fbd9dc3df27ac8753aee78d1c4300524fde901016abd3bf864fc8387c0"
   },
   "en/cli-author.md": {
@@ -203,7 +203,7 @@
   "en/internal-exitcode.md": {
     "content": "5780229adf51e1966969261bdbd3b751b6b5379ca455af2e3fcde2a45b9270d6",
     "description": "9b2bb33ffea6ec1b511f8f15e6b42c561fe4d48c97e011f353b4ad9f0bada3b3",
-    "source_docstring": "624ad505796b1d6987b52e4ae4aa826661474d28af76d140927c9bebbd9afa2e"
+    "source_docstring": "0e30729b6da15dba08f78cc5e378e00ee71c2c450e372ee360e06f7af0d4e8bb"
   },
   "en/internal-filelock.md": {
     "content": "fbfc90291bd070b20f71d5779ae4fbfcec4e1963ea16cc7ee0b02100851bd3e7",
