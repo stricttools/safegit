@@ -271,3 +271,29 @@ func TestHookRunPayloadRecordsAFailingHook(t *testing.T) {
 		})
 	}
 }
+
+// The all-hooks form returns the code of the first hook that did not pass, in
+// run order: 21 when that hook timed out, not the generic hook-failure 20.
+func TestHookRunAllReturnsTimeoutCodeForATimedOutHook(t *testing.T) {
+	dir := newRepo(t)
+	setHookTimeout(t, dir, "1")
+	installDirHook(t, dir, "10-lint", "exec sleep 30")
+	installDirHook(t, dir, "20-test", "true")
+
+	stdout, stderr, code := runSafegit(t, dir, "--json", "hook", "run")
+	if code != exitcode.PushHookTimeout {
+		t.Fatalf("exit = %d, want %d (PushHookTimeout); stderr: %s", code, exitcode.PushHookTimeout, stderr)
+	}
+	hooks := payloadHooks(t, stdout)
+	if len(hooks) == 0 || hooks[0].Name == nil || *hooks[0].Name != "10-lint" {
+		t.Fatalf("the first entry must be 10-lint: %+v", hooks)
+	}
+	if hooks[0].TimedOut == nil || !*hooks[0].TimedOut {
+		t.Errorf("10-lint timed_out must be true: %+v", hooks[0])
+	}
+
+	// The text form answers the same code.
+	if _, stderr, code := runSafegit(t, dir, "hook", "run"); code != exitcode.PushHookTimeout {
+		t.Errorf("text-mode exit = %d, want %d; stderr: %s", code, exitcode.PushHookTimeout, stderr)
+	}
+}

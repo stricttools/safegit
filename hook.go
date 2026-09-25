@@ -199,7 +199,6 @@ func hookRun(flags globalFlags, name string) int {
 		return 0
 	}
 
-	failed := false
 	for _, r := range results {
 		printLeftovers(r)
 		status := "passed"
@@ -210,16 +209,12 @@ func hookRun(flags globalFlags, name string) int {
 		} else if r.Failed() {
 			status = "failed (left processes running)"
 		}
-		if r.Failed() {
-			failed = true
-		}
 		outf(flags, "  %s: %s (%v)\n", r.Name, status, r.Duration)
 	}
 
-	if failed {
-		return exitcode.PushHookFailed
-	}
-	return 0
+	// The same rule push uses: the first run that did not pass decides the
+	// code, so a timeout answers 21 rather than the generic 20.
+	return hookRunsExit(results)
 }
 
 // printLeftovers writes one error line to stderr per process a hook left
