@@ -168,7 +168,10 @@ func hookRun(flags globalFlags, name string) int {
 		outf(flags, "running hook: %s\n", name)
 		r, rErr := hooks.RunSingle(ctx, hookPath, hookStdin, timeoutSec, hookEnv)
 		if rErr != nil {
-			die(exitcode.General, fmt.Sprintf("running hooks: %v", rErr))
+			// safegit could not run the hook under containment, so there is no
+			// run to record; the payload still answers, with an empty list.
+			flags.payload(hookRunPayload{Hooks: hookRecords(nil)})
+			fmt.Fprintf(os.Stderr, "error: running hooks: %v\n", rErr)
 			return exitcode.General
 		}
 		results := []hooks.HookResult{r}
@@ -188,7 +191,14 @@ func hookRun(flags globalFlags, name string) int {
 	}
 	results, rErr := hooks.RunAll(ctx, hookPaths, hookStdin, timeoutSec, hookEnv)
 	if rErr != nil {
-		die(exitcode.General, fmt.Sprintf("running hooks: %v", rErr))
+		// safegit could not run a hook under containment. The runs before it
+		// are facts all the same, so the payload records them; the error text
+		// and the exit code are the verdict.
+		for _, r := range results {
+			printLeftovers(r)
+		}
+		flags.payload(hookRunPayload{Hooks: hookRecords(results)})
+		fmt.Fprintf(os.Stderr, "error: running hooks: %v\n", rErr)
 		return exitcode.General
 	}
 

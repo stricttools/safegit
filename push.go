@@ -312,16 +312,16 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 
 		hookResults, err = hooks.RunAll(ctx, hookPaths, hookStdin, timeoutSec, hookEnv)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("running hooks: %v", err))
+			// safegit could not run a hook under containment. The runs before
+			// it are facts all the same, so the payload records them; the
+			// error text and the exit code are the verdict.
+			printHookRuns(flags, hookResults)
+			flags.payload(buildPushPayload(flags, remote, nil, forceFlag, pushIsAtomic(validated), hookResults, hooksSkipped))
+			fmt.Fprintf(os.Stderr, "error: running hooks: %v\n", err)
 			return exitcode.General
 		}
 
-		for _, hr := range hookResults {
-			if flags.verbose {
-				fmt.Fprintf(os.Stderr, "  hook %s: %s (%v)\n", hr.Name, hookEnding(hr), hr.Duration)
-			}
-			printLeftovers(hr)
-		}
+		printHookRuns(flags, hookResults)
 		// A hook that did not pass stops the push before any network contact.
 		// The payload is still emitted -- nothing pushed, the hook runs
 		// recorded -- so a machine consumer reads what ran next to the exit
@@ -448,6 +448,17 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		}
 	}
 	return 0
+}
+
+// printHookRuns writes what push says about each hook run on stderr: its
+// ending under --verbose, and every process it left behind always.
+func printHookRuns(flags globalFlags, hookResults []hooks.HookResult) {
+	for _, hr := range hookResults {
+		if flags.verbose {
+			fmt.Fprintf(os.Stderr, "  hook %s: %s (%v)\n", hr.Name, hookEnding(hr), hr.Duration)
+		}
+		printLeftovers(hr)
+	}
 }
 
 // resolveRemoteURL gets the URL for a named remote.
