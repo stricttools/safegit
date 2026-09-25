@@ -277,19 +277,16 @@ func namesThroughLink(arg string) bool {
 	return strings.HasSuffix(arg, "/") || strings.HasSuffix(arg, string(filepath.Separator))
 }
 
-// CanonicalRel is canonicalRel for `safegit mv`, whose arguments are paths a
-// person typed at a shell prompt exactly as a positional path is, and which
-// must therefore mean the same thing from a subdirectory as from the root.
+// CanonicalRel is canonicalRel for a caller outside this package.
 //
-// It differs from the commit family's intake in one respect: every component
-// above the final one is RESOLVED, links under the repository root included
-// (resolveAllParents), so an mv path under a link names the file the link
-// reaches, and one whose link leads out of the repository is refused as
-// outside it. mv's validation reads the source and the destination on disk
-// through that resolved spelling; the intake's lexical reading would have it
-// move a file living in the link's target.
+// It exists for `safegit mv`, whose arguments are paths a person typed at a
+// shell prompt exactly as a positional path is, and which must therefore mean
+// the same thing from a subdirectory as from the root. One canonicalizer, so a
+// path named in a `mv` argument and the same path named anywhere else in the
+// commit family resolve to the same repo-relative spelling. A path it returns
+// may lie beyond a symbolic link; mv refuses those itself (LinkAbove).
 func CanonicalRel(repoRoot, arg string, followFinal bool) (string, error) {
-	return canonicalRelWith(repoRoot, arg, followFinal, resolveAllParents)
+	return canonicalRel(repoRoot, arg, followFinal)
 }
 
 // canonicalRel turns one caller-typed argument into its canonical
@@ -301,12 +298,6 @@ func CanonicalRel(repoRoot, arg string, followFinal bool) (string, error) {
 // is committed as the 120000 object it is rather than collapsing into whatever
 // it points at.
 func canonicalRel(repoRoot, arg string, followFinal bool) (string, error) {
-	return canonicalRelWith(repoRoot, arg, followFinal, resolveParentSymlinks)
-}
-
-// canonicalRelWith is canonicalRel with the treatment of the components above
-// the final one supplied by the caller.
-func canonicalRelWith(repoRoot, arg string, followFinal bool, parents func(repoRoot, absPath string) string) (string, error) {
 	var absPath string
 	if filepath.IsAbs(arg) {
 		absPath = filepath.Clean(arg)
@@ -324,7 +315,7 @@ func canonicalRelWith(repoRoot, arg string, followFinal bool, parents func(repoR
 	// starting with ".." and the file is rejected as outside the repository.
 	// The final component is left alone: resolving it is what used to make a
 	// symlink argument uncommittable.
-	absPath = parents(repoRoot, absPath)
+	absPath = resolveParentSymlinks(repoRoot, absPath)
 
 	if followFinal {
 		if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
@@ -390,24 +381,6 @@ func resolveParentSymlinks(repoRoot, absPath string) string {
 	return filepath.Join(resolvedDir, base)
 }
 
-// resolveAllParents resolves every component above the final one, links under
-// the repository root included, and leaves the final component untouched. It is
-// mv's reading (see CanonicalRel).
-func resolveAllParents(_, absPath string) string {
-	dir, base := filepath.Split(absPath)
-	if base == "" {
-		if resolved, err := filepath.EvalSymlinks(absPath); err == nil {
-			return resolved
-		}
-		return absPath
-	}
-	resolvedDir, err := filepath.EvalSymlinks(filepath.Clean(dir))
-	if err != nil {
-		return absPath
-	}
-	return filepath.Join(resolvedDir, base)
-}
-
 // belowRoot finds the ancestor of dir (dir itself included) that IS the
 // repository root and returns the remainder of dir below it, unresolved. The
 // root is matched lexically first, then by resolving each ancestor from the
@@ -451,13 +424,39 @@ func insideRoot(repoRoot, p string) bool {
 // it: what the filesystem shows under a link is the link target's content,
 // which is not this repository's, so it is never read, staged or asked about.
 func underLink(repoRoot, rel string) bool {
-	for dir := filepath.Dir(filepath.FromSlash(rel)); dir != "." && dir != string(filepath.Separator); dir = filepath.Dir(dir) {
-		info, err := os.Lstat(filepath.Join(repoRoot, dir))
-		if err == nil && !info.IsDir() {
-			return true
+	_, info := firstNonDirectoryAbove(repoRoot, rel)
+	return info != nil
+}
+
+// LinkAbove returns the repo-relative path of the symlink that a repo-relative
+// path lies beyond -- the outermost directory above it that is a symlink on
+// disk -- or the empty string when there is none.
+func LinkAbove(repoRoot, rel string) string {
+	dir, info := firstNonDirectoryAbove(repoRoot, rel)
+	if info == nil || info.Mode()&os.ModeSymlink == 0 {
+		return ""
+	}
+	return dir
+}
+
+// firstNonDirectoryAbove walks the directories above a repo-relative path from
+// the repository root down and returns the first one that is on disk and is
+// not a real directory, with its Lstat result; nil when every one that exists
+// is a directory. The walk stops at that entry, or at the first one that does
+// not exist, so nothing is ever looked up through a link.
+func firstNonDirectoryAbove(repoRoot, rel string) (string, os.FileInfo) {
+	parts := strings.Split(rel, "/")
+	for i := 1; i < len(parts); i++ {
+		dir := strings.Join(parts[:i], "/")
+		info, err := os.Lstat(git.Anchor(repoRoot, dir))
+		if err != nil {
+			return "", nil
+		}
+		if !info.IsDir() {
+			return dir, info
 		}
 	}
-	return false
+	return "", nil
 }
 
 // presentOnDisk reports whether a repo-relative path is in the working tree:

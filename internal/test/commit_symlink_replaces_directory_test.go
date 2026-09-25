@@ -232,38 +232,92 @@ func TestCommitLinkReplacingTrackedDirectoryFromALinkedSpellingOfTheRoot(t *test
 	assertLinkReplacedDirectory(t, dir, before, "not-there")
 }
 
-// TestMvDoesNotMoveAFileOutOfALinkTarget: `safegit mv` resolves the components
-// above a path's final one, so a tracked path whose directory has become a link
-// leading out of the repository is refused as outside it. What must never
-// happen is the move itself: the file the filesystem shows under the link
-// belongs to the link's target, and moving it would pull it out of there and
-// into the repository -- even when its content matches the tracked blob.
-func TestMvDoesNotMoveAFileOutOfALinkTarget(t *testing.T) {
-	outside := evalTempDir(t)
-	testutil.WriteFileAt(t, filepath.Join(outside, "a.txt"), "tracked\n")
-	dir := newRepo(t)
+// mvThroughLinkFixture tracks logs/a.txt and real/kept.txt, then replaces logs/
+// on disk with a symlink holding target. It returns the repository and HEAD.
+func mvThroughLinkFixture(t *testing.T, target string) (dir, before string) {
+	t.Helper()
+	dir = newRepo(t)
 	testutil.WriteFile(t, dir, "logs/a.txt", "tracked\n")
-	testutil.Git(t, dir, "add", "logs/a.txt")
-	testutil.Git(t, dir, "commit", "-m", "track logs/a.txt")
+	testutil.WriteFile(t, dir, "real/kept.txt", "kept\n")
+	testutil.Git(t, dir, "add", "logs/a.txt", "real/kept.txt")
+	testutil.Git(t, dir, "commit", "-m", "track logs/ and real/")
 	if err := os.RemoveAll(filepath.Join(dir, "logs")); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(outside, filepath.Join(dir, "logs")); err != nil {
+	if err := os.Symlink(target, filepath.Join(dir, "logs")); err != nil {
 		t.Fatal(err)
 	}
-	before := testutil.Rev(t, dir, "HEAD")
+	return dir, testutil.Rev(t, dir, "HEAD")
+}
 
-	_, stderr, code := runSafegit(t, dir, "mv", "-m", "move it", "logs/a.txt -> b.txt")
-	if code == 0 {
-		t.Fatalf("mv moved a path under a link that leaves the repository; stderr:\n%s", stderr)
+// assertMvBeyondLinkRefused checks the refusal of an mv pair naming a path
+// beyond a symbolic link: exit 19, the path and the link both named, and
+// nothing moved or committed.
+func assertMvBeyondLinkRefused(t *testing.T, dir, before, pair, path string) {
+	t.Helper()
+	_, stderr, code := runSafegit(t, dir, "mv", "-m", "move it", pair)
+	if code != exitcode.MoveNotBorneOut {
+		t.Fatalf("mv %q exited %d, want %d (MoveNotBorneOut); stderr:\n%s", pair, code, exitcode.MoveNotBorneOut, stderr)
 	}
-	if !testutil.FileExists(filepath.Join(outside, "a.txt")) {
-		t.Error("the file in the link's target was moved away")
-	}
-	if testutil.FileExists(filepath.Join(dir, "b.txt")) {
-		t.Error("b.txt appeared in the repository")
+	want := path + " is beyond a symbolic link: logs is a symlink"
+	if !strings.Contains(stderr, want) {
+		t.Errorf("the refusal must say %q; stderr:\n%s", want, stderr)
 	}
 	if after := testutil.Rev(t, dir, "HEAD"); after != before {
 		t.Errorf("HEAD moved: %s -> %s", before, after)
+	}
+}
+
+// TestMvSourceBeyondALinkIsRefused: a tracked path whose directory has become a
+// link is beyond a symbolic link, as git mv says, whether the link leads out of
+// the repository or back into it. The file the filesystem shows under the link
+// belongs to the link's target, and moving it would pull it out of there -- so
+// it stays put even when its content matches the tracked blob.
+func TestMvSourceBeyondALinkIsRefused(t *testing.T) {
+	t.Run("link leaves the repository", func(t *testing.T) {
+		outside := evalTempDir(t)
+		testutil.WriteFileAt(t, filepath.Join(outside, "a.txt"), "tracked\n")
+		dir, before := mvThroughLinkFixture(t, outside)
+		assertMvBeyondLinkRefused(t, dir, before, "logs/a.txt -> b.txt", "logs/a.txt")
+		if !testutil.FileExists(filepath.Join(outside, "a.txt")) {
+			t.Error("the file in the link's target was moved away")
+		}
+		if testutil.FileExists(filepath.Join(dir, "b.txt")) {
+			t.Error("b.txt appeared in the repository")
+		}
+	})
+	t.Run("link points inside the repository", func(t *testing.T) {
+		dir, before := mvThroughLinkFixture(t, "real")
+		testutil.WriteFile(t, dir, "real/a.txt", "tracked\n")
+		assertMvBeyondLinkRefused(t, dir, before, "logs/a.txt -> b.txt", "logs/a.txt")
+		if !testutil.FileExists(filepath.Join(dir, "real", "a.txt")) {
+			t.Error("the file in the link's target was moved away")
+		}
+	})
+}
+
+// TestMvDestinationBeyondALinkIsRefused: a destination under a symlinked
+// directory is refused the same way, and nothing is written through the link.
+func TestMvDestinationBeyondALinkIsRefused(t *testing.T) {
+	dir, before := mvThroughLinkFixture(t, "real")
+	assertMvBeyondLinkRefused(t, dir, before, "real/kept.txt -> logs/kept.txt", "logs/kept.txt")
+	if !testutil.FileExists(filepath.Join(dir, "real", "kept.txt")) {
+		t.Error("the source was moved")
+	}
+}
+
+// TestMvPathOutsideTheRepositoryIsStillRefused: a path that really is outside
+// keeps its own refusal.
+func TestMvPathOutsideTheRepositoryIsStillRefused(t *testing.T) {
+	dir := newRepo(t)
+	_, stderr, code := runSafegit(t, dir, "mv", "-m", "move it", "seed.txt -> ../elsewhere/seed.txt")
+	if code == 0 {
+		t.Fatal("mv moved a file outside the repository")
+	}
+	if !strings.Contains(stderr, "file ../elsewhere/seed.txt is outside the repository") {
+		t.Errorf("expected the outside-the-repository refusal; stderr:\n%s", stderr)
+	}
+	if !testutil.FileExists(filepath.Join(dir, "seed.txt")) {
+		t.Error("seed.txt was moved")
 	}
 }

@@ -336,6 +336,16 @@ func checkMvPair(ctx context.Context, repoRoot string, ignoreCase, createMissing
 	absOld := git.Anchor(repoRoot, p.oldPrefix())
 	absNew := git.Anchor(repoRoot, p.newPrefix())
 
+	// A path beyond a symbolic link is not in the working tree, as git mv
+	// says: what the filesystem shows there is the link target's, so moving
+	// it would take a file out of the target, and landing there would write
+	// into it. Asked first, before anything is read at either path.
+	for _, path := range []string{p.oldPrefix(), p.newPrefix()} {
+		if link := commit.LinkAbove(repoRoot, path); link != "" {
+			return fmt.Sprintf("%s is beyond a symbolic link: %s is a symlink, and a move never reads or writes through one", path, link)
+		}
+	}
+
 	info, err := os.Lstat(absOld)
 	if err != nil {
 		return fmt.Sprintf("%s is not on disk; a move takes content that is there to somewhere else", p.oldPrefix())
@@ -555,9 +565,8 @@ func destinationParentReason(repoRoot, absNew, newPrefix string, createMissingDi
 // about b.txt/deeper, which cannot be stat'ed at all because b.txt is a file, so
 // the answer is only found one level up.
 //
-// Existence is asked with Lstat and directoryness with Stat, on purpose: a
-// symlink pointing at a directory IS a directory to land in, while a dangling
-// one is a name that is taken by something that is not.
+// Existence is asked with Lstat and directoryness with Stat. A symlink never
+// reaches this far: checkMvPair refuses a destination beyond one first.
 func nonDirectoryAncestor(repoRoot, dir string) string {
 	sep := string(filepath.Separator)
 	for cur := dir; ; {
