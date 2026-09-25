@@ -14,6 +14,7 @@ import (
 // credentials) would otherwise silently change what the tests exercise.
 
 func TestControlledEnvIsAllowlisted(t *testing.T) {
+	isolate(t)
 	t.Setenv("CLAUDE_CODE_SESSION_ID", "ambient-poison-session")
 	t.Setenv("RLSBL_DIST_DIR", "/ambient/dist")
 	t.Setenv("GH_TOKEN", "ambient-token")

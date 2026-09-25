@@ -187,11 +187,31 @@ var envAllowlist = []string{
 }
 
 // controlledEnv builds the environment for a spawned safegit process:
-// the allowlisted parent variables, a throwaway HOME with no usable git
-// config, deterministic locale and prompt settings, plus any explicit
-// key=value overrides the caller supplies (which win over everything above).
+// the allowlisted parent variables, a throwaway HOME, the throwaway git
+// config files testisolation wrote for this test, deterministic locale and
+// prompt settings, plus any explicit key=value overrides the caller supplies
+// (which win over everything above).
+//
+// The git config is testisolation's, read from the test's own environment
+// (isolate binds it), rather than a path of its own: the system file there
+// turns maintenance.auto off, and without it every `git fetch` a spawned
+// safegit runs starts `git maintenance run --auto --detach`, which keeps
+// writing into .git after safegit returns and races the test's cleanup. A test
+// that never called isolate has no such files, and is refused here.
 func controlledEnv(t *testing.T, extra ...string) []string {
 	t.Helper()
+
+	gitConfig := make([]string, 0, 2)
+	for _, name := range []string{"GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM"} {
+		path := os.Getenv(name)
+		if path == "" {
+			t.Fatalf("%s is not set: a test that spawns safegit must bind testisolation's environment first (isolate, which evalTempDir and every repo constructor call)", name)
+		}
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("%s names %s, which testisolation did not write: %v", name, path, err)
+		}
+		gitConfig = append(gitConfig, name+"="+path)
+	}
 
 	home := t.TempDir()
 	env := make([]string, 0, len(envAllowlist)+len(extra)+8)
@@ -204,13 +224,11 @@ func controlledEnv(t *testing.T, extra ...string) []string {
 		"HOME="+home,
 		"USERPROFILE="+home,
 		"XDG_CONFIG_HOME="+filepath.Join(home, ".config"),
-		// Point git at files that do not exist: no global/system config is read.
-		"GIT_CONFIG_GLOBAL="+filepath.Join(home, "absent-gitconfig"),
-		"GIT_CONFIG_SYSTEM="+filepath.Join(home, "absent-gitconfig-system"),
 		"GIT_TERMINAL_PROMPT=0",
 		"LANG=C",
 		"LC_ALL=C",
 	)
+	env = append(env, gitConfig...)
 	return append(env, extra...)
 }
 
