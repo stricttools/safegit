@@ -204,6 +204,9 @@ Every future change that introduces a decision of this kind adds its entry here.
   deletion from history. A trailing slash, not the filesystem, is what says
   whether an argument names a symlink or the directory it points at, and it
   follows the final component only: a path under a link is read as spelled.
+  A move pair -- a `safegit mv` argument or a `commit --moved` declaration --
+  is the exception: there the slash marks the subtree form and never follows a
+  link, and a side beyond a link is refused naming the path and the link.
 - **Ruling:** ours — deliberate
 
 ### Committing in a submodule refuses until the parent has decided about the gitlink

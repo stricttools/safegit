@@ -219,6 +219,11 @@ func resolveMovedRetract(ctx context.Context, parentRev string, ids []string) ([
 // must name the path the tree names. The subtree marker is carried across the
 // canonicalization, which strips a trailing slash, so the spelling the caller
 // used still decides whether the record speaks for a prefix.
+//
+// Both sides are read as spelled, exactly as a `safegit mv` pair is: the
+// trailing slash marks the subtree form and never asks for the final component
+// to be followed through a link. A side that lies beyond a link is refused by
+// validateMoved, which asks LinkAbove of the spelling with its slash.
 func parseMovedArgs(repoRoot string, moved []string) ([]movedDeclaration, error) {
 	out := make([]movedDeclaration, 0, len(moved))
 	for _, arg := range moved {
@@ -227,11 +232,11 @@ func parseMovedArgs(repoRoot string, moved []string) ([]movedDeclaration, error)
 			return nil, &CommitError{Code: exitcode.Usage, Message: fmt.Sprintf("--moved %s: %v", arg, err)}
 		}
 		subtree := strings.HasSuffix(old, "/")
-		oldRel, err := canonicalRel(repoRoot, old, subtree)
+		oldRel, err := canonicalRel(repoRoot, old, false)
 		if err != nil {
 			return nil, &CommitError{Code: exitcode.Usage, Message: fmt.Sprintf("--moved %s: %v", arg, err)}
 		}
-		newRel, err := canonicalRel(repoRoot, new, subtree)
+		newRel, err := canonicalRel(repoRoot, new, false)
 		if err != nil {
 			return nil, &CommitError{Code: exitcode.Usage, Message: fmt.Sprintf("--moved %s: %v", arg, err)}
 		}
@@ -365,9 +370,11 @@ func overlapSideName(kind trailer.OverlapKind) string {
 	return "the same source"
 }
 
-// validateMoved is the whole check one declaration gets. Three questions, each
+// validateMoved is the whole check one declaration gets. Its questions are each
 // asked of the repository rather than of the caller:
 //
+//   - does either side lie beyond a symbolic link? Such a path is not in the
+//     working tree, and what the filesystem shows there is the link target's.
 //   - is the old path something the commit's parent TRACKED? A move out of a
 //     path nothing ever held is not a move.
 //   - is the old path GONE from the working tree? A path still sitting there
@@ -383,6 +390,18 @@ func overlapSideName(kind trailer.OverlapKind) string {
 // the delta already witnesses, and every one of its fences exists to keep that
 // reading from becoming a guess.)
 func validateMoved(ctx context.Context, repoRoot, parentRev string, tree *treeIndex, d movedDeclaration) error {
+	// A path beyond a symbolic link is not in the working tree, as git sees it:
+	// what the filesystem shows there is the link target's content. Asked first,
+	// and of each side's own spelling, so a subtree side keeps its trailing
+	// slash and `logs/` with `logs` a link is beyond that link -- the same
+	// check, and the same words, `safegit mv` uses.
+	for _, path := range []string{d.old, d.new} {
+		if link := LinkAbove(repoRoot, path); link != "" {
+			return movedRefusal("--moved %s: %s is beyond a symbolic link: %s is a symlink, and a move never reads or writes through one",
+				d.arg, path, link)
+		}
+	}
+
 	if parentRev == "" {
 		return movedRefusal("--moved %s declares a move out of %s, but this commit has no parent: "+
 			"nothing existed for it to move from", d.arg, d.oldPrefix())

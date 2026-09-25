@@ -452,3 +452,70 @@ func TestCommitUntrackedPathUnderAnInRepoLinkIsRefused(t *testing.T) {
 		t.Errorf("HEAD moved: %s -> %s", before, after)
 	}
 }
+
+// assertMovedBeyondLinkRefused checks the refusal of a `commit --moved`
+// declaration naming a path beyond a symbolic link: exit 19, the path as
+// spelled and the link both named, and nothing committed.
+func assertMovedBeyondLinkRefused(t *testing.T, dir, before, pair, path string, files ...string) {
+	t.Helper()
+	args := append([]string{"commit", "-m", "declare it", "--moved", pair, "--"}, files...)
+	_, stderr, code := runSafegit(t, dir, args...)
+	if code != exitcode.MoveNotBorneOut {
+		t.Fatalf("commit --moved %q exited %d, want %d (MoveNotBorneOut); stderr:\n%s", pair, code, exitcode.MoveNotBorneOut, stderr)
+	}
+	want := path + " is beyond a symbolic link: logs is a symlink"
+	if !strings.Contains(stderr, want) {
+		t.Errorf("the refusal must say %q; stderr:\n%s", want, stderr)
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("HEAD moved: %s -> %s", before, after)
+	}
+}
+
+// TestMovedBeyondALinkIsRefused: a `--moved` declaration is read as spelled,
+// the same way a `safegit mv` pair is. A trailing slash marks the subtree form
+// and never asks for the final component to be followed, so `logs/` with
+// `logs` a symlink names what lies beyond that link rather than the directory
+// it points at, and every side beyond a link is refused naming the path and the
+// link -- never resolved through the link, and never called outside the
+// repository when the link leads out of it.
+func TestMovedBeyondALinkIsRefused(t *testing.T) {
+	t.Run("the link itself as a source", func(t *testing.T) {
+		dir, before := mvThroughLinkFixture(t, "real")
+		testutil.WriteFile(t, dir, "x/a.txt", "tracked\n")
+		assertMovedBeyondLinkRefused(t, dir, before, "logs/ -> x/", "logs/", "x/a.txt")
+	})
+	t.Run("a directory under the link as a source", func(t *testing.T) {
+		dir, _ := mvThroughLinkFixture(t, "real")
+		testutil.WriteFile(t, dir, "real/sub/f.txt", "under real\n")
+		testutil.Git(t, dir, "add", "real/sub/f.txt")
+		testutil.Git(t, dir, "commit", "-m", "track real/sub")
+		before := testutil.Rev(t, dir, "HEAD")
+		testutil.WriteFile(t, dir, "x/f.txt", "under real\n")
+		assertMovedBeyondLinkRefused(t, dir, before, "logs/sub/ -> x/", "logs/sub/", "x/f.txt")
+	})
+	t.Run("a file under the link as a source", func(t *testing.T) {
+		dir, before := mvThroughLinkFixture(t, "real")
+		testutil.WriteFile(t, dir, "b.txt", "tracked\n")
+		assertMovedBeyondLinkRefused(t, dir, before, "logs/a.txt -> b.txt", "logs/a.txt", "logs/a.txt", "b.txt")
+	})
+	t.Run("a link leaving the repository", func(t *testing.T) {
+		outside := evalTempDir(t)
+		testutil.WriteFileAt(t, filepath.Join(outside, "a.txt"), "tracked\n")
+		dir, before := mvThroughLinkFixture(t, outside)
+		testutil.WriteFile(t, dir, "x/a.txt", "tracked\n")
+		assertMovedBeyondLinkRefused(t, dir, before, "logs/ -> x/", "logs/", "x/a.txt")
+	})
+	t.Run("a directory under the link as a destination", func(t *testing.T) {
+		dir, _ := mvThroughLinkFixture(t, "real")
+		testutil.WriteFile(t, dir, "other/o.txt", "other\n")
+		testutil.Git(t, dir, "add", "other/o.txt")
+		testutil.Git(t, dir, "commit", "-m", "track other/")
+		before := testutil.Rev(t, dir, "HEAD")
+		testutil.WriteFile(t, dir, "real/sub/o.txt", "other\n")
+		if err := os.RemoveAll(filepath.Join(dir, "other")); err != nil {
+			t.Fatal(err)
+		}
+		assertMovedBeyondLinkRefused(t, dir, before, "other/ -> logs/sub/", "logs/sub/", "other/o.txt")
+	})
+}
