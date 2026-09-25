@@ -22,6 +22,10 @@ import (
 const (
 	prSetChildSubreaper = 36
 	prGetChildSubreaper = 37
+
+	// The pidfd system calls have one number on every Linux architecture.
+	sysPidfdSendSignal = 424
+	sysPidfdOpen       = 434
 )
 
 // uncontainedNote ends the message for a process safegit found and could not
@@ -41,6 +45,15 @@ type container struct {
 
 func beginContainment() (*container, error) {
 	c := &container{self: os.Getpid()}
+	// Every signal the sweep sends goes through a pidfd, so the kernel has to
+	// have them (Linux 5.3); asked of safegit's own process before the hook
+	// starts, so a kernel without them refuses the run instead of leaving the
+	// sweep unable to stop anything.
+	fd, errno := pidfdOpen(c.self)
+	if errno != 0 {
+		return nil, fmt.Errorf("opening a pidfd, which is how safegit signals exactly the processes a hook left behind: %v", errno)
+	}
+	syscall.Close(fd)
 	var flag int32
 	if _, _, errno := syscall.RawSyscall(syscall.SYS_PRCTL, prGetChildSubreaper, uintptr(unsafe.Pointer(&flag)), 0); errno != 0 {
 		return nil, fmt.Errorf("reading the child-subreaper flag: %v", errno)
@@ -76,6 +89,12 @@ func (c *container) started(pid int) error {
 // SIGTERM, SIGKILL after the grace, and is reaped when it is safegit's own
 // child. A process that appears while this runs (a leftover forking) is found
 // by the next scan and counted too.
+//
+// Every signal goes through a pidfd opened when the process is found and
+// checked against the start time the scan read, never through the bare pid: a
+// leftover that exits between a scan and a signal can have its pid handed to an
+// unrelated process, and a pidfd can only ever reach the process it was opened
+// on.
 func (c *container) sweep(signalledGroup bool) ([]LeftoverProcess, string) {
 	if signalledGroup {
 		deadline := time.Now().Add(killGrace)
@@ -89,6 +108,12 @@ func (c *container) sweep(signalledGroup bool) ([]LeftoverProcess, string) {
 	}
 
 	found := map[int]*LeftoverProcess{}
+	handles := map[int]pidHandle{}
+	defer func() {
+		for _, h := range handles {
+			syscall.Close(h.fd)
+		}
+	}()
 	var order []int
 	record := func(live map[int]procStat) {
 		for pid, st := range live {
@@ -96,11 +121,23 @@ func (c *container) sweep(signalledGroup bool) ([]LeftoverProcess, string) {
 				found[pid] = &LeftoverProcess{PID: pid, Command: st.comm}
 				order = append(order, pid)
 			}
+			if h, ok := handles[pid]; ok {
+				if h.ticks == st.ticks {
+					continue
+				}
+				syscall.Close(h.fd)
+				delete(handles, pid)
+			}
+			if fd, ok := openHandle(pid, st.ticks); ok {
+				handles[pid] = pidHandle{fd: fd, ticks: st.ticks}
+			}
 		}
 	}
 	signal := func(live map[int]procStat, sig syscall.Signal) {
-		for pid := range live {
-			syscall.Kill(pid, sig)
+		for pid, st := range live {
+			if h, ok := handles[pid]; ok && h.ticks == st.ticks {
+				pidfdSendSignal(h.fd, sig)
+			}
 		}
 	}
 
@@ -132,11 +169,47 @@ func (c *container) sweep(signalledGroup bool) ([]LeftoverProcess, string) {
 	for _, pid := range order {
 		l := *found[pid]
 		_, stillLive := live[pid]
-		l.Killed = !stillLive && c.reap(pid)
+		h, hasHandle := handles[pid]
+		l.Killed = !stillLive && c.reap(pid, h, hasHandle)
 		out = append(out, l)
 	}
 	c.reapZombies()
 	return out, ""
+}
+
+// pidHandle is a pidfd on one process the sweep found, with the start time the
+// scan read for it.
+type pidHandle struct {
+	fd    int
+	ticks uint64
+}
+
+// openHandle opens a pidfd on the process a scan found at pid with start time
+// ticks. It reports false when that process is gone: the open found no process
+// at pid, or found one that started at another time -- the pid was reused --
+// in which case the pidfd is closed without ever being used. A pidfd opened
+// before the start-time check refers to the checked process for good, so a
+// check that passes leaves no window for reuse.
+func openHandle(pid int, ticks uint64) (int, bool) {
+	fd, errno := pidfdOpen(pid)
+	if errno != 0 {
+		return -1, false
+	}
+	if st, err := readStat(pid); err != nil || st.ticks != ticks {
+		syscall.Close(fd)
+		return -1, false
+	}
+	return fd, true
+}
+
+func pidfdOpen(pid int) (int, syscall.Errno) {
+	fd, _, errno := syscall.Syscall(sysPidfdOpen, uintptr(pid), 0, 0)
+	return int(fd), errno
+}
+
+func pidfdSendSignal(fd int, sig syscall.Signal) syscall.Errno {
+	_, _, errno := syscall.Syscall6(sysPidfdSendSignal, uintptr(fd), uintptr(sig), 0, 0, 0, 0)
+	return errno
 }
 
 // reap waits for a leftover the sweep stopped, and reports whether it is gone.
@@ -145,11 +218,14 @@ func (c *container) sweep(signalledGroup bool) ([]LeftoverProcess, string) {
 // when that parent exits, which can come after the scan that reaped the parent:
 // the scan reads each process at its own moment, so the leftover may have been
 // read under its parent just before the parent's exit handed it over. Waiting
-// for it by pid does not depend on that read. A leftover that is safegit's child
-// and has not exited yet is killed here and waited for, up to the grace; one
-// that is not safegit's child (ECHILD) was already reaped, or belongs to a
-// parent outside safegit's tree that the scans would have reported as live.
-func (c *container) reap(pid int) bool {
+// for it by pid does not depend on that read, and is safe from reuse: a pid
+// wait4 answers for is safegit's own child, whose pid is not free until it is
+// reaped. A leftover that is safegit's child and has not exited yet is killed
+// through its pidfd and waited for, up to the grace; one that is not safegit's
+// child (ECHILD) was already reaped, or belongs to a parent outside safegit's
+// tree that the scans would have reported as live. Without a pidfd -- the
+// process was gone by the time it was found -- nothing is signalled.
+func (c *container) reap(pid int, h pidHandle, hasHandle bool) bool {
 	deadline := time.Now().Add(killGrace)
 	for {
 		var ws syscall.WaitStatus
@@ -157,10 +233,10 @@ func (c *container) reap(pid int) bool {
 		if wpid == pid || err != nil {
 			return true
 		}
-		if time.Now().After(deadline) {
+		if !hasHandle || time.Now().After(deadline) {
 			return false
 		}
-		syscall.Kill(pid, syscall.SIGKILL)
+		pidfdSendSignal(h.fd, syscall.SIGKILL)
 		time.Sleep(20 * time.Millisecond)
 	}
 }

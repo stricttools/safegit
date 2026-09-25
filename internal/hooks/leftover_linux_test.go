@@ -202,3 +202,48 @@ func TestNoZombieRemainsAfterADoubleForkHook(t *testing.T) {
 		t.Errorf("leftover %d is still there in state %s", pid, st.state)
 	}
 }
+
+// TestAReusedPidIsNeverSignalled: between the scan that finds a leftover and
+// the signal that stops it, the leftover can exit and its pid can be given to
+// an unrelated process. The seam replays that: the first scan reports a
+// leftover at the pid of a process this test started before the hook, with a
+// start time that is not that process's. The unrelated process must survive:
+// safegit signals the process it found, never whatever holds the number now.
+func TestAReusedPidIsNeverSignalled(t *testing.T) {
+	bystander := exec.Command("sleep", "60")
+	if err := bystander.Start(); err != nil {
+		t.Fatal(err)
+	}
+	exited := make(chan struct{})
+	go func() { bystander.Wait(); close(exited) }()
+	t.Cleanup(func() { bystander.Process.Kill(); <-exited })
+	// Start times count in clock ticks, and a child of this process that
+	// started in the same tick as the hook would be attributed to the hook by
+	// a real scan too; safegit starts no other process while a hook runs.
+	time.Sleep(50 * time.Millisecond)
+
+	prev := readProcStats
+	injected := false
+	readProcStats = func() map[int]procStat {
+		all := prev()
+		if !injected {
+			injected = true
+			all[bystander.Process.Pid] = procStat{comm: "leftover", state: "S", ppid: os.Getpid(), pgrp: 1, ticks: ^uint64(0)}
+		}
+		return all
+	}
+	defer func() { readProcStats = prev }()
+
+	gitDir := setupGitDir(t)
+	restore := SetOutput(&bytes.Buffer{}, &bytes.Buffer{})
+	defer restore()
+	writeHook(t, filepath.Join(LocalDir(gitDir), "pre-pre-push"), "#!/bin/sh\nexit 0\n")
+	if _, err := Run(context.Background(), store(gitDir), nil, 30, nil); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-exited:
+		t.Fatalf("the process now holding pid %d was signalled; it is not the leftover the scan found", bystander.Process.Pid)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
