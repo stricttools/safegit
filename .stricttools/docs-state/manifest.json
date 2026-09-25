@@ -3946,23 +3946,6 @@
       ]
     },
     {
-      "path": "experiments-snap.md",
-      "title": "experiments/snap",
-      "type": "doc",
-      "headings": [
-        {
-          "level": 1,
-          "text": "experiments/snap",
-          "anchor": "experimentssnap"
-        },
-        {
-          "level": 2,
-          "text": "`experiments/snap`",
-          "anchor": "experimentssnap"
-        }
-      ]
-    },
-    {
       "path": "gen-index.md",
       "title": "API Reference",
       "type": "doc",
@@ -7918,6 +7901,6 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-09-25T21:30:44.020869+00:00",
+  "last_gen": "2026-09-25T21:56:36.640214+00:00",
   "theme": "minimal"
 }
