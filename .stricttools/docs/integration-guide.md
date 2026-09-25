@@ -285,8 +285,12 @@ interchangeable:
    and the payload names what stands and what was left -- the created SHA, the
    `residue` list of the aftercare steps that failed, and, on a conclusion, the
    `autostash` member. **Payload carries aftercare**: a partial outcome is
-   reported in the document, never only in prose. Read the payload on a nonzero
-   exit rather than assuming it is null.
+   reported in the document, never only in prose. A push a pre-pre-push hook
+   stopped (exit **20**, or **21** for a timeout) answers this way too, and so
+   does a `hook run` whose hook did not pass: the payload's `hooks` list
+   records every hook that ran, and a stopped push's `refs` is empty because
+   nothing was pushed. Read the payload on a nonzero exit rather than assuming
+   it is null.
 2. **An envelope whose payload is null.** A refusal that reaches dispatch emits
    the envelope with `exit_code` set and `payload: null`, because a payload
    schema describes a performed operation and there is no error-payload channel
@@ -343,6 +347,6 @@ The properties worth knowing:
 - **`--json` does not imply approval.** A non-interactive `--json` run of a *consequential* command (`scrub file`/`match`/`run`, `author rewrite`) must pass `--approve-consequential` explicitly. Ordinary mutating commands such as `commit` need nothing. A `--json backup backup` to a remote safegit cannot prove is private is the one place `--approve-consequential` is not the answer either: that question belongs to the target, so it takes `--allow-public-remote`.
 - **A successful run of a payload-producing command always carries its payload.** `scrub match` and `scrub run` used to emit a null payload on their nothing-matched early returns, so a machine consumer could not tell "the run said nothing matched" from "the run produced nothing"; both now answer with the payload in every completing shape, which is the one-envelope invariant doing its job.
 - **git's own push output moves.** `push` captures git's streams rather than passing them through, and under `--json` git's stdout is re-routed to stderr, so the envelope stays the only document on stdout.
-- **There is no JSON error OBJECT, but a failure is not always silent on stdout.** A command that fails writes its message to stderr and exits nonzero, and safegit never writes a second, error-shaped document: the envelope is the only document machine mode has. What a failure produces on stdout is one of the three shapes above -- an envelope with a payload (the commit-stands family), an envelope with `payload: null`, or nothing at all where the path exits before dispatch. The human-readable reason is on stderr in all three.
+- **There is no JSON error OBJECT, but a failure is not always silent on stdout.** A command that fails writes its message to stderr and exits nonzero, and safegit never writes a second, error-shaped document: the envelope is the only document machine mode has. What a failure produces on stdout is one of the three shapes above -- an envelope with a payload (the commit-stands family, and a push or `hook run` a hook did not pass), an envelope with `payload: null`, or nothing at all where the path exits before dispatch. The human-readable reason is on stderr in all three.
 
 This makes safegit suitable for embedding in tool pipelines that parse structured output.

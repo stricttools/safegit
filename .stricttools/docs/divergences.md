@@ -1670,10 +1670,10 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   `--json`, exactly one document, the framework's envelope. A command that
   DECLARES a payload schema answers with its data in that envelope's `payload`,
   validated against the declaration at emission. Not every command declares one,
-  and the reporting commands are split: `version`, `scan`, `author list` and
-  `author check` carry a payload, while `config show`, `config get`, `hook
-  list`, `hook run`, `hook migrate`, `backup list` and `doctor` answer with
-  `payload: null` today and report their result on the human channel that
+  and the reporting commands are split: `version`, `scan`, `author list`,
+  `author check` and `hook run` carry a payload, while `config show`, `config
+  get`, `hook list`, `hook migrate`, `backup list` and `doctor` answer with
+  `payload: null` and report their result on the human channel that
   machine mode replaces — so a machine consumer of those reads the exit code,
   and the result text is not on stdout at all.
   Everything that is not the result goes to stderr: notices, warnings, prompts,
@@ -1694,7 +1694,9 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   document, because the envelope is the only document machine mode has. What a
   failure produces on stdout is one of three shapes, and a consumer has to
   handle all three: an envelope WITH a payload (exit 26, where the payload names
-  the commit that stands and the aftercare that did not finish), an envelope
+  the commit that stands and the aftercare that did not finish; and exits 20
+  and 21 from `push` and `hook run`, where the payload's `hooks` list records the
+  hook runs, and a stopped push's `refs` is empty), an envelope
   with `payload: null` (a refusal that reached dispatch — a payload schema
   describes a performed operation, and there is no error-payload channel), or
   nothing at all where the path exits before dispatch. The human-readable reason

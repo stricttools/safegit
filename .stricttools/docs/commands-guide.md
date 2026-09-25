@@ -649,6 +649,7 @@ safegit push --refs both
 - **A dry run still discovers the hooks**: discovery and execution are separate, and only execution is skipped under `--dry-run`. Finding which scripts a push would run reads the filesystem and mutates nothing, and its two refusals -- exit **24** for hooks still in the pre-migration `.git/hooks` location, exit **25** for a discovered hook without its execute bit, in either store -- are verdicts about the checkout that hold whether or not anything is pushed. A preview that skipped discovery reported success for a push that could only ever exit 24 or 25, which is the one thing a preview may never do. `--no-pre-push-hook` skips discovery along with execution, since there is then nothing to discover for.
 - **Order of operations**: the force-push confirmation comes first, before any network contact, so a declined force reaches nothing. Then the refs are resolved -- which reads the remote with `ls-remote` -- and only then do the pre-pre-push hooks run, on the ref set that read produced. The hooks' input and the push set are decided once: a retry that finds a LOCAL ref has moved since refuses (exit **40**) rather than publishing on the strength of a hook run that never saw it.
 - **Oplog recording**: one `push` entry is appended after the push succeeds, recording the remote, the pushed refs and how many hooks ran. Failed attempts and retries are not separate entries, and a hook timeout writes none.
+- **The machine payload records the hook runs**: under `--json` the payload's `hooks` list has one entry per hook that ran, in run order -- `name`, `exit_code`, `timed_out`, `duration_ms` (wall-clock milliseconds) and `leftover_processes`, a list of `{pid, command, killed}` that is empty when the hook left nothing running (`killed` is false for a process safegit could not stop, which is still running). The list is empty when no hook ran: none installed, `--no-pre-push-hook`, or a `--dry-run` (`pre_pre_push_hooks_skipped` says which of the last two, and `pre_pre_push_hooks_run` is the list's length). A push a hook stopped still emits its payload, with `refs` empty because nothing was pushed and `hooks` ending at the hook that stopped it. No member says whether a hook passed: the exit code does (20, or 21 for a timeout) and the error text on stderr names the hook and the reason.
 - **git's push output arrives at the end**: safegit captures git's stdout and stderr rather than streaming them, because classifying a transport error from a verdict needs git's stderr as data. Progress therefore appears when the attempt finishes instead of live. Under `--json` git's stdout is re-routed to stderr, so the envelope stays the only document on stdout.
 
 ### Exit Codes
@@ -1853,6 +1854,29 @@ A hook that exits 0 but leaves a process running when it ends is a failure, as
 it is on a push: exit **20**, with each process named on stderr, for example
 `error: hook release-check left process 48213 (node) running after it ended; it was killed`.
 A hook's output, stdout included, goes to stderr.
+
+### Exit code and machine payload
+
+Run without a name, the hooks run in order and stop at the first that does not
+pass, and that hook decides the exit code, by the rule a push uses: **21** when
+it timed out, **20** when it exited nonzero or left a process running, and 0
+when every hook passed. A run whose first failing hook timed out exits 21 even
+though a later hook might have failed differently, because the later hooks do
+not run.
+
+Under `--json`, both forms emit a payload whose `hooks` list has one entry per
+hook that ran -- `name`, `exit_code`, `timed_out`, `duration_ms` (wall-clock milliseconds) and `leftover_processes`, a list of `{pid, command, killed}` that is empty when the hook left nothing running (`killed` is false for a process safegit could not stop, which is still running). The payload is emitted whether the hooks passed or not; whether each passed is carried by the exit code and the error text on stderr, not by a payload member.
+
+```json
+{"hooks": [
+  {"name": "10-lint", "exit_code": 0, "timed_out": false, "duration_ms": 412, "leftover_processes": []},
+  {"name": "20-test", "exit_code": 0, "timed_out": false, "duration_ms": 1873,
+   "leftover_processes": [{"pid": 48213, "command": "node", "killed": true}]}
+]}
+```
+
+That run exits 20: `20-test` exited 0 but left `node` running, and safegit
+stopped it.
 
 ### `--dry-run` is refused
 

@@ -425,6 +425,10 @@ error: hook release-check left process 48213 (node) running after it ended; it w
 
 The hook's stdin, stdout and stderr are pipes safegit hands to the hook as files, so the hook process ending is what safegit waits for, however long another process holds a pipe. Once everything it could find is stopped, safegit reads what is left in the pipes to its end, however slowly its own destination takes it; only a pipe that stays open with no data arriving for one second is given up on, and safegit then closes its ends of the pipes: a process it could not reach (on macOS, one that left the process group) can never make safegit hang.
 
+### What the machine payload records
+
+`push` and `hook run` describe a hook run the same way under `--json`: a `hooks` list with one entry per hook that ran, in run order, each carrying facts about that run only -- `name`, `exit_code`, `timed_out`, `duration_ms` and `leftover_processes` (`pid`, `command`, `killed`). A timed-out hook has no exit status of its own, and its `exit_code` is the marker 21, the same number as safegit's hook-timeout exit code; `timed_out` is the member to read. The payload is emitted whether or not the hooks passed: a push a hook stopped answers with `refs` empty and the `hooks` list ending at the hook that stopped it, instead of a null payload. No member states a verdict: whether the hooks passed is the exit code's (20, or 21 when the first hook that did not pass timed out) and the error text's on stderr.
+
 ### Bypass
 
 `safegit push --no-pre-push-hook` skips the entire pre-pre-push phase and goes straight to the git push. (The flag is `--pre-push-hook` / `--no-pre-push-hook`; omitted, the hooks run.) This escape hatch exists for human operators who need to push urgently when a hook is broken or misconfigured. For AI agent environments, the negated form should be disallowed via Claude Code permission settings to prevent agents from routinely bypassing validation checks.
