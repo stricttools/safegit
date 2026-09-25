@@ -216,6 +216,7 @@ The range is a required choice on all three: `--entire-history` or `--from <sha>
 | Variable | Used by | Purpose |
 |----------|---------|---------|
 | `CLAUDE_CODE_SESSION_ID` | `commit`, `undo`, oplog | Session scoping for undo operations and commit trailer injection. When set, commits get a `Claude-Code-Session-Id` trailer. `undo` filters oplog entries to the current session. |
+| `SAFEGIT_HOOK_KILL_CAP_S` | `push`, `hook run` | The cap, in whole seconds from 11 to 1800, on stopping a pre-pre-push hook and the processes it started; 60 when unset. Any other value is refused before a hook runs. A process still alive at the cap is named as not stoppable and left running. |
 
 ### Variables safegit sets (for hooks)
 
