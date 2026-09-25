@@ -67,11 +67,12 @@ func TestPushDryRunPayloadStatesTheHookSkip(t *testing.T) {
 		t.Fatalf("dry-run push --json failed (code %d): %s", code, stderr)
 	}
 	payload := jsonPayload(t, stdout)
-	for _, want := range []string{`"pre_pre_push_hooks_skipped":"dry-run"`, `"pre_pre_push_hooks_run":0`, `"dry_run":true`} {
+	for _, want := range []string{`"pre_pre_push_hooks_skipped":"dry-run"`, `"hooks":[]`, `"dry_run":true`} {
 		if !strings.Contains(payload, want) {
 			t.Errorf("the preview payload must carry %s; got:\n%s", want, payload)
 		}
 	}
+	assertNoHookCount(t, payload)
 }
 
 // TestPushPayloadReportsHooksThatRan: the executed counterpart, so the skip
@@ -85,10 +86,14 @@ func TestPushPayloadReportsHooksThatRan(t *testing.T) {
 		t.Fatalf("push --json failed (code %d): %s", code, stderr)
 	}
 	payload := jsonPayload(t, stdout)
-	for _, want := range []string{`"pre_pre_push_hooks_skipped":null`, `"pre_pre_push_hooks_run":1`, `"dry_run":false`} {
+	for _, want := range []string{`"pre_pre_push_hooks_skipped":null`, `"dry_run":false`} {
 		if !strings.Contains(payload, want) {
 			t.Errorf("the executed push's payload must carry %s; got:\n%s", want, payload)
 		}
+	}
+	assertNoHookCount(t, payload)
+	if hooks := payloadHooks(t, stdout); len(hooks) != 1 {
+		t.Errorf("the executed push ran one hook, so hooks must have one entry: %+v", hooks)
 	}
 
 	// --no-pre-push-hook is the other way none run, and it is a different
@@ -215,5 +220,14 @@ func TestPushHelpStatesTheDryRunHookSkip(t *testing.T) {
 		if !strings.Contains(help, want) {
 			t.Errorf("push --help must mention %q so the hook skip is visible before the run; got:\n%s", want, help)
 		}
+	}
+}
+
+// assertNoHookCount refuses a push payload member restating how many hooks ran:
+// the length of the hooks list is that count.
+func assertNoHookCount(t *testing.T, payload string) {
+	t.Helper()
+	if strings.Contains(payload, "pre_pre_push_hooks_run") {
+		t.Errorf("the payload carries pre_pre_push_hooks_run; len(hooks) is the count:\n%s", payload)
 	}
 }

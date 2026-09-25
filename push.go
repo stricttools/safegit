@@ -78,11 +78,8 @@ type pushPayload struct {
 	// for every multi-ref push.
 	Atomic bool `json:"atomic"`
 	// Hooks records every pre-pre-push hook that ran, in run order, and is
-	// empty when none ran.
+	// empty when none ran; its length is how many ran.
 	Hooks []hookRecord `json:"hooks"`
-	// PrePrePushHooksRun is how many pre-pre-push hooks actually ran: always
-	// the length of Hooks.
-	PrePrePushHooksRun int `json:"pre_pre_push_hooks_run"`
 	// PrePrePushHooksSkipped says WHY none ran: "dry-run" when the run is a
 	// preview, "disabled" when --no-pre-push-hook was passed, and null when the
 	// hooks were asked (whether or not any were installed).
@@ -110,11 +107,10 @@ var pushPayloadSchema = strictcli.SchemaObject(
 		"force_with_lease":           strictcli.SchemaType("boolean"),
 		"atomic":                     strictcli.SchemaType("boolean"),
 		"hooks":                      strictcli.SchemaArray(hookRecordSchema),
-		"pre_pre_push_hooks_run":     strictcli.SchemaType("integer"),
 		"pre_pre_push_hooks_skipped": strictcli.SchemaType("string", "null"),
 		"dry_run":                    strictcli.SchemaType("boolean"),
 	},
-	[]string{"remote", "refs", "force_with_lease", "atomic", "hooks", "pre_pre_push_hooks_run", "pre_pre_push_hooks_skipped", "dry_run"},
+	[]string{"remote", "refs", "force_with_lease", "atomic", "hooks", "pre_pre_push_hooks_skipped", "dry_run"},
 	false,
 )
 
@@ -147,7 +143,6 @@ func buildPushPayload(flags globalFlags, remote string, refs []pushRefInfo, forc
 		ForceWithLease:         force,
 		Atomic:                 pushIsAtomic(refs),
 		Hooks:                  hookRecords(hookResults),
-		PrePrePushHooksRun:     len(hookResults),
 		PrePrePushHooksSkipped: hooksSkipped,
 		DryRun:                 flags.dryRun,
 	}
