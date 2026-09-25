@@ -277,16 +277,19 @@ func namesThroughLink(arg string) bool {
 	return strings.HasSuffix(arg, "/") || strings.HasSuffix(arg, string(filepath.Separator))
 }
 
-// CanonicalRel is canonicalRel for a caller outside this package.
+// CanonicalRel is canonicalRel for a caller outside this package, with no
+// component of the path read through a link.
 //
 // It exists for `safegit mv`, whose arguments are paths a person typed at a
 // shell prompt exactly as a positional path is, and which must therefore mean
 // the same thing from a subdirectory as from the root. One canonicalizer, so a
 // path named in a `mv` argument and the same path named anywhere else in the
 // commit family resolve to the same repo-relative spelling. A path it returns
-// may lie beyond a symbolic link; mv refuses those itself (LinkAbove).
-func CanonicalRel(repoRoot, arg string, followFinal bool) (string, error) {
-	return canonicalRel(repoRoot, arg, followFinal)
+// may lie beyond a symbolic link; mv refuses those itself (LinkAbove), which is
+// why the final component is never followed here: a trailing slash on a `mv`
+// side marks a subtree pair, not a reach through a link.
+func CanonicalRel(repoRoot, arg string) (string, error) {
+	return canonicalRel(repoRoot, arg, false)
 }
 
 // canonicalRel turns one caller-typed argument into its canonical
@@ -430,7 +433,9 @@ func underLink(repoRoot, rel string) bool {
 
 // LinkAbove returns the repo-relative path of the symlink that a repo-relative
 // path lies beyond -- the outermost directory above it that is a symlink on
-// disk -- or the empty string when there is none.
+// disk -- or the empty string when there is none. A path spelled with a
+// trailing slash names what is under its final component, so that component
+// counts as above it.
 func LinkAbove(repoRoot, rel string) string {
 	dir, info := firstNonDirectoryAbove(repoRoot, rel)
 	if info == nil || info.Mode()&os.ModeSymlink == 0 {

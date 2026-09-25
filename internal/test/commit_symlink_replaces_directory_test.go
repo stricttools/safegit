@@ -321,3 +321,56 @@ func TestMvPathOutsideTheRepositoryIsStillRefused(t *testing.T) {
 		t.Error("seed.txt was moved")
 	}
 }
+
+// TestMvDirectoryFormBeyondALinkIsRefused: the directory form of a pair is read
+// as spelled too. `logs/` with `logs` a symlink names the link's target, and a
+// path under `logs/` lies beyond the link, so each is refused as beyond a
+// symbolic link -- never resolved through the link to the directory it points
+// at and moved from there, and never called outside the repository when the
+// link leads out of it.
+func TestMvDirectoryFormBeyondALinkIsRefused(t *testing.T) {
+	t.Run("the link itself as a source", func(t *testing.T) {
+		dir, before := mvThroughLinkFixture(t, "real")
+		assertMvBeyondLinkRefused(t, dir, before, "logs/ -> x/", "logs/")
+		if !testutil.FileExists(filepath.Join(dir, "real", "kept.txt")) {
+			t.Error("the link's target real/ was moved")
+		}
+		if testutil.FileExists(filepath.Join(dir, "x")) {
+			t.Error("x/ appeared in the repository")
+		}
+	})
+	t.Run("a directory under the link as a source", func(t *testing.T) {
+		dir, _ := mvThroughLinkFixture(t, "real")
+		testutil.WriteFile(t, dir, "real/sub/f.txt", "under real\n")
+		testutil.Git(t, dir, "add", "real/sub/f.txt")
+		testutil.Git(t, dir, "commit", "-m", "track real/sub")
+		before := testutil.Rev(t, dir, "HEAD")
+		assertMvBeyondLinkRefused(t, dir, before, "logs/sub/ -> x/", "logs/sub/")
+		if !testutil.FileExists(filepath.Join(dir, "real", "sub", "f.txt")) {
+			t.Error("real/sub, the directory under the link's target, was moved")
+		}
+	})
+	t.Run("a link leaving the repository", func(t *testing.T) {
+		outside := evalTempDir(t)
+		testutil.WriteFileAt(t, filepath.Join(outside, "a.txt"), "tracked\n")
+		dir, before := mvThroughLinkFixture(t, outside)
+		assertMvBeyondLinkRefused(t, dir, before, "logs/ -> x/", "logs/")
+		if !testutil.FileExists(filepath.Join(outside, "a.txt")) {
+			t.Error("the file in the link's target was moved away")
+		}
+	})
+	t.Run("a directory under the link as a destination", func(t *testing.T) {
+		dir, before := mvThroughLinkFixture(t, "real")
+		testutil.WriteFile(t, dir, "other/o.txt", "other\n")
+		testutil.Git(t, dir, "add", "other/o.txt")
+		testutil.Git(t, dir, "commit", "-m", "track other/")
+		before = testutil.Rev(t, dir, "HEAD")
+		assertMvBeyondLinkRefused(t, dir, before, "other/ -> logs/sub/", "logs/sub/")
+		if !testutil.FileExists(filepath.Join(dir, "other", "o.txt")) {
+			t.Error("other/ was moved")
+		}
+		if testutil.FileExists(filepath.Join(dir, "real", "sub")) {
+			t.Error("the move wrote through the link into real/sub")
+		}
+	})
+}

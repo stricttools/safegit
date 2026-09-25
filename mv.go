@@ -221,13 +221,16 @@ func parseMvPairs(repoRoot string, args []string) ([]mvPair, int) {
 			fmt.Fprintf(os.Stderr, "error: %s: %v\n", arg, err)
 			return nil, exitcode.Usage
 		}
+		// The trailing slash marks a subtree pair; it never asks for the final
+		// component to be read through a link. Both sides are taken as spelled,
+		// and checkMvPair refuses one that lies beyond a link.
 		subtree := strings.HasSuffix(old, "/")
-		oldRel, err := commit.CanonicalRel(repoRoot, old, subtree)
+		oldRel, err := commit.CanonicalRel(repoRoot, old)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %s: %v\n", arg, err)
 			return nil, exitcode.Usage
 		}
-		newRel, err := commit.CanonicalRel(repoRoot, new, subtree)
+		newRel, err := commit.CanonicalRel(repoRoot, new)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %s: %v\n", arg, err)
 			return nil, exitcode.Usage
@@ -339,8 +342,11 @@ func checkMvPair(ctx context.Context, repoRoot string, ignoreCase, createMissing
 	// A path beyond a symbolic link is not in the working tree, as git mv
 	// says: what the filesystem shows there is the link target's, so moving
 	// it would take a file out of the target, and landing there would write
-	// into it. Asked first, before anything is read at either path.
-	for _, path := range []string{p.oldPrefix(), p.newPrefix()} {
+	// into it. Asked first, before anything is read at either path, and of
+	// the pair's own spelling: a subtree side keeps its trailing slash, so
+	// `logs/` with `logs` a link is beyond that link, like everything under
+	// it.
+	for _, path := range []string{p.old, p.new} {
 		if link := commit.LinkAbove(repoRoot, path); link != "" {
 			return fmt.Sprintf("%s is beyond a symbolic link: %s is a symlink, and a move never reads or writes through one", path, link)
 		}
