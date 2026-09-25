@@ -15,10 +15,13 @@ import (
 	"github.com/smm-h/safegit/internal/exitcode"
 )
 
-// stdout and stderr are the default output writers for hook execution.
-// Tests can override them via SetOutput to capture output.
+// stdout and stderr are where a hook's stdout and its stderr are forwarded.
+// BOTH default to safegit's stderr: safegit's stdout is a structured channel
+// (the JSON envelope in machine mode), and an operator-supplied script must not
+// be able to write into it, whichever stream it wrote to. Tests can override
+// them via SetOutput to tell the two streams apart.
 var (
-	stdout io.Writer = os.Stdout
+	stdout io.Writer = os.Stderr
 	stderr io.Writer = os.Stderr
 )
 
