@@ -2,6 +2,15 @@
 
 # Changelog
 
+## 0.29.4
+
+Symlinks that replaced tracked directories commit as links, and mv refuses paths beyond a symbolic link
+
+### Fixes
+
+- **A tracked directory replaced by a symlink commits as the link.** `safegit commit -- logs/.gitignore logs` refused `logs/.gitignore` as outside the repository, and `safegit commit -- logs` failed with `git check-ignore ... beyond a symbolic link` (or, for a dangling link, committed the deletions without the link). Both now record the deletion and the `logs` symlink in one commit; paths below the repository root are read as spelled rather than through links, and a path under a link is treated as absent from the working tree, as git treats it.
+- **`safegit mv` refuses a path beyond a symbolic link.** A source or destination with a symlinked directory above it is refused at exit 19 naming the path and the link, as `git mv` does, instead of being called outside the repository or moving the file that lives in the link's target.
+
 ## 0.29.3
 
 A commit no longer leaves a deleted-then-recreated path pending in the shared index.
