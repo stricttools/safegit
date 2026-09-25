@@ -20,7 +20,7 @@ list every pre-pre-push hook location safegit knows about, with its origin, its 
 
 ## hook run
 
-run all installed pre-pre-push hooks (or a single named hook) immediately without performing an actual push, so you can verify that all configured hooks pass before committing to a real push operation. Discovery's own verdicts about the checkout reach here too: exit 24 while a hook is still in the pre-migration .git/hooks location, and exit 25 when a discovered hook is not executable, in EITHER store -- never a silent skip and never a 'no hooks to run', because a command whose whole purpose is to say whether the checks pass must not exit 0 because a check was passed over
+run all installed pre-pre-push hooks (or a single named hook) immediately without performing an actual push, so you can verify that all configured hooks pass before committing to a real push operation. Discovery's own verdicts about the checkout reach here too: exit 24 while a hook is still in the pre-migration .git/hooks location, and exit 25 when a discovered hook is not executable, in EITHER store -- never a silent skip and never a 'no hooks to run', because a command whose whole purpose is to say whether the checks pass must not exit 0 because a check was passed over. A hook that exits 0 but leaves a process running when it ends fails too, with the hook-failure exit code 20, and each process it left is named on stderr; a hook's output, stdout included, goes to stderr
 
 **Effect:** mutating
 

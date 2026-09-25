@@ -2,7 +2,6 @@
 title = "safegit push"
 description = "push refs to remote with pre-pre-push hooks and automatic retry"
 generated = true
-seeded = true
 nav_group = "CLI Reference"
 nav_order = 14
 +++
@@ -10,7 +9,7 @@ nav_order = 14
 
 # safegit push
 
-push refs to remote with pre-pre-push hooks and automatic retry
+push refs to remote with pre-pre-push hooks and automatic retry. A hook that exits nonzero, times out, or leaves any process running when it ends aborts the push before any network contact, and every process it left is named on stderr; a hook's output, stdout included, goes to stderr, so it never mixes into safegit's own stdout
 
 **Effect:** mutating
 

@@ -95,8 +95,7 @@
   "en/cli-push.md": {
     "content": "14b4e3cc203cd180f6e24a66e746b8eff27c056d5e3efc125b1d075521485b85",
     "description": "19f262bc3d6e4d443f9a60b9136b8e42e77a11a8a8ba1ed0fcd1f0437d8a7aa8",
-    "schema_hash": "0186a72426f6b1c4725d1454feb5c9805fb94ff456523ad41ab0dfaba27b0567",
-    "seed_hash": "19f262bc3d6e4d443f9a60b9136b8e42e77a11a8a8ba1ed0fcd1f0437d8a7aa8"
+    "schema_hash": "0186a72426f6b1c4725d1454feb5c9805fb94ff456523ad41ab0dfaba27b0567"
   },
   "en/cli-rebase.md": {
     "content": "ef98e225d6cd4af2f7f5e7a6065ccb2d476c14ed6444e6bf31cb8fe2033347ed",
