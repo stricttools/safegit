@@ -30,7 +30,7 @@ func TestNoPidfdSupportRefusesTheRun(t *testing.T) {
 	hookPath := filepath.Join(LocalDir(gitDir), "pre-pre-push")
 	writeHook(t, hookPath, "#!/bin/sh\ntouch '"+marker+"'\n")
 
-	results, err := Run(context.Background(), store(gitDir), nil, 30, nil)
+	results, err := Run(context.Background(), store(gitDir), nil, 30, DefaultStopCap, nil)
 	if err == nil {
 		t.Fatalf("the run succeeded without pidfd support; results %+v", results)
 	}

@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smm-h/safegit/internal/hooks"
 )
 
 // readPidFile reads a pid a hook recorded, failing the test when it is absent.
@@ -78,6 +77,7 @@ func TestInterruptedSafegitStopsTheRunningHook(t *testing.T) {
 
 				cmd := exec.Command(safegitBin, args...)
 				cmd.Dir = dir
+				// No SAFEGIT_HOOK_KILL_CAP_S: the announcement names the default.
 				cmd.Env = controlledEnv(t)
 				var stderr strings.Builder
 				cmd.Stderr = &stderr
@@ -115,8 +115,8 @@ func TestInterruptedSafegitStopsTheRunningHook(t *testing.T) {
 				if !processGone(child, 2*time.Second) {
 					t.Errorf("the hook's detached child %d is still running after safegit exited", child)
 				}
-				if !strings.Contains(stderr.String(), stoppingLine("10-lint")) {
-					t.Errorf("stderr does not say %q:\n%s", stoppingLine("10-lint"), stderr.String())
+				if !strings.Contains(stderr.String(), stoppingLine("10-lint", "60s")) {
+					t.Errorf("stderr does not say %q:\n%s", stoppingLine("10-lint", "60s"), stderr.String())
 				}
 				want := "hook 10-lint left process " + strconv.Itoa(child) + " (sleep) running after it ended; it was killed"
 				if !strings.Contains(stderr.String(), want) {
@@ -151,9 +151,10 @@ func (s *syncBuffer) String() string {
 
 // stoppingLine is what safegit prints on stderr when an interruption makes it
 // begin stopping a hook: the hook's name, and the longest the stop can take,
-// taken from the grace and kill budget the stop itself runs under.
-func stoppingLine(name string) string {
-	return "stopping hook " + name + " and the processes it started; this can take up to " + hooks.InterruptStopBudget().String()
+// which is the cap on stopping a hook -- 60s unless SAFEGIT_HOOK_KILL_CAP_S
+// says otherwise.
+func stoppingLine(name, limit string) string {
+	return "stopping hook " + name + " and the processes it started; this can take up to " + limit + "\n"
 }
 
 // An interrupted machine-mode run still answers with its payload. The hooks run
@@ -189,7 +190,10 @@ func TestInterruptedJSONRunEmitsThePayload(t *testing.T) {
 
 				cmd := exec.Command(safegitBin, args...)
 				cmd.Dir = dir
-				cmd.Env = controlledEnv(t)
+				// The smallest cap the variable allows: the hook ignores SIGTERM,
+				// so the stop waits out the SIGTERM grace the cap leaves, and the
+				// announcement names this cap rather than the default.
+				cmd.Env = controlledEnv(t, "SAFEGIT_HOOK_KILL_CAP_S=11")
 				var stdout strings.Builder
 				stderr := &syncBuffer{}
 				cmd.Stdout = &stdout
@@ -211,11 +215,11 @@ func TestInterruptedJSONRunEmitsThePayload(t *testing.T) {
 				// The second signal goes in once safegit has said it is stopping
 				// the hook, which is the window it must be ignored in.
 				deadline := time.Now().Add(10 * time.Second)
-				for !strings.Contains(stderr.String(), stoppingLine("20-test")) && time.Now().Before(deadline) {
+				for !strings.Contains(stderr.String(), stoppingLine("20-test", "11s")) && time.Now().Before(deadline) {
 					time.Sleep(10 * time.Millisecond)
 				}
-				if !strings.Contains(stderr.String(), stoppingLine("20-test")) {
-					t.Errorf("stderr does not say %q:\n%s", stoppingLine("20-test"), stderr.String())
+				if !strings.Contains(stderr.String(), stoppingLine("20-test", "11s")) {
+					t.Errorf("stderr does not say %q:\n%s", stoppingLine("20-test", "11s"), stderr.String())
 				}
 				cmd.Process.Signal(sig)
 

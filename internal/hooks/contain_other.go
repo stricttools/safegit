@@ -55,11 +55,20 @@ func (c *container) groupAlive() bool {
 	return syscall.Kill(-c.pgid, 0) == nil
 }
 
-// sweep stops what is left in the hook's process group and names it.
-func (c *container) sweep(signalledGroup bool) ([]LeftoverProcess, string) {
+// terminate has nothing to add to the group signal a stop begins with: a
+// process that left the hook's process group is out of reach here.
+func (c *container) terminate() {}
+
+// describe has no /proc to read the command name and state from.
+func describe(pid int) (string, string) { return "", "" }
+
+// sweep stops what is left in the hook's process group and names it, under the
+// deadlines of the stop's clock: SIGTERM until the grace ends, SIGKILL until
+// the SIGKILL window ends. A member still alive then is reported as not
+// killed, and left.
+func (c *container) sweep(clock stopClock, signalledGroup bool) ([]LeftoverProcess, string) {
 	if signalledGroup {
-		deadline := time.Now().Add(killGrace)
-		for c.groupAlive() && time.Now().Before(deadline) {
+		for c.groupAlive() && time.Now().Before(clock.term) {
 			time.Sleep(20 * time.Millisecond)
 		}
 	}
@@ -76,14 +85,12 @@ func (c *container) sweep(signalledGroup bool) ([]LeftoverProcess, string) {
 		members = parsePsGroup(out, c.pgid)
 	}
 
-	syscall.Kill(-c.pgid, syscall.SIGTERM)
-	deadline := time.Now().Add(killGrace)
-	for c.groupAlive() && time.Now().Before(deadline) {
+	signalGroup(c.pgid, syscall.SIGTERM)
+	for c.groupAlive() && time.Now().Before(clock.term) {
 		time.Sleep(20 * time.Millisecond)
 	}
-	deadline = time.Now().Add(killGrace)
-	for c.groupAlive() && time.Now().Before(deadline) {
-		syscall.Kill(-c.pgid, syscall.SIGKILL)
+	for c.groupAlive() && time.Now().Before(clock.kill) {
+		signalGroup(c.pgid, syscall.SIGKILL)
 		time.Sleep(20 * time.Millisecond)
 	}
 

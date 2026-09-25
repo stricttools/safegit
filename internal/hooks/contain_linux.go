@@ -44,6 +44,9 @@ type container struct {
 	// attributed to the hook only if it started no earlier: safegit starts no
 	// other process while a hook runs, so such a process descends from the hook.
 	hookTicks uint64
+	// terminated are the processes terminate signalled outside the hook's
+	// process group; the sweep names them whether or not they outlived it.
+	terminated map[int]procStat
 }
 
 func beginContainment() (*container, error) {
@@ -86,24 +89,55 @@ func (c *container) started(pid int) error {
 	return nil
 }
 
-// sweep stops every process the hook left behind and returns them, named.
+// terminate sends SIGTERM, when a stop begins while the hook still runs, to
+// every process the hook has started so far outside its process group: the
+// group signal does not reach those, and this way they get the whole SIGTERM
+// grace too. They are remembered, so that the sweep names them as processes
+// the hook left even when they are gone by the time it runs.
+func (c *container) terminate() {
+	c.terminated = map[int]procStat{}
+	for pid, st := range c.scan() {
+		if st.pgrp == c.hookPid {
+			continue
+		}
+		if fd, ok := openHandle(pid, st.ticks); ok {
+			signalProcess(pid, fd, syscall.SIGTERM)
+			syscall.Close(fd)
+			c.terminated[pid] = st
+		}
+	}
+}
+
+// describe returns the command name and the state /proc reports for pid, or
+// empty strings when it cannot be read.
+func describe(pid int) (string, string) {
+	st, err := readStat(pid)
+	if err != nil {
+		return "", ""
+	}
+	return st.comm, st.state
+}
+
+// sweep stops every process the hook left behind and returns them, named,
+// under the deadlines of the stop's clock.
 //
 // signalledGroup says the hook's process group was already signalled (the
-// timeout or a cancellation): its members get the grace to act on that signal
-// before whatever still runs is counted. Then every live descendant gets
-// SIGTERM, SIGKILL after the grace, and is reaped when it is safegit's own
-// child. A process that appears while this runs (a leftover forking) is found
-// by the next scan and counted too.
+// timeout or a cancellation): its members get what is left of the SIGTERM
+// grace to act on that signal before whatever still runs is counted. Then
+// every live descendant gets SIGTERM until the grace ends, SIGKILL until the
+// SIGKILL window ends, and is reaped when it is safegit's own child. A process
+// that appears while this runs (a leftover forking) is found by the next scan
+// and counted too. A process still alive when the SIGKILL window ends is
+// reported as not killed, with its state, and left.
 //
 // Every signal goes through a pidfd opened when the process is found and
 // checked against the start time the scan read, never through the bare pid: a
 // leftover that exits between a scan and a signal can have its pid handed to an
 // unrelated process, and a pidfd can only ever reach the process it was opened
 // on.
-func (c *container) sweep(signalledGroup bool) ([]LeftoverProcess, string) {
+func (c *container) sweep(clock stopClock, signalledGroup bool) ([]LeftoverProcess, string) {
 	if signalledGroup {
-		deadline := time.Now().Add(killGrace)
-		for time.Now().Before(deadline) {
+		for time.Now().Before(clock.term) {
 			live := c.scan()
 			if !anyInGroup(live, c.hookPid) {
 				break
@@ -141,28 +175,30 @@ func (c *container) sweep(signalledGroup bool) ([]LeftoverProcess, string) {
 	signal := func(live map[int]procStat, sig syscall.Signal) {
 		for pid, st := range live {
 			if h, ok := handles[pid]; ok && h.ticks == st.ticks {
-				pidfdSendSignal(h.fd, sig)
+				signalProcess(pid, h.fd, sig)
 			}
 		}
 	}
 
+	for pid, st := range c.terminated {
+		found[pid] = &LeftoverProcess{PID: pid, Command: st.comm}
+		order = append(order, pid)
+	}
 	live := c.scan()
-	if len(live) == 0 {
+	if len(live) == 0 && len(found) == 0 {
 		c.reapZombies()
 		return nil, ""
 	}
 	record(live)
 	signal(live, syscall.SIGTERM)
 
-	deadline := time.Now().Add(killGrace)
-	for len(live) > 0 && time.Now().Before(deadline) {
+	for len(live) > 0 && time.Now().Before(clock.term) {
 		time.Sleep(20 * time.Millisecond)
 		live = c.scan()
 		record(live)
 		signal(live, syscall.SIGTERM)
 	}
-	deadline = time.Now().Add(killGrace)
-	for len(live) > 0 && time.Now().Before(deadline) {
+	for len(live) > 0 && time.Now().Before(clock.kill) {
 		signal(live, syscall.SIGKILL)
 		time.Sleep(20 * time.Millisecond)
 		live = c.scan()
@@ -173,9 +209,16 @@ func (c *container) sweep(signalledGroup bool) ([]LeftoverProcess, string) {
 	out := make([]LeftoverProcess, 0, len(order))
 	for _, pid := range order {
 		l := *found[pid]
-		_, stillLive := live[pid]
+		st, stillLive := live[pid]
 		h, hasHandle := handles[pid]
-		l.Killed = !stillLive && c.reap(pid, h, hasHandle)
+		l.Killed = !stillLive && c.reap(pid, h, hasHandle, clock.kill)
+		if !l.Killed {
+			if stillLive {
+				l.State = st.state
+			} else if now, err := readStat(pid); err == nil && hasHandle && now.ticks == h.ticks {
+				l.State = now.state
+			}
+		}
 		out = append(out, l)
 	}
 	c.reapZombies()
@@ -216,12 +259,17 @@ func pidfdOpen(pid int) (int, syscall.Errno) {
 	return int(fd), errno
 }
 
+// signalProcess is how the sweep signals the process at pid through its pidfd;
+// a test stands in for it to play a process that survives SIGKILL.
+var signalProcess = func(pid, fd int, sig syscall.Signal) { pidfdSendSignal(fd, sig) }
+
 func pidfdSendSignal(fd int, sig syscall.Signal) syscall.Errno {
 	_, _, errno := syscall.Syscall6(sysPidfdSendSignal, uintptr(fd), uintptr(sig), 0, 0, 0, 0)
 	return errno
 }
 
-// reap waits for a leftover the sweep stopped, and reports whether it is gone.
+// reap waits for a leftover the sweep stopped, until deadline, and reports
+// whether it is gone.
 //
 // A leftover whose parent was also a leftover is reparented to safegit only
 // when that parent exits, which can come after the scan that reaped the parent:
@@ -230,22 +278,24 @@ func pidfdSendSignal(fd int, sig syscall.Signal) syscall.Errno {
 // for it by pid does not depend on that read, and is safe from reuse: a pid
 // wait4 answers for is safegit's own child, whose pid is not free until it is
 // reaped. A leftover that is safegit's child and has not exited yet is killed
-// through its pidfd and waited for, up to the grace; one that is not safegit's
+// through its pidfd and waited for, up to the deadline; one that is not safegit's
 // child (ECHILD) was already reaped, or belongs to a parent outside safegit's
 // tree that the scans would have reported as live. Without a pidfd -- the
-// process was gone by the time it was found -- nothing is signalled.
-func (c *container) reap(pid int, h pidHandle, hasHandle bool) bool {
-	deadline := time.Now().Add(killGrace)
+// process was gone by the time it was found -- nothing is signalled, and the
+// wait goes on to the deadline all the same.
+func (c *container) reap(pid int, h pidHandle, hasHandle bool, deadline time.Time) bool {
 	for {
 		var ws syscall.WaitStatus
 		wpid, err := syscall.Wait4(pid, &ws, syscall.WNOHANG, nil)
 		if wpid == pid || err != nil {
 			return true
 		}
-		if !hasHandle || time.Now().After(deadline) {
+		if time.Now().After(deadline) {
 			return false
 		}
-		pidfdSendSignal(h.fd, syscall.SIGKILL)
+		if hasHandle {
+			signalProcess(pid, h.fd, syscall.SIGKILL)
+		}
 		time.Sleep(20 * time.Millisecond)
 	}
 }
@@ -279,12 +329,16 @@ func (c *container) outputHolders(readFds []int) ([]LeftoverProcess, string) {
 	return nil, "a process outside safegit's process tree still held the hook's output after every process the hook left was stopped, so safegit stopped reading it"
 }
 
-// scan returns the live (not zombie) processes descending from the hook, and
-// reaps the zombies among safegit's own children that belong to it.
+// scan returns the live (not zombie) processes descending from the hook, the
+// hook itself excluded, and reaps the zombies among safegit's own children that
+// belong to it.
 //
 // The roots are safegit's children that started no earlier than the hook: the
-// hook's orphans, reparented here. The hook itself is reaped before any scan,
-// and its surviving children are orphans by then too.
+// hook's orphans, reparented here. The hook is ordinarily reaped before a
+// sweep's scans, and its surviving children are orphans by then too; while it
+// is still running -- a stop's first SIGTERM, or a hook that outlived SIGKILL
+// -- its own children are roots as well. The hook is recognized by its start
+// time, so a reused pid never lends its children.
 func (c *container) scan() map[int]procStat {
 	all := readProcStats()
 	children := map[int][]int{}
@@ -292,6 +346,9 @@ func (c *container) scan() map[int]procStat {
 		children[st.ppid] = append(children[st.ppid], pid)
 	}
 	var queue []int
+	if st, ok := all[c.hookPid]; ok && st.ticks == c.hookTicks && st.state != "Z" {
+		queue = append(queue, children[c.hookPid]...)
+	}
 	for _, pid := range children[c.self] {
 		st := all[pid]
 		if pid == c.hookPid || st.ticks < c.hookTicks {

@@ -163,6 +163,13 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
 		return exitcode.General
 	}
+	// Read before anything runs, so a cap safegit cannot honor refuses the
+	// push rather than surfacing only once a hook has to be stopped.
+	stopCap, err := hooks.StopCapFromEnvironment(os.LookupEnv)
+	if err != nil {
+		die(exitcode.General, err.Error())
+		return exitcode.General
+	}
 
 	forceFlag := forceWithLease
 
@@ -312,7 +319,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 
 		var sigExit int
 		hookResults, sigExit, err = runHooksInterruptibly(ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
-			return hooks.RunAll(hctx, hookPaths, hookStdin, timeoutSec, hookEnv)
+			return hooks.RunAll(hctx, hookPaths, hookStdin, timeoutSec, stopCap, hookEnv)
 		})
 		if sigExit != 0 {
 			// Interrupted: nothing is pushed, the hook runs so far are

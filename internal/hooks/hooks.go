@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -64,14 +65,25 @@ type HookResult struct {
 	// holding its output after it ended and safegit could not name it; it says
 	// why.
 	LeftoverUnknown string
+	// stopCap is the cap the run's stop ran under, which the message naming a
+	// process safegit could not stop quotes.
+	stopCap time.Duration
 }
 
-// LeftoverProcess is one process a hook left running when it ended.
+// LeftoverProcess is one process a hook left running when it ended, or the
+// hook's own process when the stop could not end it.
 type LeftoverProcess struct {
 	PID     int
 	Command string
-	// Killed reports that safegit stopped it. False means it is still running.
+	// Killed reports that safegit stopped it. False means it is still running:
+	// it was alive when the stop reached its cap.
 	Killed bool
+	// State is the process state /proc reported for a process still running at
+	// the cap ("D" for uninterruptible sleep), and empty where the platform has
+	// no /proc or the process was killed.
+	State string
+	// Hook marks the hook's own process, which the stop could not end.
+	Hook bool
 }
 
 // Failed reports whether the run failed: a nonzero status, no status at all
@@ -94,10 +106,24 @@ func (r HookResult) LeftoverMessages() []string {
 func leftoverMessages(r HookResult, partial bool) []string {
 	var msgs []string
 	for _, l := range r.Leftovers {
-		fate := "it was killed"
 		if !l.Killed {
-			fate = "it is still running; " + uncontainedNote
-		} else if partial {
+			state := ""
+			if l.State != "" {
+				state = " (process state " + l.State + ")"
+			}
+			unstopped := fmt.Sprintf("safegit could not stop it within the %s cap on stopping a hook%s and exits without it", FormatStopCap(r.stopCap), state)
+			if partial {
+				unstopped += "; " + uncontainedNote
+			}
+			if l.Hook {
+				msgs = append(msgs, fmt.Sprintf("hook %s (process %d) is still running: %s", r.Name, l.PID, unstopped))
+			} else {
+				msgs = append(msgs, fmt.Sprintf("hook %s left process %d (%s) running after it ended; it is still running: %s", r.Name, l.PID, l.Command, unstopped))
+			}
+			continue
+		}
+		fate := "it was killed"
+		if partial {
 			fate += "; " + uncontainedNote
 		}
 		msgs = append(msgs, fmt.Sprintf("hook %s left process %d (%s) running after it ended; %s", r.Name, l.PID, l.Command, fate))
@@ -236,19 +262,19 @@ func DiscoverMulti(stores []Store) ([]string, error) {
 
 // Run executes all discovered hooks sequentially with the given stdin.
 // The first failed run (see HookResult.Failed) skips the remaining hooks.
-func Run(ctx context.Context, s Store, stdin []byte, timeoutSec int, env []string) ([]HookResult, error) {
+func Run(ctx context.Context, s Store, stdin []byte, timeoutSec int, stopCap time.Duration, env []string) ([]HookResult, error) {
 	hooks, err := Discover(s)
 	if err != nil {
 		return nil, err
 	}
-	return RunAll(ctx, hooks, stdin, timeoutSec, env)
+	return RunAll(ctx, hooks, stdin, timeoutSec, stopCap, env)
 }
 
 // RunAll executes the given hook paths sequentially with the given stdin.
 // The first failed run (see HookResult.Failed) skips the remaining hooks. The
 // error is safegit's own -- a hook it could not contain -- never a hook's
 // verdict, which is in the results.
-func RunAll(ctx context.Context, hookPaths []string, stdin []byte, timeoutSec int, env []string) ([]HookResult, error) {
+func RunAll(ctx context.Context, hookPaths []string, stdin []byte, timeoutSec int, stopCap time.Duration, env []string) ([]HookResult, error) {
 	if len(hookPaths) == 0 {
 		return nil, nil
 	}
@@ -259,7 +285,7 @@ func RunAll(ctx context.Context, hookPaths []string, stdin []byte, timeoutSec in
 			// Cancelled between two hooks: the next one is not started.
 			break
 		}
-		result, err := runOne(ctx, hookPath, stdin, timeoutSec, env)
+		result, err := runOne(ctx, hookPath, stdin, timeoutSec, stopCap, env)
 		if err != nil {
 			return results, err
 		}
@@ -272,37 +298,97 @@ func RunAll(ctx context.Context, hookPaths []string, stdin []byte, timeoutSec in
 }
 
 // RunSingle executes a single hook by path.
-func RunSingle(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, env []string) (HookResult, error) {
-	return runOne(ctx, hookPath, stdin, timeoutSec, env)
+func RunSingle(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, stopCap time.Duration, env []string) (HookResult, error) {
+	return runOne(ctx, hookPath, stdin, timeoutSec, stopCap, env)
 }
 
-// killGrace is how long a signalled process gets between SIGTERM and SIGKILL.
-const killGrace = 5 * time.Second
+// The stop of a hook and the processes it started -- on timeout, on
+// interruption, and for what a hook left behind when it ended -- runs under one
+// hard cap, measured from the moment the stop begins. Every process gets
+// SIGTERM at once and the SIGTERM grace to shut down cleanly; what is still
+// alive then gets SIGKILL and killWindow to die and be reaped; and the output
+// still arriving gets readGrace. A process alive at the end is named as not
+// stoppable and left: a process in uninterruptible sleep survives SIGKILL, and
+// waiting for it would make the cap a lie.
+const (
+	// DefaultStopCap is the cap when SAFEGIT_HOOK_KILL_CAP_S is not set.
+	DefaultStopCap = 60 * time.Second
+	// MaxStopCap is the largest cap SAFEGIT_HOOK_KILL_CAP_S may set.
+	MaxStopCap = 1800 * time.Second
+	// MinStopCap is the smallest: the fixed end of the stop plus a SIGTERM
+	// grace no shorter than minTermGrace.
+	MinStopCap = stopWindow + minTermGrace
 
-// readGrace bounds how long a read of a hook's output may wait for data once
-// every process safegit could find has been stopped. A pipe that stays open
-// and silent that long is held by a process safegit could not reach, and the
-// read ends are closed so that safegit can never hang on it. Only waiting for
-// data counts: a destination that takes its time over the output already read
-// never trips it, so a slow reader loses nothing.
-const readGrace = time.Second
+	// killWindow is how long processes get to die of SIGKILL and be reaped.
+	killWindow = 5 * time.Second
+	// readGrace bounds how long a read of a hook's output may wait for data
+	// once every process safegit could find has been stopped. A pipe that stays
+	// open and silent that long is held by a process safegit could not reach,
+	// and the read ends are closed so that safegit can never hang on it. Only
+	// waiting for data counts: a destination that takes its time over the
+	// output already read never trips it before the cap.
+	readGrace = time.Second
+	// stopWindow is the fixed end of every stop, after the SIGTERM grace:
+	// killWindow, then readGrace. The SIGTERM grace is the cap minus this.
+	stopWindow = killWindow + readGrace
+	// minTermGrace is the shortest SIGTERM grace a cap may leave: the grace
+	// every stop gave before the cap existed.
+	minTermGrace = 5 * time.Second
+)
 
-// InterruptStopBudget is the longest an interruption's stop of a running hook
-// can take, derived from the graces the stop runs under rather than stated: the
-// hook's process group gets killGrace between SIGTERM and SIGKILL; the sweep
-// then gives the group's other members killGrace to act on that signal, and
-// every leftover it finds killGrace after SIGTERM and killGrace more to die of
-// SIGKILL; and the output still held after that gets readGrace.
-func InterruptStopBudget() time.Duration {
-	return 4*killGrace + readGrace
+// StopCapVariable names the environment variable that sets the cap on stopping
+// a hook, in whole seconds.
+const StopCapVariable = "SAFEGIT_HOOK_KILL_CAP_S"
+
+// StopCapFromEnvironment returns the cap StopCapVariable sets through lookup
+// (os.LookupEnv), or DefaultStopCap when it is not set. A value that is not a
+// whole number of seconds from MinStopCap to MaxStopCap is an error naming the
+// variable, the value and the range: a cap safegit cannot honor is refused
+// rather than replaced by one it can.
+func StopCapFromEnvironment(lookup func(string) (string, bool)) (time.Duration, error) {
+	raw, set := lookup(StopCapVariable)
+	if !set {
+		return DefaultStopCap, nil
+	}
+	secs, err := strconv.Atoi(raw)
+	if err != nil || secs < int(MinStopCap/time.Second) || secs > int(MaxStopCap/time.Second) {
+		return 0, fmt.Errorf("%s=%q is not allowed: the cap on stopping a hook and the processes it started must be a whole number of seconds from %d to %d; unset the variable for the default of %d",
+			StopCapVariable, raw, int(MinStopCap/time.Second), int(MaxStopCap/time.Second), int(DefaultStopCap/time.Second))
+	}
+	return time.Duration(secs) * time.Second, nil
+}
+
+// FormatStopCap words a cap in whole seconds, as the variable sets it: "60s".
+func FormatStopCap(limit time.Duration) string {
+	return strconv.Itoa(int(limit/time.Second)) + "s"
+}
+
+// stopClock is one stop's deadlines, fixed when the stop begins.
+type stopClock struct {
+	// term is when the SIGTERM grace ends and SIGKILL is sent.
+	term time.Time
+	// kill is when the SIGKILL window ends: a process alive then is not
+	// stoppable.
+	kill time.Time
+	// end is the cap: reading the hook's output ends here at the latest.
+	end time.Time
+}
+
+func startStop(limit time.Duration) stopClock {
+	now := time.Now()
+	return stopClock{
+		term: now.Add(limit - stopWindow),
+		kill: now.Add(limit - readGrace),
+		end:  now.Add(limit),
+	}
 }
 
 // runOne executes a single hook, forwarding its stdout and stderr to the
 // package-level writers, and enforces two rules on it.
 //
 // The configured timeout is the only budget. On timeout, and when ctx is
-// cancelled, the hook's process group gets SIGTERM, then SIGKILL after
-// killGrace.
+// cancelled, the hook is stopped under stopCap: its process group and every
+// process it started get SIGTERM, and SIGKILL once the SIGTERM grace ends.
 //
 // A hook that leaves any process running when it ends -- normally or by the
 // timeout -- is a failed run. Once the hook process itself has exited, the
@@ -316,7 +402,7 @@ func InterruptStopBudget() time.Duration {
 // budget it runs under: a hook that needs a different timeout reads
 // SAFEGIT_HOOK_TIMEOUT_S from its environment and is configured, never
 // self-declared on stdout.
-func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, env []string) (HookResult, error) {
+func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, stopCap time.Duration, env []string) (HookResult, error) {
 	name := filepath.Base(hookPath)
 	start := time.Now()
 	result := HookResult{Name: name}
@@ -373,17 +459,29 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 
 	var waitErr error
 	signalled := false
-	// stop ends the hook from outside: SIGTERM to the whole process group,
-	// then SIGKILL after the grace. The hook is not reaped before the signals,
-	// so its pid -- the group id -- cannot have been reused.
+	// hookAlive is set when the hook itself outlived SIGKILL until the cap.
+	hookAlive := false
+	var clock stopClock
+	// stop ends the hook from outside: SIGTERM to the whole process group and
+	// to every process the hook started outside it, so each gets the whole
+	// SIGTERM grace; then SIGKILL to the group. The hook is not reaped before
+	// the signals, so its pid -- the group id -- cannot have been reused. A hook
+	// still alive when the SIGKILL window ends is left, and named.
 	stop := func() {
 		signalled = true
+		clock = startStop(stopCap)
 		killGroup(cmd, syscall.SIGTERM)
+		c.terminate()
 		select {
 		case waitErr = <-waited:
-		case <-time.After(killGrace):
-			killGroup(cmd, syscall.SIGKILL)
-			waitErr = <-waited
+			return
+		case <-time.After(time.Until(clock.term)):
+		}
+		killGroup(cmd, syscall.SIGKILL)
+		select {
+		case waitErr = <-waited:
+		case <-time.After(time.Until(clock.kill)):
+			hookAlive = true
 		}
 	}
 	timer := time.NewTimer(time.Duration(timeoutSec) * time.Second)
@@ -399,34 +497,62 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		// The stop can take a while and a second interruption is ignored
 		// meanwhile, so the operator is told what is happening and for how long
 		// at most.
-		fmt.Fprintf(notices, "stopping hook %s and the processes it started; this can take up to %v\n", name, InterruptStopBudget())
+		fmt.Fprintf(notices, "stopping hook %s and the processes it started; this can take up to %s\n", name, FormatStopCap(stopCap))
 		stop()
 	}
+	result.stopCap = stopCap
 
-	// The hook has exited and is reaped. Whatever it started that is still
-	// running is left behind.
-	result.Leftovers, result.LeftoverUnknown = c.sweep(signalled)
+	// The hook has exited and is reaped, unless it outlived SIGKILL. Whatever
+	// it started that is still running is left behind, and stopping it is a
+	// stop too: when the hook ended by itself, the cap runs from here.
+	if !signalled {
+		clock = startStop(stopCap)
+	}
+	result.Leftovers, result.LeftoverUnknown = c.sweep(clock, signalled)
+	if hookAlive {
+		pid := cmd.Process.Pid
+		comm, state := describe(pid)
+		if comm == "" {
+			comm = name
+		}
+		result.Leftovers = append([]LeftoverProcess{{PID: pid, Command: comm, State: state, Hook: true}}, result.Leftovers...)
+	}
+	unstopped := false
+	for _, l := range result.Leftovers {
+		if !l.Killed {
+			unstopped = true
+		}
+	}
 
 	// Every process safegit could find is stopped, so the output ends once
 	// what is left in the pipes is read -- unless something it could not reach
 	// still holds a pipe, which shows as a read waiting for data that never
-	// comes.
+	// comes, or the cap arrives first. A process named above as still running
+	// may be what holds it, so no other holder is looked for then.
 	swept := time.Now()
 	for waiting := true; waiting; {
 		select {
 		case <-fwd.done:
 			waiting = false
 		case <-time.After(20 * time.Millisecond):
-			if fwd.starved(readGrace, swept) {
+			starved := fwd.starved(readGrace, swept)
+			if !starved && time.Now().Before(clock.end) {
+				continue
+			}
+			switch {
+			case unstopped:
+			case starved:
 				holders, unknown := c.outputHolders(p.readFds())
 				result.Leftovers = append(result.Leftovers, holders...)
 				if unknown != "" && result.LeftoverUnknown == "" {
 					result.LeftoverUnknown = unknown
 				}
-				p.closeParentEnds()
-				<-fwd.done
-				waiting = false
+			default:
+				fmt.Fprintf(notices, "hook %s: its output was still arriving when the stop reached its %s cap, and safegit stopped reading it\n", name, FormatStopCap(stopCap))
 			}
+			p.closeParentEnds()
+			<-fwd.done
+			waiting = false
 		}
 	}
 	p.inW.Close()

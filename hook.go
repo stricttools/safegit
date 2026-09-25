@@ -127,6 +127,11 @@ func hookRun(flags globalFlags, name string) int {
 		fmt.Fprintf(os.Stderr, "error: loading config: %v\n", err)
 		return exitcode.General
 	}
+	stopCap, err := hooks.StopCapFromEnvironment(os.LookupEnv)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return exitcode.General
+	}
 
 	// Synthesize stdin from current branch state
 	ctx := flags.ctx()
@@ -170,7 +175,7 @@ func hookRun(flags globalFlags, name string) int {
 		var r hooks.HookResult
 		ran, sigExit, rErr := runHooksInterruptibly(ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
 			var err error
-			r, err = hooks.RunSingle(hctx, hookPath, hookStdin, timeoutSec, hookEnv)
+			r, err = hooks.RunSingle(hctx, hookPath, hookStdin, timeoutSec, stopCap, hookEnv)
 			if err != nil {
 				return nil, err
 			}
@@ -203,7 +208,7 @@ func hookRun(flags globalFlags, name string) int {
 		return hookDiscoveryExit(dErr)
 	}
 	results, sigExit, rErr := runHooksInterruptibly(ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
-		return hooks.RunAll(hctx, hookPaths, hookStdin, timeoutSec, hookEnv)
+		return hooks.RunAll(hctx, hookPaths, hookStdin, timeoutSec, stopCap, hookEnv)
 	})
 	if sigExit != 0 {
 		// Interrupted: the runs so far are recorded, the interrupted one

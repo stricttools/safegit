@@ -100,11 +100,17 @@ func TestPipeHoldersSaysWhyWhenItsOwnReadEndIsNotListed(t *testing.T) {
 }
 
 // TestUncontainedMessagesStateThePartialContainment: the error text for a
-// process safegit could not stop names it and says it is still running and why.
+// process safegit could not stop names it and says it is still running and why:
+// the stop reached its cap first, and, where containment is partial, the note
+// saying so.
 func TestUncontainedMessagesStateThePartialContainment(t *testing.T) {
-	r := HookResult{Name: "release-check", Leftovers: []LeftoverProcess{{PID: 48213, Command: "node"}}}
+	r := HookResult{Name: "release-check", Leftovers: []LeftoverProcess{{PID: 48213, Command: "node"}}, stopCap: DefaultStopCap}
 	msgs := strings.Join(r.LeftoverMessages(), "\n")
-	want := "hook release-check left process 48213 (node) running after it ended; it is still running; " + uncontainedNote
+	want := "hook release-check left process 48213 (node) running after it ended; it is still running: " +
+		"safegit could not stop it within the 60s cap on stopping a hook and exits without it"
+	if containmentPartial {
+		want += "; " + uncontainedNote
+	}
 	if !strings.Contains(msgs, want) {
 		t.Errorf("messages = %q, want %q", msgs, want)
 	}

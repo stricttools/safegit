@@ -36,7 +36,7 @@ func runLeftoverHook(t *testing.T, body string, timeoutSec int) (HookResult, int
 		"\nwhile [ ! -s '"+pidFile+"' ]; do sleep 0.05; done\necho started\nexit 0\n")
 
 	start := time.Now()
-	results, err := Run(context.Background(), store(gitDir), nil, timeoutSec, nil)
+	results, err := Run(context.Background(), store(gitDir), nil, timeoutSec, DefaultStopCap, nil)
 	elapsed := time.Since(start)
 	pid := readPid(t, pidFile)
 	t.Cleanup(func() { syscall.Kill(pid, syscall.SIGKILL) })
@@ -152,7 +152,7 @@ func TestHookThatLeavesNothingHasNoLeftovers(t *testing.T) {
 	defer restore()
 	writeHook(t, filepath.Join(LocalDir(gitDir), "pre-pre-push"), "#!/bin/sh\nsleep 0.1 &\nwait\necho ok\n")
 
-	results, err := Run(context.Background(), store(gitDir), nil, 30, nil)
+	results, err := Run(context.Background(), store(gitDir), nil, 30, DefaultStopCap, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestAReusedPidIsNeverSignalled(t *testing.T) {
 	restore := SetOutput(&bytes.Buffer{}, &bytes.Buffer{})
 	defer restore()
 	writeHook(t, filepath.Join(LocalDir(gitDir), "pre-pre-push"), "#!/bin/sh\nexit 0\n")
-	if _, err := Run(context.Background(), store(gitDir), nil, 30, nil); err != nil {
+	if _, err := Run(context.Background(), store(gitDir), nil, 30, DefaultStopCap, nil); err != nil {
 		t.Fatal(err)
 	}
 	select {

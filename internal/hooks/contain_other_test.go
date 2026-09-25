@@ -28,7 +28,7 @@ func TestKilledGroupMemberIsNamedWithThePartialNote(t *testing.T) {
 	defer func() { runPs = prev }()
 
 	c := &container{self: -1, pgid: pid}
-	left, unknown := c.sweep(false)
+	left, unknown := c.sweep(startStop(DefaultStopCap), false)
 	if unknown != "" || len(left) != 1 || left[0].PID != pid || !left[0].Killed {
 		t.Fatalf("sweep = %+v, %q; want the group member, killed", left, unknown)
 	}
