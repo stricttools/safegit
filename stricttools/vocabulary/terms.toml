@@ -1,1 +1,117 @@
 format_version = 1
+
+[[accepted]]
+word = "arxanas"
+meaning = "GitHub handle of Waleed Khan, a Jujutsu contributor listed in the research survey."
+
+[[accepted]]
+word = "backgrounded"
+meaning = "Sent to run in the background, detached from the hook's foreground, as a process a hook starts may be."
+
+[[accepted]]
+word = "Chacon"
+meaning = "Scott Chacon, GitButler's creator and Pro Git co-author, cited in the research survey."
+
+[[accepted]]
+word = "daemonized"
+meaning = "Turned into a daemon: a process that detaches and keeps running after the hook that started it exits."
+
+[[accepted]]
+word = "gitsight"
+meaning = "The code-analysis company that backs go-git, per the research survey."
+
+[[accepted]]
+word = "Grigoriev"
+meaning = "Ilya Grigoriev, a Jujutsu contributor listed in the research survey."
+
+[[accepted]]
+word = "Ilya"
+meaning = "First name of Ilya Grigoriev, a Jujutsu contributor listed in the research survey."
+
+[[accepted]]
+word = "ilyagr"
+meaning = "GitHub handle of Ilya Grigoriev, a Jujutsu contributor."
+
+[[accepted]]
+word = "Krycho"
+meaning = "Chris Krycho, author of the 'jj init' essay cited in the research survey."
+
+[[accepted]]
+word = "ls"
+meaning = "The 'ls' in git's ls-remote command, which safegit backup uses to read a remote ref."
+
+[[accepted]]
+word = "martinvonz"
+meaning = "GitHub handle of Martin von Zweigbergk, Jujutsu's creator."
+
+[[accepted]]
+word = "Nishihara"
+meaning = "Yuya Nishihara, Jujutsu's top committer, listed in the research survey."
+
+[[accepted]]
+word = "Pearce"
+meaning = "Shawn O. Pearce, creator of libgit2, JGit, and Gerrit, cited in the research survey."
+
+[[accepted]]
+word = "pidfd"
+meaning = "A Linux process file descriptor (Linux 5.3+), which safegit uses to signal a hook's leftover processes without hitting a reused PID."
+
+[[accepted]]
+word = "pidfds"
+meaning = "Plural of pidfd: Linux process file descriptors."
+
+[[accepted]]
+word = "reparented"
+meaning = "Moved under a new parent process after its original parent exits; under a child subreaper, orphaned hook processes are reparented to safegit."
+
+[[accepted]]
+word = "rlsbl"
+meaning = "The release tool whose git pre-push hook (rlsbl check --tag prepush) runs after safegit's own pre-pre-push hooks."
+
+[[accepted]]
+word = "safegit"
+meaning = "This tool: a concurrency-safe git wrapper for multiple agents sharing one worktree."
+
+[[accepted]]
+word = "Seipp"
+meaning = "Austin Seipp, a Jujutsu contributor listed in the research survey."
+
+[[accepted]]
+word = "Sohn"
+meaning = "Matthias Sohn, JGit's project lead, cited in the research survey."
+
+[[accepted]]
+word = "subreaper"
+meaning = "A Linux child subreaper (prctl PR_SET_CHILD_SUBREAPER): a process that adopts orphaned descendants, which safegit becomes while a hook runs."
+
+[[accepted]]
+word = "Thiel"
+meaning = "Sebastian Thiel, creator and maintainer of gitoxide, cited in the research survey."
+
+[[accepted]]
+word = "thoughtpolice"
+meaning = "GitHub handle of Austin Seipp, a Jujutsu contributor."
+
+[[accepted]]
+word = "trailered"
+meaning = "Carrying commit-message trailers, as every commit safegit writes does."
+
+[[accepted]]
+word = "unoptioned"
+meaning = "Without the options the caller passed: the outcome the command would have with them stripped."
+
+[[accepted]]
+word = "Waleed"
+meaning = "First name of Waleed Khan, a Jujutsu contributor listed in the research survey."
+
+[[accepted]]
+word = "yuja"
+meaning = "GitHub handle of Yuya Nishihara, Jujutsu's top committer."
+
+[[accepted]]
+word = "Yuya"
+meaning = "First name of Yuya Nishihara, Jujutsu's top committer."
+
+[[accepted]]
+word = "Zweigbergk"
+meaning = "Martin von Zweigbergk, Jujutsu's creator, cited in the research survey."
