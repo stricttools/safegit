@@ -1,4 +1,4 @@
 # BEGIN selfdoc -- derived from selfdoc's layout declaration
-docs-cache/*
-!docs-cache/manifest.toml
+.docs-cache/*
+!.docs-cache/manifest.toml
 # END selfdoc

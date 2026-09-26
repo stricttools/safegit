@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "name": "safegit",
   "slug": "safegit",
   "version": "0.29.4",
@@ -7992,5 +7992,9 @@
   ],
   "posts": [],
   "last_gen": "2026-09-25T23:45:55.267817+00:00",
-  "theme": "minimal"
+  "theme": "minimal",
+  "vocabulary": {
+    "accepted": [],
+    "rejected": []
+  }
 }
