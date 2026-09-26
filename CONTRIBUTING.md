@@ -44,7 +44,7 @@ Use `safegit commit` instead of `git commit` if safegit is installed.
 
 ## Release
 
-Releases are managed via [rlsbl](https://github.com/smm-h/rlsbl). The bump
+Releases are managed via [rlsbl](https://github.com/stricttools/rlsbl). The bump
 type is not a command-line argument: `rlsbl release init` scaffolds
 `.rlsbl/releases/unreleased.toml`, you set the bump type and the mandatory
 description there and commit that file, then run:

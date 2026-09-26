@@ -75,7 +75,7 @@ For automation, two properties are the ones to design around. First, the conclus
 
 ## rlsbl release workflow
 
-safegit integrates with [rlsbl](https://github.com/smm-h/rlsbl) for release orchestration, with the integration surfacing in three areas: push handling with pre-pre-push hooks, the rewrite journal that lets rlsbl repair release metadata after a history rewrite, and context-aware post-rewrite hints.
+safegit integrates with [rlsbl](https://github.com/stricttools/rlsbl) for release orchestration, with the integration surfacing in three areas: push handling with pre-pre-push hooks, the rewrite journal that lets rlsbl repair release metadata after a history rewrite, and context-aware post-rewrite hints.
 
 ### Push handling
 

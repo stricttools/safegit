@@ -48,7 +48,7 @@ safegit does not promise full git support and never will. It deliberately implem
 
 ## Release workflow
 
-This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestration.
+This project uses [rlsbl](https://github.com/stricttools/rlsbl) for release orchestration.
 
 - **Never hand-edit CHANGELOG.md.** It is generated from the JSONL changelog in `.rlsbl/changes/` plus the archived release files; a manual edit is lost at the next regeneration. Cover each commit with `rlsbl changelog add --commits <sha> --description "..." --type feature|fix|breaking` (or `--no-user-facing`), and verify with `rlsbl check --tag changelog`
 - The bump type is NOT a command-line argument: `rlsbl release init` scaffolds `.rlsbl/releases/unreleased.toml`, you set the bump type, the mandatory description and the optional context there, and you commit that file before releasing
