@@ -40,9 +40,9 @@
     "seed_hash": "d98b6e400219098930485f17d2670e12592da1ecfcf957ab71d6e1341d306e6f"
   },
   "en/cli-commit.md": {
-    "content": "5fbecaff0d03701fb86dfa7a4a79dd3adab24ed3172a99aa912025014c7b9f3c",
+    "content": "35cd9149913d0ec080eee4d4c0976527ccc59b26a0655aa3cb96ed8d8f36f14a",
     "description": "5e6d1c355403d853234ed672602ee82852af4e747d07d5196cac90649407e6fb",
-    "schema_hash": "091b365cfcf6a1205ff9c6ce537cdd4e8fbec0cee1a8dff3d99308ed216eb1e7",
+    "schema_hash": "e05cd75ec4e5c4e72d2727b0df8d0e19dc3efa4e344a04dffb0cc8aec3a464c1",
     "seed_hash": "5e6d1c355403d853234ed672602ee82852af4e747d07d5196cac90649407e6fb"
   },
   "en/cli-config.md": {
@@ -58,13 +58,13 @@
     "seed_hash": "1441950db53fea1255a8b1d09eb36ec76c2c0dfae4f36131bb27799bf186de98"
   },
   "en/cli-hook.md": {
-    "content": "3fd7b1c14ebd3fa8f2546ca3fc9e51122bee293fc3f9895950c4007aec9f7da5",
+    "content": "0c009a38d12179fa7a2b2883448282f8a895eb3f9f18f2d71fe6687578fccd54",
     "description": "e6d73f4ad5a9c5242caa7c549d78d45d78987f4f8538c7de9b204ca60fde98a3",
-    "schema_hash": "a436765b3587acb81b671a9a10108d1152f7cbfd21c7101454f8b1fef5a3d162",
+    "schema_hash": "bf64bb78e247ce263a367cf511d39052681da6a4481aff31dacf8151102a508b",
     "seed_hash": "e6d73f4ad5a9c5242caa7c549d78d45d78987f4f8538c7de9b204ca60fde98a3"
   },
   "en/cli-index.md": {
-    "content": "c2a45004d7d0e8eaca393868fdf06e78bcb2e1978d2fef057fe2ccfd423e5d63",
+    "content": "8317250f185665a25c12b8f80f5c80113240aedbe5f86f82302b10f5c6dee9f6",
     "description": "048286b051c998af319f37f4b8e90acba0238a51cff438eafaa46a74a1adecff",
     "seed_hash": "048286b051c998af319f37f4b8e90acba0238a51cff438eafaa46a74a1adecff"
   },
