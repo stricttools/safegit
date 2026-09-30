@@ -7991,10 +7991,127 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-09-25T23:45:55.267817+00:00",
+  "last_gen": "2026-09-30T16:14:14.981673+00:00",
   "theme": "minimal",
   "vocabulary": {
-    "accepted": [],
+    "accepted": [
+      {
+        "word": "arxanas",
+        "aliases": []
+      },
+      {
+        "word": "backgrounded",
+        "aliases": []
+      },
+      {
+        "word": "Chacon",
+        "aliases": []
+      },
+      {
+        "word": "daemonized",
+        "aliases": []
+      },
+      {
+        "word": "gitsight",
+        "aliases": []
+      },
+      {
+        "word": "Grigoriev",
+        "aliases": []
+      },
+      {
+        "word": "Ilya",
+        "aliases": []
+      },
+      {
+        "word": "ilyagr",
+        "aliases": []
+      },
+      {
+        "word": "Krycho",
+        "aliases": []
+      },
+      {
+        "word": "ls",
+        "aliases": []
+      },
+      {
+        "word": "martinvonz",
+        "aliases": []
+      },
+      {
+        "word": "Nishihara",
+        "aliases": []
+      },
+      {
+        "word": "Pearce",
+        "aliases": []
+      },
+      {
+        "word": "pidfd",
+        "aliases": []
+      },
+      {
+        "word": "pidfds",
+        "aliases": []
+      },
+      {
+        "word": "reparented",
+        "aliases": []
+      },
+      {
+        "word": "rlsbl",
+        "aliases": []
+      },
+      {
+        "word": "safegit",
+        "aliases": []
+      },
+      {
+        "word": "Seipp",
+        "aliases": []
+      },
+      {
+        "word": "Sohn",
+        "aliases": []
+      },
+      {
+        "word": "subreaper",
+        "aliases": []
+      },
+      {
+        "word": "Thiel",
+        "aliases": []
+      },
+      {
+        "word": "thoughtpolice",
+        "aliases": []
+      },
+      {
+        "word": "trailered",
+        "aliases": []
+      },
+      {
+        "word": "unoptioned",
+        "aliases": []
+      },
+      {
+        "word": "Waleed",
+        "aliases": []
+      },
+      {
+        "word": "yuja",
+        "aliases": []
+      },
+      {
+        "word": "Yuya",
+        "aliases": []
+      },
+      {
+        "word": "Zweigbergk",
+        "aliases": []
+      }
+    ],
     "rejected": []
   }
 }

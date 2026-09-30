@@ -90,11 +90,11 @@ safegit does not promise full git support and never will. It deliberately implem
 
 ## Release workflow
 
-This project uses [rlsbl](https://github.com/smm-h/rlsbl) for release orchestration.
+This project uses [rlsbl](https://github.com/stricttools/rlsbl) for release orchestration.
 
 - **Never hand-edit CHANGELOG.md.** It is generated from the JSONL changelog in `.rlsbl/changes/` plus the archived release files; a manual edit is lost at the next regeneration. Cover each commit with `rlsbl changelog add --commits <sha> --description "..." --type feature|fix|breaking` (or `--no-user-facing`), and verify with `rlsbl check --tag changelog`
 - The bump type is NOT a command-line argument: `rlsbl release init` scaffolds `.rlsbl/releases/unreleased.toml`, you set the bump type, the mandatory description and the optional context there, and you commit that file before releasing
-- Release with `rlsbl release run --no-allow-dirty --watch --approve-consequential`. It pushes the version-bump commit untagged, waits for CI on that exact commit, and only then finalizes, tags, pushes and publishes -- so a red CI verdict leaves nothing behind and is fixed forward at the same version with `rlsbl release resume`
+- Release with `rlsbl release run --watch --approve-consequential`. It pushes the version-bump commit untagged, waits for CI on that exact commit, and only then finalizes, tags, pushes and publishes -- so a red CI verdict leaves nothing behind and is fixed forward at the same version with `rlsbl release resume`
 - CI handles publishing via goreleaser (cross-platform static binaries)
 - Never publish manually, and never `git push` manually -- the release is the only thing that writes to `refs/heads/*`
 - `--dry-run` previews a release without making changes (it is framework-owned and available on every rlsbl command)

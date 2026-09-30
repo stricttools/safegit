@@ -42,7 +42,7 @@ go install github.com/smm-h/safegit@v0
 a real release. Pin an exact version (`@v0.28.0`) when you need one.
 
 Pre-built binaries are available on
-[GitHub Releases](https://github.com/smm-h/safegit/releases) via goreleaser.
+[GitHub Releases](https://github.com/stricttools/safegit/releases) via goreleaser.
 
 ## Quick start
 
