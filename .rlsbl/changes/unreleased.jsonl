@@ -31,3 +31,4 @@
 {"format_version":1,"id":"18d8fc7a7dfda54f8712b254fcb641ad962ed9db5700e10c","commits":["3d9f47d2011439c07bed92b90d6b889f04c14ef5"],"user_facing":false}
 {"format_version":1,"id":"18da2299b0b5518ce88a27cc4d0a4090908170cbee662b53","commits":["611746235e1c8123331e840617b927e6ca5f69c0"],"user_facing":false}
 {"format_version":1,"id":"18da255b9df0fe1a557774b266134e6a9b4dff9388c11eae","commits":["4a1051ff53c3c0b79400dcf4011a55435026acf6"],"user_facing":false}
+{"format_version":1,"id":"18da26c1545f9048be57fb112ddc4f079dae054e1a1b6717","commits":["4d3b85d0846d30dfd71fdde497e8d29d28de9ef4"],"user_facing":true,"description":"**The Go module path moved to `github.com/stricttools/safegit`.** The repository lives in the stricttools organization, so `github.com/smm-h/safegit` is no longer this module's path: install with `go install github.com/stricttools/safegit@v0`, and a program importing its packages changes its imports and `require` to the new path.","type":"breaking"}
