@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // The scrub engine rewrites trees through git.LsTree (internal/git/git.go:655),

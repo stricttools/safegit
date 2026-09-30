@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/smm-h/safegit/internal/filelock"
+	"github.com/stricttools/safegit/internal/filelock"
 )
 
 // Entry represents a single operation log entry.

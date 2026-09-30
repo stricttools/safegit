@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // `safegit mv` commits the RENAME AND NOTHING ELSE: each path is carried across

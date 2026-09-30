@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/conflict"
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/conflict"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 func TestResolveDefaultsToGitsOwnMarkerSizeAndStyle(t *testing.T) {

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // remoteRefSHA returns the SHA a bare remote holds for a ref, or "" if absent.

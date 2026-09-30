@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/testutil"
-	"github.com/smm-h/safegit/internal/trailer"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/trailer"
 )
 
 // Retraction is the only correction a move record has. A record already written

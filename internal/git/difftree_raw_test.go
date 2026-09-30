@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // DiffTree reports the RAW delta -- modes and blob names on both sides -- and

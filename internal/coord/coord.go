@@ -15,8 +15,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/sequencer"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/sequencer"
 )
 
 // DirtyState describes why the working tree is not clean.

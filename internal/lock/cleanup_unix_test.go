@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/exitcode"
 )
 
 // fakeSignal is an os.Signal that is not a syscall.Signal, which is the only

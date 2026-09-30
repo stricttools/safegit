@@ -7,9 +7,9 @@ import (
 	"os"
 	"sort"
 
-	"github.com/smm-h/safegit/internal/conflict"
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/conflict"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // The overwrite check: what a conclusion is allowed to destroy in the working

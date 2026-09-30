@@ -6,7 +6,7 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/smm-h/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/exitcode"
 )
 
 // cleanupSignals returns the signals that should trigger lock cleanup.

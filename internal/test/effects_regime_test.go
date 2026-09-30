@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // These tests pin the two framework-level behaviours the strictcli effects

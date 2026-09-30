@@ -6,9 +6,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/lock"
-	"github.com/smm-h/safegit/internal/repo"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/lock"
+	"github.com/stricttools/safegit/internal/repo"
 )
 
 // lockTarget is one resolved unlock argument: which lock the operator named and

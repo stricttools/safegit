@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // submoduleGitDir resolves a submodule working directory to its real git

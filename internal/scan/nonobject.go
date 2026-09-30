@@ -11,9 +11,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/hooks"
-	"github.com/smm-h/safegit/internal/repo"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/hooks"
+	"github.com/stricttools/safegit/internal/repo"
 )
 
 // rewriteJournalFile is the one file under .git/safegit the sweep skips.

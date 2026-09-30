@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // oplogPath returns the operation log's path inside a test repo.

@@ -5,11 +5,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/coord"
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/gitexec"
-	"github.com/smm-h/safegit/internal/repo"
-	"github.com/smm-h/safegit/internal/sequencer"
+	"github.com/stricttools/safegit/internal/coord"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/gitexec"
+	"github.com/stricttools/safegit/internal/repo"
+	"github.com/stricttools/safegit/internal/sequencer"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 

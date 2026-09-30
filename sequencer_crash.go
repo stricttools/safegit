@@ -7,10 +7,10 @@ import (
 	"os"
 	"sort"
 
-	"github.com/smm-h/safegit/internal/commit"
-	"github.com/smm-h/safegit/internal/conflict"
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/commit"
+	"github.com/stricttools/safegit/internal/conflict"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // The crash re-run: finishing a conclusion whose commit already stands.

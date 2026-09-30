@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/gitexec"
+	"github.com/stricttools/safegit/internal/gitexec"
 )
 
 // runGitMutation returns 0 on its --dry-run branch without reading the

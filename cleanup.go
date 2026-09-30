@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // cleanupAfterRewrite performs surgical post-rewrite cleanup: expires only

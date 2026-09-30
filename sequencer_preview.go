@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/smm-h/safegit/internal/commit"
-	"github.com/smm-h/safegit/internal/conflict"
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/gitexec"
-	"github.com/smm-h/safegit/internal/gitversion"
+	"github.com/stricttools/safegit/internal/commit"
+	"github.com/stricttools/safegit/internal/conflict"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/gitexec"
+	"github.com/stricttools/safegit/internal/gitversion"
 )
 
 // Honest previews for merge, cherry-pick and revert.

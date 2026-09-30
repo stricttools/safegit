@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smm-h/safegit/internal/procutil"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/procutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // deadPID is a pid no process on the machine can plausibly hold, which is what

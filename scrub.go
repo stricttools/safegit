@@ -7,11 +7,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/repo"
-	"github.com/smm-h/safegit/internal/submodule"
-	"github.com/smm-h/safegit/internal/trailer"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/repo"
+	"github.com/stricttools/safegit/internal/submodule"
+	"github.com/stricttools/safegit/internal/trailer"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 

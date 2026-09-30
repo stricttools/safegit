@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // writeRecipeFile writes TOML content to a temp file and returns its path.

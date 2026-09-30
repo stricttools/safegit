@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // lockFilesUnder lists every published lock file under a repository's safegit

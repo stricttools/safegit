@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // initTestRepo creates a bare-minimum git repo in a temp dir, configures

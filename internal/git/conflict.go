@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/gitversion"
+	"github.com/stricttools/safegit/internal/gitversion"
 )
 
 // This file holds the plumbing a conflicted operation is concluded through:

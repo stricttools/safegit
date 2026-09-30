@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/sequencer"
+	"github.com/stricttools/safegit/internal/sequencer"
 )
 
 // The declared sets, restated here rather than derived from Paths: a test that

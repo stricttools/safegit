@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/hooks"
+	"github.com/stricttools/safegit/internal/hooks"
 )
 
 // TestPushPayloadHasNoHookCount: the number of hooks that ran is the length of

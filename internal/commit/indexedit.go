@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // IndexEditKind names what one edit does to the temporary index.

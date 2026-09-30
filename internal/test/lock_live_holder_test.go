@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smm-h/safegit/internal/procutil"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/procutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // TestCommitDoesNotStealLockFromLiveHolder is the end-to-end form of the

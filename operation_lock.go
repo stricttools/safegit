@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/lock"
-	"github.com/smm-h/safegit/internal/repo"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/lock"
+	"github.com/stricttools/safegit/internal/repo"
 )
 
 // acquireOperationLock takes the worktree operation lock for op and returns the

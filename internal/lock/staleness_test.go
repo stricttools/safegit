@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smm-h/safegit/internal/procutil"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/procutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // plantLock writes a lock file in the format tryCreate produces. start is the

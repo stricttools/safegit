@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // These tests exercise NewFromFile in the shape the conclusion flows use it:

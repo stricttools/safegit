@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/trailer"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/trailer"
 )
 
 // Declared moves.

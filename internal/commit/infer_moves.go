@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/trailer"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/trailer"
 )
 
 // Inferred moves: the records safegit mints for moves the caller did NOT

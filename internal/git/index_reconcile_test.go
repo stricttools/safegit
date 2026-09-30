@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // reconcilePropertyFixedSeed pins the randomized round-trip test's generator.

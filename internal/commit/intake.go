@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // Argument intake: the one place a caller's file arguments become paths the

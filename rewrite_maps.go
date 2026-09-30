@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // rewriteMapsFile is the filename for the JSONL rewrite-map log. Its lines

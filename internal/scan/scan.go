@@ -10,7 +10,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // Match records a single pattern hit inside a git object.

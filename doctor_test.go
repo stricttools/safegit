@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/oplog"
-	"github.com/smm-h/safegit/internal/repo"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/oplog"
+	"github.com/stricttools/safegit/internal/repo"
 )
 
 // TestDoctorCheckRegistryIsWellFormed pins the registry's own rules, so a

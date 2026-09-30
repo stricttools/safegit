@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // Marker verification: a conclusion may not commit the conflict it was asked to

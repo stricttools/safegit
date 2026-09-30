@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // FINDING: .git/MERGE_AUTOSTASH left behind by an EARLIER crashed conclusion is

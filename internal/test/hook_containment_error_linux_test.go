@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/exitcode"
 )
 
 // When safegit cannot run a hook under containment at all -- here, nothing the

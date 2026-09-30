@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/sequencer"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/sequencer"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 func TestReadReportsNoneInAQuietRepository(t *testing.T) {

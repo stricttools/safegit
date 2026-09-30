@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/smm-h/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/exitcode"
 )
 
 func main() {

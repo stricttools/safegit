@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/testutil"
-	"github.com/smm-h/safegit/internal/trailer"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/trailer"
 )
 
 // A move record is a REFERENCE to a path. When a rewrite erases that path from

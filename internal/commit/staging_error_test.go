@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/stage"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/stage"
 )
 
 // A hunk-staging failure that is not one of the recognized refusals still has to

@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/index"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/index"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // ApplyPatch used to answer a failed `git apply --cached` by silently running

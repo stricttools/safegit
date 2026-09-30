@@ -15,8 +15,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/gitexec"
-	"github.com/smm-h/safegit/internal/gitversion"
+	"github.com/stricttools/safegit/internal/gitexec"
+	"github.com/stricttools/safegit/internal/gitversion"
 )
 
 // WithDir returns a context that carries git directory overrides. All git

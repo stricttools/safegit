@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/sequencer"
+	"github.com/stricttools/safegit/internal/sequencer"
 )
 
 // SequencerContext is a caller's DECLARATION that it is the conclusion path for

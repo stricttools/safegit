@@ -3,7 +3,7 @@ package main
 import (
 	"path/filepath"
 
-	"github.com/smm-h/safegit/internal/filelock"
+	"github.com/stricttools/safegit/internal/filelock"
 )
 
 // appendJSONLLine appends one pre-marshaled JSON line to <sgDir>/<filename>.

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // The history rewrites' previews used to be hand-rolled: a human branch and a

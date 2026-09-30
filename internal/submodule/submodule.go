@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/gitexec"
+	"github.com/stricttools/safegit/internal/gitexec"
 )
 
 // ErrNestedSubmodules is returned when a submodule itself contains submodules.

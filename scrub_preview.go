@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/gitexec"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/gitexec"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 

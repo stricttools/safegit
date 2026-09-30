@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // --remap-shas-in support: during a rewrite walk, files matching the given

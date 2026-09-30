@@ -80,7 +80,7 @@
       "connections": []
     }
   },
-  "project_id": "github.com/smm-h/safegit",
+  "project_id": "github.com/stricttools/safegit",
   "name": "safegit",
   "version": "0.29.4",
   "help": "The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood",

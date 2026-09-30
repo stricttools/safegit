@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/hooks"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/hooks"
 )
 
 // Config holds safegit configuration persisted in config.json.

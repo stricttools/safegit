@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // linkedWorktree adds a linked worktree to repoDir and returns the worktree's

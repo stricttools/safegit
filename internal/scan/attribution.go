@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // blobAttribution maps a blob SHA to the commit and path where it appears.

@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/gitexec"
-	"github.com/smm-h/safegit/internal/hooks"
-	"github.com/smm-h/safegit/internal/oplog"
-	"github.com/smm-h/safegit/internal/repo"
-	"github.com/smm-h/safegit/internal/submodule"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/gitexec"
+	"github.com/stricttools/safegit/internal/hooks"
+	"github.com/stricttools/safegit/internal/oplog"
+	"github.com/stricttools/safegit/internal/repo"
+	"github.com/stricttools/safegit/internal/submodule"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 

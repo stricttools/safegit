@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/scan"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/scan"
 )
 
 // verifyScrubbedFileContent is `scrub file`'s Tier A content check: it reads

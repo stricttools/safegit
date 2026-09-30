@@ -188,13 +188,13 @@ func TestGithubSlug(t *testing.T) {
 		wantSlug string
 		wantOK   bool
 	}{
-		{"git@github.com:smm-h/safegit.git", "smm-h/safegit", true},
-		{"git@github.com:smm-h/safegit", "smm-h/safegit", true},
-		{"https://github.com/smm-h/safegit.git", "smm-h/safegit", true},
-		{"https://github.com/smm-h/safegit", "smm-h/safegit", true},
-		{"http://github.com/smm-h/safegit", "smm-h/safegit", true},
-		{"ssh://git@github.com/smm-h/safegit.git", "smm-h/safegit", true},
-		{"https://gitlab.com/smm-h/safegit.git", "", false},
+		{"git@github.com:stricttools/safegit.git", "stricttools/safegit", true},
+		{"git@github.com:stricttools/safegit", "stricttools/safegit", true},
+		{"https://github.com/stricttools/safegit.git", "stricttools/safegit", true},
+		{"https://github.com/stricttools/safegit", "stricttools/safegit", true},
+		{"http://github.com/stricttools/safegit", "stricttools/safegit", true},
+		{"ssh://git@github.com/stricttools/safegit.git", "stricttools/safegit", true},
+		{"https://gitlab.com/stricttools/safegit.git", "", false},
 		{"/srv/git/safegit.git", "", false},
 		{"https://github.com/smm-h", "", false},
 		{"", "", false},
@@ -212,7 +212,7 @@ func TestIsNetworkRemote(t *testing.T) {
 		url  string
 		want bool
 	}{
-		{"https://github.com/smm-h/safegit.git", true},
+		{"https://github.com/stricttools/safegit.git", true},
 		{"http://example.com/repo.git", true},
 		{"ssh://git@example.com/repo.git", true},
 		{"git://example.com/repo.git", true},

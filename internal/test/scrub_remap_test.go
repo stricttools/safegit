@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 var hex40Re = regexp.MustCompile(`[0-9a-f]{40,}`)

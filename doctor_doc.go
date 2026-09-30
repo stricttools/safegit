@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/exitcode"
 )
 
 // The generated health-check table in the commands guide is delimited by these

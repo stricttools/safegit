@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/gitversion"
+	"github.com/stricttools/safegit/internal/gitversion"
 )
 
 // MergeTreeResult is what one `git merge-tree --write-tree` computed.

@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/smm-h/safegit/internal/gitversion"
+	"github.com/stricttools/safegit/internal/gitversion"
 )
 
 // The installed git's version, asked for once per process.

@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/smm-h/safegit/internal/oplog"
-	"github.com/smm-h/safegit/internal/procutil"
+	"github.com/stricttools/safegit/internal/oplog"
+	"github.com/stricttools/safegit/internal/procutil"
 )
 
 // The tool-owned pseudo-refs safegit locks under. They are not git refs and

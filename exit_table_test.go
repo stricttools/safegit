@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/exitcode"
 )
 
 // TestExitCodeTableIsGenerated is the freshness check for the generated

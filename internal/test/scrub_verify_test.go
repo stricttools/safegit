@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/oplog"
+	"github.com/stricttools/safegit/internal/oplog"
 )
 
 var scrubVerifyEnv = []string{"CLAUDE_CODE_SESSION_ID=scrub-verify-test"}

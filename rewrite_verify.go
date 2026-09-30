@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // This file holds the verification a history rewrite runs against ITSELF, in

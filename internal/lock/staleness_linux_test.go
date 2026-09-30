@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // TestIsStalePathologicalCommHolder covers a holder whose process name

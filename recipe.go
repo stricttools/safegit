@@ -9,7 +9,7 @@ import (
 	"sort"
 
 	tomledit "github.com/smm-h/go-toml-edit"
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // Recipe is the raw TOML schema for a scrub recipe file.

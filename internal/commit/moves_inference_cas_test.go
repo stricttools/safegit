@@ -10,10 +10,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/repo"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/repo"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // The compare-and-swap rule for inferred move records.

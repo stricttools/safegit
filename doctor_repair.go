@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/gitexec"
-	"github.com/smm-h/safegit/internal/sequencer"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/gitexec"
+	"github.com/stricttools/safegit/internal/sequencer"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 

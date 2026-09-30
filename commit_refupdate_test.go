@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // An empty expected old value is git's spelling for an UNCONDITIONAL ref write:

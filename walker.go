@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // TagRewrite records how a tag ref was updated during history rewriting.

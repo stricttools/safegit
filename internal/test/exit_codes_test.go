@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/lock"
-	"github.com/smm-h/safegit/internal/repo"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/lock"
+	"github.com/stricttools/safegit/internal/repo"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // holdLock takes a real safegit lock on ref, held by THIS process, and releases

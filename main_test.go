@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/commit"
+	"github.com/stricttools/safegit/internal/commit"
 )
 
 // TestGlobalsToFlagsJSONDoesNotImplyApproval pins what the deliberate

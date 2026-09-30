@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 var scrubRunEnv = []string{"CLAUDE_CODE_SESSION_ID=scrub-run-test"}

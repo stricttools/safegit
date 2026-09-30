@@ -6,8 +6,8 @@ import (
 	"path"
 	"regexp"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/scan"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/scan"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 

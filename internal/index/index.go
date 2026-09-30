@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/procutil"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/procutil"
 )
 
 // TmpIndex represents a per-invocation temporary index directory.

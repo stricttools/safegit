@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smm-h/safegit/internal/lock"
-	"github.com/smm-h/safegit/internal/repo"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/lock"
+	"github.com/stricttools/safegit/internal/repo"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // Six more commands change the world without leaving a single machine-readable

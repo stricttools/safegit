@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // The three flat conclusion commands -- merge-continue, cherry-pick-continue

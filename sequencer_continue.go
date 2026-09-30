@@ -10,15 +10,15 @@ import (
 	"strings"
 
 	tomledit "github.com/smm-h/go-toml-edit"
-	"github.com/smm-h/safegit/internal/commit"
-	"github.com/smm-h/safegit/internal/conflict"
-	"github.com/smm-h/safegit/internal/coord"
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/oplog"
-	"github.com/smm-h/safegit/internal/repo"
-	"github.com/smm-h/safegit/internal/sequencer"
-	"github.com/smm-h/safegit/internal/trailer"
+	"github.com/stricttools/safegit/internal/commit"
+	"github.com/stricttools/safegit/internal/conflict"
+	"github.com/stricttools/safegit/internal/coord"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/oplog"
+	"github.com/stricttools/safegit/internal/repo"
+	"github.com/stricttools/safegit/internal/sequencer"
+	"github.com/stricttools/safegit/internal/trailer"
 )
 
 // The conclusion engine: one implementation behind the three flat commands

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smm-h/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/exitcode"
 )
 
 // A pre-pre-push hook that exits 0 but leaves a process running fails the push

@@ -3,9 +3,9 @@ package main
 import (
 	"fmt"
 
-	"github.com/smm-h/safegit/internal/conflict"
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/sequencer"
+	"github.com/stricttools/safegit/internal/conflict"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/sequencer"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 

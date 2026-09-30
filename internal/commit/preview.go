@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/gitexec"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/gitexec"
 )
 
 // BeginPreview opens the throwaway area a dry run works in, and returns the

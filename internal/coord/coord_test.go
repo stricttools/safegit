@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/repo"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/repo"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 func TestCleanRepo(t *testing.T) {

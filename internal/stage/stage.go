@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // ErrBinaryFile reports that a hunk spec was given for a file git reports as

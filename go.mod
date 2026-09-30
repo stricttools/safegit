@@ -1,4 +1,4 @@
-module github.com/smm-h/safegit
+module github.com/stricttools/safegit
 
 go 1.25.7
 

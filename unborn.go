@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // The friendly pre-flight refusals for an UNBORN branch.

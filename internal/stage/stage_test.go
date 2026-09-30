@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/index"
-	"github.com/smm-h/safegit/internal/repo"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/index"
+	"github.com/stricttools/safegit/internal/repo"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // initStageTestRepo creates a repo with a multi-line seed file for hunk testing.

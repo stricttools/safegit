@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/gitversion"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/gitversion"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // conflictedRepo builds a repository stopped on a content conflict in f.txt and

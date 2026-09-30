@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/smm-h/safegit/internal/commit"
-	"github.com/smm-h/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/commit"
+	"github.com/stricttools/safegit/internal/exitcode"
 )
 
 // Aftercare: the steps that can only run once a ref has moved, and the one

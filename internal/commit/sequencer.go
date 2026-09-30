@@ -10,9 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/coord"
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/coord"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // guardSequencer refuses the operation when git has something in flight that

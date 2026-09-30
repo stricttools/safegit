@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // SourceAuthor returns the author identity recorded on the commit a cherry-pick

@@ -10,11 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/gitexec"
-	"github.com/smm-h/safegit/internal/oplog"
-	"github.com/smm-h/safegit/internal/repo"
-	"github.com/smm-h/safegit/internal/submodule"
-	"github.com/smm-h/safegit/internal/trailer"
+	"github.com/stricttools/safegit/internal/gitexec"
+	"github.com/stricttools/safegit/internal/oplog"
+	"github.com/stricttools/safegit/internal/repo"
+	"github.com/stricttools/safegit/internal/submodule"
+	"github.com/stricttools/safegit/internal/trailer"
 	"github.com/smm-h/strictcli/go/strictcli"
 )
 

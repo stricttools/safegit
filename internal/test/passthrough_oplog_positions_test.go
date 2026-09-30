@@ -5,7 +5,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // SPEC PIN -- deliberately failing until the ruled behavior is implemented.

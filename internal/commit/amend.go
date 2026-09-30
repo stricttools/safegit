@@ -7,15 +7,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/smm-h/safegit/internal/coord"
-	"github.com/smm-h/safegit/internal/exitcode"
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/gitexec"
-	"github.com/smm-h/safegit/internal/index"
-	"github.com/smm-h/safegit/internal/lock"
-	"github.com/smm-h/safegit/internal/oplog"
-	"github.com/smm-h/safegit/internal/repo"
-	"github.com/smm-h/safegit/internal/trailer"
+	"github.com/stricttools/safegit/internal/coord"
+	"github.com/stricttools/safegit/internal/exitcode"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/gitexec"
+	"github.com/stricttools/safegit/internal/index"
+	"github.com/stricttools/safegit/internal/lock"
+	"github.com/stricttools/safegit/internal/oplog"
+	"github.com/stricttools/safegit/internal/repo"
+	"github.com/stricttools/safegit/internal/trailer"
 )
 
 // AmendRequest holds inputs for an amend operation.

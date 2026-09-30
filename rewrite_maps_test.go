@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // gitInDir runs a git command in dir and fails the test on error.

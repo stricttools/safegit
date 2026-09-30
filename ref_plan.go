@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/git"
 )
 
 // refMove is one ref update a rewrite implies: move Refname from OldSHA to

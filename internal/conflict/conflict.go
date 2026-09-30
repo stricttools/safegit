@@ -35,8 +35,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/git"
-	"github.com/smm-h/safegit/internal/gitversion"
+	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/gitversion"
 )
 
 // DefaultMarkerSize is the conflict marker length git uses when the

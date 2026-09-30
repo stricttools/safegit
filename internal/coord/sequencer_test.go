@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/sequencer"
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/sequencer"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // Every kind the reader can report must have a way out, and it must be the

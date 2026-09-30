@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smm-h/safegit/internal/hooks"
+	"github.com/stricttools/safegit/internal/hooks"
 )
 
 // decodeRecord renders one hook run through hookRecords and decodes its JSON,

@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/smm-h/safegit/internal/trailer"
+	"github.com/stricttools/safegit/internal/trailer"
 )
 
 // Witnessed subtree collapse, and the cap on scattered inferred moves.

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/smm-h/safegit/internal/testutil"
+	"github.com/stricttools/safegit/internal/testutil"
 )
 
 // makeCommits creates n commits in repoDir with the given author/committer identity.
