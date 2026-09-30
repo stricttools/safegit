@@ -50,5 +50,5 @@ type is not a command-line argument: `rlsbl release init` scaffolds
 description there and commit that file, then run:
 
 ```sh
-rlsbl release run --no-allow-dirty --watch --approve-consequential
+rlsbl release run --watch --approve-consequential
 ```
