@@ -35,7 +35,7 @@ agents, not for all humans.
 From source (requires the Go version `go.mod` declares -- currently 1.25.7):
 
 ```
-go install github.com/smm-h/safegit@v0
+go install github.com/stricttools/safegit@v0
 ```
 
 `@v0`, not `@latest`: safegit issues no 1.x tags, so `@latest` cannot resolve to
