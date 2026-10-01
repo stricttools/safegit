@@ -34,7 +34,7 @@ func TestBusyLockDoesNotStarveWaiters(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			lk, err := Acquire(base, base, "refs/heads/busy", "test", 60*time.Second)
+			lk, err := Acquire(base, base, "refs/heads/busy", "test", "", 60*time.Second)
 			if err != nil {
 				errs[i] = err
 				return

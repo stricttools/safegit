@@ -350,7 +350,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		}
 	}
 
-	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags)}
+	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags), SessionID: flags.sessionID}
 	result, err := p.Execute(flags.ctx(), commit.CommitRequest{
 		Message:                 msg,
 		FileSpecs:               fileSpecs,
@@ -526,7 +526,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 	release := mustAcquireOperationLock(flags, gitDir, "amend")
 	defer release()
 
-	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags)}
+	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags), SessionID: flags.sessionID}
 
 	// Both arms accumulate their aftercare failures rather than dying on one:
 	// the amended (or reworded) commit is the branch's tip either way, and the

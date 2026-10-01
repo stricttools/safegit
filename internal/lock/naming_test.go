@@ -99,7 +99,7 @@ func TestReclaimIfStaleRemovesOnlyDeadHolders(t *testing.T) {
 		t.Errorf("the stale lock survived reclamation (err=%v)", err)
 	}
 
-	live, err := Acquire(base, base, "refs/heads/live", "test", time.Second)
+	live, err := Acquire(base, base, "refs/heads/live", "test", "", time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,11 +117,11 @@ func TestReclaimIfStaleRemovesOnlyDeadHolders(t *testing.T) {
 func TestReleasePendingRemovesHeldLocks(t *testing.T) {
 	base := t.TempDir()
 
-	first, err := Acquire(base, base, "refs/heads/one", "test", time.Second)
+	first, err := Acquire(base, base, "refs/heads/one", "test", "", time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := Acquire(base, base, OperationRef, "test", time.Second)
+	second, err := Acquire(base, base, OperationRef, "test", "", time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,7 +231,7 @@ func TestReleaseLeavesAReplacedLockAlone(t *testing.T) {
 	t.Run("Release", func(t *testing.T) {
 		base := t.TempDir()
 		const ref = "refs/heads/contended"
-		held, err := Acquire(base, base, ref, "test", time.Second)
+		held, err := Acquire(base, base, ref, "test", "", time.Second)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -246,13 +246,13 @@ func TestReleaseLeavesAReplacedLockAlone(t *testing.T) {
 	t.Run("ReleasePending", func(t *testing.T) {
 		base := t.TempDir()
 		const ref = "refs/heads/contended"
-		held, err := Acquire(base, base, ref, "test", time.Second)
+		held, err := Acquire(base, base, ref, "test", "", time.Second)
 		if err != nil {
 			t.Fatal(err)
 		}
 		// A second, untouched lock proves the sweep still does its job: it
 		// must remove this one while leaving the newcomer alone.
-		own, err := Acquire(base, base, OperationRef, "test", time.Second)
+		own, err := Acquire(base, base, OperationRef, "test", "", time.Second)
 		if err != nil {
 			t.Fatal(err)
 		}

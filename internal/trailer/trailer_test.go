@@ -1,24 +1,21 @@
 package trailer
 
 import (
-	"os"
 	"strings"
 	"testing"
 )
 
 func TestInject_EnvAbsent(t *testing.T) {
-	os.Unsetenv(envVar)
 	msg := "some commit message"
-	got := Inject(msg)
+	got := Inject(msg, "")
 	if got != msg {
 		t.Errorf("expected message unchanged, got %q", got)
 	}
 }
 
 func TestInject_EnvPresent(t *testing.T) {
-	t.Setenv(envVar, "session-abc-123")
 	msg := "add new feature"
-	got := Inject(msg)
+	got := Inject(msg, "session-abc-123")
 
 	if !strings.Contains(got, "Claude-Code-Session-Id: session-abc-123") {
 		t.Errorf("expected trailer in output, got %q", got)
@@ -31,18 +28,16 @@ func TestInject_EnvPresent(t *testing.T) {
 }
 
 func TestInject_Dedup_SameSession(t *testing.T) {
-	t.Setenv(envVar, "session-abc-123")
 	msg := "add new feature\n\nClaude-Code-Session-Id: session-abc-123\n"
-	got := Inject(msg)
+	got := Inject(msg, "session-abc-123")
 	if got != msg {
 		t.Errorf("expected message unchanged (dedup), got %q", got)
 	}
 }
 
 func TestInject_DifferentSession_BothPresent(t *testing.T) {
-	t.Setenv(envVar, "session-def-456")
 	msg := "add new feature\n\nClaude-Code-Session-Id: session-abc-123\n"
-	got := Inject(msg)
+	got := Inject(msg, "session-def-456")
 
 	if !strings.Contains(got, "Claude-Code-Session-Id: session-abc-123") {
 		t.Errorf("expected original trailer preserved, got %q", got)
@@ -65,9 +60,8 @@ func TestInject_DifferentSession_BothPresent(t *testing.T) {
 }
 
 func TestInject_MultiLineBody(t *testing.T) {
-	t.Setenv(envVar, "session-xyz")
 	msg := "subject line\n\nThis is the body.\nIt has multiple lines."
-	got := Inject(msg)
+	got := Inject(msg, "session-xyz")
 
 	// Trailer should be after a blank line following the body
 	expected := "subject line\n\nThis is the body.\nIt has multiple lines.\n\nClaude-Code-Session-Id: session-xyz\n"
@@ -77,9 +71,8 @@ func TestInject_MultiLineBody(t *testing.T) {
 }
 
 func TestInject_ExistingOtherTrailers(t *testing.T) {
-	t.Setenv(envVar, "session-xyz")
 	msg := "subject line\n\nSigned-off-by: Test User <test@test.com>\nReviewed-by: Other <other@test.com>\n"
-	got := Inject(msg)
+	got := Inject(msg, "session-xyz")
 
 	// New trailer should be appended in the same block (no extra blank line)
 	lines := strings.Split(strings.TrimRight(got, "\n"), "\n")
@@ -101,9 +94,8 @@ func TestInject_ExistingOtherTrailers(t *testing.T) {
 }
 
 func TestInject_EmptyEnvVar(t *testing.T) {
-	t.Setenv(envVar, "")
 	msg := "some message"
-	got := Inject(msg)
+	got := Inject(msg, "")
 	if got != msg {
 		t.Errorf("expected message unchanged for empty env var, got %q", got)
 	}
@@ -165,9 +157,8 @@ func TestAppendCustom_ExistingTrailerBlock(t *testing.T) {
 }
 
 func TestInject_TrailingNewlines(t *testing.T) {
-	t.Setenv(envVar, "session-123")
 	msg := "subject\n\n\n"
-	got := Inject(msg)
+	got := Inject(msg, "session-123")
 
 	// Should trim trailing newlines, add blank line, trailer
 	if !strings.Contains(got, "Claude-Code-Session-Id: session-123") {

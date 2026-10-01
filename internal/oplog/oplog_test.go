@@ -32,7 +32,7 @@ func TestAppendAndRead(t *testing.T) {
 		},
 	}
 
-	if err := Append(sgDir, entry); err != nil {
+	if err := Append(sgDir, entry.SessionID, entry); err != nil {
 		t.Fatal(err)
 	}
 
@@ -63,7 +63,7 @@ func TestAppendAutoFillsTimestampAndPID(t *testing.T) {
 	sgDir := setupSafegitDir(t)
 
 	entry := Entry{Op: "test"}
-	if err := Append(sgDir, entry); err != nil {
+	if err := Append(sgDir, entry.SessionID, entry); err != nil {
 		t.Fatal(err)
 	}
 
@@ -101,7 +101,7 @@ func TestAppendAcceptsOversizedLine(t *testing.T) {
 		Extra: map[string]interface{}{"big": bigValue},
 	}
 
-	if err := Append(sgDir, entry); err != nil {
+	if err := Append(sgDir, entry.SessionID, entry); err != nil {
 		t.Fatalf("append of a %d-byte value should succeed: %v", len(bigValue), err)
 	}
 
@@ -127,7 +127,7 @@ func TestAppendAcceptsOversizedLine(t *testing.T) {
 func TestReadCountsUnparseableLines(t *testing.T) {
 	sgDir := setupSafegitDir(t)
 
-	if err := Append(sgDir, Entry{Op: "commit", Extra: map[string]interface{}{"ref": "refs/heads/main", "sha": "aaa"}}); err != nil {
+	if err := Append(sgDir, "", Entry{Op: "commit", Extra: map[string]interface{}{"ref": "refs/heads/main", "sha": "aaa"}}); err != nil {
 		t.Fatal(err)
 	}
 	// Two corrupted lines: a truncated JSON object (a crash mid-append) and a
@@ -183,7 +183,7 @@ func TestReadParsesFinalLineWithoutNewline(t *testing.T) {
 func TestLastRefUpdateFailsClosedOnSkippedLines(t *testing.T) {
 	sgDir := setupSafegitDir(t)
 
-	if err := Append(sgDir, Entry{Op: "commit", SessionID: "sess-A", Extra: map[string]interface{}{"ref": "refs/heads/main", "sha": "aaa"}}); err != nil {
+	if err := Append(sgDir, "sess-A", Entry{Op: "commit", Extra: map[string]interface{}{"ref": "refs/heads/main", "sha": "aaa"}}); err != nil {
 		t.Fatal(err)
 	}
 	logFile := filepath.Join(sgDir, "log")
@@ -248,7 +248,7 @@ func TestLastRefUpdate(t *testing.T) {
 		{Op: "commit", Extra: map[string]interface{}{"ref": "refs/heads/feature", "sha": "ddd"}},
 	}
 	for _, e := range entries {
-		if err := Append(sgDir, e); err != nil {
+		if err := Append(sgDir, e.SessionID, e); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -301,7 +301,7 @@ func TestLastRefUpdateSkipsAnEntryWithNoNewTip(t *testing.T) {
 		{Op: "commit", Extra: map[string]interface{}{"ref": "refs/heads/main", "parent": "aaa", "sha": "bbb"}},
 		{Op: "merge", Extra: map[string]interface{}{"ref": "refs/heads/main", "parent": "bbb", "sha": "", "outcome": "failed"}},
 	} {
-		if err := Append(sgDir, e); err != nil {
+		if err := Append(sgDir, e.SessionID, e); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -329,7 +329,7 @@ func TestLastRefUpdateStopsAtARefDeletion(t *testing.T) {
 		{Op: "commit", Extra: map[string]interface{}{"ref": "refs/heads/main", "parent": "", "sha": "bbb"}},
 		{Op: "undo", Extra: map[string]interface{}{"ref": "refs/heads/main", "sha": "", "oldSha": "bbb", "deleted": true}},
 	} {
-		if err := Append(sgDir, e); err != nil {
+		if err := Append(sgDir, e.SessionID, e); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -343,13 +343,12 @@ func TestLastRefUpdateStopsAtARefDeletion(t *testing.T) {
 	}
 }
 
-func TestAppendAutoFillsSessionID(t *testing.T) {
+// TestAppendRecordsTheGivenSession: the entry records the session the caller
+// passes, which the command layer read through the CLI framework's handshake.
+func TestAppendRecordsTheGivenSession(t *testing.T) {
 	sgDir := setupSafegitDir(t)
 
-	t.Setenv("CLAUDE_CODE_SESSION_ID", "sess-abc-123")
-
-	entry := Entry{Op: "commit"}
-	if err := Append(sgDir, entry); err != nil {
+	if err := Append(sgDir, "sess-abc-123", Entry{Op: "commit"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -368,13 +367,14 @@ func TestAppendAutoFillsSessionID(t *testing.T) {
 	}
 }
 
-func TestAppendSessionIDEmptyWithoutEnv(t *testing.T) {
+// TestAppendDoesNotReadTheEnvironment: the session comes from the caller
+// alone; a session variable in the environment is not consulted.
+func TestAppendDoesNotReadTheEnvironment(t *testing.T) {
 	sgDir := setupSafegitDir(t)
 
-	t.Setenv("CLAUDE_CODE_SESSION_ID", "")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "sess-from-the-environment")
 
-	entry := Entry{Op: "commit"}
-	if err := Append(sgDir, entry); err != nil {
+	if err := Append(sgDir, "", Entry{Op: "commit"}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -435,7 +435,7 @@ func TestConcurrentAppend(t *testing.T) {
 				Op:    "commit",
 				Extra: map[string]interface{}{"id": id},
 			}
-			if err := Append(sgDir, entry); err != nil {
+			if err := Append(sgDir, entry.SessionID, entry); err != nil {
 				t.Errorf("goroutine %d: %v", id, err)
 			}
 		}(i)

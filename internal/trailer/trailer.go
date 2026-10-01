@@ -13,15 +13,12 @@
 package trailer
 
 import (
-	"os"
 	"regexp"
 	"strings"
 )
 
 // SessionKey is the git trailer key used to record the Claude Code session ID.
 const SessionKey = "Claude-Code-Session-Id"
-
-const envVar = "CLAUDE_CODE_SESSION_ID"
 
 // trailerLine matches lines of the form "Key-Name: value".
 var trailerLine = regexp.MustCompile(`^[A-Za-z0-9][-A-Za-z0-9]*:\s`)
@@ -31,12 +28,13 @@ var trailerLine = regexp.MustCompile(`^[A-Za-z0-9][-A-Za-z0-9]*:\s`)
 // Co-authored-by, Reviewed-by, Acked-by, etc.
 var identityTrailerKey = regexp.MustCompile(`(?i)^[A-Za-z0-9][-A-Za-z0-9]*-[Bb][Yy]:\s`)
 
-// Inject reads CLAUDE_CODE_SESSION_ID from the environment and appends
-// a Claude-Code-Session-Id trailer to the commit message if present.
+// Inject appends a Claude-Code-Session-Id trailer naming sessionID -- the Claude
+// Code session handshake as the command layer read it through the CLI
+// framework -- to the commit message, and leaves the message alone when
+// sessionID is empty.
 // For amend: deduplicates if the same session ID already exists as a trailer;
 // keeps both if a different session's trailer is present.
-func Inject(message string) string {
-	sessionID := os.Getenv(envVar)
+func Inject(message, sessionID string) string {
 	if sessionID == "" {
 		return message
 	}

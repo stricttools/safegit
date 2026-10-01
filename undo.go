@@ -440,7 +440,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	// Acquire lock on the ref
 	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
 	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
-	lk, err := lock.Acquire(sharedDir, sgDir, ref, "undo", timeout)
+	lk, err := lock.Acquire(sharedDir, sgDir, ref, "undo", flags.sessionID, timeout)
 	if err != nil {
 		if lock.IsTimeout(err) {
 			strictcli.ExitNow(exitcode.LockTimeout, fmt.Sprintf("acquiring lock: %v", err))
@@ -524,7 +524,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	if isRootUndo {
 		undoExtra["deleted"] = true
 	}
-	_ = oplog.Append(sgDir, oplog.Entry{Op: "undo", Extra: undoExtra})
+	_ = oplog.Append(sgDir, flags.sessionID, oplog.Entry{Op: "undo", Extra: undoExtra})
 
 	flags.payload(undoPayloadFor(flags, ref, targetEntry.Op, targetSHA, currentSHA, count, isRootUndo, residue))
 

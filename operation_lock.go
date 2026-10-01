@@ -73,7 +73,7 @@ func operationLock(flags globalFlags, gitDir, op string) (func(), int, string) {
 	// independently), and so does the oplog a stale-lock recovery is recorded
 	// in.
 	sgDir := repo.SafegitDir(gitDir)
-	lk, err := lock.Acquire(sgDir, sgDir, lock.OperationRef, op, timeout)
+	lk, err := lock.Acquire(sgDir, sgDir, lock.OperationRef, op, flags.sessionID, timeout)
 	if err != nil {
 		if lock.IsTimeout(err) {
 			return nil, exitcode.LockTimeout, fmt.Sprintf("%v\n  another safegit operation owns this worktree; wait for it, or release the lock with: safegit unlock %s", err, lock.OperationRef)
@@ -109,7 +109,7 @@ func acquireRewriteLock(ctx context.Context, flags globalFlags, gitDir, sgDir, o
 	}
 	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
 	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
-	lk, err := lock.Acquire(sharedDir, sgDir, lock.RewriteRef, op, timeout)
+	lk, err := lock.Acquire(sharedDir, sgDir, lock.RewriteRef, op, flags.sessionID, timeout)
 	if err != nil {
 		// The real error, not a fixed sentence: it names the ref and the
 		// process still holding it, which is the only thing that tells the

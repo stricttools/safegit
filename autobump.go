@@ -375,7 +375,7 @@ func maybeAutoBumpParent(ctx context.Context, flags globalFlags, gitDir, newHead
 	if sha != "" {
 		// Log to the sub's oplog
 		sgDir := repo.SafegitDir(gitDir)
-		_ = oplog.Append(sgDir, oplog.Entry{
+		_ = oplog.Append(sgDir, flags.sessionID, oplog.Entry{
 			Op: "auto-bump-parent",
 			Extra: map[string]interface{}{
 				"parentBumpSHA": sha,

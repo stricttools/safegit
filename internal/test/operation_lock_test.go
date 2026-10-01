@@ -177,7 +177,7 @@ func TestCommitRereadsSequencerStateUnderTheOperationLock(t *testing.T) {
 	testutil.WriteFile(t, dir, "unrelated.txt", "unrelated\n")
 
 	sgDir := repo.SafegitDir(filepath.Join(dir, ".git"))
-	held, err := lock.Acquire(sgDir, sgDir, lock.OperationRef, "test-holder", 5*time.Second)
+	held, err := lock.Acquire(sgDir, sgDir, lock.OperationRef, "test-holder", "", 5*time.Second)
 	if err != nil {
 		t.Fatalf("the test could not take the operation lock it needs to hold: %v", err)
 	}

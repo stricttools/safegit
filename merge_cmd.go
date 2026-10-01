@@ -657,7 +657,7 @@ func fastForwardMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition
 	}
 
 	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
-	lk, err := lock.Acquire(repo.SharedSafegitDir(ctx, gitDir), sgDir, pos.ref, "merge", timeout)
+	lk, err := lock.Acquire(repo.SharedSafegitDir(ctx, gitDir), sgDir, pos.ref, "merge", flags.sessionID, timeout)
 	if err != nil {
 		if lock.IsTimeout(err) {
 			errorf(flags, "acquiring lock on %s: %v", pos.ref, err)

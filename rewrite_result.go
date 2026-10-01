@@ -438,7 +438,7 @@ func (r *RewriteResult) publish(ctx context.Context, flags globalFlags, cmd stri
 	if hooks.AnnotateTag != nil {
 		extra["tagsRewritten"] = r.TagsRewrittenCount
 	}
-	_ = oplog.Append(r.SgDir, oplog.Entry{
+	_ = oplog.Append(r.SgDir, flags.sessionID, oplog.Entry{
 		Op:    r.OpName,
 		Extra: extra,
 	})

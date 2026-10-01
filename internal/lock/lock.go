@@ -197,13 +197,14 @@ func NameFromPath(locksBaseDir, path string) string {
 // locksBaseDir is the safegit directory whose "locks/" subtree holds lock files;
 // for worktrees this should be the shared (common) safegit dir so that all
 // worktrees serialize on the same lock. safegitDir is the worktree-local
-// safegit dir used for oplog writes (stale-lock recovery events).
+// safegit dir used for oplog writes (stale-lock recovery events), which record
+// sessionID, the Claude Code session handshake the command layer read.
 // Creation is atomic, so exactly one caller wins it. If the lock is held by a
 // dead process, it is automatically replaced -- see the reclamation rules in
 // reclaim.go, which are what keep two contenders facing the same stale lock
 // from both deciding they reclaimed it. Uses exponential backoff polling
 // bounded by timeout.
-func Acquire(locksBaseDir, safegitDir, ref, op string, timeout time.Duration) (*RefLock, error) {
+func Acquire(locksBaseDir, safegitDir, ref, op, sessionID string, timeout time.Duration) (*RefLock, error) {
 	lp := lockPath(locksBaseDir, ref)
 
 	// Ensure the lock directory exists
@@ -245,7 +246,7 @@ func Acquire(locksBaseDir, safegitDir, ref, op string, timeout time.Duration) (*
 				// underneath every one of them.
 				outcome, stalePid = reclaimLocked(f, lp, os.Remove)
 				if outcome == reclaimDone {
-					_ = oplog.Append(safegitDir, oplog.Entry{
+					_ = oplog.Append(safegitDir, sessionID, oplog.Entry{
 						Op: "lock_recovered",
 						Extra: map[string]interface{}{
 							"ref":      ref,

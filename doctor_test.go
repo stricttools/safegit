@@ -119,7 +119,7 @@ func bypassDetectEnv(t *testing.T) (doctorEnv, string, func(args ...string)) {
 		t.Fatalf("mkdir safegit dir: %v", err)
 	}
 	entry := oplog.Entry{Op: "commit", Extra: map[string]interface{}{"ref": ref, "sha": sha}}
-	if err := oplog.Append(sgDir, entry); err != nil {
+	if err := oplog.Append(sgDir, entry.SessionID, entry); err != nil {
 		t.Fatalf("appending oplog entry: %v", err)
 	}
 

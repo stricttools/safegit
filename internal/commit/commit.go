@@ -131,6 +131,11 @@ type Pipeline struct {
 	// around it is exactly how a preview would move a ref for real.
 	RefUpdate RefUpdate
 
+	// SessionID is the Claude Code session handshake as the command layer read
+	// it through the CLI framework, empty when no session declared itself. The
+	// pipeline records it in the commit's session trailer and the oplog entry.
+	SessionID string
+
 	// Notices is how the pipeline writes its own lines. It is required: the
 	// command layer passes the framework's writers, so a line written from in
 	// here reaches the operator, and lands under --json, the way every other
@@ -708,7 +713,7 @@ func (p *Pipeline) tryCommit(
 		// what git's own cherry-pick records too.
 		identity = &git.CommitIdentity{Author: *req.Author}
 	}
-	commitSHA, err := git.CommitTree(ctx, treeSHA, parents, trailer.Inject(message), identity)
+	commitSHA, err := git.CommitTree(ctx, treeSHA, parents, trailer.Inject(message, p.SessionID), identity)
 	if err != nil {
 		return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
 	}
@@ -751,7 +756,7 @@ func (p *Pipeline) tryCommit(
 		// one. The ref update at Step 7 is the mutation a preview must withhold,
 		// and it is the one that IS minted.
 		lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second
-		refLock, err := lock.Acquire(repo.SharedSafegitDir(ctx, p.SafegitDir), p.SafegitDir, ref, "commit", lockTimeout)
+		refLock, err := lock.Acquire(repo.SharedSafegitDir(ctx, p.SafegitDir), p.SafegitDir, ref, "commit", p.SessionID, lockTimeout)
 		if err != nil {
 			return nil, false, fmt.Errorf("acquiring lock on %s: %w", ref, err)
 		}
@@ -839,7 +844,7 @@ func (p *Pipeline) tryCommit(
 	if req.OplogSource != "" {
 		extra["source"] = req.OplogSource
 	}
-	_ = oplog.Append(p.SafegitDir, oplog.Entry{
+	_ = oplog.Append(p.SafegitDir, p.SessionID, oplog.Entry{
 		Op:    oplogOp,
 		Extra: extra,
 	})

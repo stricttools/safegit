@@ -789,7 +789,7 @@ func commitMvMoves(flags globalFlags, gitDir, message string, pairs []mvPair) in
 		}
 	}
 
-	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags)}
+	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags), SessionID: flags.sessionID}
 	result, err := p.Execute(flags.ctx(), commit.CommitRequest{
 		Message:      message,
 		DryRun:       flags.dryRun,

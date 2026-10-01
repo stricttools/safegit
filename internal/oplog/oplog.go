@@ -32,22 +32,23 @@ func Path(safegitDir string) string {
 	return filepath.Join(safegitDir, "log")
 }
 
-// Append writes a single entry to the log file atomically.
+// Append writes a single entry to the log file atomically, recording sessionID
+// as the session that performed it. sessionID is the Claude Code session
+// handshake as the command layer read it through the CLI framework, and empty
+// when no session declared itself.
 // The entry is serialized as a single JSON line of any length: the exclusive
 // flock held across the whole write is the atomicity mechanism, so the 4096-byte
 // POSIX O_APPEND guarantee is not what this file relies on and no line cap is
 // needed. (Same reasoning as the scrub rewrite-map journal, which holds
 // arbitrarily large commit maps under the same lock.)
-func Append(safegitDir string, entry Entry) error {
+func Append(safegitDir, sessionID string, entry Entry) error {
 	if entry.Timestamp.IsZero() {
 		entry.Timestamp = time.Now().UTC()
 	}
 	if entry.PID == 0 {
 		entry.PID = os.Getpid()
 	}
-	if entry.SessionID == "" {
-		entry.SessionID = os.Getenv("CLAUDE_CODE_SESSION_ID")
-	}
+	entry.SessionID = sessionID
 
 	data, err := json.Marshal(entry)
 	if err != nil {

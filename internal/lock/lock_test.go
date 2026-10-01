@@ -21,7 +21,7 @@ func setupSafegitDir(t *testing.T) string {
 func TestAcquireAndRelease(t *testing.T) {
 	sgDir := setupSafegitDir(t)
 
-	lock, err := Acquire(sgDir, sgDir, "refs/heads/main", "commit", 5*time.Second)
+	lock, err := Acquire(sgDir, sgDir, "refs/heads/main", "commit", "", 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,14 +43,14 @@ func TestAcquireAndRelease(t *testing.T) {
 func TestAcquireConflict(t *testing.T) {
 	sgDir := setupSafegitDir(t)
 
-	lock1, err := Acquire(sgDir, sgDir, "refs/heads/main", "commit", 5*time.Second)
+	lock1, err := Acquire(sgDir, sgDir, "refs/heads/main", "commit", "", 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer lock1.Release()
 
 	// Second acquire should time out quickly
-	_, err = Acquire(sgDir, sgDir, "refs/heads/main", "commit", 50*time.Millisecond)
+	_, err = Acquire(sgDir, sgDir, "refs/heads/main", "commit", "", 50*time.Millisecond)
 	if err == nil {
 		t.Fatal("expected timeout error on conflicting acquire")
 	}
@@ -62,13 +62,13 @@ func TestAcquireConflict(t *testing.T) {
 func TestAcquireTimeoutIsTyped(t *testing.T) {
 	sgDir := setupSafegitDir(t)
 
-	held, err := Acquire(sgDir, sgDir, "safegit/rewrite", "scrub-file", 5*time.Second)
+	held, err := Acquire(sgDir, sgDir, "safegit/rewrite", "scrub-file", "", 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer held.Release()
 
-	_, err = Acquire(sgDir, sgDir, "safegit/rewrite", "scrub-match", 50*time.Millisecond)
+	_, err = Acquire(sgDir, sgDir, "safegit/rewrite", "scrub-match", "", 50*time.Millisecond)
 	if err == nil {
 		t.Fatal("expected a timeout on the contended acquire")
 	}
@@ -104,7 +104,7 @@ func TestNonTimeoutAcquireFailureIsNotTyped(t *testing.T) {
 	if err := os.WriteFile(blocker, []byte("not a directory\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Acquire(sgDir, sgDir, "safegit/rewrite", "scrub-file", 50*time.Millisecond)
+	_, err := Acquire(sgDir, sgDir, "safegit/rewrite", "scrub-file", "", 50*time.Millisecond)
 	if err == nil {
 		t.Fatal("expected an error when the locks directory cannot be created")
 	}
@@ -130,7 +130,7 @@ func TestStaleLockReclaimed(t *testing.T) {
 	}
 
 	// Acquire should reclaim the stale lock
-	lock, err := Acquire(sgDir, sgDir, ref, "commit", 5*time.Second)
+	lock, err := Acquire(sgDir, sgDir, ref, "commit", "", 5*time.Second)
 	if err != nil {
 		t.Fatalf("should reclaim stale lock: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestForceRelease(t *testing.T) {
 	}
 
 	// Create and force-release
-	lock, err := Acquire(sgDir, sgDir, ref, "commit", 5*time.Second)
+	lock, err := Acquire(sgDir, sgDir, ref, "commit", "", 5*time.Second)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +281,7 @@ func TestConcurrentAcquire(t *testing.T) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			lock, err := Acquire(sgDir, sgDir, ref, "commit", 2*time.Second)
+			lock, err := Acquire(sgDir, sgDir, ref, "commit", "", 2*time.Second)
 			if err != nil {
 				return // timeout is expected for most goroutines
 			}

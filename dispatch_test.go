@@ -12,7 +12,8 @@ import (
 // "--json" or "--quiet"); the returned Result holds what the run wrote.
 func dispatch(t *testing.T, reserved []string, fn func(flags globalFlags)) strictcli.Result {
 	t.Helper()
-	app := strictcli.NewApp("probe", "0", "a throwaway app that gives a test a dispatch context")
+	app := strictcli.NewApp("probe", "0", "a throwaway app that gives a test a dispatch context",
+		strictcli.WithHandshakeEnv(sessionIDEnvVar, "the session handshake globalsToFlags reads"))
 	app.Command("probe", "run the function under test", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		fn(globalsToFlags(ctx, kwargs))
 		return strictcli.Exit(0)

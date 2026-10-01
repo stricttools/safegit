@@ -538,7 +538,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		return exitcode.General
 	}
 
-	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags)}
+	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags), SessionID: flags.sessionID}
 	result, err := p.Execute(ctx, commit.CommitRequest{
 		Message:      message,
 		Trailers:     trailers,
@@ -1132,7 +1132,7 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 		return out, exitcode.General, false
 	}
 
-	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags)}
+	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags), SessionID: flags.sessionID}
 	result, err := p.Execute(ctx, commit.CommitRequest{
 		Message:      message,
 		Trailers:     req.trailers,

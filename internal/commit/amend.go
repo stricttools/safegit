@@ -364,7 +364,7 @@ func (p *Pipeline) tryAmend(
 	}
 
 	// Create the replacement commit on the replaced commit's own parents.
-	commitSHA, err := git.CommitTree(ctx, treeSHA, parents, trailer.Inject(msg), nil)
+	commitSHA, err := git.CommitTree(ctx, treeSHA, parents, trailer.Inject(msg, p.SessionID), nil)
 	if err != nil {
 		return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
 	}
@@ -375,7 +375,7 @@ func (p *Pipeline) tryAmend(
 	// update, which it records instead of performing.
 	if !req.DryRun {
 		lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second
-		refLock, err := lock.Acquire(repo.SharedSafegitDir(ctx, p.SafegitDir), p.SafegitDir, ref, "amend", lockTimeout)
+		refLock, err := lock.Acquire(repo.SharedSafegitDir(ctx, p.SafegitDir), p.SafegitDir, ref, "amend", p.SessionID, lockTimeout)
 		if err != nil {
 			return nil, false, fmt.Errorf("acquiring lock on %s: %w", ref, err)
 		}
@@ -417,7 +417,7 @@ func (p *Pipeline) tryAmend(
 
 	// Oplog, recorded before the index is reconciled: a reconciliation failure
 	// is fatal, and the amend it followed must still be undoable.
-	_ = oplog.Append(p.SafegitDir, oplog.Entry{
+	_ = oplog.Append(p.SafegitDir, p.SessionID, oplog.Entry{
 		Op: "amend",
 		Extra: map[string]interface{}{
 			"ref":      ref,
@@ -667,13 +667,13 @@ func (p *Pipeline) tryReword(
 	// which it records instead of performing.
 	commitSHA := ""
 	if !req.DryRun {
-		commitSHA, err = git.CommitTree(ctx, treeSHA, parents, trailer.Inject(msg), nil)
+		commitSHA, err = git.CommitTree(ctx, treeSHA, parents, trailer.Inject(msg, p.SessionID), nil)
 		if err != nil {
 			return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
 		}
 
 		lockTimeout := time.Duration(p.Config.Lock.AcquireTimeoutSeconds) * time.Second
-		refLock, err := lock.Acquire(repo.SharedSafegitDir(ctx, p.SafegitDir), p.SafegitDir, ref, "reword", lockTimeout)
+		refLock, err := lock.Acquire(repo.SharedSafegitDir(ctx, p.SafegitDir), p.SafegitDir, ref, "reword", p.SessionID, lockTimeout)
 		if err != nil {
 			return nil, false, fmt.Errorf("acquiring lock on %s: %w", ref, err)
 		}
@@ -708,7 +708,7 @@ func (p *Pipeline) tryReword(
 
 	// Oplog before reconciliation, for the same reason as amend: a fatal
 	// reconciliation must leave an undoable reword behind it.
-	_ = oplog.Append(p.SafegitDir, oplog.Entry{
+	_ = oplog.Append(p.SafegitDir, p.SessionID, oplog.Entry{
 		Op: "reword",
 		Extra: map[string]interface{}{
 			"ref":    ref,

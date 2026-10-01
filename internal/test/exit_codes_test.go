@@ -23,7 +23,7 @@ func holdLock(t *testing.T, dir, ref, op string) {
 	if err := os.MkdirAll(sgDir, 0755); err != nil {
 		t.Fatalf("creating %s: %v", sgDir, err)
 	}
-	lk, err := lock.Acquire(sgDir, sgDir, ref, op, 5*time.Second)
+	lk, err := lock.Acquire(sgDir, sgDir, ref, op, "", 5*time.Second)
 	if err != nil {
 		t.Fatalf("the test could not take the %s lock it needs to hold: %v", ref, err)
 	}

@@ -143,7 +143,7 @@ func TestIsStaleUnparseableStartFailsClosed(t *testing.T) {
 // identity a staleness check needs is written when the lock is taken.
 func TestAcquireRecordsStartIdentity(t *testing.T) {
 	sgDir := setupSafegitDir(t)
-	lk, err := Acquire(sgDir, sgDir, "refs/heads/main", "commit", 5*time.Second)
+	lk, err := Acquire(sgDir, sgDir, "refs/heads/main", "commit", "", 5*time.Second)
 	if err != nil {
 		t.Fatalf("Acquire: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestAcquireDoesNotStealLiveLock(t *testing.T) {
 	plantLock(t, lp, proc.Pid, trueStart(t, proc.Pid))
 	setMtime(t, lp, time.Now().Add(-2*time.Hour))
 
-	if _, err := Acquire(sgDir, sgDir, ref, "commit", 200*time.Millisecond); err == nil {
+	if _, err := Acquire(sgDir, sgDir, ref, "commit", "", 200*time.Millisecond); err == nil {
 		t.Fatal("Acquire took a lock held by a live process")
 	}
 	if _, err := os.Stat(lp); err != nil {

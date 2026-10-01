@@ -326,7 +326,7 @@ func appendOperationEntry(flags globalFlags, sgDir, op string, pos oplogPosition
 	for k, v := range more {
 		extra[k] = v
 	}
-	_ = oplog.Append(sgDir, oplog.Entry{Op: op, Extra: extra})
+	_ = oplog.Append(sgDir, flags.sessionID, oplog.Entry{Op: op, Extra: extra})
 }
 
 // navigationExtra builds the entry for an operation that moves HEAD and no
@@ -358,7 +358,7 @@ func appendNavigationEntry(flags globalFlags, sgDir, op, ref, oldTip, newTip str
 	if flags.dryRun {
 		return
 	}
-	_ = oplog.Append(sgDir, oplog.Entry{Op: op, Extra: navigationExtra(ref, oldTip, newTip, ok, more)})
+	_ = oplog.Append(sgDir, flags.sessionID, oplog.Entry{Op: op, Extra: navigationExtra(ref, oldTip, newTip, ok, more)})
 }
 
 func navigationExtra(ref, oldTip, newTip string, ok bool, more map[string]interface{}) map[string]interface{} {

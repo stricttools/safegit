@@ -321,7 +321,7 @@ func TestAcquireContendedStaleReclamationKeepsExclusion(t *testing.T) {
 				op := fmt.Sprintf("commit-%d-%d", round, i)
 				<-start
 
-				lk, err := Acquire(sgDir, sgDir, ref, op, 3*time.Second)
+				lk, err := Acquire(sgDir, sgDir, ref, op, "", 3*time.Second)
 				if err != nil {
 					return // losing the race and timing out is a legal outcome
 				}

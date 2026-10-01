@@ -355,7 +355,7 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 		return exitcode.PushFailed
 	}
 
-	_ = oplog.Append(sgDir, oplog.Entry{
+	_ = oplog.Append(sgDir, flags.sessionID, oplog.Entry{
 		Op: "backup",
 		Extra: map[string]interface{}{
 			"remote":      remote,
@@ -499,7 +499,7 @@ func runBackupRestore(flags globalFlags, remote string) int {
 			slot, branch, slot, fetched[:12], oldHead[:12], oldHead[:12], fetched[:12]))
 	}
 
-	_ = oplog.Append(sgDir, oplog.Entry{
+	_ = oplog.Append(sgDir, flags.sessionID, oplog.Entry{
 		Op: "backup-restore",
 		Extra: map[string]interface{}{
 			"remote": remote,

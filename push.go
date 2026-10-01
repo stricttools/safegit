@@ -434,7 +434,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 				"remoteRef": r.RemoteRef, "remoteSha": r.RemoteSHA,
 			}
 		}
-		_ = oplog.Append(sgDir, oplog.Entry{
+		_ = oplog.Append(sgDir, flags.sessionID, oplog.Entry{
 			Op: "push",
 			Extra: map[string]interface{}{
 				"remote":   remote,

@@ -59,6 +59,11 @@ type globalFlags struct {
 	// a pointer so the cache survives globalFlags being copied by value into
 	// every handler.
 	root *executionRoot
+	// sessionID is the Claude Code session handshake, read once per dispatch
+	// through the framework's declared handshake (sessionIDEnvVar), empty when
+	// no session declared itself. Everything that records a session -- the
+	// oplog, the commit trailer, a lock recovery record -- takes it from here.
+	sessionID string
 	// canceled is this dispatch's cancellation: done when the framework's
 	// Context is -- by the first SIGINT or SIGTERM while the handler runs, or
 	// when the dispatch ends. Every git subprocess safegit starts runs under a
@@ -812,10 +817,8 @@ func newApp() *strictcli.App {
 	app.Command("undo", "reverse the last safegit-authored operation using the oplog -- a commit, an mv, an amend, a reword, a merge, pull, cherry-pick or revert safegit's own commit pipeline authored, or a conclusion (merge-continue, cherry-pick-continue, revert-continue). A fast-forward is REFUSED rather than reversed: the tip it moved onto is a commit git created and safegit never rolls a branch back over one. It moves a REF and never the working tree", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		bypassSession := optBool(kwargs["bypass_session"], false)
 		count := optInt(kwargs["count"], 1)
-		// Read the session handshake through the framework accessor so the
-		// dependency is declared rather than an ambient os.Getenv.
-		sessionID, _ := ctx.InfraValue(sessionIDEnvVar)
-		return strictcli.Exit(runUndo(globalsToFlags(ctx, kwargs), bypassSession, count, sessionID))
+		gf := globalsToFlags(ctx, kwargs)
+		return strictcli.Exit(runUndo(gf, bypassSession, count, gf.sessionID))
 	}),
 		strictcli.WithEffect(strictcli.EffectMutating),
 		strictcli.WithTags("json"),
@@ -947,6 +950,7 @@ func globalsToFlags(ctx *strictcli.Context, globals map[string]interface{}) glob
 		ctx.JSON(),
 	)
 	gf.sc = ctx
+	gf.sessionID, _ = ctx.InfraValue(sessionIDEnvVar)
 	gf.canceled = frameworkCancellation(ctx)
 	return gf
 }
