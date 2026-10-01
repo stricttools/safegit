@@ -18,10 +18,12 @@ func withGhVisibility(t *testing.T, fn func(ctx context.Context, slug string) (s
 	t.Cleanup(func() { ghRepoVisibility = prev })
 }
 
-// captureConfirm runs fn with stdout and stderr redirected into one pipe and
-// stdin pointed at the null device, so a confirmation prompt neither pollutes
-// the test log nor waits on a terminal that is not there.
-func captureConfirm(t *testing.T, fn func() bool) (bool, string) {
+// captureConfirm runs fn through dispatch, with the reserved flags the CLI
+// would set for approved and jsonOut. stdin is the null device, so a prompt
+// declines instead of waiting on a terminal, and the prompt itself -- the one
+// line safegit writes to stderr directly -- is captured too. The returned text
+// is the prompt, then the run's stdout, then its stderr.
+func captureConfirm(t *testing.T, approved, jsonOut bool, fn func(flags globalFlags) bool) (bool, string) {
 	t.Helper()
 
 	r, w, err := os.Pipe()
@@ -33,10 +35,19 @@ func captureConfirm(t *testing.T, fn func() bool) (bool, string) {
 		t.Fatalf("opening %s: %v", os.DevNull, err)
 	}
 
-	origOut, origErr, origIn := os.Stdout, os.Stderr, os.Stdin
-	os.Stdout, os.Stderr, os.Stdin = w, w, devNull
-	result := fn()
-	os.Stdout, os.Stderr, os.Stdin = origOut, origErr, origIn
+	var reserved []string
+	if approved {
+		reserved = append(reserved, "--approve-consequential")
+	}
+	if jsonOut {
+		reserved = append(reserved, "--json")
+	}
+
+	var result bool
+	origErr, origIn := os.Stderr, os.Stdin
+	os.Stderr, os.Stdin = w, devNull
+	res := dispatch(t, reserved, func(flags globalFlags) { result = fn(flags) })
+	os.Stderr, os.Stdin = origErr, origIn
 
 	w.Close()
 	captured, err := io.ReadAll(r)
@@ -46,13 +57,7 @@ func captureConfirm(t *testing.T, fn func() bool) (bool, string) {
 	r.Close()
 	devNull.Close()
 
-	return result, string(captured)
-}
-
-// testFlags builds globalFlags the way the CLI does, so the
-// --json/--approve-consequential coupling under test is the real one.
-func testFlags(approved, jsonOut bool) globalFlags {
-	return newGlobalFlags(reservedFlags{approved: approved}, "", jsonOut)
+	return result, string(captured) + res.Stdout + res.Stderr
 }
 
 func TestClassifyRemoteGithubVisibility(t *testing.T) {
@@ -125,13 +130,13 @@ func TestConfirmExposurePublicRequiresDeliberateConsent(t *testing.T) {
 	})
 	const url = "https://github.com/owner/repo.git"
 
-	confirm := func(flags globalFlags, allowPublicRemote bool) (bool, string) {
-		return captureConfirm(t, func() bool {
+	confirm := func(approved, jsonOut, allowPublicRemote bool) (bool, string) {
+		return captureConfirm(t, approved, jsonOut, func(flags globalFlags) bool {
 			return confirmExposure(context.Background(), flags, "origin", url, allowPublicRemote)
 		})
 	}
 
-	ok, out := confirm(testFlags(false, false), false)
+	ok, out := confirm(false, false, false)
 	if ok {
 		t.Error("an unanswered prompt must decline the backup")
 	}
@@ -139,7 +144,7 @@ func TestConfirmExposurePublicRequiresDeliberateConsent(t *testing.T) {
 		t.Errorf("expected the public-repository warning, got: %s", out)
 	}
 
-	ok, out = confirm(testFlags(false, true), false)
+	ok, out = confirm(false, true, false)
 	if ok {
 		t.Error("--json must not answer the exposure confirmation")
 	}
@@ -149,17 +154,17 @@ func TestConfirmExposurePublicRequiresDeliberateConsent(t *testing.T) {
 
 	// The decoupling: --approve-consequential says "yes, run this command",
 	// which is not a statement about where the branch lands.
-	if ok, out = confirm(testFlags(true, true), false); ok {
+	if ok, out = confirm(true, true, false); ok {
 		t.Error("--approve-consequential must not answer the exposure confirmation")
 	}
 	if !strings.Contains(out, "--allow-public-remote") {
 		t.Errorf("the refusal must still name --allow-public-remote, got: %s", out)
 	}
 
-	if ok, _ = confirm(testFlags(false, false), true); !ok {
+	if ok, _ = confirm(false, false, true); !ok {
 		t.Error("--allow-public-remote must satisfy the exposure confirmation")
 	}
-	if ok, _ = confirm(testFlags(false, true), true); !ok {
+	if ok, _ = confirm(false, true, true); !ok {
 		t.Error("--allow-public-remote must satisfy the confirmation even with --json")
 	}
 }
@@ -171,8 +176,8 @@ func TestConfirmExposurePrivateAsksNothing(t *testing.T) {
 		return "PRIVATE\n", nil
 	})
 
-	ok, out := captureConfirm(t, func() bool {
-		return confirmExposure(context.Background(), testFlags(false, false), "origin", "https://github.com/owner/repo.git", false)
+	ok, out := captureConfirm(t, false, false, func(flags globalFlags) bool {
+		return confirmExposure(context.Background(), flags, "origin", "https://github.com/owner/repo.git", false)
 	})
 	if !ok {
 		t.Error("a private remote must be backed up without confirmation")

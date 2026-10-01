@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/stricttools/safegit/internal/commit"
 	"github.com/stricttools/safegit/internal/exitcode"
@@ -162,9 +161,9 @@ func commitStands(err error) *commit.PartialError {
 // stderr unconditionally, --quiet included: stdout belongs to the envelope in
 // machine mode, and a request for less chatter is not a request to be left
 // guessing where one's own work went.
-func reportAftercareFailure(residue []residueEntry, step string, err error) []residueEntry {
+func reportAftercareFailure(flags globalFlags, residue []residueEntry, step string, err error) []residueEntry {
 	detail := fmt.Sprintf("%s failed: %v", step, err)
-	fmt.Fprintf(os.Stderr, "error: %s\n", detail)
+	errorf(flags, "%s", detail)
 	return append(residue, residueEntry{Step: step, Detail: detail})
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/stricttools/safegit/internal/conflict"
 	"github.com/stricttools/safegit/internal/exitcode"
@@ -114,7 +115,7 @@ type declinedCheck struct {
 // commit pipeline. It returns 0 when the conclusion may proceed, alongside every
 // check it DECLINED to make: an exempted path is not a checked path, and the
 // report says so rather than reading as though the whole set was verified.
-func (op continueOp) verifyMarkers(ctx context.Context, state sequencer.State, sides map[string]conflict.Sides, declared []resolution) ([]declinedCheck, int) {
+func (op continueOp) verifyMarkers(flags globalFlags, ctx context.Context, state sequencer.State, sides map[string]conflict.Sides, declared []resolution) ([]declinedCheck, int) {
 	choices := make(map[string]resolutionChoice, len(declared))
 	for _, r := range declared {
 		choices[r.Path] = r.Choice
@@ -122,7 +123,7 @@ func (op continueOp) verifyMarkers(ctx context.Context, state sequencer.State, s
 
 	paths, err := verifiablePaths(ctx, sides, choices)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return nil, exitcode.General
 	}
 	if len(paths) == 0 {
@@ -139,23 +140,23 @@ func (op continueOp) verifyMarkers(ctx context.Context, state sequencer.State, s
 	// and a base-content lookup finds no path there, which is exactly true.
 	firstParent, err := git.HeadTreeish(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: naming the tree the conflict attributes are read from: %v\n", err)
+		errorf(flags, "naming the tree the conflict attributes are read from: %v", err)
 		return nil, exitcode.General
 	}
 	attrs, err := conflict.Resolve(ctx, firstParent, paths)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: reading the conflict attributes from the first parent's tree: %v\n", err)
+		errorf(flags, "reading the conflict attributes from the first parent's tree: %v", err)
 		return nil, exitcode.General
 	}
 	exempt, err := exemptPaths(ctx, firstParent, paths)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return nil, exitcode.General
 	}
 
 	v := &markerCheck{op: op, state: state, sides: sides, choices: choices, attrs: attrs, baseCommits: baseCommitsFor(op.kind, firstParent, state)}
 	if err := v.readAutoMerge(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "error: reading what git recorded for this conflict: %v\n", err)
+		errorf(flags, "reading what git recorded for this conflict: %v", err)
 		return nil, exitcode.General
 	}
 
@@ -172,14 +173,14 @@ func (op continueOp) verifyMarkers(ctx context.Context, state sequencer.State, s
 		}
 		found, err := v.check(ctx, path)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: checking %s for conflict markers: %v\n", path, err)
+			errorf(flags, "checking %s for conflict markers: %v", path, err)
 			return nil, exitcode.General
 		}
 		violations = append(violations, found...)
 	}
 
 	if len(violations) > 0 {
-		return declines, op.refuseSurvivingMarkers(violations)
+		return declines, op.refuseSurvivingMarkers(flags, violations)
 	}
 	return declines, 0
 }
@@ -576,7 +577,7 @@ func regionInAny(bases [][]byte, r conflict.Region, size int) bool {
 }
 
 // refuseSurvivingMarkers is the rejection: every location, then both ways out.
-func (op continueOp) refuseSurvivingMarkers(violations []markerViolation) int {
+func (op continueOp) refuseSurvivingMarkers(flags globalFlags, violations []markerViolation) int {
 	sort.Slice(violations, func(i, j int) bool {
 		if violations[i].path != violations[j].path {
 			return violations[i].path < violations[j].path
@@ -584,29 +585,32 @@ func (op continueOp) refuseSurvivingMarkers(violations []markerViolation) int {
 		return violations[i].line < violations[j].line
 	})
 
-	fmt.Fprintf(os.Stderr, "error: %d conflict marker block(s) survive in what this %s would commit:\n", len(violations), op.kind)
+	var report strings.Builder
+	fmt.Fprintf(&report, "%d conflict marker block(s) survive in what this %s would commit:", len(violations), op.kind)
 	for _, v := range violations {
-		fmt.Fprintf(os.Stderr, "  %s:%d  %s\n", v.path, v.line, v.why)
+		fmt.Fprintf(&report, "\n  %s:%d  %s", v.path, v.line, v.why)
 	}
-	fmt.Fprintf(os.Stderr, "  nothing was committed and the %s is still in progress. Edit the file(s) and re-run.\n", op.kind)
+	fmt.Fprintf(&report, "\n  nothing was committed and the %s is still in progress. Edit the file(s) and re-run.", op.kind)
 	// The stage shortcut is only offered for a path git still holds unmerged:
 	// naming a path that is NOT conflicted is itself a refusal, so suggesting it
 	// for a path the operator already staged would send them into another error.
 	for _, v := range violations {
 		if v.conflicted {
-			fmt.Fprintf(os.Stderr, "  Or take one side whole, which cannot carry a marker:\n")
-			fmt.Fprintf(os.Stderr, "    safegit %s --resolve '%s=ours'   (or =theirs)\n", op.command, v.path)
+			fmt.Fprintf(&report, "\n  Or take one side whole, which cannot carry a marker:")
+			fmt.Fprintf(&report, "\n    safegit %s --resolve '%s=ours'   (or =theirs)", op.command, v.path)
 			break
 		}
 	}
-	printMarkerExemption(violations[0].path)
+	report.WriteString(markerExemptionLines(violations[0].path))
+	errorf(flags, "%s", report.String())
 	return exitcode.ConclusionMarkerSurvived
 }
 
-// printMarkerExemption prints the one-line declaration that would exempt a
-// path, which every rejection owes the operator.
-func printMarkerExemption(path string) {
-	fmt.Fprintf(os.Stderr, "  or, if this path's real content contains marker-shaped lines, declare it in .gitattributes:\n")
-	fmt.Fprintf(os.Stderr, "    %s -%s\n", path, markerExemptionAttr)
-	fmt.Fprintf(os.Stderr, "    (read from the first parent's tree, so the declaration must be COMMITTED before the conflict)\n")
+// markerExemptionLines renders the one-line declaration that would exempt a
+// path, which every rejection owes the operator, as lines for the end of the
+// refusal, each beginning with a newline.
+func markerExemptionLines(path string) string {
+	return fmt.Sprintf("\n  or, if this path's real content contains marker-shaped lines, declare it in .gitattributes:"+
+		"\n    %s -%s"+
+		"\n    (read from the first parent's tree, so the declaration must be COMMITTED before the conflict)", path, markerExemptionAttr)
 }

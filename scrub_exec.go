@@ -96,11 +96,11 @@ func scrubRangeSummary(fromSHA string, entireHistory bool) string {
 // checks, and printing it here is what makes the check reachable later without
 // the operator reconstructing the invocation from memory.
 func printRotationNotice(flags globalFlags, recheck string) {
-	infof(flags, "\nRotate the credential. Rewriting history does not un-leak a secret that was\n")
-	infof(flags, "ever pushed: every clone, fork, fetch and cache that already has the old\n")
-	infof(flags, "history still holds it, and this command cannot reach any of them.\n")
-	infof(flags, "To re-check this repository later:\n")
-	infof(flags, "  %s\n", recheck)
+	infof(flags, "\nRotate the credential. Rewriting history does not un-leak a secret that was")
+	infof(flags, "ever pushed: every clone, fork, fetch and cache that already has the old")
+	infof(flags, "history still holds it, and this command cannot reach any of them.")
+	infof(flags, "To re-check this repository later:")
+	infof(flags, "  %s", recheck)
 }
 
 // printScopeNotice states what a successful rewrite's scope actually was: the
@@ -116,10 +116,10 @@ func printRotationNotice(flags globalFlags, recheck string) {
 // refs names the ref(s) the walk actually followed, already spelled for
 // printing (a submodule rewrite passes two).
 func printScopeNotice(flags globalFlags, refs ...string) {
-	infof(flags, "\nScope: rewrote the history of %s; other refs were not rewritten.\n", strings.Join(refs, " and "))
-	infof(flags, "A branch, tag or remote-tracking ref that pointed into the walked history moved\n")
-	infof(flags, "with it, but any ref reaching commits this walk never visited still points at\n")
-	infof(flags, "the history it always did.\n")
+	infof(flags, "\nScope: rewrote the history of %s; other refs were not rewritten.", strings.Join(refs, " and "))
+	infof(flags, "A branch, tag or remote-tracking ref that pointed into the walked history moved")
+	infof(flags, "with it, but any ref reaching commits this walk never visited still points at")
+	infof(flags, "the history it always did.")
 }
 
 // recheckCommandForPatterns builds the `scrub verify` invocation that re-checks
@@ -309,7 +309,7 @@ func executeScrubRecipe(
 	// Scan for matching blobs. When scanEntireHistory is set, use EntireHistory
 	// for scanning to find ALL matching blobs regardless of the walk range.
 	// Otherwise use the user's fromSHA/entireHistory for range-scoped scanning.
-	infof(flags, "Scanning objects...\n")
+	infof(flags, "Scanning objects...")
 	scanOpts := scan.ScanOpts{
 		FromSHA:       fromSHA,
 		EntireHistory: entireHistory,
@@ -326,7 +326,7 @@ func executeScrubRecipe(
 	// but it is stated in the terms the operator asked in, so "it worked" and
 	// "it found nothing" can never be confused for each other.
 	if len(results.Matches) == 0 && len(gitlinkMap) == 0 {
-		infof(flags, "0 commits contained the pattern. Nothing was rewritten and no history changed.\n")
+		infof(flags, "0 commits contained the pattern. Nothing was rewritten and no history changed.")
 		return publishCompanionsAlone(), nil
 	}
 
@@ -400,24 +400,24 @@ func executeScrubRecipe(
 	}
 
 	// Build the combined blob map via the recipe.
-	infof(flags, "Building blob replacement map (%d candidate blobs)...\n", len(blobSHAList))
+	infof(flags, "Building blob replacement map (%d candidate blobs)...", len(blobSHAList))
 	blobMap, err := buildRecipeBlobMap(ctx, recipe, blobSHAList, blobAllowedOps)
 	if err != nil {
 		strictcli.ExitNow(exitcode.General, fmt.Sprintf("building blob map: %v", err))
 	}
 
-	infof(flags, "Found %d blobs to replace, %d commit message matches, %d tag matches\n",
+	infof(flags, "Found %d blobs to replace, %d commit message matches, %d tag matches",
 		len(blobMap), commitMatchCount, tagMatchCount)
 
 	if len(blobMap) == 0 && commitMatchCount == 0 && tagMatchCount == 0 && len(gitlinkMap) == 0 {
-		infof(flags, "0 commits contained the pattern within scope. Nothing was rewritten and no history changed.\n")
+		infof(flags, "0 commits contained the pattern within scope. Nothing was rewritten and no history changed.")
 		return publishCompanionsAlone(), nil
 	}
 
 	// `scrub run` declares itself consequential, so the framework's confirm
 	// protocol already took deliberate consent for this rewrite before dispatch.
 	// The scale is stated, not asked a second time.
-	infof(flags, "Rewriting history using %d recipe operations. This cannot be undone.\n", len(recipe.Operations))
+	infof(flags, "Rewriting history using %d recipe operations. This cannot be undone.", len(recipe.Operations))
 
 	// Capture old HEAD
 	oldHeadSHA, err := git.RevParse(ctx, "HEAD")
@@ -442,7 +442,7 @@ func executeScrubRecipe(
 	}
 
 	commitCount := len(shas)
-	infof(flags, "Rewriting %d commits...\n", commitCount)
+	infof(flags, "Rewriting %d commits...", commitCount)
 
 	messagesModified := 0
 	treeCache := make(map[string]treeRewrite)
@@ -456,7 +456,7 @@ func executeScrubRecipe(
 	// Tier A checks the rewritten commits against it before any ref moves.
 	intent := PerPathIntent()
 
-	shaMap, rewrittenCount, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
+	shaMap, rewrittenCount, err := walkAndRewrite(flags, ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 		var xform CommitTransform
 
 		// Replace blobs in tree
@@ -532,7 +532,7 @@ func executeScrubRecipe(
 	// about to be published -- read from the tips the ref update plan carries,
 	// which is the only way to ask the question before the refs move.
 	tierA := func(ctx context.Context, plan *RefUpdatePlan) error {
-		infof(flags, "Checking the rewritten history for surviving matches...\n")
+		infof(flags, "Checking the rewritten history for surviving matches...")
 		for i, op := range recipe.Operations {
 			pat := recipe.Patterns[i]
 			if err := verifyPatternAbsentFromTips(ctx, pat, opScope(&op), plan.WalkedTips); err != nil {
@@ -547,7 +547,7 @@ func executeScrubRecipe(
 	// run before cleanup by design, so its findings never abort: they exit
 	// nonzero with the rewrite standing.
 	tierB := func(ctx context.Context) error {
-		infof(flags, "Verifying secret removal...\n")
+		infof(flags, "Verifying secret removal...")
 		var findings []string
 		for i, op := range recipe.Operations {
 			pat := recipe.Patterns[i]
@@ -556,10 +556,10 @@ func executeScrubRecipe(
 			}
 		}
 		if len(findings) == 0 {
-			infof(flags, "Verification passed: no matches found in object stores.\n")
+			infof(flags, "Verification passed: no matches found in object stores.")
 			return nil
 		}
-		defer fmt.Fprintln(os.Stderr, "Run 'git reflog expire --expire=now --all && git gc --prune=now' to force cleanup.")
+		defer warnf(flags, "Run 'git reflog expire --expire=now --all && git gc --prune=now' to force cleanup.")
 		return fmt.Errorf("%s", strings.Join(findings, "\n  "))
 	}
 

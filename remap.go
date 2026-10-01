@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"path"
 	"regexp"
 	"sort"
@@ -284,7 +283,8 @@ func (rs *remapState) reportStale(flags globalFlags) {
 	if rs == nil || len(rs.stale) == 0 {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "note: --remap-shas-in: %d unresolvable 40-hex hash(es) left untouched (stale or foreign references)\n", len(rs.stale))
+	var report strings.Builder
+	fmt.Fprintf(&report, "--remap-shas-in: %d unresolvable 40-hex hash(es) left untouched (stale or foreign references)", len(rs.stale))
 	if flags.verbose {
 		list := make([]string, 0, len(rs.stale))
 		for cand := range rs.stale {
@@ -292,7 +292,8 @@ func (rs *remapState) reportStale(flags globalFlags) {
 		}
 		sort.Strings(list)
 		for _, cand := range list {
-			fmt.Fprintf(os.Stderr, "  %s\n", cand)
+			fmt.Fprintf(&report, "\n  %s", cand)
 		}
 	}
+	warnf(flags, "%s", report.String())
 }

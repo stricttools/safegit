@@ -121,7 +121,7 @@ func runAuthorList(flags globalFlags) int {
 
 	// Human-readable table output.
 	if len(entries) == 0 {
-		infof(flags, "No commits found.\n")
+		infof(flags, "No commits found.")
 		return 0
 	}
 
@@ -139,17 +139,17 @@ func runAuthorList(flags globalFlags) int {
 		}
 	}
 
-	fmtStr := fmt.Sprintf("%%-%ds  %%-%ds  %%-%ds  %%s\n", nameW, emailW, roleW)
+	fmtStr := fmt.Sprintf("%%-%ds  %%-%ds  %%-%ds  %%s", nameW, emailW, roleW)
 
-	fmt.Printf(fmtStr, "Name", "Email", "Role", "Count")
-	fmt.Printf("%s  %s  %s  %s\n",
+	outf(flags, fmtStr, "Name", "Email", "Role", "Count")
+	outf(flags, "%s  %s  %s  %s",
 		strings.Repeat("-", nameW),
 		strings.Repeat("-", emailW),
 		strings.Repeat("-", roleW),
 		strings.Repeat("-", 5))
 
 	for _, e := range entries {
-		fmt.Printf(fmtStr, e.Name, e.Email, e.Role, fmt.Sprintf("%d", e.Count))
+		outf(flags, fmtStr, e.Name, e.Email, e.Role, fmt.Sprintf("%d", e.Count))
 	}
 
 	return 0

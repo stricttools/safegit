@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -257,19 +256,19 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 
 	// Summary
-	infof(flags, "Scrub summary:\n")
-	infof(flags, "  File:    %s\n", result.File)
-	infof(flags, "  Mode:    %s\n", scrubFileModeSummary(mode, replacementPath))
-	infof(flags, "  Range:   %s\n", scrubRangeSummary(result.From, entireHistory))
-	infof(flags, "  Commits: %d\n", result.CommitCount)
-	infof(flags, "  Reason:  %s\n", reason)
+	infof(flags, "Scrub summary:")
+	infof(flags, "  File:    %s", result.File)
+	infof(flags, "  Mode:    %s", scrubFileModeSummary(mode, replacementPath))
+	infof(flags, "  Range:   %s", scrubRangeSummary(result.From, entireHistory))
+	infof(flags, "  Commits: %d", result.CommitCount)
+	infof(flags, "  Reason:  %s", reason)
 
 	// `scrub file` declares itself consequential, so the framework's confirm
 	// protocol already took deliberate consent for this rewrite before dispatch.
 	// The summary above says what and how much; a second prompt only asked the
 	// question the framework had just had answered.
 	if !flags.dryRun {
-		infof(flags, "Rewriting %d commits. This cannot be undone.\n", result.CommitCount)
+		infof(flags, "Rewriting %d commits. This cannot be undone.", result.CommitCount)
 	}
 
 	// Dry-run check: purely read-only, no lock needed. The rewrite is minted
@@ -278,7 +277,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	if flags.dryRun {
 		recordHistoryRewrite(ctx, flags, oldHeadSHA)
 		flags.payload(result)
-		infof(flags, "Dry run: no changes made.\n")
+		infof(flags, "Dry run: no changes made.")
 		return 0
 	}
 
@@ -318,7 +317,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	messagesModified := 0
 
 	treeCache := make(map[string]string)
-	shaMap, rewrittenCount, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
+	shaMap, rewrittenCount, err := walkAndRewrite(flags, ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 		// Look up the old blob SHA at the target path before replacing. This is
 		// what makes the declaration independent of the rewrite: the decision is
 		// read off the ORIGINAL tree, not off the tree the rewrite produced.
@@ -396,7 +395,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 				"not relative to your working directory) and the --from commit",
 				filePath, len(shas))
 		}
-		infof(flags, "Checking the rewritten commits...\n")
+		infof(flags, "Checking the rewritten commits...")
 		return verifyScrubbedFileContent(ctx, shaMap, filePath, mode, newBlobSHA, oldBlobSHAs, remapGlobs)
 	}
 
@@ -407,17 +406,17 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		if len(oldBlobSHAs) == 0 {
 			return nil
 		}
-		infof(flags, "Verifying old blobs removed...\n")
+		infof(flags, "Verifying old blobs removed...")
 		oldBlobList := make([]string, 0, len(oldBlobSHAs))
 		for sha := range oldBlobSHAs {
 			oldBlobList = append(oldBlobList, sha)
 		}
 		if err := verifyOldBlobsRemoved(ctx, oldBlobList); err != nil {
-			fmt.Fprintln(os.Stderr, "Old file content may still be present in the local object store.")
-			fmt.Fprintln(os.Stderr, "Run 'git reflog expire --expire=now --all && git gc --prune=now' to force cleanup.")
+			warnf(flags, "Old file content may still be present in the local object store.\n"+
+				"Run 'git reflog expire --expire=now --all && git gc --prune=now' to force cleanup.")
 			return err
 		}
-		infof(flags, "Verification passed: all old blobs removed from object store.\n")
+		infof(flags, "Verification passed: all old blobs removed from object store.")
 		return nil
 	}
 
@@ -449,11 +448,11 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	flags.payload(result)
 
 	// Summary
-	infof(flags, "\nScrub complete:\n")
-	infof(flags, "  %d commits rewritten\n", *result.CommitsRewritten)
-	infof(flags, "  %d commit messages modified (move records naming the erased path)\n", messagesModified)
-	infof(flags, "  Old HEAD: %s\n", result.OldHead[:12])
-	infof(flags, "  New HEAD: %s\n", result.NewHead[:12])
+	infof(flags, "\nScrub complete:")
+	infof(flags, "  %d commits rewritten", *result.CommitsRewritten)
+	infof(flags, "  %d commit messages modified (move records naming the erased path)", messagesModified)
+	infof(flags, "  Old HEAD: %s", result.OldHead[:12])
+	infof(flags, "  New HEAD: %s", result.NewHead[:12])
 	printScopeNotice(flags, rewriteResult.Ref)
 	printRotationNotice(flags, recheckCommandForRemovedContent())
 
@@ -480,7 +479,7 @@ func runScrubFileInSubmodule(
 	gitDir string,
 	sgDir string,
 ) int {
-	infof(flags, "File %q is inside submodule [%s], scrubbing as %q within submodule.\n",
+	infof(flags, "File %q is inside submodule [%s], scrubbing as %q within submodule.",
 		fullPath, sub.RelativePath, subFilePath)
 
 	// Ensure safegit is initialized for the submodule.
@@ -565,19 +564,19 @@ func runScrubFileInSubmodule(
 	}
 
 	// Summary
-	infof(flags, "Scrub summary:\n")
-	infof(flags, "  File:       %s (in submodule %s)\n", subFilePath, sub.RelativePath)
-	infof(flags, "  Mode:       %s\n", scrubFileModeSummary(mode, replacementPath))
-	infof(flags, "  Range:      %s\n", scrubRangeSummary(subFromSHA, entireHistory))
-	infof(flags, "  Sub commits: %d\n", result.CommitCount)
-	infof(flags, "  Reason:     %s\n", reason)
+	infof(flags, "Scrub summary:")
+	infof(flags, "  File:       %s (in submodule %s)", subFilePath, sub.RelativePath)
+	infof(flags, "  Mode:       %s", scrubFileModeSummary(mode, replacementPath))
+	infof(flags, "  Range:      %s", scrubRangeSummary(subFromSHA, entireHistory))
+	infof(flags, "  Sub commits: %d", result.CommitCount)
+	infof(flags, "  Reason:     %s", reason)
 
 	// Same as the non-submodule path: consent for the rewrite was taken by the
 	// framework before dispatch. The wider blast radius -- the parent moves too,
 	// because its gitlink has to follow the submodule -- is a consequence of the
 	// path the caller named, so it is stated rather than asked.
 	if !flags.dryRun {
-		infof(flags, "Rewriting %d submodule commits, and the parent history that points at them. This cannot be undone.\n", subCommitCount)
+		infof(flags, "Rewriting %d submodule commits, and the parent history that points at them. This cannot be undone.", subCommitCount)
 	}
 
 	if flags.dryRun {
@@ -585,7 +584,7 @@ func runScrubFileInSubmodule(
 		// execute path below, and a preview states nothing it has not read.
 		recordHistoryRewrite(ctx, flags, result.OldHead)
 		flags.payload(result)
-		infof(flags, "Dry run: no changes made.\n")
+		infof(flags, "Dry run: no changes made.")
 		return 0
 	}
 
@@ -625,7 +624,7 @@ func runScrubFileInSubmodule(
 	subIntent := PerPathIntent()
 	subTargetSeen := false
 	subMessagesModified := 0
-	subShaMap, subRewrittenCount, err := walkAndRewrite(subCtx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
+	subShaMap, subRewrittenCount, err := walkAndRewrite(flags, subCtx, subSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 		oldBlobSHA := lookupBlobAtPath(ctx, info.Tree, subFilePath)
 		if oldBlobSHA != "" {
 			subTargetSeen = true
@@ -690,7 +689,7 @@ func runScrubFileInSubmodule(
 		Hooks:  RewriteHooks{TierA: subTierA},
 	}
 
-	infof(flags, "  [%s] %d commits rewritten\n", sub.RelativePath, subRewrittenCount)
+	infof(flags, "  [%s] %d commits rewritten", sub.RelativePath, subRewrittenCount)
 
 	// Build gitlink map from submodule SHA mappings.
 	gitlinkMap := make(map[string]string)
@@ -714,7 +713,7 @@ func runScrubFileInSubmodule(
 		// submodule still gets verified and published on its own: its tag
 		// annotations or tagger identity may have been rewritten even when every
 		// commit maps to itself.
-		infof(flags, "No submodule commits were rewritten; parent history unchanged.\n")
+		infof(flags, "No submodule commits were rewritten; parent history unchanged.")
 		only := []*pendingRewrite{subPending}
 		if label, err := prepareAll(flags, only); err != nil {
 			exitFinalize(label, err)
@@ -753,7 +752,7 @@ func runScrubFileInSubmodule(
 	}
 	parentSHAs := git.SplitNonEmpty(out)
 
-	infof(flags, "Rewriting %d parent commits (gitlink updates)...\n", len(parentSHAs))
+	infof(flags, "Rewriting %d parent commits (gitlink updates)...", len(parentSHAs))
 
 	// Walk parent, updating gitlinks (no blob changes, no message changes)
 	// and remapping commit hashes in glob-matched parent files when
@@ -764,7 +763,7 @@ func runScrubFileInSubmodule(
 	}
 	parentTreeCache := make(map[string]treeRewrite)
 	parentIntent := PerPathIntent()
-	parentShaMap, parentRewrittenCount, err := walkAndRewrite(ctx, parentSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
+	parentShaMap, parentRewrittenCount, err := walkAndRewrite(flags, ctx, parentSHAs, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 		newTreeSHA, changedPaths, err := replaceInTreeByBlobMap(ctx, info.Tree, nil, gitlinkMap, parentTreeCache)
 		if err != nil {
 			return CommitTransform{}, fmt.Errorf("updating gitlinks in tree for commit %s: %w", sha, err)
@@ -814,7 +813,7 @@ func runScrubFileInSubmodule(
 		if len(oldSubBlobSHAs) == 0 {
 			return nil
 		}
-		infof(flags, "Verifying old blobs unreachable in submodule...\n")
+		infof(flags, "Verifying old blobs unreachable in submodule...")
 		// Use subCtx to target the submodule's object store without chdir.
 		reachableBlobs, err := buildReachableObjectSet(subCtx)
 		if err != nil {
@@ -831,7 +830,7 @@ func runScrubFileInSubmodule(
 			return fmt.Errorf("%d old blob(s) still reachable in submodule %s: %s",
 				len(surviving), sub.RelativePath, strings.Join(surviving, ", "))
 		}
-		infof(flags, "Verification passed: old blobs unreachable in submodule.\n")
+		infof(flags, "Verification passed: old blobs unreachable in submodule.")
 		return nil
 	}
 
@@ -853,7 +852,7 @@ func runScrubFileInSubmodule(
 			Hooks:  RewriteHooks{TierB: parentTierB},
 		},
 	}
-	infof(flags, "Verifying the submodule and parent rewrites before either is published...\n")
+	infof(flags, "Verifying the submodule and parent rewrites before either is published...")
 	if label, err := prepareAll(flags, both); err != nil {
 		exitFinalize(label, err)
 	}
@@ -892,12 +891,12 @@ func runScrubFileInSubmodule(
 	flags.payload(result)
 
 	// Summary.
-	infof(flags, "\nScrub complete:\n")
-	infof(flags, "  %d submodule commits rewritten\n", subRewrittenCount)
-	infof(flags, "  %d submodule commit messages modified (move records naming the erased path)\n", subMessagesModified)
-	infof(flags, "  %d parent commits rewritten (gitlink updates)\n", parentRewrittenCount)
-	infof(flags, "  Old HEAD: %s\n", result.OldHead[:12])
-	infof(flags, "  New HEAD: %s\n", result.NewHead[:12])
+	infof(flags, "\nScrub complete:")
+	infof(flags, "  %d submodule commits rewritten", subRewrittenCount)
+	infof(flags, "  %d submodule commit messages modified (move records naming the erased path)", subMessagesModified)
+	infof(flags, "  %d parent commits rewritten (gitlink updates)", parentRewrittenCount)
+	infof(flags, "  Old HEAD: %s", result.OldHead[:12])
+	infof(flags, "  New HEAD: %s", result.NewHead[:12])
 	printScopeNotice(flags, parentResult.Ref, fmt.Sprintf("%s in submodule [%s]", subResult.Ref, sub.RelativePath))
 	printRotationNotice(flags, recheckCommandForRemovedContent())
 
@@ -919,12 +918,12 @@ func untrackProtectedPaths(ctx context.Context, flags globalFlags, protectedPath
 	}
 	for _, p := range protectedPaths {
 		if _, _, err := git.Run(ctx, "rm", "--cached", "--", p); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to untrack gitignored file %s: %v\n", p, err)
+			warnf(flags, "failed to untrack gitignored file %s: %v", p, err)
 		}
 	}
-	infof(flags, "Preserved %d tracked+gitignored file(s) (untracked from index):\n", len(protectedPaths))
+	infof(flags, "Preserved %d tracked+gitignored file(s) (untracked from index):", len(protectedPaths))
 	for _, p := range protectedPaths {
-		infof(flags, "  %s\n", p)
+		infof(flags, "  %s", p)
 	}
 }
 

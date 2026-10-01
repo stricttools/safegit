@@ -76,21 +76,21 @@ type nativeHooks struct {
 
 // newNativeHooks prepares hook execution for one operation. Under a dry run it
 // prepares nothing and says so, naming the hooks the real run would have run.
-func newNativeHooks(ctx context.Context, repoRoot, safegitDir string, dryRun bool) (*nativeHooks, error) {
+func newNativeHooks(ctx context.Context, repoRoot, safegitDir string, dryRun bool, info func(string)) (*nativeHooks, error) {
 	hooksDir, err := git.HooksDir(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("resolving the hook directory: %w", err)
 	}
 	h := &nativeHooks{hooksDir: hooksDir, repoRoot: repoRoot, safegitDir: safegitDir, skip: dryRun}
 	if dryRun {
-		h.noteSkipped()
+		h.noteSkipped(info)
 	}
 	return h, nil
 }
 
 // noteSkipped tells the operator which of their hooks a preview did not run.
 // Silent when the repository has none, which is the common case.
-func (h *nativeHooks) noteSkipped() {
+func (h *nativeHooks) noteSkipped(info func(string)) {
 	var present []string
 	for _, name := range NativeHooks() {
 		if h.path(name) != "" {
@@ -100,7 +100,7 @@ func (h *nativeHooks) noteSkipped() {
 	if len(present) == 0 {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "  hooks: %s not run (dry run)\n", strings.Join(present, ", "))
+	info(fmt.Sprintf("  hooks: %s not run (dry run)", strings.Join(present, ", ")))
 }
 
 // path returns the executable hook of that name, or "" when the repository has

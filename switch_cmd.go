@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
-	"os"
 
 	"github.com/stricttools/safegit/internal/exitcode"
 	"github.com/stricttools/safegit/internal/git"
@@ -77,13 +75,13 @@ func runSwitch(flags globalFlags, args []string) int {
 
 	// FIRST, and before the repository is touched at all: a command line safegit
 	// itself refuses is refused without a lock and without a git call.
-	if code := refuseUnsupportedSwitch(parsed); code != 0 {
+	if code := refuseUnsupportedSwitch(flags, parsed); code != 0 {
 		return code
 	}
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
@@ -103,7 +101,7 @@ func runSwitch(flags globalFlags, args []string) int {
 	// The one refusal that needs the repository: whether the argument names a
 	// branch. It is made under the lock, like every other state reading.
 	if len(parsed.Revisions) == 1 {
-		if code := refuseNonBranch(ctx, parsed.Revisions[0]); code != 0 {
+		if code := refuseNonBranch(flags, ctx, parsed.Revisions[0]); code != 0 {
 			return code
 		}
 	}
@@ -139,40 +137,40 @@ func runSwitch(flags globalFlags, args []string) int {
 // refuseUnsupportedSwitch refuses the command lines safegit's switch does not
 // implement: the options outside its allowlist, a pathspec, and any argument
 // count other than the one form it takes.
-func refuseUnsupportedSwitch(parsed gitArgs) int {
-	if code := switchSubset.refuseUnsupportedOptions(parsed); code != 0 {
+func refuseUnsupportedSwitch(flags globalFlags, parsed gitArgs) int {
+	if code := switchSubset.refuseUnsupportedOptions(flags, parsed); code != 0 {
 		return code
 	}
 
 	if len(parsed.AfterDoubleDash) > 0 {
-		fmt.Fprintf(os.Stderr, "error: safegit switch takes no pathspec\n")
-		fmt.Fprintf(os.Stderr, "  a path after a switch is git's checkout of files OVER the working tree, which destroys\n")
-		fmt.Fprintf(os.Stderr, "  uncommitted work with no record anywhere -- in a shared worktree, possibly somebody\n")
-		fmt.Fprintf(os.Stderr, "  else's. safegit has no such command at all; see docs/divergences.md.\n")
+		errorf(flags, "safegit switch takes no pathspec\n"+
+			"  a path after a switch is git's checkout of files OVER the working tree, which destroys\n"+
+			"  uncommitted work with no record anywhere -- in a shared worktree, possibly somebody\n"+
+			"  else's. safegit has no such command at all; see docs/divergences.md.")
 		return exitcode.Usage
 	}
 
 	creating, _ := parsed.Find("-c", "--create")
 	switch {
 	case creating.Name != "" && len(parsed.Revisions) > 0:
-		fmt.Fprintf(os.Stderr, "error: safegit switch -c takes the new branch's name and nothing else\n")
-		fmt.Fprintf(os.Stderr, "  the new branch starts where you are standing; a start point elsewhere is a branch\n")
-		fmt.Fprintf(os.Stderr, "  creation rather than a step between branches. Make it with 'git branch <name> <start>'\n")
-		fmt.Fprintf(os.Stderr, "  and switch to it. See docs/divergences.md.\n")
+		errorf(flags, "safegit switch -c takes the new branch's name and nothing else\n"+
+			"  the new branch starts where you are standing; a start point elsewhere is a branch\n"+
+			"  creation rather than a step between branches. Make it with 'git branch <name> <start>'\n"+
+			"  and switch to it. See docs/divergences.md.")
 		return exitcode.Usage
 	case creating.Name != "":
 		if creating.Value == "" {
-			fmt.Fprintf(os.Stderr, "error: safegit switch %s names no branch to create\n", creating.Name)
-			fmt.Fprintf(os.Stderr, "  usage: safegit switch -c <new-branch>\n")
+			errorf(flags, "safegit switch %s names no branch to create\n"+
+				"  usage: safegit switch -c <new-branch>", creating.Name)
 			return exitcode.Usage
 		}
 	case len(parsed.Revisions) == 0:
-		fmt.Fprintf(os.Stderr, "error: safegit switch names no branch to switch to\n")
-		fmt.Fprintf(os.Stderr, "  usage: safegit switch <branch>, or safegit switch -c <new-branch>\n")
+		errorf(flags, "safegit switch names no branch to switch to\n"+
+			"  usage: safegit switch <branch>, or safegit switch -c <new-branch>")
 		return exitcode.Usage
 	case len(parsed.Revisions) > 1:
-		fmt.Fprintf(os.Stderr, "error: safegit switch takes exactly one branch, and this names %d\n", len(parsed.Revisions))
-		fmt.Fprintf(os.Stderr, "  usage: safegit switch <branch>\n")
+		errorf(flags, "safegit switch takes exactly one branch, and this names %d\n"+
+			"  usage: safegit switch <branch>", len(parsed.Revisions))
 		return exitcode.Usage
 	}
 	return 0
@@ -185,7 +183,7 @@ func refuseUnsupportedSwitch(parsed gitArgs) int {
 // the convention merge and cherry-pick already follow: `safegit switch
 // no-such-thing` must exit with git's own verdict on that argument rather than
 // with a message safegit invented about branches.
-func refuseNonBranch(ctx context.Context, arg string) int {
+func refuseNonBranch(flags globalFlags, ctx context.Context, arg string) int {
 	if _, err := git.RevParse(ctx, "refs/heads/"+arg); err == nil {
 		return 0
 	}
@@ -193,15 +191,15 @@ func refuseNonBranch(ctx context.Context, arg string) int {
 		return 0
 	}
 
-	fmt.Fprintf(os.Stderr, "error: safegit switch does not support %s: it is a commit, not a branch\n", arg)
-	fmt.Fprintf(os.Stderr, "  switching onto anything but a branch DETACHES HEAD, and a detached HEAD is the state\n")
-	fmt.Fprintf(os.Stderr, "  safegit's commit, conclusion and undo paths all refuse. Make a branch there and switch\n")
-	fmt.Fprintf(os.Stderr, "  to it:\n")
-	fmt.Fprintf(os.Stderr, "    git branch <name> %s\n", arg)
-	fmt.Fprintf(os.Stderr, "    safegit switch <name>\n")
-	fmt.Fprintf(os.Stderr, "  or, when a detached HEAD is what you deliberately want:\n")
-	fmt.Fprintf(os.Stderr, "    git switch --detach %s\n", arg)
-	fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+	errorf(flags, "safegit switch does not support %s: it is a commit, not a branch\n"+
+		"  switching onto anything but a branch DETACHES HEAD, and a detached HEAD is the state\n"+
+		"  safegit's commit, conclusion and undo paths all refuse. Make a branch there and switch\n"+
+		"  to it:\n"+
+		"    git branch <name> %s\n"+
+		"    safegit switch <name>\n"+
+		"  or, when a detached HEAD is what you deliberately want:\n"+
+		"    git switch --detach %s\n"+
+		"  safegit implements a deliberate subset of git; see docs/divergences.md.", arg, arg, arg)
 	return exitcode.Usage
 }
 

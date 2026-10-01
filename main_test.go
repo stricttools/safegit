@@ -11,26 +11,22 @@ import (
 // confirmations rely on: machine mode never stands in for consent. Only a real
 // --approve-consequential sets it.
 //
-// It also pins that machine mode no longer forges --quiet. It used to, so that
-// safegit's own stdout writes could not corrupt the JSON document it printed
-// itself; the framework's envelope is structurally exempt from quiet and is
-// written by the framework, so the only thing left to suppress is safegit's
-// direct printing -- which silent() does WITHOUT claiming the operator passed
-// --quiet.
+// It also pins that machine mode does not forge --quiet: what safegit writes
+// goes through the framework's writers, which place it in machine mode
+// themselves, so flags.quiet reports only what the operator passed.
 func TestGlobalsToFlagsJSONDoesNotImplyApproval(t *testing.T) {
 	tests := []struct {
 		name                     string
 		quiet, approved, jsonOut bool
 		wantApproved             bool
 		wantQuiet                bool
-		wantSilent               bool
 	}{
-		{"neither", false, false, false, false, false, false},
-		{"json only", false, false, true, false, false, true},
-		{"approved only", false, true, false, true, false, false},
-		{"both", false, true, true, true, false, true},
-		{"quiet only", true, false, false, false, true, true},
-		{"quiet and json", true, false, true, false, true, true},
+		{"neither", false, false, false, false, false},
+		{"json only", false, false, true, false, false},
+		{"approved only", false, true, false, true, false},
+		{"both", false, true, true, true, false},
+		{"quiet only", true, false, false, false, true},
+		{"quiet and json", true, false, true, false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -40,9 +36,6 @@ func TestGlobalsToFlagsJSONDoesNotImplyApproval(t *testing.T) {
 			}
 			if gf.quiet != tt.wantQuiet {
 				t.Errorf("quiet = %v, want %v", gf.quiet, tt.wantQuiet)
-			}
-			if gf.silent() != tt.wantSilent {
-				t.Errorf("silent() = %v, want %v", gf.silent(), tt.wantSilent)
 			}
 		})
 	}

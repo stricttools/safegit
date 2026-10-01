@@ -3,7 +3,6 @@ package commit
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -153,6 +152,9 @@ type moveInference struct {
 	// turned them all down, and zero otherwise.
 	refused []RefusedMove
 	capped  int
+
+	// warn writes the notice about the moves this commit did not record.
+	warn func(string)
 }
 
 // newMoveInference prepares inference for one commit operation.
@@ -171,8 +173,8 @@ type moveInference struct {
 // AMEND has its own constructor below, because its delta is not this one's.
 // REWORD has none at all: rewording changes no tree, so there is no authoring
 // event to read and nothing that could be witnessed.
-func newMoveInference(req CommitRequest) *moveInference {
-	return &moveInference{enabled: req.IndexBase == IndexBaseParentTree}
+func newMoveInference(req CommitRequest, warn func(string)) *moveInference {
+	return &moveInference{enabled: req.IndexBase == IndexBaseParentTree, warn: warn}
 }
 
 // newAmendMoveInference prepares inference for one amend operation.
@@ -185,8 +187,8 @@ func newMoveInference(req CommitRequest) *moveInference {
 // What it mints is ADDITIVE: the records already on the message are preserved
 // whatever happens here, and the paths they name suppress, so an amend of a
 // commit that already recorded its move records it once.
-func newAmendMoveInference() *moveInference {
-	return &moveInference{enabled: true}
+func newAmendMoveInference(warn func(string)) *moveInference {
+	return &moveInference{enabled: true, warn: warn}
 }
 
 // declaredPairs reads the pairs out of the move records this commit already
@@ -337,9 +339,9 @@ func describePairChange(before, after []trailer.Pair) string {
 // it would be accepted -- `--moved` would be refused for both of the others.
 func (m *moveInference) notice() {
 	if m.capped > 0 {
-		fmt.Fprintf(os.Stderr, "notice: this commit's delta witnesses %d moves, more than the %d safegit "+
-			"records on its own; none were recorded -- declare the ones you mean with --moved 'old -> new'\n",
-			m.capped, moveInferenceCap)
+		m.warn(fmt.Sprintf("this commit's delta witnesses %d moves, more than the %d safegit "+
+			"records on its own; none were recorded -- declare the ones you mean with --moved 'old -> new'",
+			m.capped, moveInferenceCap))
 		return
 	}
 
@@ -367,7 +369,7 @@ func (m *moveInference) notice() {
 	if len(sentences) == 0 {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "notice: %s\n", strings.Join(sentences, " "))
+	m.warn(strings.Join(sentences, " "))
 }
 
 // refusedMoveCount counts the MOVES a refusal set stands for, over the entries

@@ -111,8 +111,8 @@ func TestMvSubtreeDirtyRefusalNamesEveryDirtyPath(t *testing.T) {
 	}
 
 	// Machine mode carries the same verdict: the envelope's exit_code is the
-	// refusal's, and the complete list of dirty paths is on stderr, which
-	// machine mode never suppresses.
+	// refusal's, and the complete list of dirty paths is in its error
+	// diagnostic.
 	stdout, stderr, code = runSafegit(t, dir, "--json", "mv", "-m", "move the directory", "src/ -> lib/")
 	if code != exitcode.MoveNotBorneOut {
 		t.Fatalf("under --json the dirty subtree move exited %d, want %d\nstdout: %s\nstderr: %s",
@@ -122,8 +122,8 @@ func TestMvSubtreeDirtyRefusalNamesEveryDirtyPath(t *testing.T) {
 		t.Errorf("the envelope does not carry the refusal's exit code: %s", stdout)
 	}
 	for _, want := range []string{"src/one.txt", "src/deep/two.txt"} {
-		if !strings.Contains(stderr, want) {
-			t.Errorf("under --json the refusal does not name %q; stderr:\n%s", want, stderr)
+		if said := reported(stdout, stderr); !strings.Contains(said, want) {
+			t.Errorf("under --json the refusal does not name %q; it said:\n%s", want, said)
 		}
 	}
 }

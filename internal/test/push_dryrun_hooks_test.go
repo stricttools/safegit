@@ -35,15 +35,15 @@ func TestPushDryRunSaysTheHooksAreNotRun(t *testing.T) {
 	dir, _ := newRepoWithRemote(t)
 	marker := installPrePrePushHook(t, dir)
 
-	_, stderr, code := runSafegit(t, dir, "--dry-run", "push", "--refs", "head", "origin")
+	stdout, stderr, code := runSafegit(t, dir, "--dry-run", "push", "--refs", "head", "origin")
 	if code != 0 {
 		t.Fatalf("dry-run push failed (code %d): %s", code, stderr)
 	}
 	if _, err := os.Stat(marker); err == nil {
 		t.Error("a dry run ran the pre-pre-push hook; a hook is a mutation a preview may not perform")
 	}
-	if !strings.Contains(stderr, "pre-pre-push hooks are not run under --dry-run") {
-		t.Errorf("the preview must state the hook skip; stderr was:\n%s", stderr)
+	if !strings.Contains(stdout, "pre-pre-push hooks are not run under --dry-run") {
+		t.Errorf("the preview must state the hook skip; stdout was:\n%s", stdout)
 	}
 
 	// The control: the same push, executed, DOES run the hook. Without it the

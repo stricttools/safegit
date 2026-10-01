@@ -483,7 +483,7 @@ func TestHookRemoveTakesTheLiveHookWhenBothStoresShareAName(t *testing.T) {
 	installed := filepath.Join(localHookDir(dir), "pre-pre-push")
 	writeHookScript(t, installed, "true")
 
-	_, stderr, code := runSafegit(t, dir, "hook", "remove", "pre-pre-push")
+	stdout, stderr, code := runSafegit(t, dir, "hook", "remove", "pre-pre-push")
 	if code != 0 {
 		t.Fatalf("hook remove failed (%d): %s", code, stderr)
 	}
@@ -493,19 +493,19 @@ func TestHookRemoveTakesTheLiveHookWhenBothStoresShareAName(t *testing.T) {
 	if _, err := os.Stat(committed); err != nil {
 		t.Errorf("hook remove deleted the committed hook: %v", err)
 	}
-	if !strings.Contains(stderr, "still runs") || !strings.Contains(stderr, committed) {
-		t.Errorf("the removal must name the checkout-provided hook of that name and say it still runs, got: %s", stderr)
+	if !strings.Contains(stdout, "still runs") || !strings.Contains(stdout, committed) {
+		t.Errorf("the removal must name the checkout-provided hook of that name and say it still runs, got: %s", stdout)
 	}
 
 	// The advisory is advice, not the command's result, so --quiet suppresses
 	// it. Re-run the same shape to check that.
 	writeHookScript(t, installed, "true")
-	_, quietErr, quietCode := runSafegit(t, dir, "--quiet", "hook", "remove", "pre-pre-push")
+	quietOut, quietErr, quietCode := runSafegit(t, dir, "--quiet", "hook", "remove", "pre-pre-push")
 	if quietCode != 0 {
 		t.Fatalf("quiet hook remove failed (%d): %s", quietCode, quietErr)
 	}
-	if strings.Contains(quietErr, "still runs") {
-		t.Errorf("--quiet did not suppress the advisory: %s", quietErr)
+	if strings.Contains(quietOut+quietErr, "still runs") {
+		t.Errorf("--quiet did not suppress the advisory: %s%s", quietOut, quietErr)
 	}
 }
 
@@ -533,7 +533,7 @@ func TestHookRemoveDryRunStatesTheCheckoutProvidedHookStillRuns(t *testing.T) {
 	if _, err := os.Stat(installed); err != nil {
 		t.Errorf("a dry run removed the live hook for real: %v", err)
 	}
-	if !strings.Contains(stderr, "still runs") {
-		t.Errorf("the preview must state that the checkout-provided hook of that name still runs, got: %s", stderr)
+	if !strings.Contains(stdout, "still runs") {
+		t.Errorf("the preview must state that the checkout-provided hook of that name still runs, got: %s", stdout)
 	}
 }

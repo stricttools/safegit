@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/stricttools/safegit/internal/commit"
 	"github.com/stricttools/safegit/internal/conflict"
@@ -58,11 +57,11 @@ func previewSequencerOperation(flags globalFlags, verb string, args []string, re
 	// state something that is not going to happen.
 	parsed := parseGitArgs(verb, args)
 	if reason := previewRefusal(flags.ctx(), verb, parsed); reason != "" {
-		fmt.Fprintf(os.Stderr, "error: --dry-run cannot preview this %s: %s\n", verb, reason)
-		fmt.Fprintf(os.Stderr, "  safegit's preview computes the real outcome with git's own merge engine\n")
-		fmt.Fprintf(os.Stderr, "  (git merge-tree --write-tree), and a preview computed under different rules\n")
-		fmt.Fprintf(os.Stderr, "  than the real run would use is not a preview of this command.\n")
-		fmt.Fprintf(os.Stderr, "  Re-run without --dry-run, or without the option named above.\n")
+		errorf(flags, "--dry-run cannot preview this %s: %s\n"+
+			"  safegit's preview computes the real outcome with git's own merge engine\n"+
+			"  (git merge-tree --write-tree), and a preview computed under different rules\n"+
+			"  than the real run would use is not a preview of this command.\n"+
+			"  Re-run without --dry-run, or without the option named above.", verb, reason)
 		// The same code the framework's own per-command dry-run refusal exits
 		// with (strictcli's WithDryRunUnsupported). This is the per-INVOCATION
 		// form of that refusal, which the framework has no way to express yet;
@@ -90,7 +89,7 @@ func previewSequencerOperation(flags globalFlags, verb string, args []string, re
 
 	ctx, _, cleanup, err := commit.BeginPreview(flags.ctx(), true)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 	defer cleanup()
@@ -219,14 +218,14 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs, record
 	}
 
 	if len(parsed.Revisions) > 1 {
-		fmt.Fprintf(os.Stderr, "error: --dry-run cannot preview an octopus merge: merge-tree computes one merge of two commits\n")
+		errorf(flags, "--dry-run cannot preview an octopus merge: merge-tree computes one merge of two commits")
 		return record(exitcode.General)
 	}
 	other := parsed.Revisions[0]
 
 	otherSHA, err := git.RevParse(ctx, other+"^{commit}")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %s does not name a commit: %v\n", other, err)
+		errorf(flags, "%s does not name a commit: %v", other, err)
 		return record(exitcode.General)
 	}
 
@@ -255,29 +254,29 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs, record
 	// NO RECORD: the real run takes the unborn fast-forward arm, which is a
 	// compare-and-swap pinned to the zero object name and a sync. No git merge.
 	if git.HeadIsUnborn(ctx) {
-		infof(flags, "would merge %s: a fast-forward onto an unborn branch, no merge commit and no merge to compute\n", short(other, otherSHA))
+		infof(flags, "would merge %s: a fast-forward onto an unborn branch, no merge commit and no merge to compute", short(other, otherSHA))
 		return exitcode.OK
 	}
 
 	head, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return record(exitcode.General)
 	}
 
 	upToDate, err := git.IsAncestorOf(ctx, otherSHA, head)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return record(exitcode.General)
 	}
 	if upToDate {
-		infof(flags, "would merge %s: already up to date, nothing to do\n", short(other, otherSHA))
+		infof(flags, "would merge %s: already up to date, nothing to do", short(other, otherSHA))
 		return record(exitcode.OK)
 	}
 
 	fastForward, err := git.IsAncestorOf(ctx, head, otherSHA)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return record(exitcode.General)
 	}
 	// NO RECORD, for the reason above: safegit performs this one itself.
@@ -286,7 +285,7 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs, record
 	// sentence printed here -- so the record follows the answer the operator is
 	// given rather than a second reading of the command line.
 	if fastForward && !parsed.Has("--no-ff") {
-		infof(flags, "would merge %s: a fast-forward, no merge commit and no merge to compute\n", short(other, otherSHA))
+		infof(flags, "would merge %s: a fast-forward, no merge commit and no merge to compute", short(other, otherSHA))
 		return exitcode.OK
 	}
 
@@ -302,7 +301,7 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs, record
 	// subprocess nothing issues -- the property every other safegit refusal
 	// already has, that a refused invocation leaves no would-do entry behind.
 	if parsed.Has("--ff-only") {
-		infof(flags, "would merge %s: REFUSED -- --ff-only was given and this is not a fast-forward\n", short(other, otherSHA))
+		infof(flags, "would merge %s: REFUSED -- --ff-only was given and this is not a fast-forward", short(other, otherSHA))
 		return exitcode.OK
 	}
 
@@ -311,7 +310,7 @@ func previewMerge(flags globalFlags, ctx context.Context, parsed gitArgs, record
 	}
 	result, err := git.MergeTree(ctx, "", head, otherSHA, strategyOptionArgv(parsed)...)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 	reportPreviewOutcome(flags, "merge", short(other, otherSHA), result)
@@ -338,13 +337,13 @@ func previewReplay(flags globalFlags, ctx context.Context, verb string, parsed g
 		// Unreachable through the commands, which refuse any other count before
 		// the preview: stated rather than assumed, so a future caller that gets
 		// here is told what it did instead of silently previewing the first one.
-		fmt.Fprintf(os.Stderr, "error: safegit %s previews exactly one commit, and this names %d\n", verb, len(parsed.Revisions))
+		errorf(flags, "safegit %s previews exactly one commit, and this names %d", verb, len(parsed.Revisions))
 		return exitcode.General
 	}
 
 	c, err := git.RevParse(ctx, parsed.Revisions[0]+"^{commit}")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: resolving the commit to %s: %v\n", verb, err)
+		errorf(flags, "resolving the commit to %s: %v", verb, err)
 		return exitcode.General
 	}
 
@@ -360,19 +359,19 @@ func previewReplay(flags globalFlags, ctx context.Context, verb string, parsed g
 	// parent (a pick) or the source commit itself (a revert).
 	ours, err := git.HeadTreeish(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: reading HEAD: %v\n", err)
+		errorf(flags, "reading HEAD: %v", err)
 		return exitcode.General
 	}
 
 	base, theirs, err := replaySides(ctx, verb, c, mainline)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
 	result, err := git.MergeTree(ctx, base, ours, theirs, strategyOptionArgv(parsed)...)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
@@ -409,15 +408,15 @@ func replaySides(ctx context.Context, verb, c, mainline string) (base, theirs st
 // reportPreviewOutcome prints the computed answer for one operation.
 func reportPreviewOutcome(flags globalFlags, verb, what string, result git.MergeTreeResult) {
 	if !result.Conflicted {
-		infof(flags, "would %s %s cleanly\n", verb, what)
-		infof(flags, " resulting tree: %s\n", result.Tree)
+		infof(flags, "would %s %s cleanly", verb, what)
+		infof(flags, " resulting tree: %s", result.Tree)
 		return
 	}
-	infof(flags, "would %s %s: CONFLICT in %d path(s)\n", verb, what, len(result.Paths))
+	infof(flags, "would %s %s: CONFLICT in %d path(s)", verb, what, len(result.Paths))
 	for _, p := range result.Paths {
-		infof(flags, "  %s\n", p)
+		infof(flags, "  %s", p)
 	}
-	infof(flags, " the operation would stop here for you to resolve them\n")
+	infof(flags, " the operation would stop here for you to resolve them")
 }
 
 // describeCommit renders a commit as an operator recognizes it, falling back to

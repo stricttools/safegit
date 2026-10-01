@@ -131,9 +131,23 @@ type Pipeline struct {
 	// around it is exactly how a preview would move a ref for real.
 	RefUpdate RefUpdate
 
+	// Notices is how the pipeline writes its own lines. It is required: the
+	// command layer passes the framework's writers, so a line written from in
+	// here reaches the operator, and lands under --json, the way every other
+	// line safegit writes does.
+	Notices Notices
+
 	// PhaseADone is called (if non-nil) after Phase A completes but before
 	// the ref lock is acquired. Used by tests to inject concurrent commits.
 	PhaseADone func()
+}
+
+// Notices are the two writers the pipeline's own lines go through.
+type Notices struct {
+	// Warn writes an advisory about what is being recorded.
+	Warn func(string)
+	// Info writes progress.
+	Info func(string)
 }
 
 // FileSpec describes a file with optional hunk selection for staging.
@@ -423,7 +437,7 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 
 	// The repository's own hooks, prepared once for the whole operation: they
 	// run at most once each no matter how many attempts the CAS loop takes.
-	hooks, err := newNativeHooks(ctx, repoRoot, p.SafegitDir, req.DryRun)
+	hooks, err := newNativeHooks(ctx, repoRoot, p.SafegitDir, req.DryRun, p.Notices.Info)
 	if err != nil {
 		return nil, err
 	}
@@ -435,7 +449,7 @@ func (p *Pipeline) Execute(ctx context.Context, req CommitRequest) (*CommitResul
 	// the ref changes that delta. So the state is once-per-operation -- the ids
 	// minted once, attempt 1's answer retained as data -- while the inference
 	// itself runs per attempt. See moveInference.
-	inference := newMoveInference(req)
+	inference := newMoveInference(req, p.Notices.Warn)
 	// The pairs this commit already states, resolved once with the records
 	// themselves: a plain commit's declarations cannot change between attempts.
 	declaredMoves := declaredPairs(movedTrailers)

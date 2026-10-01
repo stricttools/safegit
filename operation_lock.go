@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/stricttools/safegit/internal/exitcode"
@@ -40,7 +39,7 @@ import (
 func acquireOperationLock(flags globalFlags, gitDir, op string) (func(), int) {
 	release, code, message := operationLock(flags, gitDir, op)
 	if code != exitcode.OK {
-		fmt.Fprintf(os.Stderr, "error: %s\n", message)
+		errorf(flags, "%s", message)
 	}
 	return release, code
 }

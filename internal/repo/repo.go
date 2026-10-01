@@ -239,13 +239,14 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	return nil
 }
 
-// EnsureInitialized auto-initializes .git/safegit/ if it doesn't exist yet.
-func EnsureInitialized(ctx context.Context, gitDir string) error {
+// EnsureInitialized auto-initializes .git/safegit/ if it doesn't exist yet,
+// and says so through warn.
+func EnsureInitialized(ctx context.Context, gitDir string, warn func(string)) error {
 	if !IsInitialized(gitDir) {
 		if err := Init(ctx, gitDir); err != nil {
 			return fmt.Errorf("safegit: auto-init failed: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "safegit: auto-initialized %s\n", SafegitDir(gitDir))
+		warn("auto-initialized " + SafegitDir(gitDir))
 	}
 	return nil
 }

@@ -1,9 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/stricttools/safegit/internal/exitcode"
 	"github.com/stricttools/safegit/internal/git"
 	"github.com/stricttools/safegit/internal/gitexec"
@@ -45,12 +42,12 @@ const (
 func runPull(flags globalFlags, mode pullMode, remote, branch string, rebase bool) int {
 	// FIRST, and before the repository is touched at all.
 	if rebase {
-		return refusePullRebase()
+		return refusePullRebase(flags)
 	}
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
@@ -59,7 +56,7 @@ func runPull(flags globalFlags, mode pullMode, remote, branch string, rebase boo
 	// ordinary commit does, so the parent must have answered the auto-bump
 	// question before anything is written.
 	if err := requireAutoBumpDecision(flags.ctx(), flags); err != nil {
-		fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
+		errorf(flags, "auto-bump parent: %v", err)
 		return exitcode.General
 	}
 
@@ -83,7 +80,7 @@ func runPull(flags globalFlags, mode pullMode, remote, branch string, rebase boo
 	// exits 0 (probed; over a parked cherry-pick git does refuse) -- so without
 	// this a pull computed the merge, committed it through the pipeline, and left
 	// REVERT_HEAD orphaned for the next `safegit commit` to refuse over.
-	if code := refuseComputeOverInFlight(gitDir, "pull"); code != 0 {
+	if code := refuseComputeOverInFlight(flags, gitDir, "pull"); code != 0 {
 		return code
 	}
 
@@ -99,7 +96,7 @@ func runPull(flags globalFlags, mode pullMode, remote, branch string, rebase boo
 	// It is asked before the dry-run branch as well: a preview of a command that
 	// cannot run is not a preview of anything, which is the rule merge's own
 	// preview follows. appendOperationEntry writes nothing in a dry run.
-	if code := refuseUnbornMergeForm(flags.ctx(), mode == pullNoFF, false, "--merge-strategy no-ff", "", unbornPullWayOut); code != 0 {
+	if code := refuseUnbornMergeForm(flags, flags.ctx(), mode == pullNoFF, false, "--merge-strategy no-ff", "", unbornPullWayOut); code != 0 {
 		appendOperationEntry(flags, sgDir, "pull", pos, false, pullExtraBase(remote, branch))
 		return code
 	}
@@ -120,8 +117,8 @@ func runPull(flags globalFlags, mode pullMode, remote, branch string, rebase boo
 		if code := runGitMutation(flags, gitexec.NoDoor, fetchArgs...); code != 0 {
 			return code
 		}
-		infof(flags, "the merge that follows cannot be previewed: what it does depends on the commits the fetch\n")
-		infof(flags, "would bring in, and a preview performs no fetch. Run 'safegit merge' after fetching to see it.\n")
+		infof(flags, "the merge that follows cannot be previewed: what it does depends on the commits the fetch")
+		infof(flags, "would bring in, and a preview performs no fetch. Run 'safegit merge' after fetching to see it.")
 		return exitcode.OK
 	}
 
@@ -178,13 +175,13 @@ func runPull(flags globalFlags, mode pullMode, remote, branch string, rebase boo
 // rebase is its own command with its own door -- git replays and authors the
 // replayed commits there, which is the one place safegit lets it. Cataloged in
 // docs/divergences.md as "`pull --rebase` is refused, naming the two commands".
-func refusePullRebase() int {
-	fmt.Fprintf(os.Stderr, "error: safegit pull does not support --rebase\n")
-	fmt.Fprintf(os.Stderr, "  a pull's merge step is safegit's own -- it authors the commit -- while a rebase is git's\n")
-	fmt.Fprintf(os.Stderr, "  replay from end to end, which is a different operation with a different door. Do the two:\n")
-	fmt.Fprintf(os.Stderr, "    git fetch <remote>\n")
-	fmt.Fprintf(os.Stderr, "    safegit rebase <remote>/<branch>\n")
-	fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+func refusePullRebase(flags globalFlags) int {
+	errorf(flags, "safegit pull does not support --rebase\n"+
+		"  a pull's merge step is safegit's own -- it authors the commit -- while a rebase is git's\n"+
+		"  replay from end to end, which is a different operation with a different door. Do the two:\n"+
+		"    git fetch <remote>\n"+
+		"    safegit rebase <remote>/<branch>\n"+
+		"  safegit implements a deliberate subset of git; see docs/divergences.md.")
 	return exitcode.Usage
 }
 

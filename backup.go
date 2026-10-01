@@ -241,12 +241,12 @@ func confirmExposure(ctx context.Context, flags globalFlags, remote, remoteURL s
 	c := consent{granted: allowPublicRemote, flag: "--allow-public-remote"}
 	switch classifyRemote(ctx, remoteURL) {
 	case exposurePublic:
-		fmt.Fprintf(os.Stderr, "warning: %s (%s) is a PUBLIC repository\n", remote, remoteURL)
-		fmt.Fprintf(os.Stderr, "         a backup pushes your entire current branch there, including work you have not published\n")
+		warnf(flags, "%s (%s) is a PUBLIC repository\n"+
+			"         a backup pushes your entire current branch there, including work you have not published", remote, remoteURL)
 		return confirmDeliberate(flags, c, "Push a backup of this branch to a PUBLIC repository?")
 	case exposureUnknown:
-		fmt.Fprintf(os.Stderr, "warning: cannot determine whether %s (%s) is public\n", remote, remoteURL)
-		fmt.Fprintf(os.Stderr, "         a backup pushes your entire current branch there\n")
+		warnf(flags, "cannot determine whether %s (%s) is public\n"+
+			"         a backup pushes your entire current branch there", remote, remoteURL)
 		return confirmDeliberate(flags, c, "Push a backup of this branch to a remote of unknown visibility?")
 	default:
 		return true
@@ -293,17 +293,17 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 		if _, err := execGitPush(flags, []string{"push", "--no-verify", lease, remote, "HEAD:" + slot}); err != nil {
 			strictcli.ExitNow(exitcode.General, fmt.Sprintf("recording the push: %v", err))
 		}
-		infof(flags, "Would back up %s (%s) to backup slot %s on %s\n", branch, headSHA[:12], slot, remote)
-		infof(flags, "  equivalent git command: git push --no-verify --force-with-lease=%s:<slot sha observed at run time> %s HEAD:%s\n", slot, remote, slot)
-		infof(flags, "  the slot's current SHA, the ancestry check against it, and the lease pinned to it are resolved when the backup runs; no remote was contacted\n")
-		infof(flags, "Dry run: no changes made.\n")
+		infof(flags, "Would back up %s (%s) to backup slot %s on %s", branch, headSHA[:12], slot, remote)
+		infof(flags, "  equivalent git command: git push --no-verify --force-with-lease=%s:<slot sha observed at run time> %s HEAD:%s", slot, remote, slot)
+		infof(flags, "  the slot's current SHA, the ancestry check against it, and the lease pinned to it are resolved when the backup runs; no remote was contacted")
+		infof(flags, "Dry run: no changes made.")
 		return 0
 	}
 
 	// Ask before touching a remote we cannot prove is private: a backup pushes
 	// the whole branch, so the decision belongs before any network contact.
 	if !confirmExposure(ctx, flags, remote, remoteURL, allowPublicRemote) {
-		infof(flags, "Aborted.\n")
+		infof(flags, "Aborted.")
 		return exitcode.General
 	}
 
@@ -344,14 +344,14 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 		// from a slot safegit read and found to hold unfamiliar commits, and it
 		// happens before anything is pushed.
 		if leaseRejected(gitStderr, true) {
-			fmt.Fprintf(os.Stderr,
+			errorf(flags,
 				"backup refused: %s on %s moved after safegit read it, so the --force-with-lease expectation no longer matches\n"+
 					"  another machine backed up this branch between the read and the push, and the lease kept its work\n"+
-					"  look at what arrived (safegit backup list %s), then run the backup again\n",
+					"  look at what arrived (safegit backup list %s), then run the backup again",
 				slot, remote, remote)
 			return exitcode.PushLeaseRejected
 		}
-		fmt.Fprintf(os.Stderr, "backup push failed: %v\n", err)
+		errorf(flags, "backup push failed: %v", err)
 		return exitcode.PushFailed
 	}
 
@@ -367,7 +367,7 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 		},
 	})
 
-	infof(flags, "  %s (%s) -> %s %s\n", branch, headSHA[:12], remote, slot)
+	infof(flags, "  %s (%s) -> %s %s", branch, headSHA[:12], remote, slot)
 	return 0
 }
 
@@ -389,7 +389,7 @@ func runBackupList(flags globalFlags, remote string) int {
 		strictcli.ExitNow(exitcode.General, fmt.Sprintf("listing backups on %s: %v", remote, err))
 	}
 	if len(refs) == 0 {
-		infof(flags, "no backups on %s\n", remote)
+		infof(flags, "no backups on %s", remote)
 		return 0
 	}
 
@@ -411,7 +411,7 @@ func runBackupList(flags globalFlags, remote string) int {
 		if len(sha) > 12 {
 			sha = sha[:12]
 		}
-		outf(flags, "  %-*s  %s  %s\n", width, branch, sha, ref)
+		outf(flags, "  %-*s  %s  %s", width, branch, sha, ref)
 	}
 	return 0
 }
@@ -473,10 +473,10 @@ func runBackupRestore(flags globalFlags, remote string) int {
 		if _, _, err := runBackupGit(flags, "ref:HEAD", "merge", "--ff-only", slotSHA); err != nil {
 			strictcli.ExitNow(exitcode.General, fmt.Sprintf("recording the fast-forward: %v", err))
 		}
-		infof(flags, "Would fast-forward %s from backup slot %s on %s (%s -> %s)\n",
+		infof(flags, "Would fast-forward %s from backup slot %s on %s (%s -> %s)",
 			branch, slot, remote, oldHead[:12], slotSHA[:12])
-		infof(flags, "  equivalent git commands: git fetch %s %s && git merge --ff-only FETCH_HEAD\n", remote, slot)
-		infof(flags, "Dry run: no changes made.\n")
+		infof(flags, "  equivalent git commands: git fetch %s %s && git merge --ff-only FETCH_HEAD", remote, slot)
+		infof(flags, "Dry run: no changes made.")
 		return 0
 	}
 
@@ -487,7 +487,7 @@ func runBackupRestore(flags globalFlags, remote string) int {
 
 	stdout, stderr, err := runBackupGit(flags, "ref:HEAD", "merge", "--ff-only", "FETCH_HEAD")
 	if stdout != "" {
-		outf(flags, "%s", stdout)
+		outf(flags, "%s", strings.TrimSuffix(stdout, "\n"))
 	}
 	if err != nil {
 		fmt.Fprint(os.Stderr, stderr)
@@ -510,6 +510,6 @@ func runBackupRestore(flags globalFlags, remote string) int {
 		},
 	})
 
-	infof(flags, "  %s restored from %s %s (%s -> %s)\n", branch, remote, slot, oldHead[:12], fetched[:12])
+	infof(flags, "  %s restored from %s %s (%s -> %s)", branch, remote, slot, oldHead[:12], fetched[:12])
 	return 0
 }

@@ -238,7 +238,7 @@ func (r *RewriteResult) prepare(ctx context.Context, flags globalFlags, hooks Re
 	}
 
 	// 1. Plan the ref updates. Tag objects are written here; no ref moves.
-	plan, err := planRefUpdates(ctx, r.ShaMap, r.TaggerOldName, r.TaggerNewName, r.TaggerOldEmail, r.TaggerNewEmail, hooks.AnnotateTag, flags.verbose)
+	plan, err := planRefUpdates(flags, ctx, r.ShaMap, r.TaggerOldName, r.TaggerNewName, r.TaggerOldEmail, r.TaggerNewEmail, hooks.AnnotateTag, flags.verbose)
 	if err != nil {
 		return nil, fmt.Errorf("planning ref updates: %w", err)
 	}
@@ -247,7 +247,7 @@ func (r *RewriteResult) prepare(ctx context.Context, flags globalFlags, hooks Re
 	r.TagsRewrittenCount = plan.TagsRewritten
 
 	// 2a. The preservation check.
-	infof(flags, "Verifying the rewrite before it is published...\n")
+	infof(flags, "Verifying the rewrite before it is published...")
 	if failures := verifyIntendedChanges(ctx, r.ShaMap, r.Intent); len(failures) > 0 {
 		return nil, refuse("the rewrite did not do what the operation declared it would:", failures)
 	}
@@ -319,8 +319,8 @@ func (r *RewriteResult) publish(ctx context.Context, flags globalFlags, cmd stri
 	}
 
 	// 4. Move the refs.
-	infof(flags, "Updating refs...\n")
-	if err := applyRefUpdates(ctx, plan, flags.verbose); err != nil {
+	infof(flags, "Updating refs...")
+	if err := applyRefUpdates(flags, ctx, plan, flags.verbose); err != nil {
 		return fmt.Errorf("updating refs: %w", err)
 	}
 
@@ -350,20 +350,19 @@ func (r *RewriteResult) publish(ctx context.Context, flags globalFlags, cmd stri
 	// working tree as it is and says what to run.
 	residual, err := foreignWorktreeState(ctx, r.OldHeadSHA)
 	if err != nil {
-		r.recordTierB(fmt.Sprintf("could not re-check the working tree before syncing it: %v", err))
+		r.recordTierB(flags, fmt.Sprintf("could not re-check the working tree before syncing it: %v", err))
 	} else if len(residual) > 0 {
 		r.SyncSkipped = true
-		r.recordTierB(fmt.Sprintf("the working tree acquired changes while the refs were moving, so it was NOT synced to the rewritten history (%d path(s))", len(residual)))
-		fmt.Fprintf(os.Stderr, "The refs now point at the rewritten history, but the working tree was left alone:\n")
+		r.recordTierB(flags, fmt.Sprintf("the working tree acquired changes while the refs were moving, so it was NOT synced to the rewritten history (%d path(s))", len(residual)))
+		report := "The refs now point at the rewritten history, but the working tree was left alone:"
 		for _, line := range residual {
-			fmt.Fprintf(os.Stderr, "  %s\n", line)
+			report += "\n  " + line
 		}
-		fmt.Fprintf(os.Stderr, "Nothing was overwritten. Deal with those changes, then run:\n")
-		fmt.Fprintf(os.Stderr, "  git read-tree --reset -u HEAD\n")
+		warnf(flags, "%s\nNothing was overwritten. Deal with those changes, then run:\n  git read-tree --reset -u HEAD", report)
 	} else {
-		protectedPaths, syncErr := git.SyncMainIndexWithWorktree(ctx, "HEAD")
+		protectedPaths, syncErr := git.SyncMainIndexWithWorktree(ctx, "HEAD", flags.sc.Warn)
 		if syncErr != nil {
-			r.recordTierB(fmt.Sprintf("syncing the working tree to the rewritten history: %v", syncErr))
+			r.recordTierB(flags, fmt.Sprintf("syncing the working tree to the rewritten history: %v", syncErr))
 		}
 		untrackProtectedPaths(ctx, flags, protectedPaths)
 	}
@@ -373,7 +372,7 @@ func (r *RewriteResult) publish(ctx context.Context, flags globalFlags, cmd stri
 	// machine-readably in CleanupOK/CleanupErrors for orchestrators.
 	cleanupErrors, residue, cleanupErr := cleanupAfterRewrite(ctx, flags, cmd, r.ShaMap, allTagRewrites, r.SgDir)
 	if cleanupErr != nil {
-		fmt.Fprintf(os.Stderr, "warning: post-rewrite cleanup: %v\n", cleanupErr)
+		warnf(flags, "post-rewrite cleanup: %v", cleanupErr)
 		cleanupErrors = append(cleanupErrors, cleanupErr.Error())
 	}
 	r.CleanupErrors = cleanupErrors
@@ -384,14 +383,14 @@ func (r *RewriteResult) publish(ctx context.Context, flags globalFlags, cmd stri
 	// reaches are not among them -- cleanup filtered those out, because they are
 	// another branch's history rather than something the prune failed at.
 	if residue != "" {
-		r.recordTierB(residue)
+		r.recordTierB(flags, residue)
 	}
 	for _, f := range verifyRefsRemapped(ctx, r.ShaMap) {
-		r.recordTierB(f)
+		r.recordTierB(flags, f)
 	}
 	if hooks.TierB != nil {
 		if err := hooks.TierB(ctx); err != nil {
-			r.recordTierB(err.Error())
+			r.recordTierB(flags, err.Error())
 		}
 	}
 
@@ -446,7 +445,7 @@ func (r *RewriteResult) publish(ctx context.Context, flags globalFlags, cmd stri
 
 	// Push hint (rlsbl-aware).
 	hint := pushHintForRepo(ctx)
-	infof(flags, "\n%s\n", hint)
+	infof(flags, "\n%s", hint)
 
 	return nil
 }
@@ -497,7 +496,7 @@ func publishAll(flags globalFlags, cmd string, rewrites []*pendingRewrite) (stri
 		// multi-repository operation says which one it is about to publish.
 		// The primary rewrite carries no label and needs no heading.
 		if pr.Label != "" {
-			infof(flags, "Publishing the %s rewrite...\n", pr.Label)
+			infof(flags, "Publishing the %s rewrite...", pr.Label)
 		}
 		if err := pr.Result.publish(pr.Ctx, flags, cmd, pr.Hooks, pr.plan); err != nil {
 			return pr.Label, err
@@ -508,9 +507,9 @@ func publishAll(flags globalFlags, cmd string, rewrites []*pendingRewrite) (stri
 
 // recordTierB records one post-rewrite finding and prints it. Tier B findings
 // never abort: they are what the command exits nonzero ABOUT.
-func (r *RewriteResult) recordTierB(finding string) {
+func (r *RewriteResult) recordTierB(flags globalFlags, finding string) {
 	r.TierBFailures = append(r.TierBFailures, finding)
-	fmt.Fprintf(os.Stderr, "CRITICAL: %s\n", finding)
+	errorf(flags, "CRITICAL: %s", finding)
 }
 
 // pushHintForRepo returns the appropriate push hint based on whether the repo

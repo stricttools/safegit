@@ -122,9 +122,9 @@ func TestCommitSymlinkOutsideTargetIsCommittedWhenElected(t *testing.T) {
 	if target := catFileBlob(t, dir, "escapes"); target != "../elsewhere/secret.txt" {
 		t.Errorf("symlink blob = %q, want the link text %q", target, "../elsewhere/secret.txt")
 	}
-	if !strings.Contains(stderr, "notice:") || !strings.Contains(stderr, "escapes") ||
+	if !strings.Contains(stderr, "warning:") || !strings.Contains(stderr, "escapes") ||
 		!strings.Contains(stderr, "outside the repository") {
-		t.Errorf("expected a one-line stderr notice naming the link and saying its target is outside the repository, got:\n%s", stderr)
+		t.Errorf("expected a one-line stderr warning naming the link and saying its target is outside the repository, got:\n%s", stderr)
 	}
 }
 
@@ -500,7 +500,7 @@ func TestCommitAbsoluteSymlinkTargetInsideTheRepositoryIsRefused(t *testing.T) {
 	if got := catFileBlob(t, dir, "abslink"); got != target {
 		t.Errorf("symlink blob = %q, want the absolute link text %q", got, target)
 	}
-	if !strings.Contains(stderr, "notice:") || !strings.Contains(stderr, "the commit records the link text") {
+	if !strings.Contains(stderr, "warning:") || !strings.Contains(stderr, "the commit records the link text") {
 		t.Errorf("the election must say once what the recorded text will not resolve to; stderr:\n%s", stderr)
 	}
 	// The notice's absolute sentence has to be true of EVERY absolute target,

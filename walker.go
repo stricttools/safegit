@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/stricttools/safegit/internal/git"
 )
@@ -39,7 +38,7 @@ type TransformFunc func(ctx context.Context, sha string, info git.CommitInfo, re
 // new commit objects when anything changed. Returns the old-to-new SHA map,
 // the count of commits that were actually rewritten (new SHA differs from
 // original), and any error.
-func walkAndRewrite(ctx context.Context, shas []string, transform TransformFunc, verbose bool) (shaMap map[string]string, rewrittenCount int, err error) {
+func walkAndRewrite(flags globalFlags, ctx context.Context, shas []string, transform TransformFunc, verbose bool) (shaMap map[string]string, rewrittenCount int, err error) {
 	shaMap = make(map[string]string, len(shas))
 
 	for _, sha := range shas {
@@ -109,12 +108,12 @@ func walkAndRewrite(ctx context.Context, shas []string, transform TransformFunc,
 			rewrittenCount++
 			if verbose {
 				reason := rewriteReason(treeChanged, messageChanged, authorChanged || committerChanged, parentRemapped)
-				fmt.Fprintf(os.Stderr, "  %s -> %s  (%s)\n", sha[:12], newSHA[:12], reason)
+				debugf(flags, "  %s -> %s  (%s)", sha[:12], newSHA[:12], reason)
 			}
 		} else {
 			shaMap[sha] = sha
 			if verbose {
-				fmt.Fprintf(os.Stderr, "  %s                   (unchanged)\n", sha[:12])
+				debugf(flags, "  %s                   (unchanged)", sha[:12])
 			}
 		}
 	}

@@ -140,17 +140,6 @@ func (g globalFlags) payload(value interface{}) {
 	g.sc.Payload(value)
 }
 
-// silent reports that safegit must not write human text to stdout.
-//
-// Two independent reasons, and neither is the other: --quiet is the operator
-// asking for silence, and machine mode is stdout being owned by the framework's
-// envelope. safegit's handlers print with fmt.Printf rather than through the
-// context writers, so those writes bypass the framework entirely (contract
-// §19.1's accepted ceiling) and would land beside the envelope as a second
-// document. Machine mode therefore suppresses them here -- it does NOT set
-// quiet: ctx.Quiet() keeps reporting exactly what the operator passed.
-func (g globalFlags) silent() bool { return g.quiet || g.json }
-
 func main() {
 	newApp().Run()
 }
@@ -901,8 +890,9 @@ type reservedFlags struct {
 // Machine mode does not rewrite any of them. It used to force quiet, which made
 // ctx.Quiet() and flags.quiet disagree and pushed every command into a separate
 // machine-mode code path; the envelope is structurally exempt from quiet, so
-// there is nothing left for the coupling to protect. Suppressing safegit's own
-// stdout writes in machine mode is silent()'s job and stays there.
+// there is nothing left for the coupling to protect. What safegit writes goes
+// through the framework's writers (infof, outf, debugf, errorf, warnf), which
+// place it in machine mode themselves.
 func newGlobalFlags(r reservedFlags, configPath string, jsonOut bool) globalFlags {
 	return globalFlags{
 		quiet:      r.quiet,
@@ -960,7 +950,7 @@ func ensureInitialized(flags globalFlags, gitDir string) error {
 	if flags.dryRun {
 		return nil
 	}
-	return repo.EnsureInitialized(flags.ctx(), gitDir)
+	return repo.EnsureInitialized(flags.ctx(), gitDir, flags.sc.Warn)
 }
 
 // mustGitDir resolves the .git directory or exits with an error.
@@ -1022,8 +1012,8 @@ func confirmDeliberate(flags globalFlags, c consent, format string, args ...inte
 	if flags.json {
 		// A --json run has nobody to prompt, and a dangling prompt would land
 		// in the JSON stream. Refuse, and name the flag that consents.
-		fmt.Fprintf(os.Stderr, "refusing: "+format+"\n", args...)
-		fmt.Fprintf(os.Stderr, "          --json does not answer this confirmation; pass %s to consent deliberately\n", c.flag)
+		errorf(flags, "refusing: "+format+"\n  --json does not answer this confirmation; pass %s to consent deliberately",
+			append(append([]interface{}{}, args...), c.flag)...)
 		return false
 	}
 	// The prompt goes to STDERR, and --quiet never suppresses it. stdout is a
@@ -1036,27 +1026,40 @@ func confirmDeliberate(flags globalFlags, c consent, format string, args ...inte
 	return answer == "y" || answer == "Y"
 }
 
-// infof writes one line of human progress text, suppressed in the two modes
-// where safegit's stdout is not the operator's to read (see silent()). It is
-// the ONE spelling of that job: a handler printing several such lines calls it
-// per line instead of repeating the silent() check around a fmt.Printf block.
+// The four writers below are safegit's only route to its own output, and each
+// is the framework's: a line is written once, with one newline the framework
+// adds, and under --json it lands in the document instead of on a stream.
 //
-// Its counterpart is outf, which prints a command's own RESULT -- the thing the
-// command exists to say -- and is suppressed only in machine mode.
+// infof writes progress text (ctx.Info): stdout, hidden by --quiet, an info
+// diagnostic under --json.
 func infof(flags globalFlags, format string, args ...interface{}) {
-	if !flags.silent() {
-		fmt.Printf(format, args...)
-	}
+	flags.sc.Info(fmt.Sprintf(format, args...))
 }
 
-// outf prints a command's own result text -- the thing the command exists to
-// say, which --quiet deliberately does NOT suppress (a `config get` is its
-// output). Machine mode still suppresses it: stdout there carries the
-// envelope and nothing else.
+// outf writes a command's own result text -- the thing the command exists to
+// say (ctx.Out): stdout, never hidden by --quiet, the document's output member
+// under --json.
 func outf(flags globalFlags, format string, args ...interface{}) {
-	if !flags.json {
-		fmt.Printf(format, args...)
-	}
+	flags.sc.Out(fmt.Sprintf(format, args...))
+}
+
+// debugf writes detail for --verbose (ctx.Debug): stdout, shown only under
+// --verbose and hidden by --quiet, a debug diagnostic under --json -- so a
+// caller writes it only when flags.verbose is set.
+func debugf(flags globalFlags, format string, args ...interface{}) {
+	flags.sc.Debug(fmt.Sprintf(format, args...))
+}
+
+// errorf writes an error (ctx.Error): stderr as "error: <message>", an error
+// diagnostic under --json. A message may span lines; it stays one diagnostic.
+func errorf(flags globalFlags, format string, args ...interface{}) {
+	flags.sc.Error(fmt.Sprintf(format, args...))
+}
+
+// warnf writes a warning or an advisory note (ctx.Warn): stderr as
+// "warning: <message>", never hidden, a warn diagnostic under --json.
+func warnf(flags globalFlags, format string, args ...interface{}) {
+	flags.sc.Warn(fmt.Sprintf(format, args...))
 }
 
 // requireCleanTree dies if the working tree has uncommitted changes.

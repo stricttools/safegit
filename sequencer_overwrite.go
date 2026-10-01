@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	"github.com/stricttools/safegit/internal/conflict"
 	"github.com/stricttools/safegit/internal/exitcode"
@@ -77,10 +78,10 @@ type overwriteVictim struct {
 // marker exemption (a declaration about a file's own text). Neither has anything
 // to do with what is about to be written over, so this pass shares nothing with
 // it but the stage blobs.
-func (op continueOp) refuseWorktreeOverwrite(ctx context.Context, sides map[string]conflict.Sides, declared []resolution, discard bool) int {
+func (op continueOp) refuseWorktreeOverwrite(flags globalFlags, ctx context.Context, sides map[string]conflict.Sides, declared []resolution, discard bool) int {
 	victims, err := unmatchedWorktreeFiles(ctx, sides, declared)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 	if len(victims) == 0 {
@@ -94,25 +95,27 @@ func (op continueOp) refuseWorktreeOverwrite(ctx context.Context, sides map[stri
 			if v.deletes {
 				verb = "deleted"
 			}
-			fmt.Fprintf(os.Stderr, "note: %s is %s as --discard-unmatched-worktree elects; its content matched no side of the conflict\n", v.path, verb)
+			warnf(flags, "%s is %s as --discard-unmatched-worktree elects; its content matched no side of the conflict", v.path, verb)
 		}
 		return 0
 	}
 
-	fmt.Fprintf(os.Stderr, "error: %d working-tree file(s) hold content no side of this %s accounts for:\n", len(victims), op.kind)
+	var report strings.Builder
+	fmt.Fprintf(&report, "%d working-tree file(s) hold content no side of this %s accounts for:", len(victims), op.kind)
 	for _, v := range victims {
 		effect := "overwrite it with the stage's content"
 		if v.deletes {
 			effect = "delete it"
 		}
-		fmt.Fprintf(os.Stderr, "  %s  (--resolve '%s=%s' would %s)\n", v.path, v.path, v.choice, effect)
+		fmt.Fprintf(&report, "\n  %s  (--resolve '%s=%s' would %s)", v.path, v.path, v.choice, effect)
 	}
-	fmt.Fprintf(os.Stderr, "  The file matches neither an index stage nor what git wrote there, so it is a hand edit:\n")
-	fmt.Fprintf(os.Stderr, "  its content is in no commit, no stage and no stash, and nothing could bring it back.\n")
-	fmt.Fprintf(os.Stderr, "  Nothing was committed and the %s is still in progress. Keep the edit:\n", op.kind)
-	fmt.Fprintf(os.Stderr, "    safegit %s --resolve '%s=worktree'\n", op.command, victims[0].path)
-	fmt.Fprintf(os.Stderr, "  or, to throw that content away deliberately:\n")
-	fmt.Fprintf(os.Stderr, "    safegit %s ... --discard-unmatched-worktree\n", op.command)
+	fmt.Fprintf(&report, "\n  The file matches neither an index stage nor what git wrote there, so it is a hand edit:")
+	fmt.Fprintf(&report, "\n  its content is in no commit, no stage and no stash, and nothing could bring it back.")
+	fmt.Fprintf(&report, "\n  Nothing was committed and the %s is still in progress. Keep the edit:", op.kind)
+	fmt.Fprintf(&report, "\n    safegit %s --resolve '%s=worktree'", op.command, victims[0].path)
+	fmt.Fprintf(&report, "\n  or, to throw that content away deliberately:")
+	fmt.Fprintf(&report, "\n    safegit %s ... --discard-unmatched-worktree", op.command)
+	errorf(flags, "%s", report.String())
 	return exitcode.ConclusionWouldOverwrite
 }
 

@@ -193,7 +193,7 @@ func printUninstallPlan(flags globalFlags, targets []repo.UninstallTarget) {
 	if flags.dryRun {
 		verb = "would remove"
 	}
-	outf(flags, "safegit uninstall %s %d path(s) from this repository:\n", verb, len(targets))
+	outf(flags, "safegit uninstall %s %d path(s) from this repository:", verb, len(targets))
 	foreign := 0
 	for _, t := range targets {
 		note := ""
@@ -201,10 +201,10 @@ func printUninstallPlan(flags globalFlags, targets []repo.UninstallTarget) {
 			note = " -- NOT the worktree you are in"
 			foreign++
 		}
-		outf(flags, "  %s  (%s%s)\n", t.Path, t.Label, note)
+		outf(flags, "  %s  (%s%s)", t.Path, t.Label, note)
 	}
 	if foreign > 0 {
-		outf(flags, "Includes %d path(s) outside the worktree you are in; uninstall is repository-wide.\n", foreign)
+		outf(flags, "Includes %d path(s) outside the worktree you are in; uninstall is repository-wide.", foreign)
 	}
 }
 
@@ -227,7 +227,7 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 	if uninstall {
 		targets, err := repo.UninstallPlan(flags.ctx(), gitDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			errorf(flags, "%v", err)
 			return exitcode.General
 		}
 		// The enumeration comes BEFORE the confirmation, because it is what the
@@ -242,7 +242,7 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 		// blanket --approve-consequential is exactly the right consent for it.
 		uninstallConsent := consent{granted: flags.approved, flag: "--approve-consequential"}
 		if !confirmDeliberate(flags, uninstallConsent, "Remove safegit from this repository?") {
-			infof(flags, "Aborted.\n")
+			infof(flags, "Aborted.")
 			return exitcode.General
 		}
 		// Through the effects handle, so --dry-run records each removal instead
@@ -251,12 +251,12 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 		fx := flags.effects()
 		for _, t := range targets {
 			if _, err := fx.Remove(t.Path, strictcli.Resource("safegit-state:"+t.Path)); err != nil {
-				fmt.Fprintf(os.Stderr, "error: removing %s: %v\n", t.Path, err)
+				errorf(flags, "removing %s: %v", t.Path, err)
 				return exitcode.General
 			}
 		}
-		if !flags.silent() && !flags.dryRun {
-			fmt.Println("safegit uninstalled")
+		if !flags.dryRun {
+			infof(flags, "%s", "safegit uninstalled")
 		}
 		return 0
 	}
@@ -272,7 +272,7 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 		inited:       repo.IsInitialized(gitDir),
 	}
 
-	checks := runDoctorChecks(env, flags.verbose)
+	checks := runDoctorChecks(flags, env, flags.verbose)
 
 	allOK := true
 	for _, c := range checks {
@@ -286,13 +286,13 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 			allOK = false
 		}
 		if c.Detail != "" {
-			outf(flags, "[%s] %s: %s\n", icon, c.Name, c.Detail)
+			outf(flags, "[%s] %s: %s", icon, c.Name, c.Detail)
 		} else {
-			outf(flags, "[%s] %s\n", icon, c.Name)
+			outf(flags, "[%s] %s", icon, c.Name)
 		}
 	}
-	if allOK && !flags.silent() {
-		outf(flags, "all checks passed\n")
+	if allOK {
+		infof(flags, "all checks passed")
 	}
 
 	failed := failingChecks(checks)
@@ -306,9 +306,9 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 		// must. A dry run repaired nothing, so its answer is the one above.
 		if !flags.dryRun {
 			env.inited = repo.IsInitialized(gitDir)
-			failed = failingChecks(runDoctorChecks(env, false))
+			failed = failingChecks(runDoctorChecks(flags, env, false))
 			if len(failed) > 0 {
-				fmt.Fprintf(os.Stderr, "still failing after --action fix: %s\n", strings.Join(failed, ", "))
+				errorf(flags, "still failing after --action fix: %s", strings.Join(failed, ", "))
 			}
 		}
 	}
@@ -320,7 +320,7 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 }
 
 // runDoctorChecks runs the registry once and returns what it reported.
-func runDoctorChecks(env doctorEnv, verbose bool) []checkResult {
+func runDoctorChecks(flags globalFlags, env doctorEnv, verbose bool) []checkResult {
 	var checks []checkResult
 	for _, c := range doctorChecks {
 		if c.RequiresInit && !env.inited {
@@ -332,7 +332,7 @@ func runDoctorChecks(env doctorEnv, verbose bool) []checkResult {
 			checks = append(checks, checkResult{Name: c.Name, Status: status, Detail: f.detail})
 		}
 		if verbose {
-			fmt.Fprintf(os.Stderr, "  checked: %s (%v)\n", c.Name, time.Since(checkStart))
+			debugf(flags, "  checked: %s (%v)", c.Name, time.Since(checkStart))
 		}
 	}
 	return checks
@@ -847,7 +847,7 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 	removedTmp := 0
 	for _, dir := range plan.orphanTmpDirs {
 		if rmErr := remove(dir); rmErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: removing %s: %v\n", dir, rmErr)
+			warnf(flags, "removing %s: %v", dir, rmErr)
 			continue
 		}
 		removedTmp++
@@ -856,7 +856,7 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 	queueRemoved := false
 	if plan.legacyQueueDir != "" {
 		if rmErr := remove(plan.legacyQueueDir); rmErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: removing %s: %v\n", plan.legacyQueueDir, rmErr)
+			warnf(flags, "removing %s: %v", plan.legacyQueueDir, rmErr)
 		} else {
 			queueRemoved = true
 		}
@@ -865,7 +865,7 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 	policiesRemoved := false
 	if plan.legacyPolicies != "" {
 		if rmErr := remove(plan.legacyPolicies); rmErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: removing %s: %v\n", plan.legacyPolicies, rmErr)
+			warnf(flags, "removing %s: %v", plan.legacyPolicies, rmErr)
 		} else {
 			policiesRemoved = true
 		}
@@ -879,27 +879,25 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 	if flags.dryRun {
 		for _, path := range append(append([]string{}, locks.StalePaths...), locks.TempPaths...) {
 			if rmErr := removeLock(path); rmErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: recording the removal of %s: %v\n", path, rmErr)
+				warnf(flags, "recording the removal of %s: %v", path, rmErr)
 			}
 		}
 	} else {
 		locks = cleanLocks(lockDirs, removeLock)
 	}
 
-	if !flags.silent() {
-		fmt.Printf("%s %d orphan tmp dir(s)\n", verb, removedTmp)
-		if queueRemoved {
-			fmt.Printf("%s legacy queue directory\n", verb)
-		}
-		if policiesRemoved {
-			fmt.Printf("%s legacy scrub-policy file %s\n", verb, plan.legacyPolicies)
-		}
-		if len(locks.Stale) > 0 {
-			fmt.Printf("%s %d stale lock(s): %s\n", verb, len(locks.Stale), strings.Join(locks.Stale, ", "))
-		}
-		if len(locks.TempPaths) > 0 {
-			fmt.Printf("%s %d orphaned lock-publication temp file(s)\n", verb, len(locks.TempPaths))
-		}
+	infof(flags, "%s %d orphan tmp dir(s)", verb, removedTmp)
+	if queueRemoved {
+		infof(flags, "%s legacy queue directory", verb)
+	}
+	if policiesRemoved {
+		infof(flags, "%s legacy scrub-policy file %s", verb, plan.legacyPolicies)
+	}
+	if len(locks.Stale) > 0 {
+		infof(flags, "%s %d stale lock(s): %s", verb, len(locks.Stale), strings.Join(locks.Stale, ", "))
+	}
+	if len(locks.TempPaths) > 0 {
+		infof(flags, "%s %d orphaned lock-publication temp file(s)", verb, len(locks.TempPaths))
 	}
 
 	fixOrphanedAutostash(flags, plan.autostash)
@@ -914,8 +912,7 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 	// carries the same failure into the exit code.
 	submodules, enumErr := submodule.Enumerate(ctx, gitDir)
 	if enumErr != nil {
-		fmt.Fprintf(os.Stderr, "error: enumerating submodules: %v\n"+
-			"No submodule state directory was cleaned.\n", enumErr)
+		errorf(flags, "enumerating submodules: %v\nNo submodule state directory was cleaned.", enumErr)
 	}
 	for _, sub := range submodules {
 		if _, err := os.Stat(sub.SafegitDir); os.IsNotExist(err) {
@@ -940,15 +937,13 @@ func doctorFixSubmodule(flags globalFlags, name, sgDir string) {
 	remove := mintedRemover(flags, "safegit-state:")
 
 	orphans, err := index.GarbageCollectPlan(sgDir)
-	if err != nil && !flags.silent() {
-		fmt.Fprintf(os.Stderr, "warning: [%s] scanning orphan tmp dirs: %v\n", name, err)
+	if err != nil {
+		warnf(flags, "[%s] scanning orphan tmp dirs: %v", name, err)
 	}
 	removedTmp := 0
 	for _, dir := range orphans {
 		if rmErr := remove(dir); rmErr != nil {
-			if !flags.silent() {
-				fmt.Fprintf(os.Stderr, "warning: [%s] removing %s: %v\n", name, dir, rmErr)
-			}
+			warnf(flags, "[%s] removing %s: %v", name, dir, rmErr)
 			continue
 		}
 		removedTmp++
@@ -960,24 +955,22 @@ func doctorFixSubmodule(flags globalFlags, name, sgDir string) {
 	removeLock := mintedRemover(flags, "lock:")
 	if flags.dryRun {
 		for _, path := range append(append([]string{}, locks.StalePaths...), locks.TempPaths...) {
-			if rmErr := removeLock(path); rmErr != nil && !flags.silent() {
-				fmt.Fprintf(os.Stderr, "warning: [%s] recording the removal of %s: %v\n", name, path, rmErr)
+			if rmErr := removeLock(path); rmErr != nil {
+				warnf(flags, "[%s] recording the removal of %s: %v", name, path, rmErr)
 			}
 		}
 	} else {
 		locks = cleanLocks(dirs, removeLock)
 	}
 
-	if !flags.silent() {
-		if removedTmp > 0 {
-			fmt.Printf("[%s] %s %d orphan tmp dir(s)\n", name, verb, removedTmp)
-		}
-		if len(locks.Stale) > 0 {
-			fmt.Printf("[%s] %s %d stale lock(s): %s\n", name, verb, len(locks.Stale), strings.Join(locks.Stale, ", "))
-		}
-		if len(locks.TempPaths) > 0 {
-			fmt.Printf("[%s] %s %d orphaned lock-publication temp file(s)\n", name, verb, len(locks.TempPaths))
-		}
+	if removedTmp > 0 {
+		infof(flags, "[%s] %s %d orphan tmp dir(s)", name, verb, removedTmp)
+	}
+	if len(locks.Stale) > 0 {
+		infof(flags, "[%s] %s %d stale lock(s): %s", name, verb, len(locks.Stale), strings.Join(locks.Stale, ", "))
+	}
+	if len(locks.TempPaths) > 0 {
+		infof(flags, "[%s] %s %d orphaned lock-publication temp file(s)", name, verb, len(locks.TempPaths))
 	}
 }
 

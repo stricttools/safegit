@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -50,7 +49,7 @@ func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, sha
 	// Step 1+2: Identify and delete tainted reflog entries.
 	if err := expireTaintedReflogEntries(ctx, flags, oldSHAs); err != nil {
 		// Non-fatal: warn and continue to pruning.
-		fmt.Fprintf(os.Stderr, "warning: reflog cleanup: %v\n", err)
+		warnf(flags, "reflog cleanup: %v", err)
 		cleanupErrors = append(cleanupErrors, fmt.Sprintf("reflog cleanup: %v", err))
 	}
 
@@ -61,7 +60,7 @@ func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, sha
 	// "to" entry was deleted. A full expire is needed to clean up these
 	// remaining references after a security-sensitive rewrite.
 	if _, _, err := git.Run(ctx, "reflog", "expire", "--expire=now", "--all"); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: reflog expire: %v\n", err)
+		warnf(flags, "reflog expire: %v", err)
 		cleanupErrors = append(cleanupErrors, fmt.Sprintf("reflog expire: %v", err))
 	}
 
@@ -70,21 +69,21 @@ func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, sha
 	// pack files as well. Both are needed because objects may be loose (newly
 	// created) or packed (pre-existing).
 	if flags.verbose {
-		fmt.Fprintln(os.Stderr, "Pruning unreachable objects")
+		debugf(flags, "Pruning unreachable objects")
 	}
 	if _, _, err := git.Run(ctx, "repack", "-a", "-d", "--unpack-unreachable=now"); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: git repack: %v\n", err)
+		warnf(flags, "git repack: %v", err)
 		cleanupErrors = append(cleanupErrors, fmt.Sprintf("git repack: %v", err))
 	}
 	if _, _, err := git.Run(ctx, "prune", "--expire=now"); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: git prune: %v\n", err)
+		warnf(flags, "git prune: %v", err)
 		cleanupErrors = append(cleanupErrors, fmt.Sprintf("git prune: %v", err))
 	}
 
 	// Step 4: Check stash/notes/replace refs for old SHAs.
-	checkStashForOldSHAs(ctx, oldSHAs)
-	checkNotesForOldSHAs(ctx, oldSHAs)
-	checkReplaceRefsForOldSHAs(ctx, oldSHAs)
+	checkStashForOldSHAs(flags, ctx, oldSHAs)
+	checkNotesForOldSHAs(flags, ctx, oldSHAs)
+	checkReplaceRefsForOldSHAs(flags, ctx, oldSHAs)
 
 	// Step 5: Verify old objects are gone.
 	surviving, sErr := verifyOldObjectsGone(ctx, flags, oldSHAs)
@@ -180,7 +179,7 @@ func expireTaintedReflogEntries(ctx context.Context, flags globalFlags, oldSHAs 
 	}
 
 	if flags.verbose {
-		fmt.Fprintf(os.Stderr, "Expiring %d reflog entries referencing pre-rewrite objects\n", len(tainted))
+		debugf(flags, "Expiring %d reflog entries referencing pre-rewrite objects", len(tainted))
 	}
 
 	// Group by ref, then sort each group by index descending (reverse order
@@ -197,7 +196,7 @@ func expireTaintedReflogEntries(ctx context.Context, flags globalFlags, oldSHAs 
 		for _, e := range entries {
 			if _, _, err := git.Run(ctx, "reflog", "delete", e.qualifier); err != nil {
 				if flags.verbose {
-					fmt.Fprintf(os.Stderr, "  warning: failed to delete reflog entry %s: %v\n", e.qualifier, err)
+					debugf(flags, "  warning: failed to delete reflog entry %s: %v", e.qualifier, err)
 				}
 			}
 		}
@@ -226,7 +225,7 @@ func parseQualifier(q string) (ref string, index int) {
 }
 
 // checkStashForOldSHAs warns if any stash entry references a pre-rewrite commit.
-func checkStashForOldSHAs(ctx context.Context, oldSHAs map[string]bool) {
+func checkStashForOldSHAs(flags globalFlags, ctx context.Context, oldSHAs map[string]bool) {
 	out, _, err := git.Run(ctx, "stash", "list", "--format=%H %gd")
 	if err != nil {
 		return // no stash or error — nothing to do
@@ -246,14 +245,14 @@ func checkStashForOldSHAs(ctx context.Context, oldSHAs map[string]bool) {
 			// Extract the numeric index for the drop command.
 			idx := strings.TrimPrefix(stashRef, "stash@{")
 			idx = strings.TrimSuffix(idx, "}")
-			fmt.Fprintf(os.Stderr, "WARNING: stash entry %s references pre-rewrite commit %s\n", stashRef, shortSHA(sha))
-			fmt.Fprintf(os.Stderr, "  run: git stash drop %s\n", idx)
+			warnf(flags, "stash entry %s references pre-rewrite commit %s\n"+
+				"  run: git stash drop %s", stashRef, shortSHA(sha), idx)
 		}
 	}
 }
 
 // checkNotesForOldSHAs warns if any note references a pre-rewrite commit.
-func checkNotesForOldSHAs(ctx context.Context, oldSHAs map[string]bool) {
+func checkNotesForOldSHAs(flags globalFlags, ctx context.Context, oldSHAs map[string]bool) {
 	out, _, err := git.Run(ctx, "notes", "list")
 	if err != nil {
 		return // no notes or error
@@ -270,14 +269,14 @@ func checkNotesForOldSHAs(ctx context.Context, oldSHAs map[string]bool) {
 		}
 		objSHA := parts[1]
 		if oldSHAs[objSHA] {
-			fmt.Fprintf(os.Stderr, "WARNING: note on %s may reference pre-rewrite objects\n", shortSHA(objSHA))
-			fmt.Fprintf(os.Stderr, "  run: git notes remove %s\n", objSHA)
+			warnf(flags, "note on %s may reference pre-rewrite objects\n"+
+				"  run: git notes remove %s", shortSHA(objSHA), objSHA)
 		}
 	}
 }
 
 // checkReplaceRefsForOldSHAs warns if any replace ref references a pre-rewrite commit.
-func checkReplaceRefsForOldSHAs(ctx context.Context, oldSHAs map[string]bool) {
+func checkReplaceRefsForOldSHAs(flags globalFlags, ctx context.Context, oldSHAs map[string]bool) {
 	out, _, err := git.Run(ctx, "for-each-ref", "--format=%(refname) %(objectname)", "refs/replace/")
 	if err != nil {
 		return
@@ -294,8 +293,8 @@ func checkReplaceRefsForOldSHAs(ctx context.Context, oldSHAs map[string]bool) {
 		refname := parts[0]
 		sha := parts[1]
 		if oldSHAs[sha] {
-			fmt.Fprintf(os.Stderr, "WARNING: replace ref %s references pre-rewrite commit %s\n", refname, shortSHA(sha))
-			fmt.Fprintf(os.Stderr, "  run: git update-ref -d %s\n", refname)
+			warnf(flags, "replace ref %s references pre-rewrite commit %s\n"+
+				"  run: git update-ref -d %s", refname, shortSHA(sha), refname)
 		}
 	}
 }
@@ -327,7 +326,7 @@ func verifyOldObjectsGone(ctx context.Context, flags globalFlags, oldSHAs map[st
 		if _, _, cerr := git.Run(ctx, "cat-file", "-e", sha); cerr == nil {
 			surviving = append(surviving, sha)
 			if flags.verbose {
-				fmt.Fprintf(os.Stderr, "  pre-rewrite object %s still exists after cleanup and no ref reaches it\n", shortSHA(sha))
+				debugf(flags, "  pre-rewrite object %s still exists after cleanup and no ref reaches it", shortSHA(sha))
 			}
 		}
 	}

@@ -145,13 +145,13 @@ const mvOplogOp = "mv"
 func runMv(flags globalFlags, messages []string, args []string, createMissingDirs bool) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 	message := joinMessages(messages)
 
 	if err := requireAutoBumpDecision(flags.ctx(), flags); err != nil {
-		fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
+		errorf(flags, "auto-bump parent: %v", err)
 		return exitcode.General
 	}
 
@@ -171,14 +171,14 @@ func runMv(flags globalFlags, messages []string, args []string, createMissingDir
 	// them. Read inside the operation lock, so no passthrough in this worktree
 	// can start one between the check and the renames.
 	if err := coord.GuardInFlight(gitDir, mvOplogOp, nil); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.CoordinationBusy
 	}
 
 	ctx := flags.ctx()
 	repoRoot, err := git.AnchorRoot(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: resolving the repository root: %v\n", err)
+		errorf(flags, "resolving the repository root: %v", err)
 		return exitcode.General
 	}
 
@@ -189,16 +189,16 @@ func runMv(flags globalFlags, messages []string, args []string, createMissingDir
 	// answers within one invocation.
 	ignoreCase := gitIgnoreCase(ctx)
 
-	pairs, code := parseMvPairs(repoRoot, args)
+	pairs, code := parseMvPairs(flags, repoRoot, args)
 	if code != 0 {
 		return code
 	}
-	if code := checkMvWorld(ctx, repoRoot, ignoreCase, createMissingDirs, pairs); code != 0 {
+	if code := checkMvWorld(flags, ctx, repoRoot, ignoreCase, createMissingDirs, pairs); code != 0 {
 		return code
 	}
 
 	if err := performMvMoves(flags, ignoreCase, createMissingDirs, repoRoot, pairs); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
@@ -213,12 +213,12 @@ func runMv(flags globalFlags, messages []string, args []string, createMissingDir
 // does not parse, two pairs that both claim one path -- which is Usage, the
 // same code every other argument-against-argument refusal in the commit family
 // exits. Nothing here has looked at the repository yet.
-func parseMvPairs(repoRoot string, args []string) ([]mvPair, int) {
+func parseMvPairs(flags globalFlags, repoRoot string, args []string) ([]mvPair, int) {
 	pairs := make([]mvPair, 0, len(args))
 	for _, arg := range args {
 		old, new, err := trailer.ParsePair(arg)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %s: %v\n", arg, err)
+			errorf(flags, "%s: %v", arg, err)
 			return nil, exitcode.Usage
 		}
 		// The trailing slash marks a subtree pair; it never asks for the final
@@ -227,16 +227,16 @@ func parseMvPairs(repoRoot string, args []string) ([]mvPair, int) {
 		subtree := strings.HasSuffix(old, "/")
 		oldRel, err := commit.CanonicalRel(repoRoot, old)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %s: %v\n", arg, err)
+			errorf(flags, "%s: %v", arg, err)
 			return nil, exitcode.Usage
 		}
 		newRel, err := commit.CanonicalRel(repoRoot, new)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %s: %v\n", arg, err)
+			errorf(flags, "%s: %v", arg, err)
 			return nil, exitcode.Usage
 		}
 		if oldRel == "" || newRel == "" {
-			fmt.Fprintf(os.Stderr, "error: %s names the repository root, which cannot move\n", arg)
+			errorf(flags, "%s names the repository root, which cannot move", arg)
 			return nil, exitcode.Usage
 		}
 		if subtree {
@@ -244,7 +244,7 @@ func parseMvPairs(repoRoot string, args []string) ([]mvPair, int) {
 			newRel += "/"
 		}
 		if err := trailer.ValidatePair(oldRel, newRel); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %s: %v\n", arg, err)
+			errorf(flags, "%s: %v", arg, err)
 			return nil, exitcode.Usage
 		}
 		pairs = append(pairs, mvPair{
@@ -254,7 +254,7 @@ func parseMvPairs(repoRoot string, args []string) ([]mvPair, int) {
 			caseOnly: oldRel != newRel && strings.EqualFold(oldRel, newRel),
 		})
 	}
-	if code := refuseMvOverlaps(pairs); code != 0 {
+	if code := refuseMvOverlaps(flags, pairs); code != 0 {
 		return nil, code
 	}
 	return pairs, 0
@@ -266,22 +266,20 @@ func parseMvPairs(repoRoot string, args []string) ([]mvPair, int) {
 // The question is trailer.Overlap's -- the ONE implementation, shared with the
 // `--moved` refusal, which judges the same declarations by another spelling.
 // All this does is say the verdict in the terms an `mv` caller typed.
-func refuseMvOverlaps(pairs []mvPair) int {
+func refuseMvOverlaps(flags globalFlags, pairs []mvPair) int {
 	for i := range pairs {
 		for j := i + 1; j < len(pairs); j++ {
 			a, b := pairs[i], pairs[j]
 			switch kind, x, _ := trailer.Overlap(a.pair(), b.pair()); kind {
 			case trailer.SameSource:
-				fmt.Fprintf(os.Stderr, "error: %s and %s both move %s; say one thing about each path\n",
-					a.arg, b.arg, x)
+				errorf(flags, "%s and %s both move %s; say one thing about each path", a.arg, b.arg, x)
 				return exitcode.Usage
 			case trailer.SameDestination:
-				fmt.Fprintf(os.Stderr, "error: %s and %s both land on %s; say one thing about each path\n",
-					a.arg, b.arg, x)
+				errorf(flags, "%s and %s both land on %s; say one thing about each path", a.arg, b.arg, x)
 				return exitcode.Usage
 			case trailer.Chained:
-				fmt.Fprintf(os.Stderr, "error: %s and %s chain: one moves a path the other moves away from,\n", a.arg, b.arg)
-				fmt.Fprintf(os.Stderr, "       so the result would depend on which was performed first. Make them two commands.\n")
+				errorf(flags, "%s and %s chain: one moves a path the other moves away from,\n"+
+					"       so the result would depend on which was performed first. Make them two commands.", a.arg, b.arg)
 				return exitcode.Usage
 			}
 		}
@@ -297,15 +295,15 @@ func refuseMvOverlaps(pairs []mvPair) int {
 // made to discover them one command at a time -- and a set of moves that is
 // refused must leave the working tree exactly as it was, so there is no reason
 // to stop at the first.
-func checkMvWorld(ctx context.Context, repoRoot string, ignoreCase, createMissingDirs bool, pairs []mvPair) int {
+func checkMvWorld(flags globalFlags, ctx context.Context, repoRoot string, ignoreCase, createMissingDirs bool, pairs []mvPair) int {
 	head, err := git.RevParse(ctx, "HEAD")
 	if err != nil || head == "" {
-		fmt.Fprintf(os.Stderr, "error: this branch has no commit yet, so nothing is tracked for a move to come out of\n")
+		errorf(flags, "this branch has no commit yet, so nothing is tracked for a move to come out of")
 		return exitcode.MoveNotBorneOut
 	}
 	entries, err := git.LsTreeRecursive(ctx, head)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: reading the tree of HEAD: %v\n", err)
+		errorf(flags, "reading the tree of HEAD: %v", err)
 		return exitcode.General
 	}
 	tracked := make(map[string]git.TreeEntry, len(entries))
@@ -323,11 +321,13 @@ func checkMvWorld(ctx context.Context, repoRoot string, ignoreCase, createMissin
 		}
 	}
 	if len(refusals) > 0 {
-		fmt.Fprintf(os.Stderr, "error: %d of %d move(s) are not borne out by the repository:\n", len(refusals), len(pairs))
+		var report strings.Builder
+		fmt.Fprintf(&report, "%d of %d move(s) are not borne out by the repository:", len(refusals), len(pairs))
 		for _, r := range refusals {
-			fmt.Fprintf(os.Stderr, "  %s\n", r)
+			fmt.Fprintf(&report, "\n  %s", r)
 		}
-		fmt.Fprintf(os.Stderr, "  nothing was moved and nothing was committed.\n")
+		fmt.Fprintf(&report, "\n  nothing was moved and nothing was committed.")
+		errorf(flags, "%s", report.String())
 		return exitcode.MoveNotBorneOut
 	}
 	return 0
@@ -757,7 +757,7 @@ func gitIgnoreCase(ctx context.Context) bool {
 func (fs *mvFilesystem) rollback() {
 	for i := len(fs.undo) - 1; i >= 0; i-- {
 		if err := fs.undo[i](); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: putting back part of the move failed: %v\n", err)
+			warnf(fs.flags, "putting back part of the move failed: %v", err)
 		}
 	}
 }
@@ -768,7 +768,7 @@ func commitMvMoves(flags globalFlags, gitDir, message string, pairs []mvPair) in
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: loading config: %v\n", err)
+		errorf(flags, "loading config: %v", err)
 		return exitcode.General
 	}
 
@@ -777,7 +777,7 @@ func commitMvMoves(flags globalFlags, gitDir, message string, pairs []mvPair) in
 	for _, p := range pairs {
 		record, err := trailer.NewRecord(p.old, p.new, trailer.OriginDeclared)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %s: %v\n", p.arg, err)
+			errorf(flags, "%s: %v", p.arg, err)
 			return exitcode.Usage
 		}
 		records = append(records, trailer.RecordLine(record))
@@ -789,7 +789,7 @@ func commitMvMoves(flags globalFlags, gitDir, message string, pairs []mvPair) in
 		}
 	}
 
-	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
+	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags)}
 	result, err := p.Execute(flags.ctx(), commit.CommitRequest{
 		Message:      message,
 		DryRun:       flags.dryRun,
@@ -803,16 +803,16 @@ func commitMvMoves(flags globalFlags, gitDir, message string, pairs []mvPair) in
 	// to make a second one. See aftercare.go.
 	var residue []residueEntry
 	if partial := commitStands(err); partial != nil && result != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		residue = recordAftercareFailure(residue, partial.Step, err.Error())
 	} else if err != nil {
-		fmt.Fprintf(os.Stderr, "error: the paths were moved, but the commit failed: %v\n", err)
-		fmt.Fprintf(os.Stderr, "  the files are at their new paths. Commit them with 'safegit commit --moved' once the cause is fixed.\n")
+		errorf(flags, "the paths were moved, but the commit failed: %v\n"+
+			"  the files are at their new paths. Commit them with 'safegit commit --moved' once the cause is fixed.", err)
 		return pipelineExitCode(err)
 	}
 
 	if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, mvOplogOp, firstLine(message)); err != nil {
-		residue = reportAftercareFailure(residue, stepParentBump, err)
+		residue = reportAftercareFailure(flags, residue, stepParentBump, err)
 	}
 
 	// What the COMMIT carries, not what the pair list said -- read off the
@@ -841,14 +841,12 @@ func commitMvMoves(flags globalFlags, gitDir, message string, pairs []mvPair) in
 		DryRun:       flags.dryRun,
 	})
 
-	if !flags.silent() {
-		if flags.dryRun {
-			fmt.Println(wouldWriteHeader(mvOplogOp, result.Ref, result.Tree, firstLine(message)))
-			fmt.Printf(" %d move(s) would be recorded, %d path(s) would change\n", len(moved), len(result.Files))
-		} else {
-			fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(message))
-			fmt.Printf(" %d move(s) recorded, %d path(s) changed\n", len(moved), len(result.Files))
-		}
+	if flags.dryRun {
+		infof(flags, "%s", wouldWriteHeader(mvOplogOp, result.Ref, result.Tree, firstLine(message)))
+		infof(flags, " %d move(s) would be recorded, %d path(s) would change", len(moved), len(result.Files))
+	} else {
+		infof(flags, "[%s %s] %s", refShortName(result.Ref), result.SHA[:8], firstLine(message))
+		infof(flags, " %d move(s) recorded, %d path(s) changed", len(moved), len(result.Files))
 	}
 	return aftercareExit(residue)
 }

@@ -60,6 +60,23 @@ func decodeEnvelope(t *testing.T, stdout string) machineEnvelope {
 	return env
 }
 
+// reported is everything a run said about itself: its stderr and, when its
+// stdout is the --json document, every diagnostic message in it -- under --json
+// an error or a warning is a diagnostic rather than a stderr line.
+func reported(stdout, stderr string) string {
+	var env machineEnvelope
+	if json.Unmarshal([]byte(stdout), &env) != nil {
+		return stderr
+	}
+	var b strings.Builder
+	b.WriteString(stderr)
+	for _, d := range env.Diagnostics {
+		b.WriteString("\n")
+		b.WriteString(d["message"])
+	}
+	return b.String()
+}
+
 // jsonPayload returns the envelope's payload member, which is where a
 // machine-mode run's own document now lives.
 func jsonPayload(t *testing.T, stdout string) string {

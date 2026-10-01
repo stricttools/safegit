@@ -114,12 +114,12 @@ func (d *DirtyState) Refuse(operation string) string {
 	var b strings.Builder
 
 	if d.Sequencer.InProgress() {
-		fmt.Fprintf(&b, "safegit: %s\n", RefuseInFlight(operation, d.Sequencer))
+		fmt.Fprintf(&b, "%s\n", RefuseInFlight(operation, d.Sequencer))
 		d.writeModifiedFiles(&b)
 		return b.String()
 	}
 
-	fmt.Fprintf(&b, "safegit: working tree is not clean; refusing %s to avoid clobbering uncommitted work.\n", operation)
+	fmt.Fprintf(&b, "working tree is not clean; refusing %s to avoid clobbering uncommitted work.\n", operation)
 	d.writeModifiedFiles(&b)
 
 	b.WriteString("\nSuggestion:\n")

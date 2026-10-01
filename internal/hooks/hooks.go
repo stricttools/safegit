@@ -26,10 +26,6 @@ var (
 	stderr io.Writer = os.Stderr
 )
 
-// notices is where safegit's own lines about a hook run go -- stderr, beside
-// the hook's output, and never stdout, for the same reason.
-var notices io.Writer = os.Stderr
-
 // beforeStdoutRead runs in the reader just before it starts reading a hook's
 // stdout. It does nothing in production; a test replaces it to delay the
 // reader and prove that output is never lost to a slow reader.
@@ -262,19 +258,21 @@ func DiscoverMulti(stores []Store) ([]string, error) {
 
 // Run executes all discovered hooks sequentially with the given stdin.
 // The first failed run (see HookResult.Failed) skips the remaining hooks.
-func Run(ctx context.Context, s Store, stdin []byte, timeoutSec int, stopCap time.Duration, env []string) ([]HookResult, error) {
+func Run(ctx context.Context, s Store, stdin []byte, timeoutSec int, stopCap time.Duration, env []string, warn func(string)) ([]HookResult, error) {
 	hooks, err := Discover(s)
 	if err != nil {
 		return nil, err
 	}
-	return RunAll(ctx, hooks, stdin, timeoutSec, stopCap, env)
+	return RunAll(ctx, hooks, stdin, timeoutSec, stopCap, env, warn)
 }
 
 // RunAll executes the given hook paths sequentially with the given stdin.
 // The first failed run (see HookResult.Failed) skips the remaining hooks. The
 // error is safegit's own -- a hook it could not contain -- never a hook's
-// verdict, which is in the results.
-func RunAll(ctx context.Context, hookPaths []string, stdin []byte, timeoutSec int, stopCap time.Duration, env []string) ([]HookResult, error) {
+// verdict, which is in the results. warn receives safegit's own lines about a
+// run: the announcement that an interrupted hook is being stopped, and a stop
+// that reached its cap while output was still arriving.
+func RunAll(ctx context.Context, hookPaths []string, stdin []byte, timeoutSec int, stopCap time.Duration, env []string, warn func(string)) ([]HookResult, error) {
 	if len(hookPaths) == 0 {
 		return nil, nil
 	}
@@ -285,7 +283,7 @@ func RunAll(ctx context.Context, hookPaths []string, stdin []byte, timeoutSec in
 			// Cancelled between two hooks: the next one is not started.
 			break
 		}
-		result, err := runOne(ctx, hookPath, stdin, timeoutSec, stopCap, env)
+		result, err := runOne(ctx, hookPath, stdin, timeoutSec, stopCap, env, warn)
 		if err != nil {
 			return results, err
 		}
@@ -298,8 +296,8 @@ func RunAll(ctx context.Context, hookPaths []string, stdin []byte, timeoutSec in
 }
 
 // RunSingle executes a single hook by path.
-func RunSingle(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, stopCap time.Duration, env []string) (HookResult, error) {
-	return runOne(ctx, hookPath, stdin, timeoutSec, stopCap, env)
+func RunSingle(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, stopCap time.Duration, env []string, warn func(string)) (HookResult, error) {
+	return runOne(ctx, hookPath, stdin, timeoutSec, stopCap, env, warn)
 }
 
 // The stop of a hook and the processes it started -- on timeout, on
@@ -402,7 +400,7 @@ func startStop(limit time.Duration) stopClock {
 // budget it runs under: a hook that needs a different timeout reads
 // SAFEGIT_HOOK_TIMEOUT_S from its environment and is configured, never
 // self-declared on stdout.
-func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, stopCap time.Duration, env []string) (HookResult, error) {
+func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, stopCap time.Duration, env []string, warn func(string)) (HookResult, error) {
 	name := filepath.Base(hookPath)
 	start := time.Now()
 	result := HookResult{Name: name}
@@ -497,7 +495,7 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		// The stop can take a while and a second interruption is ignored
 		// meanwhile, so the operator is told what is happening and for how long
 		// at most.
-		fmt.Fprintf(notices, "stopping hook %s and the processes it started; this can take up to %s\n", name, FormatStopCap(stopCap))
+		warn(fmt.Sprintf("stopping hook %s and the processes it started; this can take up to %s", name, FormatStopCap(stopCap)))
 		stop()
 	}
 	result.stopCap = stopCap
@@ -548,7 +546,7 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 					result.LeftoverUnknown = unknown
 				}
 			default:
-				fmt.Fprintf(notices, "hook %s: its output was still arriving when the stop reached its %s cap, and safegit stopped reading it\n", name, FormatStopCap(stopCap))
+				warn(fmt.Sprintf("hook %s: its output was still arriving when the stop reached its %s cap, and safegit stopped reading it", name, FormatStopCap(stopCap)))
 			}
 			p.closeParentEnds()
 			<-fwd.done

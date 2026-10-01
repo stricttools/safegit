@@ -89,7 +89,7 @@ func TestPipelineWithoutRefUpdateRefusesToCommit(t *testing.T) {
 	objectsBefore := countObjects(t, dir)
 
 	// No RefUpdate: the field is left at its zero value on purpose.
-	p := &Pipeline{SafegitDir: sgDir, Config: repo.DefaultConfig()}
+	p := &Pipeline{SafegitDir: sgDir, Config: repo.DefaultConfig(), Notices: testNotices}
 	result, err := p.Execute(ctx, CommitRequest{
 		Message: "no port to move a ref with",
 		Files:   []string{"orphan.txt"},
@@ -129,7 +129,7 @@ func TestPipelineWithoutRefUpdateRefusesAPreviewToo(t *testing.T) {
 	ctx := context.Background()
 	objectsBefore := countObjects(t, dir)
 
-	p := &Pipeline{SafegitDir: sgDir, Config: repo.DefaultConfig()}
+	p := &Pipeline{SafegitDir: sgDir, Config: repo.DefaultConfig(), Notices: testNotices}
 	_, err := p.Execute(ctx, CommitRequest{
 		Message: "no port, and only a preview",
 		Files:   []string{"orphan.txt"},
@@ -162,7 +162,7 @@ func TestAmendWithoutRefUpdateRefuses(t *testing.T) {
 	}
 
 	// Amend and reword share the same port, so they share the same refusal.
-	p := &Pipeline{SafegitDir: sgDir, Config: repo.DefaultConfig()}
+	p := &Pipeline{SafegitDir: sgDir, Config: repo.DefaultConfig(), Notices: testNotices}
 	_, amendErr := p.Amend(ctx, AmendRequest{
 		Message:   "amended without a port",
 		FileSpecs: []FileSpec{{Path: "extra.txt"}},

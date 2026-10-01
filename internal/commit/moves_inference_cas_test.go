@@ -214,7 +214,7 @@ func TestTheRefusalSetIsTheWinningAttemptsNotTheFirsts(t *testing.T) {
 			SrcMode: "000000", SrcSHA: git.ZeroSHA}
 	}
 
-	m := newAmendMoveInference()
+	m := newAmendMoveInference(testNotices.Warn)
 	ctx := context.Background()
 
 	first := []git.ChangedPath{del("x1.txt"), del("x2.txt"), add("y1.txt"), add("y2.txt")}

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/stricttools/safegit/internal/git"
@@ -62,7 +61,7 @@ type RefUpdatePlan struct {
 // moved or its tagger matched an identity rewrite, and again because the
 // annotation transform changed its body. Both writes happen here, chained, and
 // the ref moves once, from the original object to the final one.
-func planRefUpdates(ctx context.Context, shaMap map[string]string, oldName, newName, oldEmail, newEmail string, annotate TagBodyTransformFunc, verbose bool) (*RefUpdatePlan, error) {
+func planRefUpdates(flags globalFlags, ctx context.Context, shaMap map[string]string, oldName, newName, oldEmail, newEmail string, annotate TagBodyTransformFunc, verbose bool) (*RefUpdatePlan, error) {
 	// %(*objectname) is the dereferenced target of an annotated tag and is empty
 	// for everything else. It is what says whether a tag belongs to the walked
 	// history: a tag whose target commit the SHA map covers does, one pointing
@@ -136,7 +135,7 @@ func planRefUpdates(ctx context.Context, shaMap map[string]string, oldName, newN
 					plan.AnnotationTagRewrites = append(plan.AnnotationTagRewrites, TagRewrite{Refname: refname, OldSHA: retargeted, NewSHA: annotated, Annotated: true})
 					plan.TagsRewritten++
 					if verbose {
-						fmt.Fprintf(os.Stderr, "  tag annotation %s: %s -> %s\n", refname, shortSHA(retargeted), shortSHA(annotated))
+						debugf(flags, "  tag annotation %s: %s -> %s", refname, shortSHA(retargeted), shortSHA(annotated))
 					}
 					final = annotated
 				}
@@ -203,13 +202,13 @@ func rewriteTagBody(ctx context.Context, refname, tagObjectSHA string, annotate 
 
 // applyRefUpdates performs the planned ref moves. This is the irreversible step
 // of a rewrite: everything refusable has already run.
-func applyRefUpdates(ctx context.Context, plan *RefUpdatePlan, verbose bool) error {
+func applyRefUpdates(flags globalFlags, ctx context.Context, plan *RefUpdatePlan, verbose bool) error {
 	for _, m := range plan.Moves {
 		if err := git.UpdateRef(ctx, m.Refname, m.NewSHA, m.OldSHA); err != nil {
 			return fmt.Errorf("updating ref %s: %w", m.Refname, err)
 		}
 		if verbose {
-			fmt.Fprintf(os.Stderr, "  %-20s %s -> %s\n", m.Refname, shortSHA(m.OldSHA), shortSHA(m.NewSHA))
+			debugf(flags, "  %-20s %s -> %s", m.Refname, shortSHA(m.OldSHA), shortSHA(m.NewSHA))
 		}
 	}
 	return nil

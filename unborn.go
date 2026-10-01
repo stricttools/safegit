@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 
 	"github.com/stricttools/safegit/internal/exitcode"
 	"github.com/stricttools/safegit/internal/git"
@@ -53,7 +52,7 @@ import (
 // naming a flag the operator did not type, or advice they cannot follow, is a
 // refusal they cannot act on -- the same rule the fast-forward-only refusal
 // beside it follows.
-func refuseUnbornMergeForm(ctx context.Context, noFF, park bool, noFFFlag, parkFlag, wayOut string) int {
+func refuseUnbornMergeForm(flags globalFlags, ctx context.Context, noFF, park bool, noFFFlag, parkFlag, wayOut string) int {
 	if !noFF && !park {
 		return 0
 	}
@@ -72,15 +71,16 @@ func refuseUnbornMergeForm(ctx context.Context, noFF, park bool, noFFFlag, parkF
 			"merge by computing it with --no-ff underneath.",
 		}
 	}
-	fmt.Fprintf(os.Stderr, "error: this branch is unborn -- it has no commits yet -- so a merge into it can only be a fast-forward\n")
-	fmt.Fprintf(os.Stderr, "  %s %s\n", asked, why[0])
+	report := fmt.Sprintf("this branch is unborn -- it has no commits yet -- so a merge into it can only be a fast-forward\n"+
+		"  %s %s", asked, why[0])
 	for _, line := range why[1:] {
-		fmt.Fprintf(os.Stderr, "  %s\n", line)
+		report += "\n  " + line
 	}
-	fmt.Fprintf(os.Stderr, "  git's own words for the attempt: \"Non-fast-forward commit does not make sense into an\n")
-	fmt.Fprintf(os.Stderr, "  empty head\".\n")
-	fmt.Fprint(os.Stderr, wayOut)
-	fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+	errorf(flags, "%s\n"+
+		"  git's own words for the attempt: \"Non-fast-forward commit does not make sense into an\n"+
+		"  empty head\".\n"+
+		"%s"+
+		"  safegit implements a deliberate subset of git; see docs/divergences.md.", report, wayOut)
 	return exitcode.General
 }
 
@@ -98,15 +98,14 @@ const (
 // It is a SEPARATE refusal from refuseRebaseOverAnotherOperation, which is
 // about somebody else's in-flight state: this one is about where this branch
 // stands, both are asked before git runs, and both stay.
-func refuseUnbornRebase(ctx context.Context, upstream string) int {
+func refuseUnbornRebase(flags globalFlags, ctx context.Context, upstream string) int {
 	if !git.HeadIsUnborn(ctx) {
 		return 0
 	}
-	fmt.Fprintf(os.Stderr, "error: this branch is unborn -- it has no commits yet -- so there is nothing to rebase\n")
-	fmt.Fprintf(os.Stderr, "  a rebase replays the commits this branch has that the upstream does not, and this branch\n")
-	fmt.Fprintf(os.Stderr, "  has none. git's own message here is \"Could not resolve HEAD to a commit\".\n")
-	fmt.Fprintf(os.Stderr, "  To start this branch from %s, fast-forward onto it: safegit merge %s\n",
-		unbornUpstreamName(upstream), unbornUpstreamName(upstream))
+	errorf(flags, "this branch is unborn -- it has no commits yet -- so there is nothing to rebase\n"+
+		"  a rebase replays the commits this branch has that the upstream does not, and this branch\n"+
+		"  has none. git's own message here is \"Could not resolve HEAD to a commit\".\n"+
+		"  To start this branch from %s, fast-forward onto it: safegit merge %s", unbornUpstreamName(upstream), unbornUpstreamName(upstream))
 	return exitcode.General
 }
 
@@ -124,16 +123,16 @@ func unbornUpstreamName(upstream string) string {
 // Only `start` is refused. Every other subcommand needs a bisect that is
 // already running, and one cannot have been started here -- git's answer to
 // those is about the missing bisect, which is the true thing to say.
-func refuseUnbornBisect(ctx context.Context, args []string) int {
+func refuseUnbornBisect(flags globalFlags, ctx context.Context, args []string) int {
 	if len(args) == 0 || args[0] != "start" {
 		return 0
 	}
 	if !git.HeadIsUnborn(ctx) {
 		return 0
 	}
-	fmt.Fprintf(os.Stderr, "error: this branch is unborn -- it has no commits yet -- so there is nothing to bisect\n")
-	fmt.Fprintf(os.Stderr, "  a bisect searches a range of commits, and this branch has none. git's own message here\n")
-	fmt.Fprintf(os.Stderr, "  is \"bad HEAD - strange symbolic ref\", which is about the ref rather than the range.\n")
-	fmt.Fprintf(os.Stderr, "  Switch to a branch that has commits first: safegit switch <branch>\n")
+	errorf(flags, "this branch is unborn -- it has no commits yet -- so there is nothing to bisect\n"+
+		"  a bisect searches a range of commits, and this branch has none. git's own message here\n"+
+		"  is \"bad HEAD - strange symbolic ref\", which is about the ref rather than the range.\n"+
+		"  Switch to a branch that has commits first: safegit switch <branch>")
 	return exitcode.General
 }

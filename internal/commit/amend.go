@@ -164,7 +164,7 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	}
 
 	// One hook run per amend, not per CAS attempt -- see nativeHooks.
-	hooks, err := newNativeHooks(ctx, repoRoot, p.SafegitDir, req.DryRun)
+	hooks, err := newNativeHooks(ctx, repoRoot, p.SafegitDir, req.DryRun, p.Notices.Info)
 	if err != nil {
 		return nil, err
 	}
@@ -173,7 +173,7 @@ func (p *Pipeline) Amend(ctx context.Context, req AmendRequest) (*AmendResult, e
 	// The moves the amended commit's own authoring event witnesses. Once per
 	// operation, exactly like the plain commit path's -- the ids are minted once
 	// and attempt 1's answer is retained as data. See moveInference.
-	inference := newAmendMoveInference()
+	inference := newAmendMoveInference(p.Notices.Warn)
 
 	maxAttempts := p.Config.Commit.CASMaxAttempts
 
@@ -573,7 +573,7 @@ func (p *Pipeline) Reword(ctx context.Context, req RewordRequest) (*RewordResult
 
 	// A reword is a commit as far as the repository's hooks are concerned, so it
 	// runs the same three, once each -- see nativeHooks.
-	hooks, err := newNativeHooks(ctx, repoRoot, p.SafegitDir, req.DryRun)
+	hooks, err := newNativeHooks(ctx, repoRoot, p.SafegitDir, req.DryRun, p.Notices.Info)
 	if err != nil {
 		return nil, err
 	}

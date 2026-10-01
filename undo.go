@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -429,11 +428,11 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 
 		flags.payload(undoPayloadFor(flags, ref, targetEntry.Op, targetSHA, currentSHA, count, isRootUndo, nil))
 
-		outf(flags, "would undo %d operation(s) on %s\n", count, refShortName(ref))
+		outf(flags, "would undo %d operation(s) on %s", count, refShortName(ref))
 		if isRootUndo {
-			outf(flags, "  %s -> (empty, delete ref)\n", currentSHA[:8])
+			outf(flags, "  %s -> (empty, delete ref)", currentSHA[:8])
 		} else {
-			outf(flags, "  %s -> %s\n", currentSHA[:8], targetSHA[:8])
+			outf(flags, "  %s -> %s", currentSHA[:8], targetSHA[:8])
 		}
 		return exitcode.OK
 	}
@@ -471,7 +470,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	var residue []residueEntry
 	if err := git.ReconcileMainIndex(ctx, currentSHA, syncTreeish, nil); err != nil {
 		detail := fmt.Sprintf("%s was undone, but reconciling the shared index failed: %v", currentSHA[:8], err)
-		fmt.Fprintf(os.Stderr, "error: %s\n", detail)
+		errorf(flags, "%s", detail)
 		residue = recordAftercareFailure(residue, commit.StepIndexReconcile, detail)
 	}
 
@@ -486,20 +485,20 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	// operation to leave standing -- and saying so is the difference between an
 	// operator who knows where their files are and one who does not.
 	if targetEntry.Op == mvOplogOp {
-		fmt.Fprintf(os.Stderr, "note: the commit is reversed, but the files are still at their new paths -- undo moves\n")
-		fmt.Fprintf(os.Stderr, "      a ref and never the working tree. Move them back yourself, or re-commit them\n")
-		fmt.Fprintf(os.Stderr, "      where they are with 'safegit commit --moved'.\n")
+		warnf(flags, "the commit is reversed, but the files are still at their new paths -- undo moves\n"+
+			"      a ref and never the working tree. Move them back yourself, or re-commit them\n"+
+			"      where they are with 'safegit commit --moved'.")
 	}
 
 	if operation, isConclusion := conclusionOps[targetEntry.Op]; isConclusion {
-		fmt.Fprintf(os.Stderr, "note: %s is reversed, but git's %s state is NOT restored -- MERGE_HEAD, the message draft\n", targetEntry.Op, operation)
-		fmt.Fprintf(os.Stderr, "      and the conflict stages are gone, so the repository is idle rather than mid-%s.\n", operation)
-		fmt.Fprintf(os.Stderr, "      Re-run the %s to get back to a state safegit %s-continue can conclude.\n", operation, operation)
+		warnf(flags, "%s is reversed, but git's %s state is NOT restored -- MERGE_HEAD, the message draft\n"+
+			"      and the conflict stages are gone, so the repository is idle rather than mid-%s.\n"+
+			"      Re-run the %s to get back to a state safegit %s-continue can conclude.", targetEntry.Op, operation, operation, operation, operation)
 	}
 
 	// If the commit being undone triggered a parent bump, inform the user.
 	if bumpSHA := findAssociatedParentBump(sgDir, targetEntry); bumpSHA != "" {
-		fmt.Fprintf(os.Stderr, "note: undoing commit that triggered parent bump %s\n", bumpSHA[:8])
+		warnf(flags, "undoing commit that triggered parent bump %s", bumpSHA[:8])
 	}
 
 	// A RETURN, not strictcli.ExitNow: the ref is already back where the oplog
@@ -508,7 +507,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	// here -- the worktree operation lock taken at the top and the ref lock taken
 	// just above -- are released through their own defers either way.
 	if err := maybeAutoBumpParent(ctx, flags, gitDir, targetSHA, "undo", ""); err != nil {
-		residue = reportAftercareFailure(residue, stepParentBump, err)
+		residue = reportAftercareFailure(flags, residue, stepParentBump, err)
 	}
 
 	// Log the undo to the oplog. A ROOT undo deletes the ref rather than moving
@@ -529,17 +528,15 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 
 	flags.payload(undoPayloadFor(flags, ref, targetEntry.Op, targetSHA, currentSHA, count, isRootUndo, residue))
 
-	if !flags.silent() {
-		if count == 1 {
-			fmt.Printf("undid %s on %s\n", targetEntry.Op, refShortName(ref))
-		} else {
-			fmt.Printf("undid %d operations on %s (last: %s)\n", count, refShortName(ref), targetEntry.Op)
-		}
-		if isRootUndo {
-			fmt.Printf("  %s -> (empty)\n", currentSHA[:8])
-		} else {
-			fmt.Printf("  %s -> %s\n", currentSHA[:8], targetSHA[:8])
-		}
+	if count == 1 {
+		infof(flags, "undid %s on %s", targetEntry.Op, refShortName(ref))
+	} else {
+		infof(flags, "undid %d operations on %s (last: %s)", count, refShortName(ref), targetEntry.Op)
+	}
+	if isRootUndo {
+		infof(flags, "  %s -> (empty)", currentSHA[:8])
+	} else {
+		infof(flags, "  %s -> %s", currentSHA[:8], targetSHA[:8])
 	}
 	return aftercareExit(residue)
 }

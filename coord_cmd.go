@@ -44,7 +44,7 @@ import (
 func runGitMutation(flags globalFlags, door gitexec.DoorID, args ...string) int {
 	argv, err := gitexec.ArgvAny(gitexec.ExemptGitMutation, door, args...)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 	// Streaming is HUMAN mode only. Stream(true) wires the child's stdout to
@@ -66,7 +66,7 @@ func runGitMutation(flags globalFlags, door gitexec.DoorID, args ...string) int 
 	}
 	done, err := flags.effects().Run(argv, opts...)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 	if flags.dryRun {
@@ -121,11 +121,11 @@ func coordGuard(flags globalFlags, gitDir, operation string) int {
 	ctx := flags.ctx()
 	dirty, err := coord.Check(ctx, gitDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 	if dirty != nil {
-		fmt.Fprint(os.Stderr, dirty.Refuse(operation))
+		errorf(flags, "%s", strings.TrimSuffix(dirty.Refuse(operation), "\n"))
 		return exitcode.CoordinationBusy
 	}
 	return 0
@@ -171,9 +171,9 @@ func coordGuard(flags globalFlags, gitDir, operation string) int {
 // (--abort/--quit) and the three -continue commands are the way out of the
 // state, and a check that refused them would strand the repository in the state
 // it was protecting.
-func refuseComputeOverInFlight(gitDir, operation string) int {
+func refuseComputeOverInFlight(flags globalFlags, gitDir, operation string) int {
 	if err := coord.GuardInFlight(gitDir, operation, nil); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.CoordinationBusy
 	}
 	return 0
@@ -201,16 +201,16 @@ func refuseComputeOverInFlight(gitDir, operation string) int {
 // it would refuse every clean-repository rebase. The refusal text is still
 // coord's own (coord.RefuseInFlight), so it cannot name a different way out from
 // the one the sibling refusals name.
-func refuseRebaseOverAnotherOperation(gitDir string) int {
+func refuseRebaseOverAnotherOperation(flags globalFlags, gitDir string) int {
 	state, err := sequencer.Read(gitDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: refusing rebase: cannot read git's in-flight operation state: %v\n", err)
+		errorf(flags, "refusing rebase: cannot read git's in-flight operation state: %v", err)
 		return exitcode.CoordinationBusy
 	}
 	if !state.InProgress() || state.Kind == sequencer.KindRebase {
 		return 0
 	}
-	fmt.Fprintf(os.Stderr, "error: %s\n", coord.RefuseInFlight("rebase", state))
+	errorf(flags, "%s", coord.RefuseInFlight("rebase", state))
 	return exitcode.CoordinationBusy
 }
 
@@ -225,8 +225,8 @@ func refuseRebaseOverAnotherOperation(gitDir string) int {
 // coord.WayOutOf -- the single authority every in-flight refusal already reads,
 // so no two messages can name different commands for the same state.
 //
-// It prints on stderr, unconditionally: this is the tail of a failure, and an
-// operator who asked for --quiet asked for less noise on the happy path, not
+// It is a warning, written unconditionally: this is the tail of a failure, and
+// an operator who asked for --quiet asked for less noise on the happy path, not
 // for the way out to be withheld.
 func announceWayOut(flags globalFlags, gitDir string) {
 	if flags.dryRun {
@@ -241,11 +241,7 @@ func announceWayOut(flags globalFlags, gitDir string) {
 	if w.Conclude == "" {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "\nsafegit: %s is in progress.\n", state.String())
-	fmt.Fprintf(os.Stderr, "  conclude it:  %s\n", w.Conclude)
-	if w.Abandon != "" {
-		fmt.Fprintf(os.Stderr, "  abandon it:   %s\n", w.Abandon)
-	}
+	warnf(flags, "%s is in progress.%s", state.String(), wayOutLines(w, "  "))
 }
 
 // The oplog baseline every operation records.
@@ -385,13 +381,13 @@ func runRebase(flags globalFlags, args []string) int {
 	// FIRST, and before the repository is touched at all: a command line safegit
 	// itself refuses is refused without a lock and without a git call.
 	parsed := parseGitArgs("rebase", args)
-	if code := refuseUnsupportedRebase(parsed); code != 0 {
+	if code := refuseUnsupportedRebase(flags, parsed); code != 0 {
 		return code
 	}
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
@@ -412,7 +408,7 @@ func runRebase(flags globalFlags, args []string) int {
 	// BEFORE readOplogPosition on purpose: a refusal that happens before git runs
 	// writes no oplog entry, like every other pre-git refusal, and a --dry-run
 	// rebase refuses here too rather than previewing a run that cannot happen.
-	if code := refuseRebaseOverAnotherOperation(gitDir); code != 0 {
+	if code := refuseRebaseOverAnotherOperation(flags, gitDir); code != 0 {
 		return code
 	}
 
@@ -422,7 +418,7 @@ func runRebase(flags globalFlags, args []string) int {
 	// own answer ("Could not resolve HEAD to a commit") names the ref rather
 	// than the reason. Like every other pre-git refusal here it writes no oplog
 	// entry, which is why it comes before readOplogPosition.
-	if code := refuseUnbornRebase(flags.ctx(), rebaseUpstream(parsed)); code != 0 {
+	if code := refuseUnbornRebase(flags, flags.ctx(), rebaseUpstream(parsed)); code != 0 {
 		return code
 	}
 
@@ -454,7 +450,7 @@ func runReset(flags globalFlags, args []string) int {
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
@@ -495,13 +491,13 @@ func runReset(flags globalFlags, args []string) int {
 }
 
 func runBisect(flags globalFlags, args []string) int {
-	if code := refuseUnsupportedBisect(parseGitArgs("bisect", args)); code != 0 {
+	if code := refuseUnsupportedBisect(flags, parseGitArgs("bisect", args)); code != 0 {
 		return code
 	}
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
@@ -528,7 +524,7 @@ func runBisect(flags globalFlags, args []string) int {
 	// subcommand that can be typed there: every other one needs a bisect that is
 	// already running, which cannot have been started. Before git, and with no
 	// oplog entry, like the sibling pre-git refusals.
-	if code := refuseUnbornBisect(flags.ctx(), args); code != 0 {
+	if code := refuseUnbornBisect(flags, flags.ctx(), args); code != 0 {
 		return code
 	}
 
@@ -596,7 +592,7 @@ func runComputingPassthrough(flags globalFlags, gitCmd string, args []string) in
 func guardedPassthrough(flags globalFlags, gitCmd string, args []string, role passthroughRole) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
@@ -620,7 +616,7 @@ func guardedPassthrough(flags globalFlags, gitCmd string, args []string, role pa
 	// the preview below computes the operation with git's own merge engine over
 	// the very state being refused over. Only the compute forms reach it.
 	if role == passthroughComputes {
-		if code := refuseComputeOverInFlight(gitDir, gitCmd); code != 0 {
+		if code := refuseComputeOverInFlight(flags, gitDir, gitCmd); code != 0 {
 			return code
 		}
 	}
@@ -663,7 +659,7 @@ func runPassthrough(flags globalFlags, gitCmd string, args []string) int {
 	// single-authorship boundary declines to hand to git.
 	if err != nil {
 		if _, isExit := err.(*exec.ExitError); !isExit {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			errorf(flags, "%v", err)
 		}
 	}
 	return passthroughExitCode(err)

@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/stricttools/safegit/internal/exitcode"
@@ -71,8 +70,8 @@ func runAuthorCheck(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 
 	if expectName == "" && expectEmail == "" {
-		fmt.Fprintf(os.Stderr, "error: at least one of --name or --email is required\n")
-		fmt.Fprintf(os.Stderr, "Run 'safegit author check --help' for usage.\n")
+		errorf(flags, "at least one of --name or --email is required\n"+
+			"Run 'safegit author check --help' for usage.")
 		return exitcode.Usage
 	}
 
@@ -145,18 +144,18 @@ func runAuthorCheck(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 
 	if len(deviations) == 0 {
-		infof(flags, "All commits match expected identity.\n")
+		infof(flags, "All commits match expected identity.")
 		return 0
 	}
 
-	fmt.Printf("Found %d commits with deviating identity:\n\n", len(deviations))
+	outf(flags, "Found %d commits with deviating identity:\n", len(deviations))
 	for _, d := range deviations {
-		fmt.Printf("  %s  author: %s <%s>  committer: %s <%s>\n",
+		outf(flags, "  %s  author: %s <%s>  committer: %s <%s>",
 			d.SHA[:12], d.AuthorName, d.AuthorEmail, d.CommitterName, d.CommitterEmail)
 	}
 
 	// Suggest a rewrite command.
-	fmt.Printf("\nSuggested fix:\n")
+	outf(flags, "\nSuggested fix:")
 	var rewriteArgs []string
 	if expectName != "" {
 		// Find the most common deviating name to suggest as --old-name.
@@ -188,7 +187,7 @@ func runAuthorCheck(flags globalFlags, kwargs map[string]interface{}) int {
 		}
 	}
 	if len(rewriteArgs) > 0 {
-		fmt.Printf("  safegit author rewrite %s\n", strings.Join(rewriteArgs, " "))
+		outf(flags, "  safegit author rewrite %s", strings.Join(rewriteArgs, " "))
 	}
 
 	return exitcode.General

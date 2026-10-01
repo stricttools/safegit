@@ -276,7 +276,7 @@ func runScan(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 
 	// Scan git objects.
-	infof(flags, "Scanning objects...\n")
+	infof(flags, "Scanning objects...")
 	scanOpts := scan.ScanOpts{FromSHA: fromSHA, EntireHistory: entireHistory}
 	results, err := scan.ScanObjects(ctx, compiledPattern, scanOpts)
 	if err != nil {
@@ -387,59 +387,59 @@ func runScan(flags globalFlags, kwargs map[string]interface{}) int {
 
 	// Human-readable output.
 	if totalMatches == 0 {
-		infof(flags, "No matches found.\n")
+		infof(flags, "No matches found.")
 		return 0
 	}
 
-	infof(flags, "Found %d matches:\n", totalMatches)
+	infof(flags, "Found %d matches:", totalMatches)
 
 	if len(blobMatches) > 0 {
-		infof(flags, "\nBlobs:\n")
+		infof(flags, "\nBlobs:")
 		for _, m := range blobMatches {
 			if m.Path != "" && m.CommitSHA != "" {
-				infof(flags, "  %s in commit %s (line %d): %s\n", m.Path, shortSHA(m.CommitSHA), m.Line, m.Context)
+				infof(flags, "  %s in commit %s (line %d): %s", m.Path, shortSHA(m.CommitSHA), m.Line, m.Context)
 			} else if m.Path != "" {
-				infof(flags, "  %s (unreachable, line %d): %s\n", m.Path, m.Line, m.Context)
+				infof(flags, "  %s (unreachable, line %d): %s", m.Path, m.Line, m.Context)
 			} else if m.Reachable {
-				infof(flags, "  blob %s (line %d): %s\n", shortSHA(m.SHA), m.Line, m.Context)
+				infof(flags, "  blob %s (line %d): %s", shortSHA(m.SHA), m.Line, m.Context)
 			} else {
-				infof(flags, "  blob %s (unreachable, line %d): %s\n", shortSHA(m.SHA), m.Line, m.Context)
+				infof(flags, "  blob %s (unreachable, line %d): %s", shortSHA(m.SHA), m.Line, m.Context)
 			}
 		}
 	}
 
 	if len(commitMatches) > 0 {
-		infof(flags, "\nCommit messages:\n")
+		infof(flags, "\nCommit messages:")
 		for _, m := range commitMatches {
-			infof(flags, "  commit %s (line %d): %s\n", shortSHA(m.SHA), m.Line, m.Context)
+			infof(flags, "  commit %s (line %d): %s", shortSHA(m.SHA), m.Line, m.Context)
 		}
 	}
 
 	if len(tagMatches) > 0 {
-		infof(flags, "\nTag annotations:\n")
+		infof(flags, "\nTag annotations:")
 		for _, m := range tagMatches {
-			infof(flags, "  tag %s (line %d): %s\n", shortSHA(m.SHA), m.Line, m.Context)
+			infof(flags, "  tag %s (line %d): %s", shortSHA(m.SHA), m.Line, m.Context)
 		}
 	}
 
 	if len(trailerMatches) > 0 {
-		infof(flags, "\nTrailers:\n")
+		infof(flags, "\nTrailers:")
 		for _, m := range trailerMatches {
-			infof(flags, "  commit %s (line %d): %s\n", shortSHA(m.SHA), m.Line, m.Context)
+			infof(flags, "  commit %s (line %d): %s", shortSHA(m.SHA), m.Line, m.Context)
 		}
 	}
 
 	if len(nonObjectMatches) > 0 {
-		infof(flags, "\nNon-object files:\n")
+		infof(flags, "\nNon-object files:")
 		for _, m := range nonObjectMatches {
-			infof(flags, "  %s (line %d): %s\n", m.Path, m.Line, m.Context)
+			infof(flags, "  %s (line %d): %s", m.Path, m.Line, m.Context)
 		}
 	}
 
-	infof(flags, "\nSummary: %d blob, %d commit message, %d tag annotation, %d trailer, %d file matches\n",
+	infof(flags, "\nSummary: %d blob, %d commit message, %d tag annotation, %d trailer, %d file matches",
 		len(blobMatches), len(commitMatches), len(tagMatches), len(trailerMatches), len(nonObjectMatches))
 	if results.Skipped > 0 {
-		infof(flags, "Binary blobs skipped: %d\n", results.Skipped)
+		infof(flags, "Binary blobs skipped: %d", results.Skipped)
 	}
 
 	return 0

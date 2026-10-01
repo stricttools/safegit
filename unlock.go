@@ -81,26 +81,26 @@ func resolveLockTarget(flags globalFlags, gitDir, arg string) (lockTarget, error
 func runUnlock(flags globalFlags, ref string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 
 	target, err := resolveLockTarget(flags, gitDir, ref)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.Usage
 	}
 
 	lp := lock.Path(target.base, target.name)
 	if _, err := os.Stat(lp); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "error: no lock held on %s\n", target.display)
+		errorf(flags, "no lock held on %s", target.display)
 		return exitcode.General
 	}
 
 	// Always check liveness -- refuse to release locks held by live processes
 	if !lock.IsStale(lp) {
 		pid, _ := lock.ParsePID(lp)
-		fmt.Fprintf(os.Stderr, "error: lock on %s is held by a live process (pid %d); kill the process or wait for it to finish\n", target.display, pid)
+		errorf(flags, "lock on %s is held by a live process (pid %d); kill the process or wait for it to finish", target.display, pid)
 		return exitcode.General
 	}
 
@@ -123,16 +123,14 @@ func runUnlock(flags globalFlags, ref string) int {
 	// removal and performs nothing -- which is why the dry-run branch is here,
 	// below the refusals and inside the mint, rather than a return above it.
 	if err := lock.ForceRelease(target.base, target.name, mintedRemover(flags, "lock:")); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
-	if !flags.silent() {
-		if flags.dryRun {
-			fmt.Printf("would release lock on %s\n", target.display)
-		} else {
-			fmt.Printf("lock on %s released\n", target.display)
-		}
+	if flags.dryRun {
+		infof(flags, "would release lock on %s", target.display)
+	} else {
+		infof(flags, "lock on %s released", target.display)
 	}
 	return 0
 }

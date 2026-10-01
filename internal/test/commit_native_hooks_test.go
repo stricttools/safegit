@@ -168,8 +168,8 @@ func TestDryRunRunsNoCommitHookAndSaysSo(t *testing.T) {
 		t.Errorf("a dry run ran hooks: %v", got)
 	}
 	for _, name := range []string{"pre-commit", "commit-msg", "post-commit"} {
-		if !strings.Contains(stderr, name) {
-			t.Errorf("the preview does not say %s was skipped: %s", name, stderr)
+		if !strings.Contains(stdout, name) {
+			t.Errorf("the preview does not say %s was skipped: %s", name, stdout)
 		}
 	}
 }

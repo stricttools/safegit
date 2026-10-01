@@ -144,4 +144,3 @@ func TestVersionIsTheFrameworkCommand(t *testing.T) {
 		t.Fatalf("version printed %q, want the framework's one line 'safegit <version>'", stdout)
 	}
 }
-

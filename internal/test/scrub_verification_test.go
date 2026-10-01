@@ -175,11 +175,12 @@ func TestScrubSkipsWorktreeSyncWhenForeignStateAppears(t *testing.T) {
 		t.Fatalf("a skipped sync must exit %d (RewriteIncomplete), got %d: %s",
 			exitcode.RewriteIncomplete, code, stderr)
 	}
-	if !strings.Contains(stderr, "was NOT synced") {
-		t.Errorf("the operator must be told the working tree was not synced; stderr: %s", stderr)
+	said := reported(stdout, stderr)
+	if !strings.Contains(said, "was NOT synced") {
+		t.Errorf("the operator must be told the working tree was not synced; it said: %s", said)
 	}
-	if !strings.Contains(stderr, "read-tree --reset -u HEAD") {
-		t.Errorf("the operator must be told what to run; stderr: %s", stderr)
+	if !strings.Contains(said, "read-tree --reset -u HEAD") {
+		t.Errorf("the operator must be told what to run; it said: %s", said)
 	}
 
 	// The same fact reaches a machine reader, not only the operator's terminal.

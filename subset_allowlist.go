@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"strings"
 
@@ -67,18 +66,18 @@ type argvSubset struct {
 // refuseUnsupportedOptions is the default-deny check. It returns 0 when every
 // option on the command line is one this command honors, and the exit code of
 // the refusal otherwise.
-func (s argvSubset) refuseUnsupportedOptions(parsed gitArgs) int {
+func (s argvSubset) refuseUnsupportedOptions(flags globalFlags, parsed gitArgs) int {
 	for _, o := range parsed.Options {
 		// FIRST, because it is a different answer from either of the two below:
 		// this is a flag safegit HAS, written where this command cannot see it.
 		if frameworkOwnedFlag(o.Name) {
-			return refuseMisplacedFrameworkFlag(s.command, o.Name)
+			return refuseMisplacedFrameworkFlag(flags, s.command, o.Name)
 		}
 		if why, named := s.refusalReason(o.Name); named {
-			return refuseCapability(s.command, o.Name, why)
+			return refuseCapability(flags, s.command, o.Name, why)
 		}
 		if !s.allows(o.Name) {
-			return refuseUnlistedOption(s.command, o.Name)
+			return refuseUnlistedOption(flags, s.command, o.Name)
 		}
 	}
 	return 0
@@ -117,12 +116,12 @@ func frameworkOwnedFlag(name string) bool { return containsString(frameworkOwned
 //
 // So this one names the route instead. It is the whole difference: the operator
 // wanted machine mode, or a preview, and has to write it one word earlier.
-func refuseMisplacedFrameworkFlag(command, option string) int {
-	fmt.Fprintf(os.Stderr, "error: safegit %s does not support %s after the command name\n", command, option)
-	fmt.Fprintf(os.Stderr, "  %s is safegit's own flag rather than one of git's, and it is read BEFORE the command\n", option)
-	fmt.Fprintf(os.Stderr, "  name. After that name the command line is git's vocabulary, which does not include it.\n")
-	fmt.Fprintf(os.Stderr, "  Write it before the command name:\n")
-	fmt.Fprintf(os.Stderr, "    safegit %s %s ...\n", option, command)
+func refuseMisplacedFrameworkFlag(flags globalFlags, command, option string) int {
+	errorf(flags, "safegit %s does not support %s after the command name\n"+
+		"  %s is safegit's own flag rather than one of git's, and it is read BEFORE the command\n"+
+		"  name. After that name the command line is git's vocabulary, which does not include it.\n"+
+		"  Write it before the command name:\n"+
+		"    safegit %s %s ...", command, option, option, option, command)
 	return exitcode.Usage
 }
 
@@ -151,21 +150,21 @@ func containsString(list []string, want string) bool {
 }
 
 // refuseCapability is the refusal for a capability the table names.
-func refuseCapability(command, option, why string) int {
-	fmt.Fprintf(os.Stderr, "error: safegit %s does not support %s\n", command, option)
-	fmt.Fprintf(os.Stderr, "  %s.\n", why)
-	fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+func refuseCapability(flags globalFlags, command, option, why string) int {
+	errorf(flags, "safegit %s does not support %s\n"+
+		"  %s.\n"+
+		"  safegit implements a deliberate subset of git; see docs/divergences.md.", command, option, why)
 	return exitcode.Usage
 }
 
 // refuseUnlistedOption is the refusal for everything else: the subset law
 // itself, stated as the reason.
-func refuseUnlistedOption(command, option string) int {
-	fmt.Fprintf(os.Stderr, "error: safegit %s does not support %s\n", command, option)
-	fmt.Fprintf(os.Stderr, "  safegit %s accepts only the options it can honor, and this is not one of them.\n", command)
-	fmt.Fprintf(os.Stderr, "  An option safegit has not considered would change what git does while safegit's own\n")
-	fmt.Fprintf(os.Stderr, "  checks, its record of the operation and its report stayed written for something else.\n")
-	fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+func refuseUnlistedOption(flags globalFlags, command, option string) int {
+	errorf(flags, "safegit %s does not support %s\n"+
+		"  safegit %s accepts only the options it can honor, and this is not one of them.\n"+
+		"  An option safegit has not considered would change what git does while safegit's own\n"+
+		"  checks, its record of the operation and its report stayed written for something else.\n"+
+		"  safegit implements a deliberate subset of git; see docs/divergences.md.", command, option, command)
 	return exitcode.Usage
 }
 
@@ -513,15 +512,15 @@ func bisectSubcommands() []string {
 
 // refuseUnsupportedRebase refuses the rebase command lines outside the one
 // declared door.
-func refuseUnsupportedRebase(parsed gitArgs) int {
-	if code := rebaseSubset.refuseUnsupportedOptions(parsed); code != 0 {
+func refuseUnsupportedRebase(flags globalFlags, parsed gitArgs) int {
+	if code := rebaseSubset.refuseUnsupportedOptions(flags, parsed); code != 0 {
 		return code
 	}
 
 	if len(parsed.AfterDoubleDash) > 0 {
-		fmt.Fprintf(os.Stderr, "error: safegit rebase takes no pathspec\n")
-		fmt.Fprintf(os.Stderr, "  a rebase replays whole commits; there is no part of one it can replay.\n")
-		fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+		errorf(flags, "safegit rebase takes no pathspec\n"+
+			"  a rebase replays whole commits; there is no part of one it can replay.\n"+
+			"  safegit implements a deliberate subset of git; see docs/divergences.md.")
 		return exitcode.Usage
 	}
 
@@ -529,8 +528,8 @@ func refuseUnsupportedRebase(parsed gitArgs) int {
 	// rebase's conclusion is git's, and safegit has no verb that finishes one.
 	if parsed.Has("--continue", "--abort", "--skip") {
 		if len(parsed.Revisions) > 0 {
-			fmt.Fprintf(os.Stderr, "error: safegit rebase's --continue, --abort and --skip take no argument\n")
-			fmt.Fprintf(os.Stderr, "  they act on the rebase git already has in flight, whatever it was started from.\n")
+			errorf(flags, "safegit rebase's --continue, --abort and --skip take no argument\n"+
+				"  they act on the rebase git already has in flight, whatever it was started from.")
 			return exitcode.Usage
 		}
 		return 0
@@ -539,16 +538,16 @@ func refuseUnsupportedRebase(parsed gitArgs) int {
 	switch len(parsed.Revisions) {
 	case 1:
 	case 0:
-		fmt.Fprintf(os.Stderr, "error: safegit rebase names no upstream\n")
-		fmt.Fprintf(os.Stderr, "  usage: safegit rebase <upstream>, or safegit rebase --onto <newbase> <upstream>\n")
-		fmt.Fprintf(os.Stderr, "  the upstream is named rather than read from configuration, so what is replayed\n")
-		fmt.Fprintf(os.Stderr, "  onto what is on the command line and not in a file somewhere.\n")
+		errorf(flags, "safegit rebase names no upstream\n"+
+			"  usage: safegit rebase <upstream>, or safegit rebase --onto <newbase> <upstream>\n"+
+			"  the upstream is named rather than read from configuration, so what is replayed\n"+
+			"  onto what is on the command line and not in a file somewhere.")
 		return exitcode.Usage
 	default:
-		fmt.Fprintf(os.Stderr, "error: safegit rebase takes exactly one upstream, and this names %d\n", len(parsed.Revisions))
-		fmt.Fprintf(os.Stderr, "  `git rebase <upstream> <branch>` switches branches first, which is a navigation\n")
-		fmt.Fprintf(os.Stderr, "  safegit makes you state: switch to the branch, then rebase it.\n")
-		fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+		errorf(flags, "safegit rebase takes exactly one upstream, and this names %d\n"+
+			"  `git rebase <upstream> <branch>` switches branches first, which is a navigation\n"+
+			"  safegit makes you state: switch to the branch, then rebase it.\n"+
+			"  safegit implements a deliberate subset of git; see docs/divergences.md.", len(parsed.Revisions))
 		return exitcode.Usage
 	}
 	return 0
@@ -564,15 +563,15 @@ func refuseUnsupportedRebase(parsed gitArgs) int {
 // safe. What it does to a path another session staged is invisible to
 // everything safegit records.
 func refuseUnsupportedReset(flags globalFlags, parsed gitArgs) int {
-	if code := resetSubset.refuseUnsupportedOptions(parsed); code != 0 {
+	if code := resetSubset.refuseUnsupportedOptions(flags, parsed); code != 0 {
 		return code
 	}
 	if len(parsed.AfterDoubleDash) > 0 {
-		return refuseResetPathspec(parsed.AfterDoubleDash[0])
+		return refuseResetPathspec(flags, parsed.AfterDoubleDash[0])
 	}
 	if len(parsed.Revisions) > 1 {
 		// The first is the commit; anything after it can only be a path.
-		return refuseResetPathspec(parsed.Revisions[1])
+		return refuseResetPathspec(flags, parsed.Revisions[1])
 	}
 	if len(parsed.Revisions) == 1 {
 		// The bare form, `git reset <path>`, which git tells from a commit by
@@ -585,7 +584,7 @@ func refuseUnsupportedReset(flags globalFlags, parsed gitArgs) int {
 		// which is the convention merge, cherry-pick and switch already follow.
 		arg := parsed.Revisions[0]
 		if _, err := git.RevParse(flags.ctx(), arg+"^{commit}"); err != nil && namesAPath(flags, arg) {
-			return refuseResetPathspec(arg)
+			return refuseResetPathspec(flags, arg)
 		}
 	}
 	return 0
@@ -605,35 +604,35 @@ func namesAPath(flags globalFlags, arg string) bool {
 
 // refuseResetPathspec is the one wording for every spelling of the pathspec
 // form.
-func refuseResetPathspec(path string) int {
-	fmt.Fprintf(os.Stderr, "error: safegit reset does not support a pathspec (%q does not name a commit)\n", path)
-	fmt.Fprintf(os.Stderr, "  the pathspec form of reset writes the SHARED index entry by entry, and safegit's whole\n")
-	fmt.Fprintf(os.Stderr, "  design keeps out of that file: every commit stages into a temporary index of its own, so\n")
-	fmt.Fprintf(os.Stderr, "  that concurrent sessions cannot stage over each other. A reset of one path would be the\n")
-	fmt.Fprintf(os.Stderr, "  one exception, invisible to everything safegit records.\n")
-	fmt.Fprintf(os.Stderr, "  safegit reset takes a commit: --soft, --mixed, --hard, --merge or --keep.\n")
-	fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+func refuseResetPathspec(flags globalFlags, path string) int {
+	errorf(flags, "safegit reset does not support a pathspec (%q does not name a commit)\n"+
+		"  the pathspec form of reset writes the SHARED index entry by entry, and safegit's whole\n"+
+		"  design keeps out of that file: every commit stages into a temporary index of its own, so\n"+
+		"  that concurrent sessions cannot stage over each other. A reset of one path would be the\n"+
+		"  one exception, invisible to everything safegit records.\n"+
+		"  safegit reset takes a commit: --soft, --mixed, --hard, --merge or --keep.\n"+
+		"  safegit implements a deliberate subset of git; see docs/divergences.md.", path)
 	return exitcode.Usage
 }
 
 // refuseUnsupportedBisect refuses a bisect command line whose subcommand is
 // outside the classified vocabulary, and every option: what safegit forwards is
 // the vocabulary its classification table declares, and nothing else.
-func refuseUnsupportedBisect(parsed gitArgs) int {
-	if code := bisectSubset.refuseUnsupportedOptions(parsed); code != 0 {
+func refuseUnsupportedBisect(flags globalFlags, parsed gitArgs) int {
+	if code := bisectSubset.refuseUnsupportedOptions(flags, parsed); code != 0 {
 		return code
 	}
 	if len(parsed.Revisions) == 0 {
-		fmt.Fprintf(os.Stderr, "error: safegit bisect names no subcommand\n")
-		fmt.Fprintf(os.Stderr, "  usage: safegit bisect <%s>\n", strings.Join(bisectSubcommands(), "|"))
+		errorf(flags, "safegit bisect names no subcommand\n"+
+			"  usage: safegit bisect <%s>", strings.Join(bisectSubcommands(), "|"))
 		return exitcode.Usage
 	}
 	if sub := parsed.Revisions[0]; !containsString(bisectSubcommands(), sub) {
-		fmt.Fprintf(os.Stderr, "error: safegit bisect does not support %s\n", sub)
-		fmt.Fprintf(os.Stderr, "  the subcommands safegit forwards are the ones its git classification table declares,\n")
-		fmt.Fprintf(os.Stderr, "  because the same declaration is what tells safegit which of them write the working\n")
-		fmt.Fprintf(os.Stderr, "  tree and therefore need the uncommitted-work check: %s.\n", strings.Join(bisectSubcommands(), ", "))
-		fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+		errorf(flags, "safegit bisect does not support %s\n"+
+			"  the subcommands safegit forwards are the ones its git classification table declares,\n"+
+			"  because the same declaration is what tells safegit which of them write the working\n"+
+			"  tree and therefore need the uncommitted-work check: %s.\n"+
+			"  safegit implements a deliberate subset of git; see docs/divergences.md.", sub, strings.Join(bisectSubcommands(), ", "))
 		return exitcode.Usage
 	}
 	return 0

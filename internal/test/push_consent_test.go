@@ -24,8 +24,8 @@ func TestPushForceWithLeaseJSONDoesNotConfirm(t *testing.T) {
 	dir, remoteDir, remoteBase := divergedFromRemote(t)
 	want := testutil.Rev(t, dir, "HEAD")
 
-	_, stderr, code := runSafegit(t, dir, "--json", "push", "--refs", "head", "--force-with-lease", "origin")
-	assertRefusedForConsent(t, code, stderr)
+	stdout, stderr, code := runSafegit(t, dir, "--json", "push", "--refs", "head", "--force-with-lease", "origin")
+	assertRefusedForConsent(t, code, reported(stdout, stderr))
 	if got := testutil.Rev(t, remoteDir, "refs/heads/main"); got == want {
 		t.Error("--json must not answer the force-push confirmation; the remote ref was overwritten")
 	}

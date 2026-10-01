@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 
@@ -114,7 +113,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		default:
 			rewriteDesc = fmt.Sprintf("email: %s -> %s", oldEmail, newEmail)
 		}
-		fmt.Printf("Would rewrite %d of %d commits (%s)\n",
+		outf(flags, "Would rewrite %d of %d commits (%s)",
 			*result.CommitsMatched, *result.CommitsToCheck, rewriteDesc)
 		limit := len(affected)
 		if limit > 5 {
@@ -122,10 +121,10 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		}
 		for _, sha := range affected[:limit] {
 			info, _ := git.ParseCommit(ctx, sha)
-			fmt.Printf("  %s  author=%s committer=%s\n", sha[:12], info.Author.Name, info.Committer.Name)
+			outf(flags, "  %s  author=%s committer=%s", sha[:12], info.Author.Name, info.Committer.Name)
 		}
 		if len(affected) > 5 {
-			fmt.Printf("  ... and %d more\n", len(affected)-5)
+			outf(flags, "  ... and %d more", len(affected)-5)
 		}
 		return 0
 	}
@@ -148,7 +147,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 			strictcli.ExitNow(exitcode.General, fmt.Sprintf("listing commits: %v", err))
 		}
 		total := len(git.SplitNonEmpty(out))
-		infof(flags, "Rewriting %d commits. This cannot be undone.\n", total)
+		infof(flags, "Rewriting %d commits. This cannot be undone.", total)
 	}
 
 	// Capture old HEAD before rewrite
@@ -158,15 +157,15 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 
 	// Actual rewrite
-	infof(flags, "Capturing pre-rewrite snapshot...\n")
+	infof(flags, "Capturing pre-rewrite snapshot...")
 	before, err := captureSnapshot(ctx)
 	if err != nil {
 		strictcli.ExitNow(exitcode.General, fmt.Sprintf("capturing pre-rewrite snapshot: %v", err))
 	}
 
-	infof(flags, "Rewriting commits...\n")
+	infof(flags, "Rewriting commits...")
 	intent := IdentityIntent()
-	shaMap, nameChanged, err := rewriteCommits(ctx, oldName, newName, oldEmail, newEmail, intent, flags.verbose)
+	shaMap, nameChanged, err := rewriteCommits(flags, ctx, oldName, newName, oldEmail, newEmail, intent, flags.verbose)
 	if err != nil {
 		strictcli.ExitNow(exitcode.General, fmt.Sprintf("rewriting commits: %v", err))
 	}
@@ -208,13 +207,13 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	// refs have moved -- the snapshot it compares against is a snapshot of what
 	// the refs reach.
 	tierB := func(ctx context.Context) error {
-		infof(flags, "Capturing post-rewrite snapshot...\n")
+		infof(flags, "Capturing post-rewrite snapshot...")
 		after, err := captureSnapshot(ctx)
 		if err != nil {
 			return fmt.Errorf("capturing post-rewrite snapshot: %v", err)
 		}
 
-		infof(flags, "Verifying...\n")
+		infof(flags, "Verifying...")
 		failures := compareSnapshots(before, after, oldName, newName, oldEmail, true)
 
 		// Also verify working tree is clean after rewrite
@@ -227,12 +226,12 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 
 		if len(failures) > 0 {
 			for _, f := range failures {
-				fmt.Fprintf(os.Stderr, "  FAIL: %s\n", f)
+				errorf(flags, "FAIL: %s", f)
 			}
 			return fmt.Errorf("the rewritten history does not match the pre-rewrite snapshot in %d respect(s)", len(failures))
 		}
 
-		infof(flags, "Verification passed: all checks OK\n")
+		infof(flags, "Verification passed: all checks OK")
 		return nil
 	}
 
@@ -280,10 +279,10 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	flags.payload(payload)
 
 	if parentOnly == 1 {
-		infof(flags, "Rewrote %d commits (%d had name changes, %d was inherited (ancestors changed))\n",
+		infof(flags, "Rewrote %d commits (%d had name changes, %d was inherited (ancestors changed))",
 			total, nameChanged, parentOnly)
 	} else {
-		infof(flags, "Rewrote %d commits (%d had name changes, %d were inherited (ancestors changed))\n",
+		infof(flags, "Rewrote %d commits (%d had name changes, %d were inherited (ancestors changed))",
 			total, nameChanged, parentOnly)
 	}
 
@@ -723,7 +722,7 @@ func compareIntSlices(label string, before, after []int) string {
 // change: an identity-bearing trailer in the message. Tier A holds it to that
 // -- trees identical everywhere, messages changed only where a trailer was
 // rewritten.
-func rewriteCommits(ctx context.Context, oldName, newName, oldEmail, newEmail string, intent *RewriteIntent, verbose bool) (map[string]string, int, error) {
+func rewriteCommits(flags globalFlags, ctx context.Context, oldName, newName, oldEmail, newEmail string, intent *RewriteIntent, verbose bool) (map[string]string, int, error) {
 	// Get all commits in topo-order with parents before children.
 	args := append([]string{"rev-list", "--topo-order", "--reverse"}, refGlobs...)
 	out, _, err := git.Run(ctx, args...)
@@ -734,7 +733,7 @@ func rewriteCommits(ctx context.Context, oldName, newName, oldEmail, newEmail st
 	shas := git.SplitNonEmpty(out)
 	nameChanged := 0
 
-	shaMap, _, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
+	shaMap, _, err := walkAndRewrite(flags, ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 		author := info.Author
 		committer := info.Committer
 		thisNameChanged := false

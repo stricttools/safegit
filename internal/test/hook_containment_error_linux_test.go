@@ -33,8 +33,8 @@ func TestHookRunsRecordedBeforeAContainmentErrorAreEmitted(t *testing.T) {
 			if code != exitcode.General {
 				t.Fatalf("exit = %d, want %d; stderr: %s", code, exitcode.General, stderr)
 			}
-			if !strings.Contains(stderr, "error: running hooks: hook 20-b: ") || !strings.Contains(stderr, "too many open files") {
-				t.Errorf("the error must name the hook safegit could not run and why; stderr:\n%s", stderr)
+			if said := reported(stdout, stderr); !strings.Contains(said, "running hooks: hook 20-b: ") || !strings.Contains(said, "too many open files") {
+				t.Errorf("the error must name the hook safegit could not run and why; it said:\n%s", said)
 			}
 			hooks := payloadHooks(t, stdout)
 			if len(hooks) != 1 {

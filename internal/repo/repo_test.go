@@ -163,7 +163,7 @@ func TestInitCompletesHalfInitializedDir(t *testing.T) {
 func TestEnsureInitializedCompletesHalfInitializedDir(t *testing.T) {
 	gitDir := halfInitializedGitDir(t)
 
-	if err := EnsureInitialized(context.Background(), gitDir); err != nil {
+	if err := EnsureInitialized(context.Background(), gitDir, func(string) {}); err != nil {
 		t.Fatalf("EnsureInitialized over a half-initialized dir: %v", err)
 	}
 	if _, err := os.Stat(ConfigPath(gitDir)); err != nil {
@@ -174,7 +174,7 @@ func TestEnsureInitializedCompletesHalfInitializedDir(t *testing.T) {
 	}
 
 	// Idempotent: calling it again on the repaired repo changes nothing.
-	if err := EnsureInitialized(context.Background(), gitDir); err != nil {
+	if err := EnsureInitialized(context.Background(), gitDir, func(string) {}); err != nil {
 		t.Fatalf("second EnsureInitialized: %v", err)
 	}
 	if !IsInitialized(gitDir) {
@@ -200,7 +200,7 @@ func TestEnsureInitialized(t *testing.T) {
 	os.MkdirAll(gitDir, 0755)
 
 	// EnsureInitialized should auto-init when not initialized
-	err := EnsureInitialized(context.Background(), gitDir)
+	err := EnsureInitialized(context.Background(), gitDir, func(string) {})
 	if err != nil {
 		t.Fatalf("unexpected error from auto-init: %v", err)
 	}
@@ -209,7 +209,7 @@ func TestEnsureInitialized(t *testing.T) {
 	}
 
 	// Calling again on an already-initialized repo should succeed
-	err = EnsureInitialized(context.Background(), gitDir)
+	err = EnsureInitialized(context.Background(), gitDir, func(string) {})
 	if err != nil {
 		t.Fatalf("unexpected error after init: %v", err)
 	}

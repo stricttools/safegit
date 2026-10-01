@@ -79,12 +79,12 @@ func hookList(flags globalFlags) int {
 
 	locations, err := hooks.Enumerate(hookStore(flags, sharedGitDir(flags, gitDir)))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
 	if len(locations) == 0 {
-		outf(flags, "no pre-pre-push hooks found\n")
+		outf(flags, "no pre-pre-push hooks found")
 		return 0
 	}
 
@@ -97,18 +97,18 @@ func hookList(flags globalFlags) int {
 		if !loc.IsHookName() {
 			state = "not a hook (dot-prefixed or editor backup)"
 		}
-		outf(flags, "  %s  [%s, %s]  %s\n", loc.Rel, loc.Origin, state, loc.Path)
+		outf(flags, "  %s  [%s, %s]  %s", loc.Rel, loc.Origin, state, loc.Path)
 		if loc.Origin == hooks.OriginLegacy {
 			legacy = append(legacy, loc.Path)
 		}
 	}
-	outf(flags, "%d hook(s)\n", len(locations))
+	outf(flags, "%d hook(s)", len(locations))
 
 	// The listing is printed first and the refusal comes after it: the operator
 	// needs to SEE what is in the legacy location before being told to move it.
 	if len(legacy) > 0 {
 		e := &hooks.LegacyLocationError{Paths: legacy}
-		fmt.Fprintf(os.Stderr, "error: %v\n", e)
+		errorf(flags, "%v", e)
 		return exitcode.HooksNotMigrated
 	}
 	return 0
@@ -118,18 +118,18 @@ func hookList(flags globalFlags) int {
 func hookRun(flags globalFlags, name string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: loading config: %v\n", err)
+		errorf(flags, "loading config: %v", err)
 		return exitcode.General
 	}
 	stopCap, err := hooks.StopCapFromEnvironment(os.LookupEnv)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
@@ -137,7 +137,7 @@ func hookRun(flags globalFlags, name string) int {
 	ctx := flags.ctx()
 	hookStdin, err := synthesizeHookStdin(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
@@ -167,15 +167,15 @@ func hookRun(flags globalFlags, name string) int {
 			}
 		}
 		if hookPath == "" {
-			fmt.Fprintf(os.Stderr, "hook %q not found\n", name)
+			errorf(flags, "hook %q not found", name)
 			return exitcode.General
 		}
 
-		outf(flags, "running hook: %s\n", name)
+		outf(flags, "running hook: %s", name)
 		var r hooks.HookResult
-		ran, sigExit, rErr := runHooksInterruptibly(ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
+		ran, sigExit, rErr := runHooksInterruptibly(flags, ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
 			var err error
-			r, err = hooks.RunSingle(hctx, hookPath, hookStdin, timeoutSec, stopCap, hookEnv)
+			r, err = hooks.RunSingle(hctx, hookPath, hookStdin, timeoutSec, stopCap, hookEnv, flags.sc.Warn)
 			if err != nil {
 				return nil, err
 			}
@@ -189,16 +189,16 @@ func hookRun(flags globalFlags, name string) int {
 			// safegit could not run the hook under containment, so there is no
 			// run to record; the payload still answers, with an empty list.
 			flags.payload(hookRunPayload{Hooks: hookRecords(nil)})
-			fmt.Fprintf(os.Stderr, "error: running hooks: %v\n", rErr)
+			errorf(flags, "running hooks: %v", rErr)
 			return exitcode.General
 		}
 		results := []hooks.HookResult{r}
 		flags.payload(hookRunPayload{Hooks: hookRecords(results)})
-		printLeftovers(r)
-		if code := hookRunsExit(results); code != 0 {
+		printLeftovers(flags, r)
+		if code := hookRunsExit(flags, results); code != 0 {
 			return code
 		}
-		outf(flags, "hook %s passed (%v)\n", name, r.Duration)
+		outf(flags, "hook %s passed (%v)", name, r.Duration)
 		return 0
 	}
 
@@ -207,8 +207,8 @@ func hookRun(flags globalFlags, name string) int {
 	if dErr != nil {
 		return hookDiscoveryExit(dErr)
 	}
-	results, sigExit, rErr := runHooksInterruptibly(ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
-		return hooks.RunAll(hctx, hookPaths, hookStdin, timeoutSec, stopCap, hookEnv)
+	results, sigExit, rErr := runHooksInterruptibly(flags, ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
+		return hooks.RunAll(hctx, hookPaths, hookStdin, timeoutSec, stopCap, hookEnv, flags.sc.Warn)
 	})
 	if sigExit != 0 {
 		// Interrupted: the runs so far are recorded, the interrupted one
@@ -221,22 +221,22 @@ func hookRun(flags globalFlags, name string) int {
 		// are facts all the same, so the payload records them; the error text
 		// and the exit code are the verdict.
 		for _, r := range results {
-			printLeftovers(r)
+			printLeftovers(flags, r)
 		}
 		flags.payload(hookRunPayload{Hooks: hookRecords(results)})
-		fmt.Fprintf(os.Stderr, "error: running hooks: %v\n", rErr)
+		errorf(flags, "running hooks: %v", rErr)
 		return exitcode.General
 	}
 
 	flags.payload(hookRunPayload{Hooks: hookRecords(results)})
 
 	if len(results) == 0 {
-		outf(flags, "no hooks to run\n")
+		outf(flags, "no hooks to run")
 		return 0
 	}
 
 	for _, r := range results {
-		printLeftovers(r)
+		printLeftovers(flags, r)
 		status := "passed"
 		if r.StartError != "" {
 			status = fmt.Sprintf("could not be started (%s)", r.StartError)
@@ -247,12 +247,12 @@ func hookRun(flags globalFlags, name string) int {
 		} else if r.Failed() {
 			status = "failed (left processes running)"
 		}
-		outf(flags, "  %s: %s (%v)\n", r.Name, status, r.Duration)
+		outf(flags, "  %s: %s (%v)", r.Name, status, r.Duration)
 	}
 
 	// The same rule push uses: the first run that did not pass decides the
 	// code, so a timeout answers 21 rather than the generic 20.
-	return hookRunsExit(results)
+	return hookRunsExit(flags, results)
 }
 
 // hookEnding says how a hook run ended, for the text output: "exit=N" for a
@@ -286,14 +286,14 @@ func hookEnding(r hooks.HookResult) string {
 // with. The hold is deliberately never released then: a release would let the
 // signal handler exit the process before the payload is written. With no
 // signal, the second result is 0.
-func runHooksInterruptibly(ctx context.Context, run func(context.Context) ([]hooks.HookResult, error)) ([]hooks.HookResult, int, error) {
+func runHooksInterruptibly(flags globalFlags, ctx context.Context, run func(context.Context) ([]hooks.HookResult, error)) ([]hooks.HookResult, int, error) {
 	hctx, hold := lock.HoldInterrupts(ctx)
 	results, err := run(hctx)
 	if sig, interrupted := hold.Interrupted(); interrupted {
 		for _, r := range results {
-			printLeftovers(r)
+			printLeftovers(flags, r)
 		}
-		fmt.Fprintf(os.Stderr, "error: interrupted (%v) while the pre-pre-push hooks ran; the running hook was stopped\n", sig)
+		errorf(flags, "interrupted (%v) while the pre-pre-push hooks ran; the running hook was stopped", sig)
 		return results, lock.SignalExitStatus(sig), err
 	}
 	hold.Release()
@@ -302,9 +302,9 @@ func runHooksInterruptibly(ctx context.Context, run func(context.Context) ([]hoo
 
 // printLeftovers writes one error line to stderr per process a hook left
 // running when it ended. Such a run is a failure even when the hook exited 0.
-func printLeftovers(r hooks.HookResult) {
+func printLeftovers(flags globalFlags, r hooks.HookResult) {
 	for _, msg := range r.LeftoverMessages() {
-		fmt.Fprintf(os.Stderr, "error: %s\n", msg)
+		errorf(flags, "%s", msg)
 	}
 }
 
@@ -313,19 +313,19 @@ func printLeftovers(r hooks.HookResult) {
 // pass -- PushHookTimeout when it timed out, PushHookFailed when it could not
 // be started, exited nonzero or left a process behind -- and 0 when every run
 // passed. It writes
-// that run's verdict to stderr, which is where the verdict lives: the payload
+// that run's verdict as an error, which is where the verdict lives: the payload
 // records the runs, never whether they passed.
-func hookRunsExit(results []hooks.HookResult) int {
+func hookRunsExit(flags globalFlags, results []hooks.HookResult) int {
 	for _, r := range results {
 		switch {
 		case r.StartError != "":
-			fmt.Fprintf(os.Stderr, "hook %s could not be started: %s\n", r.Name, r.StartError)
+			errorf(flags, "hook %s could not be started: %s", r.Name, r.StartError)
 			return exitcode.PushHookFailed
 		case r.TimedOut:
-			fmt.Fprintf(os.Stderr, "hook %s timed out after %v\n", r.Name, r.Duration)
+			errorf(flags, "hook %s timed out after %v", r.Name, r.Duration)
 			return exitcode.PushHookTimeout
 		case r.ExitCode != nil && *r.ExitCode != 0:
-			fmt.Fprintf(os.Stderr, "hook %s failed (exit %d)\n", r.Name, *r.ExitCode)
+			errorf(flags, "hook %s failed (exit %d)", r.Name, *r.ExitCode)
 			return exitcode.PushHookFailed
 		case r.Failed():
 			// A run that exited 0 and still failed left something behind;
@@ -453,7 +453,7 @@ func hookInstall(flags globalFlags, srcPath string) int {
 	// safegit had never touched used to depend on git's own hooks directory
 	// already being there.
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 
@@ -464,26 +464,26 @@ func hookInstall(flags globalFlags, srcPath string) int {
 	// real run would refuse is a lie.
 	data, dest, err := hooks.PlanInstall(sharedGitDir(flags, gitDir), srcPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 	fx := flags.effects()
 	if _, err := fx.Mkdir(filepath.Dir(dest)); err != nil {
-		fmt.Fprintf(os.Stderr, "error: creating hooks dir: %v\n", err)
+		errorf(flags, "creating hooks dir: %v", err)
 		return exitcode.General
 	}
 	if _, err := fx.Write(dest, data, strictcli.Resource("safegit-hook:"+dest)); err != nil {
-		fmt.Fprintf(os.Stderr, "error: writing hook file: %v\n", err)
+		errorf(flags, "writing hook file: %v", err)
 		return exitcode.General
 	}
 	if _, err := fx.Chmod(dest, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "error: making hook executable: %v\n", err)
+		errorf(flags, "making hook executable: %v", err)
 		return exitcode.General
 	}
 
 	name := filepath.Base(srcPath)
-	if !flags.silent() && !flags.dryRun {
-		fmt.Printf("installed hook: %s\n", name)
+	if !flags.dryRun {
+		infof(flags, "installed hook: %s", name)
 	}
 	return 0
 }
@@ -499,13 +499,13 @@ func hookInstall(flags globalFlags, srcPath string) int {
 func hookRemove(flags globalFlags, name string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 
 	locations, err := hooks.Enumerate(hookStore(flags, sharedGitDir(flags, gitDir)))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
@@ -558,20 +558,19 @@ func hookRemove(flags globalFlags, name string) int {
 	target := local[0]
 	fx := flags.effects()
 	if _, err := fx.Remove(target.Path); err != nil {
-		fmt.Fprintf(os.Stderr, "error: removing %s: %v\n", target.Path, err)
+		errorf(flags, "removing %s: %v", target.Path, err)
 		return exitcode.General
 	}
-	if !flags.silent() && !flags.dryRun {
-		fmt.Printf("removed hook: %s\n", target.Rel)
+	if !flags.dryRun {
+		infof(flags, "removed hook: %s", target.Rel)
 	}
 	// The advisory is what keeps the removal from reading as "that name is gone
 	// now", so a preview states it too: after the removal this command previews,
 	// the repository-provided hook of the same name still runs. It is advice
-	// about the store rather than a result, so --quiet (and machine mode, whose
-	// stdout is the envelope) suppresses it.
-	if len(tracked) > 0 && !flags.silent() {
-		fmt.Fprintf(os.Stderr, "note: %s also names a hook the checkout provides (%s), which still runs; removing that one means deleting the file and committing that\n",
-			name, tracked[0].Path)
+	// about the store rather than a result, so it is progress text, which
+	// --quiet suppresses.
+	if len(tracked) > 0 {
+		infof(flags, "note: %s also names a hook the checkout provides (%s), which still runs; removing that one means deleting the file and committing that", name, tracked[0].Path)
 	}
 	return 0
 }
@@ -588,7 +587,7 @@ func hookRemove(flags globalFlags, name string) int {
 func hookMigrate(flags globalFlags) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 
@@ -617,22 +616,22 @@ func hookMigrate(flags globalFlags) int {
 	}
 
 	if len(moves) == 0 {
-		outf(flags, "nothing to migrate: no hooks in %s\n", filepath.Join(shared, "hooks"))
+		outf(flags, "nothing to migrate: no hooks in %s", filepath.Join(shared, "hooks"))
 		return 0
 	}
 
 	fx := flags.effects()
 	if _, err := fx.Mkdir(hooks.LocalDir(shared)); err != nil {
-		fmt.Fprintf(os.Stderr, "error: creating %s: %v\n", hooks.LocalDir(shared), err)
+		errorf(flags, "creating %s: %v", hooks.LocalDir(shared), err)
 		return exitcode.General
 	}
 	for _, m := range moves {
 		if _, err := fx.Rename(m.src, m.dest); err != nil {
-			fmt.Fprintf(os.Stderr, "error: moving %s: %v\n", m.src, err)
+			errorf(flags, "moving %s: %v", m.src, err)
 			return exitcode.General
 		}
-		if !flags.silent() && !flags.dryRun {
-			fmt.Printf("migrated %s -> %s\n", m.label, m.dest)
+		if !flags.dryRun {
+			infof(flags, "migrated %s -> %s", m.label, m.dest)
 		}
 	}
 	return 0

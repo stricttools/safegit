@@ -241,17 +241,14 @@ func (out conclusionResult) reportedSHA(flags globalFlags) *string {
 // a dry run of it says what WOULD be committed, when the answer is that nothing
 // was and nothing would be.
 func (op continueOp) renderStood(flags globalFlags, out conclusionResult) {
-	if flags.silent() {
-		return
-	}
-	fmt.Printf("[%s %s] the %s was already concluded; nothing was committed\n",
+	infof(flags, "[%s %s] the %s was already concluded; nothing was committed",
 		refShortName(out.commit.Ref), shortSHA(out.commit.SHA), op.kind)
 	if flags.dryRun {
-		fmt.Printf(" the %s state files would be removed and the index and working tree put in step with the commit\n", op.kind)
+		infof(flags, " the %s state files would be removed and the index and working tree put in step with the commit", op.kind)
 		return
 	}
 	if out.cleared {
-		fmt.Printf(" the %s state files are removed and the index and working tree are in step with the commit\n", op.kind)
+		infof(flags, " the %s state files are removed and the index and working tree are in step with the commit", op.kind)
 	}
 }
 
@@ -259,42 +256,38 @@ func (op continueOp) renderStood(flags globalFlags, out conclusionResult) {
 // own one-line summary of the operation: the three conclusion commands say they
 // concluded something, the restructured revert says it reverted a commit.
 func (op continueOp) renderHuman(flags globalFlags, out conclusionResult, headline string) {
-	if flags.silent() {
-		return
-	}
-
 	if flags.dryRun {
-		fmt.Println(wouldWriteHeader("conclude the "+op.kind.String(), out.commit.Ref, out.commit.Tree, firstLine(messageSubject(out))))
-		fmt.Printf(" %d file(s) would be committed, %d parent(s), %d declared resolution(s)\n",
+		infof(flags, "%s", wouldWriteHeader("conclude the "+op.kind.String(), out.commit.Ref, out.commit.Tree, firstLine(messageSubject(out))))
+		infof(flags, " %d file(s) would be committed, %d parent(s), %d declared resolution(s)",
 			len(out.commit.Files), len(out.commit.Parents), len(out.declared))
-		fmt.Printf(" the %s state files would then be removed\n", op.kind)
+		infof(flags, " the %s state files would then be removed", op.kind)
 		// Stated because it is a working-tree write the preview is not making:
 		// an executing run puts the operator's autostashed work back, and a
 		// preview that said nothing about it would be describing a smaller
 		// operation than the one it is previewing.
 		if out.state.Autostash != "" {
-			fmt.Printf(" the autostash %s would then be applied to the working tree and %s removed\n",
+			infof(flags, " the autostash %s would then be applied to the working tree and %s removed",
 				shortSHA(out.state.Autostash), sequencer.FileMergeAutostash)
 		}
 		if written, removed := worktreeEffects(out.declared, out.sides); len(written)+len(removed) > 0 {
 			if len(written) > 0 {
-				fmt.Printf(" %d working-tree file(s) would be overwritten with the resolved content: %s\n", len(written), joinPaths(written))
+				infof(flags, " %d working-tree file(s) would be overwritten with the resolved content: %s", len(written), joinPaths(written))
 			}
 			if len(removed) > 0 {
-				fmt.Printf(" %d working-tree file(s) would be deleted: %s\n", len(removed), joinPaths(removed))
+				infof(flags, " %d working-tree file(s) would be deleted: %s", len(removed), joinPaths(removed))
 			}
 		}
-		renderDeclinedChecks(out.declines)
+		renderDeclinedChecks(flags, out.declines)
 		return
 	}
 
-	fmt.Printf("[%s %s] %s\n", refShortName(out.commit.Ref), shortSHA(out.commit.SHA), headline)
-	fmt.Printf(" %d file(s) committed, %d parent(s)\n", len(out.commit.Files), len(out.commit.Parents))
+	infof(flags, "[%s %s] %s", refShortName(out.commit.Ref), shortSHA(out.commit.SHA), headline)
+	infof(flags, " %d file(s) committed, %d parent(s)", len(out.commit.Files), len(out.commit.Parents))
 	if out.author != nil {
 		if op.preservesSourceAuthor() {
-			fmt.Printf(" author preserved: %s <%s>\n", out.author.Name, out.author.Email)
+			infof(flags, " author preserved: %s <%s>", out.author.Name, out.author.Email)
 		} else {
-			fmt.Printf(" author: %s <%s> (a revert is your own change, so it is NOT authored by the commit it undoes)\n",
+			infof(flags, " author: %s <%s> (a revert is your own change, so it is NOT authored by the commit it undoes)",
 				out.author.Name, out.author.Email)
 		}
 	}
@@ -305,12 +298,12 @@ func (op continueOp) renderHuman(flags globalFlags, out conclusionResult, headli
 	// the source.
 	written, removed := worktreeEffects(out.declared, out.sides)
 	if len(written) > 0 {
-		fmt.Printf(" %d working-tree file(s) written with the resolved content: %s\n", len(written), joinPaths(written))
+		infof(flags, " %d working-tree file(s) written with the resolved content: %s", len(written), joinPaths(written))
 	}
 	if len(removed) > 0 {
-		fmt.Printf(" %d working-tree file(s) deleted: %s\n", len(removed), joinPaths(removed))
+		infof(flags, " %d working-tree file(s) deleted: %s", len(removed), joinPaths(removed))
 	}
-	renderDeclinedChecks(out.declines)
+	renderDeclinedChecks(flags, out.declines)
 }
 
 // worktreeEffects splits the declared resolutions into the paths whose
@@ -377,9 +370,9 @@ func orEmptyDeclines(declines []declinedCheck) []declinedCheck {
 // executed run alike, because the preview ran the same verification and declined
 // the same checks. Each line names the check, the path and what declined it, so
 // an operator who did not know the exemption was there can find the declaration.
-func renderDeclinedChecks(declines []declinedCheck) {
+func renderDeclinedChecks(flags globalFlags, declines []declinedCheck) {
 	for _, d := range declines {
-		fmt.Printf(" check declined: %s on %s -- %s\n", d.Check, d.Path, d.Reason)
+		infof(flags, " check declined: %s on %s -- %s", d.Check, d.Path, d.Reason)
 	}
 }
 

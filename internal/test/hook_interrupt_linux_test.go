@@ -14,7 +14,6 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
 )
 
 // readPidFile reads a pid a hook recorded, failing the test when it is absent.
@@ -149,7 +148,7 @@ func (s *syncBuffer) String() string {
 	return s.b.String()
 }
 
-// stoppingLine is what safegit prints on stderr when an interruption makes it
+// stoppingLine is the warning safegit writes when an interruption makes it
 // begin stopping a hook: the hook's name, and the longest the stop can take,
 // which is the cap on stopping a hook -- 60s unless SAFEGIT_HOOK_KILL_CAP_S
 // says otherwise.
@@ -212,14 +211,13 @@ func TestInterruptedJSONRunEmitsThePayload(t *testing.T) {
 				if err := cmd.Process.Signal(sig); err != nil {
 					t.Fatal(err)
 				}
-				// The second signal goes in once safegit has said it is stopping
-				// the hook, which is the window it must be ignored in.
-				deadline := time.Now().Add(10 * time.Second)
-				for !strings.Contains(stderr.String(), stoppingLine("20-test", "11s")) && time.Now().Before(deadline) {
-					time.Sleep(10 * time.Millisecond)
-				}
-				if !strings.Contains(stderr.String(), stoppingLine("20-test", "11s")) {
-					t.Errorf("stderr does not say %q:\n%s", stoppingLine("20-test", "11s"), stderr.String())
+				// The second signal goes in once the stop has begun, which is the
+				// window it must be ignored in. Under --json the announcement is a
+				// diagnostic in the document written at the end, so the sign the
+				// stop has begun is the SIGTERM it sends: the hook ignores it, and
+				// its detached child dies of it.
+				if !processGone(child, 10*time.Second) {
+					t.Fatalf("the stop did not reach the hook's child %d within 10s of %v; stderr:\n%s", child, sig, stderr.String())
 				}
 				cmd.Process.Signal(sig)
 
@@ -240,6 +238,9 @@ func TestInterruptedJSONRunEmitsThePayload(t *testing.T) {
 				}
 				if env := decodeEnvelope(t, stdout.String()); env.ExitCode != sigExit {
 					t.Errorf("envelope exit_code = %d, want %d", env.ExitCode, sigExit)
+				}
+				if said := reported(stdout.String(), stderr.String()); !strings.Contains(said, strings.TrimSuffix(stoppingLine("20-test", "11s"), "\n")) {
+					t.Errorf("the run does not say %q:\n%s", stoppingLine("20-test", "11s"), said)
 				}
 				entries := payloadHooks(t, stdout.String())
 				if len(entries) != 2 {

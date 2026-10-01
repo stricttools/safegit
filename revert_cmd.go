@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/stricttools/safegit/internal/coord"
@@ -66,7 +65,7 @@ func runRevert(flags globalFlags, args []string) int {
 
 	// The allowlist covers EVERY route, the state-control forms included: an
 	// option safegit does not implement is refused whichever verb it accompanies.
-	if code := revertSubset.refuseUnsupportedOptions(parsed); code != 0 {
+	if code := revertSubset.refuseUnsupportedOptions(flags, parsed); code != 0 {
 		return code
 	}
 	if parsed.Has("--continue", "--abort", "--quit") {
@@ -85,18 +84,18 @@ func runRevert(flags globalFlags, args []string) int {
 // absent, because "safegit does not do this" is a different answer from "this
 // failed" and an operator has to be able to tell them apart. Each needs its
 // entry in the divergences catalog.
-func refuseUnsupportedRevert(parsed gitArgs) int {
+func refuseUnsupportedRevert(flags globalFlags, parsed gitArgs) int {
 	if len(parsed.AfterDoubleDash) > 0 {
-		fmt.Fprintf(os.Stderr, "error: safegit revert takes no pathspec\n")
-		fmt.Fprintf(os.Stderr, "  a pathspec undoes part of a commit and records a message claiming the whole of it.\n")
-		fmt.Fprintf(os.Stderr, "  Revert the commit, or make the partial change yourself and commit it.\n")
+		errorf(flags, "safegit revert takes no pathspec\n"+
+			"  a pathspec undoes part of a commit and records a message claiming the whole of it.\n"+
+			"  Revert the commit, or make the partial change yourself and commit it.")
 		return exitcode.Usage
 	}
 
 	// BEFORE the count, because a rev-set is one argv token and counting tokens
 	// would call `A..B` a single commit.
 	for _, rev := range parsed.Revisions {
-		if code := refuseRevisionSet("revert", rev); code != 0 {
+		if code := refuseRevisionSet(flags, "revert", rev); code != 0 {
 			return code
 		}
 	}
@@ -104,12 +103,12 @@ func refuseUnsupportedRevert(parsed gitArgs) int {
 	switch len(parsed.Revisions) {
 	case 1:
 	case 0:
-		fmt.Fprintf(os.Stderr, "error: safegit revert names no commit to revert\n")
-		fmt.Fprintf(os.Stderr, "  usage: safegit revert <commit>\n")
+		errorf(flags, "safegit revert names no commit to revert\n"+
+			"  usage: safegit revert <commit>")
 		return exitcode.Usage
 	default:
-		fmt.Fprintf(os.Stderr, "error: safegit revert takes exactly one commit, and this names %d\n", len(parsed.Revisions))
-		fmt.Fprintf(os.Stderr, "  %s\n", sequentialFormReason("revert"))
+		errorf(flags, "safegit revert takes exactly one commit, and this names %d\n"+
+			"  %s", len(parsed.Revisions), sequentialFormReason("revert"))
 		return exitcode.Usage
 	}
 	return 0
@@ -121,19 +120,19 @@ func runRestructuredRevert(flags globalFlags, args []string, parsed gitArgs) int
 	// FIRST, and before the repository is touched at all: a command line
 	// safegit itself refuses is refused without a lock, without an
 	// auto-initialization and without a git call.
-	if code := refuseUnsupportedRevert(parsed); code != 0 {
+	if code := refuseUnsupportedRevert(flags, parsed); code != 0 {
 		return code
 	}
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
 	if err := requireAutoBumpDecision(flags.ctx(), flags); err != nil {
-		fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
+		errorf(flags, "auto-bump parent: %v", err)
 		return exitcode.General
 	}
 
@@ -151,7 +150,7 @@ func runRestructuredRevert(flags globalFlags, args []string, parsed gitArgs) int
 	// computed over an operation git already has in flight. `revert --no-commit`
 	// happily writes REVERT_HEAD beside a parked CHERRY_PICK_HEAD and stages an
 	// inverse patch nothing will commit, so the refusal has to be safegit's own.
-	if code := refuseComputeOverInFlight(gitDir, "revert"); code != 0 {
+	if code := refuseComputeOverInFlight(flags, gitDir, "revert"); code != 0 {
 		return code
 	}
 
@@ -209,7 +208,7 @@ func concludeComputedRevert(flags globalFlags, gitDir, sgDir, reverted string) i
 
 	state, err := sequencer.Read(gitDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: reading the revert state git just wrote: %v\n", err)
+		errorf(flags, "reading the revert state git just wrote: %v", err)
 		return exitcode.General
 	}
 	if state.Kind != sequencer.KindRevert {
@@ -234,12 +233,12 @@ func concludeComputedRevert(flags globalFlags, gitDir, sgDir, reverted string) i
 		// operating in this worktree, and that rollback could take its work with
 		// it. safegit refuses to ship work it cannot account for; it does not
 		// destroy it.
-		fmt.Fprintf(os.Stderr, "error: git's operation state changed while the revert was being computed (%s now); nothing was committed\n", state.String())
-		fmt.Fprintf(os.Stderr, "  nothing was in flight when this command started, so something else started or cleared a\n")
-		fmt.Fprintf(os.Stderr, "  git operation in this worktree while it ran.\n")
-		fmt.Fprintf(os.Stderr, "  The computed inverse patch is still in the index and the working tree. safegit leaves it\n")
-		fmt.Fprintf(os.Stderr, "  there rather than discarding it, because something else is operating here. Inspect it with\n")
-		fmt.Fprintf(os.Stderr, "  'git status', then commit it or drop it yourself.\n")
+		errorf(flags, "git's operation state changed while the revert was being computed (%s now); nothing was committed\n"+
+			"  nothing was in flight when this command started, so something else started or cleared a\n"+
+			"  git operation in this worktree while it ran.\n"+
+			"  The computed inverse patch is still in the index and the working tree. safegit leaves it\n"+
+			"  there rather than discarding it, because something else is operating here. Inspect it with\n"+
+			"  'git status', then commit it or drop it yourself.", state.String())
 		return exitcode.General
 	}
 
@@ -372,19 +371,20 @@ const revertHelp = "revert ONE commit by applying its inverse patch, and author 
 // called -- so the message says which of the two states the operator is left
 // in, and offers an abort only where there is still something to abort.
 //
-// The residue detail comes first and the advice last, so the line an operator
+// The residue detail follows the headline and the advice comes last, so the line an operator
 // acts on is the one nearest their cursor.
-func refuseEmptyRevert(cleanup cleanEmptyParkOutcome) int {
-	cleanup.reportResidue()
-	fmt.Fprintf(os.Stderr, "error: this revert produces no change: the commit's effect is already absent from the tree\n")
+func refuseEmptyRevert(flags globalFlags, cleanup cleanEmptyParkOutcome) int {
+	msg := "this revert produces no change: the commit's effect is already absent from the tree" + cleanup.residueLines()
 	if cleanup.cleaned() {
-		fmt.Fprintf(os.Stderr, "  nothing was committed, and the revert state safegit parked has been cleaned up:\n")
-		fmt.Fprintf(os.Stderr, "  the branch, the index and the working tree stand where they did, and the next\n")
-		fmt.Fprintf(os.Stderr, "  safegit command just works.\n")
+		errorf(flags, "%s\n"+
+			"  nothing was committed, and the revert state safegit parked has been cleaned up:\n"+
+			"  the branch, the index and the working tree stand where they did, and the next\n"+
+			"  safegit command just works.", msg)
 		return exitcode.General
 	}
-	fmt.Fprintf(os.Stderr, "  nothing was committed, but the revert is STILL in progress; drop it with:\n")
-	fmt.Fprintf(os.Stderr, "    git revert --abort\n")
+	errorf(flags, "%s\n"+
+		"  nothing was committed, but the revert is STILL in progress; drop it with:\n"+
+		"    git revert --abort", msg)
 	return exitcode.General
 }
 
@@ -433,20 +433,22 @@ func refuseOwnedConclusion(flags globalFlags, gitDir, verb string, args []string
 	}
 	w := coord.WayOutOf(state)
 
+	var msg string
 	if strings.HasPrefix(w.Conclude, "safegit ") {
-		fmt.Fprintf(os.Stderr, "error: safegit %s --continue does not conclude %s; safegit does\n", verb, state.String())
-		fmt.Fprintf(os.Stderr, "  git's own --continue would commit the whole index itself, with none of safegit's trailers\n")
-		fmt.Fprintf(os.Stderr, "  and none of its commit-time machinery. Use the command that does:\n")
+		msg = fmt.Sprintf("safegit %s --continue does not conclude %s; safegit does\n"+
+			"  git's own --continue would commit the whole index itself, with none of safegit's trailers\n"+
+			"  and none of its commit-time machinery. Use the command that does:", verb, state.String())
 	} else {
-		fmt.Fprintf(os.Stderr, "error: safegit %s --continue does not conclude %s\n", verb, state.String())
-		fmt.Fprintf(os.Stderr, "  this one is git's to finish, and every commit its --continue makes is git's: no safegit\n")
-		fmt.Fprintf(os.Stderr, "  trailers, safegit's commit-time machinery never runs, and 'safegit undo' cannot reverse\n")
-		fmt.Fprintf(os.Stderr, "  them. safegit does not put its own name on that -- run git's own command yourself:\n")
+		msg = fmt.Sprintf("safegit %s --continue does not conclude %s\n"+
+			"  this one is git's to finish, and every commit its --continue makes is git's: no safegit\n"+
+			"  trailers, safegit's commit-time machinery never runs, and 'safegit undo' cannot reverse\n"+
+			"  them. safegit does not put its own name on that -- run git's own command yourself:", verb, state.String())
 	}
-	fmt.Fprintf(os.Stderr, "    conclude it:  %s\n", w.Conclude)
+	msg += "\n    conclude it:  " + w.Conclude
 	if w.Abandon != "" {
-		fmt.Fprintf(os.Stderr, "    abandon it:   %s\n", w.Abandon)
+		msg += "\n    abandon it:   " + w.Abandon
 	}
+	errorf(flags, "%s", msg)
 	return exitcode.CoordinationBusy
 }
 

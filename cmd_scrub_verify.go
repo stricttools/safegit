@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"path"
 	"regexp"
 
@@ -248,16 +247,14 @@ func runScrubVerify(flags globalFlags, kwargs map[string]interface{}) int {
 			record.Pass = true
 			results = append(results, record)
 			passed++
-			infof(flags, "  PASS [%d] %s\n", i+1, verifyTargetLabel(t))
+			infof(flags, "  PASS [%d] %s", i+1, verifyTargetLabel(t))
 			continue
 		}
 		detail := formatMatchFailure(matches)
 		record.Details = []string{detail}
 		results = append(results, record)
 		failed++
-		if !flags.silent() {
-			fmt.Fprintf(os.Stderr, "  FAIL [%d] %s: %s\n", i+1, verifyTargetLabel(t), detail)
-		}
+		errorf(flags, "FAIL [%d] %s: %s", i+1, verifyTargetLabel(t), detail)
 	}
 
 	// One computation, two renderings: the counts below are the same three
@@ -269,7 +266,7 @@ func runScrubVerify(flags globalFlags, kwargs map[string]interface{}) int {
 		Failed:   failed,
 		Results:  results,
 	})
-	infof(flags, "\n%d pattern(s) checked: %d passed, %d failed\n", len(targets), passed, failed)
+	infof(flags, "\n%d pattern(s) checked: %d passed, %d failed", len(targets), passed, failed)
 
 	if failed > 0 {
 		return exitcode.General

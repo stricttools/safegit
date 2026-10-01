@@ -223,8 +223,8 @@ func TestPushPayloadEmittedWhenAHookFails(t *testing.T) {
 	if code != exitcode.PushHookFailed {
 		t.Fatalf("exit = %d, want %d; stderr: %s", code, exitcode.PushHookFailed, stderr)
 	}
-	if !strings.Contains(stderr, "hook 20-test failed (exit 3)") {
-		t.Errorf("the verdict must be on stderr:\n%s", stderr)
+	if said := reported(stdout, stderr); !strings.Contains(said, "hook 20-test failed (exit 3)") {
+		t.Errorf("the run must state the verdict:\n%s", said)
 	}
 	hooks := payloadHooks(t, stdout)
 	if len(hooks) != 2 {
@@ -379,15 +379,15 @@ func TestPushVerboseSaysATimedOutHookTimedOut(t *testing.T) {
 	setHookTimeout(t, dir, "1")
 	installDirHook(t, dir, "10-lint", "exec sleep 30")
 
-	_, stderr, code := runSafegit(t, dir, "--verbose", "push", "--refs", "head", "origin")
+	stdout, stderr, code := runSafegit(t, dir, "--verbose", "push", "--refs", "head", "origin")
 	if code != exitcode.PushHookTimeout {
 		t.Fatalf("exit = %d, want %d; stderr: %s", code, exitcode.PushHookTimeout, stderr)
 	}
-	if !strings.Contains(stderr, "hook 10-lint: timed out (") {
-		t.Errorf("the verbose line must say the hook timed out; stderr:\n%s", stderr)
+	if !strings.Contains(stdout, "hook 10-lint: timed out (") {
+		t.Errorf("the verbose line must say the hook timed out; stdout:\n%s", stdout)
 	}
-	if strings.Contains(stderr, "exit=") {
-		t.Errorf("a timed-out hook has no exit status, and the verbose line printed one; stderr:\n%s", stderr)
+	if strings.Contains(stdout, "exit=") {
+		t.Errorf("a timed-out hook has no exit status, and the verbose line printed one; stdout:\n%s", stdout)
 	}
 }
 
@@ -428,8 +428,8 @@ func TestHookThatCannotStartIsRecordedAsAStartError(t *testing.T) {
 					if code != exitcode.PushHookFailed {
 						t.Fatalf("exit = %d, want %d; stderr: %s", code, exitcode.PushHookFailed, stderr)
 					}
-					if !strings.Contains(stderr, "hook 10-lint could not be started: "+tc.want) {
-						t.Errorf("the verdict must be on stderr; stderr:\n%s", stderr)
+					if said := reported(stdout, stderr); !strings.Contains(said, "hook 10-lint could not be started: "+tc.want) {
+						t.Errorf("the run must state the verdict; it said:\n%s", said)
 					}
 					hooks := payloadHooks(t, stdout)
 					if len(hooks) != 1 {

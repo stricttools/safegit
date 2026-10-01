@@ -418,7 +418,7 @@ func (op continueOp) conclusionMovedRecords(ctx context.Context, state sequencer
 func runContinue(flags globalFlags, op continueOp, messages []string, trailers []string, resolveFlags []string, resolveFilePath string, discardUnmatched bool) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 
@@ -426,14 +426,14 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	// the repository being touched at all.
 	declared, err := collectResolutions(resolveFlags, resolveFilePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.Usage
 	}
 
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: loading config: %v\n", err)
+		errorf(flags, "loading config: %v", err)
 		return exitcode.General
 	}
 
@@ -441,7 +441,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	// ordinary commit does, so the parent must have answered the auto-bump
 	// question before anything is written.
 	if err := requireAutoBumpDecision(flags.ctx(), flags); err != nil {
-		fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
+		errorf(flags, "auto-bump parent: %v", err)
 		return exitcode.General
 	}
 
@@ -458,32 +458,32 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 
 	state, err := sequencer.Read(gitDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: reading git's in-flight operation state: %v\n", err)
+		errorf(flags, "reading git's in-flight operation state: %v", err)
 		return exitcode.General
 	}
-	if code := op.refuseWrongState(ctx, gitDir, state); code != 0 {
+	if code := op.refuseWrongState(flags, ctx, gitDir, state); code != 0 {
 		return code
 	}
 	// The shapes safegit cannot have started, refused before anything about the
 	// operator's own command line is looked at: whose operation this is does not
 	// depend on what they declared.
-	if code := op.refuseRawGitShape(state); code != 0 {
+	if code := op.refuseRawGitShape(flags, state); code != 0 {
 		return code
 	}
 	if _, err := git.HeadRef(ctx); err != nil {
-		return op.refuseDetachedHead(state)
+		return op.refuseDetachedHead(flags, state)
 	}
 
 	// The conflict as it actually stands, read from the shared index safegit
 	// only ever reads.
 	sides, err := conflict.Stages(ctx, "")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: reading the conflicted paths from the index: %v\n", err)
+		errorf(flags, "reading the conflicted paths from the index: %v", err)
 		return exitcode.General
 	}
 	// The other raw-git shape, which needs the conflict read first: a content
 	// conflict git recorded without the tree the marker verification reads.
-	if code := op.refuseUnreadableConflict(ctx, sides); code != 0 {
+	if code := op.refuseUnreadableConflict(flags, ctx, sides); code != 0 {
 		return code
 	}
 
@@ -492,53 +492,53 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 	// what is left is the cleanup a crash interrupted. See alreadyConcluded.
 	stood, err := op.alreadyConcluded(ctx, sgDir, state)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 	if stood != nil {
 		return op.finishWhatCrashed(ctx, flags, gitDir, state, stood, sides, declared, discardUnmatched)
 	}
 
-	if code := op.checkCompleteness(ctx, state, sides, declared); code != 0 {
+	if code := op.checkCompleteness(flags, ctx, state, sides, declared); code != 0 {
 		return code
 	}
 	// The resolutions name the right paths; now the content those paths carry
 	// has to be free of the conflict itself. See sequencer_markers.go.
-	declines, code := op.verifyMarkers(ctx, state, sides, declared)
+	declines, code := op.verifyMarkers(flags, ctx, state, sides, declared)
 	if code != 0 {
 		return code
 	}
 	// And what those resolutions would DESTROY on disk. See
 	// sequencer_overwrite.go.
-	if code := op.refuseWorktreeOverwrite(ctx, sides, declared, discardUnmatched); code != 0 {
+	if code := op.refuseWorktreeOverwrite(flags, ctx, sides, declared, discardUnmatched); code != 0 {
 		return code
 	}
 
 	edits, err := indexEditsFor(sides, declared)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
 	message, err := op.conclusionMessage(ctx, state, messages)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.Usage
 	}
 
 	pinned, recorded, err := op.conclusionAuthorship(ctx, state)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
 	movedRecords, err := op.conclusionMovedRecords(ctx, state)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
-	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
+	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags)}
 	result, err := p.Execute(ctx, commit.CommitRequest{
 		Message:      message,
 		Trailers:     trailers,
@@ -566,7 +566,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		// Not a refusal: the ref moved. The rest of the aftercare still runs --
 		// the state files above all have to go, or the repository stays
 		// mid-operation on top of a commit that concluded it.
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		out.residue = recordAftercareFailure(out.residue, partial.Step, err.Error())
 	} else if err != nil {
 		// The empty-commit refusal names --allow-empty, a flag these commands do
@@ -574,7 +574,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		// its own ways out, so it gets its own message rather than a pointer at
 		// something the operator cannot pass.
 		if errors.Is(err, commit.ErrTreeUnchanged) {
-			return op.refuseEmptyConclusion()
+			return op.refuseEmptyConclusion(flags)
 		}
 		strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
 	}
@@ -615,7 +615,7 @@ func (out *conclusionResult) concludeAftercare(
 	message string,
 ) {
 	if r := finishConclusion(ctx, gitDir, state, result, edits, materialize); r != nil {
-		fmt.Fprintf(os.Stderr, "error: %s\n", r.Detail)
+		msg := r.Detail
 		out.residue = append(out.residue, *r)
 		if state.Kind == sequencer.KindMerge && state.Autostash != "" {
 			// Said explicitly, because the alternative is silence about work that
@@ -633,25 +633,26 @@ func (out *conclusionResult) concludeAftercare(
 			stash := state.Autostash
 			out.autostash = autostashOutcome{State: autostashPending, Stash: &stash}
 			if why, ours := autostashIsThisMerges(ctx, stash, firstParentOf(result)); ours {
-				fmt.Fprintf(os.Stderr, "  the autostash was not reached: %s still holds your uncommitted work (commit %s)\n",
+				msg += fmt.Sprintf("\n  the autostash was not reached: %s still holds your uncommitted work (commit %s)",
 					sequencer.FileMergeAutostash, stash)
 			} else {
-				fmt.Fprintf(os.Stderr, "  the autostash was not reached: %s is untouched (commit %s)\n",
-					sequencer.FileMergeAutostash, stash)
-				fmt.Fprintf(os.Stderr, "    it names a commit this merge did not set aside, so whose work it holds is not safegit's to say: %s\n", why)
+				msg += fmt.Sprintf("\n  the autostash was not reached: %s is untouched (commit %s)"+
+					"\n    it names a commit this merge did not set aside, so whose work it holds is not safegit's to say: %s",
+					sequencer.FileMergeAutostash, stash, why)
 			}
 		}
+		errorf(flags, "%s", msg)
 		return
 	}
 	out.cleared = true
 
 	if err := maybeAutoBumpParent(ctx, flags, gitDir, result.SHA, parentBumpOp, firstLine(message)); err != nil {
-		out.residue = reportAftercareFailure(out.residue, stepParentBump, err)
+		out.residue = reportAftercareFailure(flags, out.residue, stepParentBump, err)
 	}
 
 	// The first parent is the tip this conclusion committed onto, which is where
 	// git's own autostash for this merge was set aside from.
-	stash, residue := consumeAutostash(ctx, gitDir, state, firstParentOf(result))
+	stash, residue := consumeAutostash(flags, ctx, gitDir, state, firstParentOf(result))
 	out.autostash = stash
 	out.residue = append(out.residue, residue...)
 }
@@ -692,7 +693,7 @@ func (out *conclusionResult) previewParentBump(
 		return
 	}
 	if err := previewAutoBumpParent(ctx, flags, result.SHA, triggeredBy, parentBumpOp, firstLine(message)); err != nil {
-		out.residue = reportAftercareFailure(out.residue, stepParentBump, err)
+		out.residue = reportAftercareFailure(flags, out.residue, stepParentBump, err)
 	}
 }
 
@@ -892,24 +893,23 @@ func (op continueOp) finishWhatCrashed(
 ) int {
 	committed, err := committedSides(ctx, stood.SHA, sides)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 	// The command line first: what the operator SAID is checked against what the
 	// commit holds before anything on disk is looked at, exactly as the ordinary
 	// path checks the declaration before the working tree.
-	if code := op.refuseContradictedDeclarations(ctx, stood.SHA, sides, committed, declared); code != 0 {
+	if code := op.refuseContradictedDeclarations(flags, ctx, stood.SHA, sides, committed, declared); code != 0 {
 		return code
 	}
-	if code := op.refuseCrashWorktreeOverwrite(ctx, stood.SHA, sides, committed, discardUnmatched); code != 0 {
+	if code := op.refuseCrashWorktreeOverwrite(flags, ctx, stood.SHA, sides, committed, discardUnmatched); code != 0 {
 		return code
 	}
 	edits := crashIndexEdits(committed)
 
 	info, err := git.ParseCommit(ctx, stood.SHA)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: reading the commit %s that already concluded this %s: %v\n",
-			shortSHA(stood.SHA), op.kind, err)
+		errorf(flags, "reading the commit %s that already concluded this %s: %v", shortSHA(stood.SHA), op.kind, err)
 		return exitcode.General
 	}
 
@@ -923,10 +923,9 @@ func (op continueOp) finishWhatCrashed(
 
 	// stderr, and never suppressed: an operator who re-ran the command has to be
 	// told why no commit was made, and in machine mode stdout is the envelope's.
-	fmt.Fprintf(os.Stderr, "note: this %s was already concluded by commit %s, which stands on %s\n",
-		op.kind, shortSHA(stood.SHA), refShortName(stood.Ref))
-	fmt.Fprintf(os.Stderr, "  a run was killed after the commit and before the cleanup, so git still calls this repository\n")
-	fmt.Fprintf(os.Stderr, "  mid-%s. Nothing is committed again; what is left of the conclusion is finished.\n", op.kind)
+	warnf(flags, "this %s was already concluded by commit %s, which stands on %s\n"+
+		"  a run was killed after the commit and before the cleanup, so git still calls this repository\n"+
+		"  mid-%s. Nothing is committed again; what is left of the conclusion is finished.", op.kind, shortSHA(stood.SHA), refShortName(stood.Ref), op.kind)
 
 	if flags.dryRun {
 		// The stood commit's real object name, not the placeholder: nothing is
@@ -987,7 +986,7 @@ type parkedConclusion struct {
 	// has to branch on it: after a successful cleanup there is no operation left
 	// to abort, and after a failed one there is. A zero-argument callback could
 	// not tell the two apart.
-	onEmpty func(cleanEmptyParkOutcome) int
+	onEmpty func(globalFlags, cleanEmptyParkOutcome) int
 }
 
 // cleanEmptyParkOutcome is what became of the state safegit parked for a
@@ -1002,15 +1001,17 @@ type cleanEmptyParkOutcome struct {
 // cleaned reports whether the parked state is really gone.
 func (o cleanEmptyParkOutcome) cleaned() bool { return len(o.residue) == 0 }
 
-// reportResidue prints what did not finish, BEFORE the caller's own one-line
-// refusal. The order is deliberate: the refusal's last line is the advice an
-// operator acts on, so the detail that qualifies it comes first rather than
-// after it, where a long list would push the actionable line off the top of the
-// message.
-func (o cleanEmptyParkOutcome) reportResidue() {
+// residueLines is what did not finish, as indented lines that follow the
+// refusal's headline, each beginning with a newline. The order is deliberate:
+// the refusal's last line is the advice an operator acts on, so the detail that
+// qualifies it comes before the advice rather than after it, where a long list
+// would push the actionable line out of view.
+func (o cleanEmptyParkOutcome) residueLines() string {
+	var b strings.Builder
 	for _, line := range o.residue {
-		fmt.Fprintf(os.Stderr, "  %s\n", line)
+		fmt.Fprintf(&b, "\n  %s", line)
 	}
+	return b.String()
 }
 
 // cleanEmptyPark removes the operation state safegit's OWN compute step parked,
@@ -1057,7 +1058,7 @@ func cleanEmptyPark(flags globalFlags, gitDir string, state sequencer.State) cle
 		out.residue = append(out.residue,
 			fmt.Sprintf("the %s state safegit parked could not be removed: %v", state.Kind, err))
 	}
-	if _, err := git.SyncMainIndexWithWorktree(flags.ctx(), "HEAD"); err != nil {
+	if _, err := git.SyncMainIndexWithWorktree(flags.ctx(), "HEAD", flags.sc.Warn); err != nil {
 		out.residue = append(out.residue,
 			fmt.Sprintf("the index and the working tree could not be put back onto HEAD: %v", err))
 	}
@@ -1084,7 +1085,7 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 	}
 
 	if _, err := git.HeadRef(ctx); err != nil {
-		return out, op.refuseDetachedHead(state), false
+		return out, op.refuseDetachedHead(flags, state), false
 	}
 
 	// A clean compute step leaves no unmerged paths, so the declaration is
@@ -1094,26 +1095,26 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 	// same answer here as it is behind the -continue commands.
 	sides, err := conflict.Stages(ctx, "")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: reading the conflicted paths from the index: %v\n", err)
+		errorf(flags, "reading the conflicted paths from the index: %v", err)
 		return out, exitcode.General, false
 	}
 	var declared []resolution
-	if code := op.checkCompleteness(ctx, state, sides, declared); code != 0 {
+	if code := op.checkCompleteness(flags, ctx, state, sides, declared); code != 0 {
 		return out, code, false
 	}
-	declines, code := op.verifyMarkers(ctx, state, sides, declared)
+	declines, code := op.verifyMarkers(flags, ctx, state, sides, declared)
 	if code != 0 {
 		return out, code, false
 	}
 
 	message, err := op.conclusionMessage(ctx, state, req.messages)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return out, exitcode.General, false
 	}
 	pinned, recorded, err := op.conclusionAuthorship(ctx, state)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return out, exitcode.General, false
 	}
 	// Undoing a move is a move: a revert inverts the records on the commit it
@@ -1121,17 +1122,17 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 	// revert that hit a conflict and one that did not declare the same thing.
 	movedRecords, err := op.conclusionMovedRecords(ctx, state)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return out, exitcode.General, false
 	}
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: loading config: %v\n", err)
+		errorf(flags, "loading config: %v", err)
 		return out, exitcode.General, false
 	}
 
-	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
+	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags)}
 	result, err := p.Execute(ctx, commit.CommitRequest{
 		Message:      message,
 		Trailers:     req.trailers,
@@ -1152,14 +1153,14 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 	if partial := commitStands(err); partial != nil && result != nil {
 		// The ref moved, so this is a report rather than a refusal -- see
 		// runContinue's own arm, which reaches the same verdict.
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		out.residue = recordAftercareFailure(out.residue, partial.Step, err.Error())
 	} else if err != nil {
 		if errors.Is(err, commit.ErrTreeUnchanged) {
 			// Nothing to commit, so nothing keeps this operation open: the state
 			// safegit parked for its own compute goes before the refusal is
 			// worded, and the refusal words itself from what became of it.
-			return conclusionResult{}, req.onEmpty(cleanEmptyPark(flags, gitDir, state)), false
+			return conclusionResult{}, req.onEmpty(flags, cleanEmptyPark(flags, gitDir, state)), false
 		}
 		strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
 	}
@@ -1205,7 +1206,7 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 // It RETURNS what became of the work and what it left behind, rather than a
 // bare exit code: the outcome is a fact the payload states (see
 // autostashOutcome), and an exit code cannot say WHERE the operator's work is.
-func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State, tip string) (autostashOutcome, []residueEntry) {
+func consumeAutostash(flags globalFlags, ctx context.Context, gitDir string, state sequencer.State, tip string) (autostashOutcome, []residueEntry) {
 	if state.Kind != sequencer.KindMerge || state.Autostash == "" {
 		return noAutostash(), nil
 	}
@@ -1217,13 +1218,12 @@ func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State,
 	// autostashIsThisMerges. A file that names anything else is left exactly
 	// where it is.
 	if why, ours := autostashIsThisMerges(ctx, stash, tip); !ours {
-		fmt.Fprintf(os.Stderr, "error: %s names a commit this merge did not set aside, so nothing was put back\n",
-			sequencer.FileMergeAutostash)
-		fmt.Fprintf(os.Stderr, "  %s\n", why)
-		fmt.Fprintf(os.Stderr, "  The commit %s and the file are untouched. Inspect it and decide whose work it is:\n", stash)
-		fmt.Fprintf(os.Stderr, "    git show %s\n", stash)
-		fmt.Fprintf(os.Stderr, "    git stash apply %s     # put it in the working tree\n", stash)
-		fmt.Fprintf(os.Stderr, "    rm %s     # once it is somewhere you can reach\n", path)
+		errorf(flags, "%s names a commit this merge did not set aside, so nothing was put back\n"+
+			"  %s\n"+
+			"  The commit %s and the file are untouched. Inspect it and decide whose work it is:\n"+
+			"    git show %s\n"+
+			"    git stash apply %s     # put it in the working tree\n"+
+			"    rm %s     # once it is somewhere you can reach", sequencer.FileMergeAutostash, why, stash, stash, stash, path)
 		return autostashOutcome{State: autostashForeign, Stash: &stash}, []residueEntry{{
 			Step:   stepAutostashForeign,
 			Detail: fmt.Sprintf("%s names %s, which this merge did not set aside (%s); it was neither applied nor removed", path, stash, why),
@@ -1235,8 +1235,8 @@ func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State,
 		applied := autostashOutcome{State: autostashApplied, Stash: &stash}
 		if rmErr := os.Remove(path); rmErr != nil && !os.IsNotExist(rmErr) {
 			detail := fmt.Sprintf("the autostash was applied but %s could not be removed: %v", path, rmErr)
-			fmt.Fprintf(os.Stderr, "error: %s\n", detail)
-			fmt.Fprintf(os.Stderr, "  remove it by hand; leaving it there would make the next conclusion apply the same work twice\n")
+			errorf(flags, "%s\n"+
+				"  remove it by hand; leaving it there would make the next conclusion apply the same work twice", detail)
 			return applied, []residueEntry{{Step: stepAutostashFile, Detail: detail}}
 		}
 		// The apply is itself a merge, so it leaves the same residue any merge
@@ -1248,14 +1248,15 @@ func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State,
 		// sitting in the working tree.
 		if err := sequencer.Cleanup(gitDir, sequencer.KindMerge); err != nil {
 			detail := fmt.Sprintf("the autostash was applied but its own leftover state could not be removed: %v", err)
-			fmt.Fprintf(os.Stderr, "error: %s\n", detail)
+			errorf(flags, "%s", detail)
 			return applied, []residueEntry{{Step: stepAutostashState, Detail: detail}}
 		}
-		fmt.Fprintf(os.Stderr, "Applied autostash.\n")
+		infof(flags, "Applied autostash.")
 		return applied, nil
 	}
 
-	fmt.Fprintf(os.Stderr, "error: applying the autostash resulted in conflicts; the merge commit was created and stands\n")
+	var msg strings.Builder
+	msg.WriteString("applying the autostash resulted in conflicts; the merge commit was created and stands")
 	// git's own report of what it could not merge, verbatim and indented under
 	// the line above. Where git printed nothing at all, the wrapped error is the
 	// only account of the failure there is.
@@ -1263,15 +1264,16 @@ func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State,
 		gitSaid = applyErr.Error()
 	}
 	for _, line := range strings.Split(strings.TrimRight(gitSaid, "\n"), "\n") {
-		fmt.Fprintf(os.Stderr, "  %s\n", line)
+		fmt.Fprintf(&msg, "\n  %s", line)
 	}
 
 	if storeErr := git.StashStore(ctx, stash, "autostash"); storeErr != nil {
 		// Nothing was stored, so the file is the only name the work has left and
 		// it stays exactly where it is.
-		fmt.Fprintf(os.Stderr, "  it could not be stored as a stash entry either: %v\n", storeErr)
-		fmt.Fprintf(os.Stderr, "  your changes are the commit %s, still recorded in %s. Recover them with:\n", stash, path)
-		fmt.Fprintf(os.Stderr, "    git stash apply %s\n", stash)
+		fmt.Fprintf(&msg, "\n  it could not be stored as a stash entry either: %v"+
+			"\n  your changes are the commit %s, still recorded in %s. Recover them with:"+
+			"\n    git stash apply %s", storeErr, stash, path, stash)
+		errorf(flags, "%s", msg.String())
 		return autostashOutcome{State: autostashUnstored, Stash: &stash},
 			[]residueEntry{{
 				Step:   stepAutostashStore,
@@ -1281,15 +1283,17 @@ func consumeAutostash(ctx context.Context, gitDir string, state sequencer.State,
 
 	stored := autostashOutcome{State: autostashStored, Stash: &stash}
 	if rmErr := os.Remove(path); rmErr != nil && !os.IsNotExist(rmErr) {
-		fmt.Fprintf(os.Stderr, "  your changes are safe in the stash, but %s could not be removed: %v\n", path, rmErr)
-		fmt.Fprintf(os.Stderr, "  remove it by hand; the work is recorded twice until you do\n")
+		fmt.Fprintf(&msg, "\n  your changes are safe in the stash, but %s could not be removed: %v"+
+			"\n  remove it by hand; the work is recorded twice until you do", path, rmErr)
+		errorf(flags, "%s", msg.String())
 		return stored, []residueEntry{{
 			Step:   stepAutostashFile,
 			Detail: fmt.Sprintf("the work is parked as stash@{0}, but %s could not be removed: %v", path, rmErr),
 		}}
 	}
-	fmt.Fprintf(os.Stderr, "  your changes are safe in the stash, as stash@{0} (commit %s).\n", stash)
-	fmt.Fprintf(os.Stderr, "  run 'git stash pop' or 'git stash drop' at any time\n")
+	fmt.Fprintf(&msg, "\n  your changes are safe in the stash, as stash@{0} (commit %s)."+
+		"\n  run 'git stash pop' or 'git stash drop' at any time", stash)
+	errorf(flags, "%s", msg.String())
 	// A stored autostash is residue in its own right: the conclusion could not
 	// put the operator's work back, and it is sitting in a stash entry nobody
 	// asked for until they deal with it. That is what carries the family exit
@@ -1540,33 +1544,27 @@ func firstParentOf(result *commit.CommitResult) string {
 // against: nothing in flight, and an operation this command does not conclude.
 // Both are the same verdict the commit pipeline's own declaration check gives,
 // so both exit CoordinationBusy.
-func (op continueOp) refuseWrongState(ctx context.Context, gitDir string, state sequencer.State) int {
+func (op continueOp) refuseWrongState(flags globalFlags, ctx context.Context, gitDir string, state sequencer.State) int {
 	if state.InProgress() {
 		if state.Kind == op.kind {
 			return 0
 		}
-		fmt.Fprintf(os.Stderr, "error: safegit %s cannot conclude %s\n", op.command, state.String())
-		w := coord.WayOutOf(state)
-		if w.Conclude != "" {
-			fmt.Fprintf(os.Stderr, "  conclude it:  %s\n", w.Conclude)
-		}
-		if w.Abandon != "" {
-			fmt.Fprintf(os.Stderr, "  abandon it:   %s\n", w.Abandon)
-		}
+		errorf(flags, "safegit %s cannot conclude %s%s", op.command, state.String(), wayOutLines(coord.WayOutOf(state), "  "))
 		return exitcode.CoordinationBusy
 	}
 
-	fmt.Fprintf(os.Stderr, "error: nothing to conclude: no operation is in progress\n")
-	fmt.Fprintf(os.Stderr, "  safegit %s concludes %s that git stopped before committing\n", op.command, op.article())
+	msg := fmt.Sprintf("nothing to conclude: no operation is in progress\n"+
+		"  safegit %s concludes %s that git stopped before committing", op.command, op.article())
 	// A LONE AUTO_MERGE is residue of an operation that already finished --
 	// git's own `rebase --continue` leaves one behind -- so it is not evidence
 	// of anything in flight and never a refusal of its own. It is mentioned
 	// here because an operator who just looked in .git and saw it deserves to
 	// know why it does not count.
 	if _, present, err := conflict.AutoMergeTree(ctx); err == nil && present {
-		fmt.Fprintf(os.Stderr, "  (%s/AUTO_MERGE is present, but git leaves it behind when an operation FINISHES;\n", gitDir)
-		fmt.Fprintf(os.Stderr, "   only an operation's own state files say one is in flight, and there are none)\n")
+		msg += fmt.Sprintf("\n  (%s/AUTO_MERGE is present, but git leaves it behind when an operation FINISHES;"+
+			"\n   only an operation's own state files say one is in flight, and there are none)", gitDir)
 	}
+	errorf(flags, "%s", msg)
 	return exitcode.CoordinationBusy
 }
 
@@ -1622,17 +1620,16 @@ func (op continueOp) rawGitShape(state sequencer.State) (what, why string, refus
 // safegit refuses both and says so. Cataloged in docs/divergences.md: the queue
 // under "Every commit made through safegit is safegit's; the ones it cannot
 // write, it refuses", the octopus under "A merge has exactly one other side".
-func (op continueOp) refuseRawGitShape(state sequencer.State) int {
+func (op continueOp) refuseRawGitShape(flags globalFlags, state sequencer.State) int {
 	what, why, refused := op.rawGitShape(state)
 	if !refused {
 		return 0
 	}
 
-	fmt.Fprintf(os.Stderr, "error: safegit %s does not conclude %s\n", op.command, what)
-	fmt.Fprintf(os.Stderr, "  %s\n", why)
-	fmt.Fprintf(os.Stderr, "  Finish what git started, with git:\n")
-	renderWayOut(coord.WayOutOf(state))
-	fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+	errorf(flags, "safegit %s does not conclude %s\n"+
+		"  %s\n"+
+		"  Finish what git started, with git:%s\n"+
+		"  safegit implements a deliberate subset of git; see docs/divergences.md.", op.command, what, why, wayOutLines(coord.WayOutOf(state), "    "))
 	return exitcode.CoordinationBusy
 }
 
@@ -1664,13 +1661,13 @@ func refuseParkedRawGitShape(flags globalFlags, gitDir string, state sequencer.S
 		return 0, false
 	}
 
-	fmt.Fprintf(os.Stderr, "error: safegit %s does not author %s\n", req.oplogOp, what)
-	fmt.Fprintf(os.Stderr, "  %s\n", why)
+	msg := fmt.Sprintf("safegit %s does not author %s\n"+
+		"  %s", req.oplogOp, what, why)
+	const subsetLine = "\n  safegit implements a deliberate subset of git; see docs/divergences.md."
 
 	if state.Queued {
-		fmt.Fprintf(os.Stderr, "  Nothing was committed. Finish what git started, with git:\n")
-		renderWayOut(coord.WayOutOf(state))
-		fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+		errorf(flags, "%s\n  Nothing was committed. Finish what git started, with git:%s%s",
+			msg, wayOutLines(coord.WayOutOf(state), "    "), subsetLine)
 		return exitcode.CoordinationBusy, true
 	}
 
@@ -1679,19 +1676,19 @@ func refuseParkedRawGitShape(flags globalFlags, gitDir string, state sequencer.S
 	// pieces of residue, and an operator has to be told about each.
 	code := exitcode.CoordinationBusy
 	if err := sequencer.Cleanup(gitDir, state.Kind); err != nil {
-		fmt.Fprintf(os.Stderr, "  the %s state git parked could not be removed: %v\n", state.Kind, err)
+		msg += fmt.Sprintf("\n  the %s state git parked could not be removed: %v", state.Kind, err)
 		code = exitcode.General
 	}
-	if _, err := git.SyncMainIndexWithWorktree(flags.ctx(), "HEAD"); err != nil {
-		fmt.Fprintf(os.Stderr, "  the index and the working tree could not be put back onto HEAD: %v\n", err)
-		fmt.Fprintf(os.Stderr, "  until that is done they carry the %s that was computed, staged and uncommitted.\n", state.Kind)
+	if _, err := git.SyncMainIndexWithWorktree(flags.ctx(), "HEAD", flags.sc.Warn); err != nil {
+		msg += fmt.Sprintf("\n  the index and the working tree could not be put back onto HEAD: %v"+
+			"\n  until that is done they carry the %s that was computed, staged and uncommitted.", err, state.Kind)
 		code = exitcode.General
 	}
 	if code == exitcode.CoordinationBusy {
-		fmt.Fprintf(os.Stderr, "  Nothing was committed, and the %s git computed has been undone: the branch, the index\n", state.Kind)
-		fmt.Fprintf(os.Stderr, "  and the working tree stand where they did.\n")
+		msg += fmt.Sprintf("\n  Nothing was committed, and the %s git computed has been undone: the branch, the index"+
+			"\n  and the working tree stand where they did.", state.Kind)
 	}
-	fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+	errorf(flags, "%s%s", msg, subsetLine)
 	return code, true
 }
 
@@ -1716,7 +1713,7 @@ func refuseParkedRawGitShape(flags globalFlags, gitDir string, state sequencer.S
 // not"
 // (the front-door half) and "Every commit made through safegit is safegit's;
 // the ones it cannot write, it refuses" (this raw-git half).
-func (op continueOp) refuseUnreadableConflict(ctx context.Context, sides map[string]conflict.Sides) int {
+func (op continueOp) refuseUnreadableConflict(flags globalFlags, ctx context.Context, sides map[string]conflict.Sides) int {
 	if op.kind != sequencer.KindMerge {
 		return 0
 	}
@@ -1734,34 +1731,30 @@ func (op continueOp) refuseUnreadableConflict(ctx context.Context, sides map[str
 	}
 	sort.Strings(contentConflicts)
 
-	fmt.Fprintf(os.Stderr, "error: safegit %s cannot conclude this merge: git recorded no AUTO_MERGE for it\n", op.command)
-	fmt.Fprintf(os.Stderr, "  %s carries a content conflict, and on the git version safegit requires the default merge\n", contentConflicts[0])
-	fmt.Fprintf(os.Stderr, "  strategy always records AUTO_MERGE beside one -- the tree safegit reads to tell a conflict\n")
-	fmt.Fprintf(os.Stderr, "  block git wrote from one that was already in the file. A conflict without it was computed\n")
-	fmt.Fprintf(os.Stderr, "  by another strategy, which safegit's merge does not select and cannot check the result of.\n")
-	fmt.Fprintf(os.Stderr, "  Finish what git started, with git:\n")
-	// git's commands, named here rather than read from the way-out authority.
-	// That authority answers from the STATE FILES, and the fact this refusal
-	// turns on is not among them: AUTO_MERGE is a ref, so telling its presence
-	// apart from its absence takes a git call the filesystem-only state reader
-	// deliberately does not make. Every other message about this repository
-	// still names safegit's own conclusion, which is what an operator should
-	// reach for -- and reaching for it produces exactly this refusal.
-	fmt.Fprintf(os.Stderr, "    conclude it:  git merge --continue\n")
-	fmt.Fprintf(os.Stderr, "    abandon it:   git merge --abort\n")
-	fmt.Fprintf(os.Stderr, "  safegit implements a deliberate subset of git; see docs/divergences.md.\n")
+	errorf(flags, "safegit %s cannot conclude this merge: git recorded no AUTO_MERGE for it\n"+
+		"  %s carries a content conflict, and on the git version safegit requires the default merge\n"+
+		"  strategy always records AUTO_MERGE beside one -- the tree safegit reads to tell a conflict\n"+
+		"  block git wrote from one that was already in the file. A conflict without it was computed\n"+
+		"  by another strategy, which safegit's merge does not select and cannot check the result of.\n"+
+		"  Finish what git started, with git:\n"+
+		"    conclude it:  git merge --continue\n"+
+		"    abandon it:   git merge --abort\n"+
+		"  safegit implements a deliberate subset of git; see docs/divergences.md.", op.command, contentConflicts[0])
 	return exitcode.CoordinationBusy
 }
 
-// renderWayOut prints the two commands that end a state, from the single
-// way-out authority.
-func renderWayOut(w coord.WayOut) {
+// wayOutLines renders the two commands that end a state, from the single
+// way-out authority, as lines indented by indent, each beginning with a
+// newline, for a message to end with.
+func wayOutLines(w coord.WayOut, indent string) string {
+	var b strings.Builder
 	if w.Conclude != "" {
-		fmt.Fprintf(os.Stderr, "    conclude it:  %s\n", w.Conclude)
+		fmt.Fprintf(&b, "\n%sconclude it:  %s", indent, w.Conclude)
 	}
 	if w.Abandon != "" {
-		fmt.Fprintf(os.Stderr, "    abandon it:   %s\n", w.Abandon)
+		fmt.Fprintf(&b, "\n%sabandon it:   %s", indent, w.Abandon)
 	}
+	return b.String()
 }
 
 // article names the operation the way the refusal sentence needs it.
@@ -1792,14 +1785,14 @@ func (op continueOp) article() string {
 // touch neither the index nor the working tree, so every state file, every
 // conflict stage and every resolution already made survives -- verified by
 // TestConclusionDetachedHeadGuidanceWorks.
-func (op continueOp) refuseDetachedHead(state sequencer.State) int {
-	fmt.Fprintf(os.Stderr, "error: HEAD is detached; safegit %s commits onto a branch\n", op.command)
-	fmt.Fprintf(os.Stderr, "  %s is still in progress and nothing has been lost. Put HEAD on a branch and conclude there:\n", state.String())
-	fmt.Fprintf(os.Stderr, "    git branch <name>\n")
-	fmt.Fprintf(os.Stderr, "    git symbolic-ref HEAD refs/heads/<name>\n")
-	fmt.Fprintf(os.Stderr, "    safegit %s\n", op.command)
-	fmt.Fprintf(os.Stderr, "  ('git switch -c <name>' does NOT work here: git refuses to switch branches mid-%s.\n", state.Kind)
-	fmt.Fprintf(os.Stderr, "   The two commands above move HEAD without touching the index or the working tree.)\n")
+func (op continueOp) refuseDetachedHead(flags globalFlags, state sequencer.State) int {
+	errorf(flags, "HEAD is detached; safegit %s commits onto a branch\n"+
+		"  %s is still in progress and nothing has been lost. Put HEAD on a branch and conclude there:\n"+
+		"    git branch <name>\n"+
+		"    git symbolic-ref HEAD refs/heads/<name>\n"+
+		"    safegit %s\n"+
+		"  ('git switch -c <name>' does NOT work here: git refuses to switch branches mid-%s.\n"+
+		"   The two commands above move HEAD without touching the index or the working tree.)", op.command, state.String(), op.command, state.Kind)
 	return exitcode.General
 }
 
@@ -1820,12 +1813,12 @@ func (op continueOp) refuseDetachedHead(state sequencer.State) int {
 // the parked state is safegit's own, created moments earlier by safegit's own
 // `--no-commit` step, and it is cleaned up rather than left behind -- see
 // cleanEmptyPark.
-func (op continueOp) refuseEmptyConclusion() int {
+func (op continueOp) refuseEmptyConclusion(flags globalFlags) int {
 	verb := strings.TrimSuffix(op.command, "-continue")
-	fmt.Fprintf(os.Stderr, "error: this %s produces no change: the resolutions leave the tree exactly as it is\n", verb)
-	fmt.Fprintf(os.Stderr, "  resolve at least one path to something the branch does not already have, or drop the operation:\n")
-	fmt.Fprintf(os.Stderr, "    git %s --skip     # move past this commit, keeping the rest of the operation\n", verb)
-	fmt.Fprintf(os.Stderr, "    git %s --abort    # throw the whole operation away\n", verb)
+	errorf(flags, "this %s produces no change: the resolutions leave the tree exactly as it is\n"+
+		"  resolve at least one path to something the branch does not already have, or drop the operation:\n"+
+		"    git %s --skip     # move past this commit, keeping the rest of the operation\n"+
+		"    git %s --abort    # throw the whole operation away", verb, verb, verb)
 	return exitcode.General
 }
 
@@ -1838,7 +1831,7 @@ func (op continueOp) refuseEmptyConclusion() int {
 // conflicted at all is as meaningless there as it is here, and reading it as a
 // statement about the commit's content would be answering a question the
 // operator did not ask.
-func (op continueOp) refuseStrayResolutions(sides map[string]conflict.Sides, declared []resolution) int {
+func (op continueOp) refuseStrayResolutions(flags globalFlags, sides map[string]conflict.Sides, declared []resolution) int {
 	var stray []string
 	for _, r := range declared {
 		if _, conflicted := sides[r.Path]; !conflicted {
@@ -1849,11 +1842,11 @@ func (op continueOp) refuseStrayResolutions(sides map[string]conflict.Sides, dec
 		return 0
 	}
 	sort.Strings(stray)
-	fmt.Fprintf(os.Stderr, "error: %d path(s) are resolved but not conflicted:\n", len(stray))
+	msg := fmt.Sprintf("%d path(s) are resolved but not conflicted:", len(stray))
 	for _, p := range stray {
-		fmt.Fprintf(os.Stderr, "  %s\n", p)
+		msg += "\n  " + p
 	}
-	fmt.Fprintf(os.Stderr, "  a resolution names a path git left unmerged; paths are repository-relative\n")
+	errorf(flags, "%s\n  a resolution names a path git left unmerged; paths are repository-relative", msg)
 	return exitcode.ConclusionUnresolved
 }
 
@@ -1864,8 +1857,8 @@ func (op continueOp) refuseStrayResolutions(sides map[string]conflict.Sides, dec
 // the per-path listing that says what each keyword concretely resolves to. That
 // listing is the whole mitigation for the `theirs`-on-a-revert confusion: it is
 // printed where the decision is made, not left in help text.
-func (op continueOp) checkCompleteness(ctx context.Context, state sequencer.State, sides map[string]conflict.Sides, declared []resolution) int {
-	if code := op.refuseStrayResolutions(sides, declared); code != 0 {
+func (op continueOp) checkCompleteness(flags globalFlags, ctx context.Context, state sequencer.State, sides map[string]conflict.Sides, declared []resolution) int {
+	if code := op.refuseStrayResolutions(flags, sides, declared); code != 0 {
 		return code
 	}
 
@@ -1885,10 +1878,10 @@ func (op continueOp) checkCompleteness(ctx context.Context, state sequencer.Stat
 	}
 	sort.Strings(missing)
 
-	fmt.Fprintf(os.Stderr, "error: %d conflicted path(s) have no resolution:\n", len(missing))
-	fmt.Fprint(os.Stderr, op.conflictListing(ctx, state, sides, missing))
-	fmt.Fprintf(os.Stderr, "  or write them into a file and pass --resolve-file:\n")
-	fmt.Fprintf(os.Stderr, "    [[resolutions]]\n    path = %q\n    choice = \"theirs\"\n", missing[0])
+	errorf(flags, "%d conflicted path(s) have no resolution:\n%s"+
+		"  or write them into a file and pass --resolve-file:\n"+
+		"    [[resolutions]]\n    path = %q\n    choice = \"theirs\"",
+		len(missing), op.conflictListing(ctx, state, sides, missing), missing[0])
 	return exitcode.ConclusionUnresolved
 }
 

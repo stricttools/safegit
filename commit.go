@@ -57,6 +57,11 @@ func pipelineExitCode(err error) int {
 	return exitcode.General
 }
 
+// commitNotices hands the commit pipeline the framework's writers.
+func commitNotices(flags globalFlags) commit.Notices {
+	return commit.Notices{Warn: flags.sc.Warn, Info: flags.sc.Info}
+}
+
 // commitPayload is what `commit` puts in the envelope's payload, in all three
 // of its forms: a new commit, an amend, and a reword.
 //
@@ -339,13 +344,13 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		for i, fs := range fileSpecs {
 			paths[i] = fs.Path
 		}
-		fmt.Fprintf(os.Stderr, "  files: %s\n", strings.Join(paths, ", "))
+		debugf(flags, "  files: %s", strings.Join(paths, ", "))
 		if branch != "" {
-			fmt.Fprintf(os.Stderr, "  branch: %s\n", branch)
+			debugf(flags, "  branch: %s", branch)
 		}
 	}
 
-	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
+	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags)}
 	result, err := p.Execute(flags.ctx(), commit.CommitRequest{
 		Message:                 msg,
 		FileSpecs:               fileSpecs,
@@ -362,21 +367,21 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	// on to report the commit rather than dying above the envelope seam.
 	var residue []residueEntry
 	if partial := commitStands(err); partial != nil && result != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		residue = recordAftercareFailure(residue, partial.Step, err.Error())
 	} else if err != nil {
 		strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
 	}
 
 	if flags.verbose {
-		fmt.Fprintf(os.Stderr, "  ref: %s\n", result.Ref)
-		fmt.Fprintf(os.Stderr, "  tree: %s\n", result.Tree)
-		fmt.Fprintf(os.Stderr, "  parents: %s\n", strings.Join(result.Parents, " "))
-		fmt.Fprintf(os.Stderr, "  sha: %s\n", result.SHA)
+		debugf(flags, "  ref: %s", result.Ref)
+		debugf(flags, "  tree: %s", result.Tree)
+		debugf(flags, "  parents: %s", strings.Join(result.Parents, " "))
+		debugf(flags, "  sha: %s", result.SHA)
 	}
 
 	if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "commit", firstLine(msg)); err != nil {
-		residue = reportAftercareFailure(residue, stepParentBump, err)
+		residue = reportAftercareFailure(flags, residue, stepParentBump, err)
 	}
 
 	flags.payload(commitPayload{
@@ -396,19 +401,18 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		MovesOverCap:   result.MovesOverCap,
 	})
 
-	if !flags.silent() {
-		if flags.dryRun {
-			fmt.Println(wouldWriteHeader("commit", result.Ref, result.Tree, firstLine(msg)))
-			fmt.Printf(" %d file(s) would be committed", len(result.Files))
-		} else {
-			fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msg))
-			fmt.Printf(" %d file(s) committed", len(result.Files))
-		}
-		if result.Attempts > 1 {
-			fmt.Printf(" (%d CAS retries)", result.Attempts-1)
-		}
-		fmt.Println()
+	var summary string
+	if flags.dryRun {
+		infof(flags, "%s", wouldWriteHeader("commit", result.Ref, result.Tree, firstLine(msg)))
+		summary = fmt.Sprintf(" %d file(s) would be committed", len(result.Files))
+	} else {
+		infof(flags, "[%s %s] %s", refShortName(result.Ref), result.SHA[:8], firstLine(msg))
+		summary = fmt.Sprintf(" %d file(s) committed", len(result.Files))
 	}
+	if result.Attempts > 1 {
+		summary += fmt.Sprintf(" (%d CAS retries)", result.Attempts-1)
+	}
+	infof(flags, "%s", summary)
 	return aftercareExit(residue)
 }
 
@@ -522,7 +526,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 	release := mustAcquireOperationLock(flags, gitDir, "amend")
 	defer release()
 
-	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
+	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags)}
 
 	// Both arms accumulate their aftercare failures rather than dying on one:
 	// the amended (or reworded) commit is the branch's tip either way, and the
@@ -554,9 +558,9 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			for i, fs := range fileSpecs {
 				paths[i] = fs.Path
 			}
-			fmt.Fprintf(os.Stderr, "  amend files: %s\n", strings.Join(paths, ", "))
+			debugf(flags, "  amend files: %s", strings.Join(paths, ", "))
 			if branch != "" {
-				fmt.Fprintf(os.Stderr, "  branch: %s\n", branch)
+				debugf(flags, "  branch: %s", branch)
 			}
 		}
 
@@ -572,22 +576,22 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			MovedRetract:            movedRetract,
 		})
 		if partial := commitStands(err); partial != nil && result != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			errorf(flags, "%v", err)
 			residue = recordAftercareFailure(residue, partial.Step, err.Error())
 		} else if err != nil {
 			strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
 		}
 
 		if flags.verbose {
-			fmt.Fprintf(os.Stderr, "  ref: %s\n", result.Ref)
-			fmt.Fprintf(os.Stderr, "  tree: %s\n", result.Tree)
-			fmt.Fprintf(os.Stderr, "  parents: %s\n", strings.Join(result.Parents, " "))
-			fmt.Fprintf(os.Stderr, "  old: %s\n", result.OldSHA)
-			fmt.Fprintf(os.Stderr, "  sha: %s\n", result.SHA)
+			debugf(flags, "  ref: %s", result.Ref)
+			debugf(flags, "  tree: %s", result.Tree)
+			debugf(flags, "  parents: %s", strings.Join(result.Parents, " "))
+			debugf(flags, "  old: %s", result.OldSHA)
+			debugf(flags, "  sha: %s", result.SHA)
 		}
 
 		if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "amend", firstLine(msg)); err != nil {
-			residue = reportAftercareFailure(residue, stepParentBump, err)
+			residue = reportAftercareFailure(flags, residue, stepParentBump, err)
 		}
 
 		flags.payload(commitPayload{
@@ -607,35 +611,34 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			MovesOverCap:   result.MovesOverCap,
 		})
 
-		if !flags.silent() {
-			msgDisplay := msg
-			if msgDisplay == "" {
-				msgDisplay = "(message preserved)"
-			}
-			if flags.dryRun {
-				fmt.Println(wouldWriteHeader("amend", result.Ref, result.Tree, firstLine(msgDisplay)))
-				fmt.Printf(" %d file(s) would be amended (was %s)", len(result.Files), shortSHA(result.OldSHA))
-			} else {
-				fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msgDisplay))
-				fmt.Printf(" %d file(s) amended (was %s)", len(result.Files), shortSHA(result.OldSHA))
-			}
-			if result.Attempts > 1 {
-				fmt.Printf(" (%d CAS retries)", result.Attempts-1)
-			}
-			fmt.Println()
+		msgDisplay := msg
+		if msgDisplay == "" {
+			msgDisplay = "(message preserved)"
 		}
+		var summary string
+		if flags.dryRun {
+			infof(flags, "%s", wouldWriteHeader("amend", result.Ref, result.Tree, firstLine(msgDisplay)))
+			summary = fmt.Sprintf(" %d file(s) would be amended (was %s)", len(result.Files), shortSHA(result.OldSHA))
+		} else {
+			infof(flags, "[%s %s] %s", refShortName(result.Ref), result.SHA[:8], firstLine(msgDisplay))
+			summary = fmt.Sprintf(" %d file(s) amended (was %s)", len(result.Files), shortSHA(result.OldSHA))
+		}
+		if result.Attempts > 1 {
+			summary += fmt.Sprintf(" (%d CAS retries)", result.Attempts-1)
+		}
+		infof(flags, "%s", summary)
 	} else {
 		// Reword: change the tip commit message without touching files
 		if len(messages) == 0 {
-			strictcli.ExitNow(exitcode.Usage, "commit message required (-m) when using --amend without files")
+			strictcli.ExitNow(exitcode.Usage, "commit message required (--message/-m) when using --amend without files")
 		}
 
 		msg := joinMessages(messages)
 
 		if flags.verbose {
-			fmt.Fprintf(os.Stderr, "  reword message: %s\n", firstLine(msg))
+			debugf(flags, "  reword message: %s", firstLine(msg))
 			if branch != "" {
-				fmt.Fprintf(os.Stderr, "  branch: %s\n", branch)
+				debugf(flags, "  branch: %s", branch)
 			}
 		}
 
@@ -648,24 +651,24 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			MovedRetract: movedRetract,
 		})
 		if partial := commitStands(err); partial != nil && result != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			errorf(flags, "%v", err)
 			residue = recordAftercareFailure(residue, partial.Step, err.Error())
 		} else if err != nil {
 			strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
 		}
 
 		if flags.verbose {
-			fmt.Fprintf(os.Stderr, "  ref: %s\n", result.Ref)
-			fmt.Fprintf(os.Stderr, "  old: %s\n", result.OldSHA)
+			debugf(flags, "  ref: %s", result.Ref)
+			debugf(flags, "  old: %s", result.OldSHA)
 			// A preview of a reword builds no commit object, so there is no
 			// SHA to name; the line is omitted rather than printed empty.
 			if result.SHA != "" {
-				fmt.Fprintf(os.Stderr, "  sha: %s\n", result.SHA)
+				debugf(flags, "  sha: %s", result.SHA)
 			}
 		}
 
 		if err := maybeAutoBumpParent(flags.ctx(), flags, gitDir, result.SHA, "reword", firstLine(msg)); err != nil {
-			residue = reportAftercareFailure(residue, stepParentBump, err)
+			residue = reportAftercareFailure(flags, residue, stepParentBump, err)
 		}
 
 		// A reword replaces a message and nothing else, so its changed-path
@@ -690,14 +693,12 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			MovesOverCap: 0,
 		})
 
-		if !flags.silent() {
-			if flags.dryRun {
-				fmt.Println(wouldWriteHeader("reword", result.Ref, result.Tree, firstLine(msg)))
-				fmt.Printf(" would reword (was %s)\n", shortSHA(result.OldSHA))
-			} else {
-				fmt.Printf("[%s %s] %s\n", refShortName(result.Ref), result.SHA[:8], firstLine(msg))
-				fmt.Printf(" reworded (was %s)\n", shortSHA(result.OldSHA))
-			}
+		if flags.dryRun {
+			infof(flags, "%s", wouldWriteHeader("reword", result.Ref, result.Tree, firstLine(msg)))
+			infof(flags, " would reword (was %s)", shortSHA(result.OldSHA))
+		} else {
+			infof(flags, "[%s %s] %s", refShortName(result.Ref), result.SHA[:8], firstLine(msg))
+			infof(flags, " reworded (was %s)", shortSHA(result.OldSHA))
 		}
 	}
 	return aftercareExit(residue)

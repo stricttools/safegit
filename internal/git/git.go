@@ -529,7 +529,10 @@ func ListTrackedIgnoredFiles(ctx context.Context) ([]string, error) {
 // `read-tree --reset -u` every tracked file out of the working tree, which is
 // the opposite of what a caller passing a real SHA (a merge's incoming tip)
 // asked for.
-func SyncMainIndexWithWorktree(ctx context.Context, treeish string) ([]string, error) {
+//
+// warn receives the line for a tracked, gitignored file that could not be
+// saved before the reset or restored after it.
+func SyncMainIndexWithWorktree(ctx context.Context, treeish string, warn func(string)) ([]string, error) {
 	if treeish == "HEAD" {
 		resolved, err := HeadTreeish(ctx)
 		if err != nil {
@@ -593,7 +596,7 @@ func SyncMainIndexWithWorktree(ctx context.Context, treeish string) ([]string, e
 		}
 		content, rerr := os.ReadFile(abs)
 		if rerr != nil {
-			fmt.Fprintf(os.Stderr, "safegit: warning: failed to save %s before read-tree: %v\n", f, rerr)
+			warn(fmt.Sprintf("failed to save %s before read-tree: %v", f, rerr))
 			continue
 		}
 		saved = append(saved, savedFile{path: abs, content: content, mode: info.Mode().Perm()})
@@ -608,7 +611,7 @@ func SyncMainIndexWithWorktree(ctx context.Context, treeish string) ([]string, e
 	// Restore on-disk content of tracked+gitignored files.
 	for _, sf := range saved {
 		if werr := os.WriteFile(sf.path, sf.content, sf.mode); werr != nil {
-			fmt.Fprintf(os.Stderr, "safegit: warning: failed to restore %s after read-tree: %v\n", sf.path, werr)
+			warn(fmt.Sprintf("failed to restore %s after read-tree: %v", sf.path, werr))
 		}
 	}
 

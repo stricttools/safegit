@@ -524,8 +524,9 @@ func TestApproveConsequentialDoesNotConsentToAnUnprovenRemote(t *testing.T) {
 
 	t.Run("blanket consent refuses", func(t *testing.T) {
 		dir := newUnprovenRemoteRepo(t)
-		_, stderr, code := runSafegitEnv(t, dir, confirmEnv,
+		stdout, stderr, code := runSafegitEnv(t, dir, confirmEnv,
 			"--json", "--approve-consequential", "backup", "backup", "cloudy")
+		stderr = reported(stdout, stderr)
 		if code == 0 {
 			t.Errorf("--approve-consequential must not consent to an unproven remote; stderr: %s", stderr)
 		}
@@ -539,8 +540,9 @@ func TestApproveConsequentialDoesNotConsentToAnUnprovenRemote(t *testing.T) {
 
 	t.Run("the per-condition flag consents", func(t *testing.T) {
 		dir := newUnprovenRemoteRepo(t)
-		_, stderr, _ := runSafegitEnv(t, dir, confirmEnv,
+		stdout, stderr, _ := runSafegitEnv(t, dir, confirmEnv,
 			"--json", "backup", "backup", "--allow-public-remote", "cloudy")
+		stderr = reported(stdout, stderr)
 		if strings.Contains(stderr, "--allow-public-remote") {
 			t.Errorf("--allow-public-remote must answer the exposure question, got: %s", stderr)
 		}

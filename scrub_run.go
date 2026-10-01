@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -190,7 +189,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 		strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("parsing recipe: %v", err))
 	}
 
-	infof(flags, "Recipe loaded: %d operations\n", len(recipe.Operations))
+	infof(flags, "Recipe loaded: %d operations", len(recipe.Operations))
 
 	// Resolve --from if provided (needed by both --diff and execute paths).
 	var fromSHA string
@@ -234,7 +233,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 			strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("compiling combined pattern: %v", err))
 		}
 
-		infof(flags, "Scanning objects...\n")
+		infof(flags, "Scanning objects...")
 		results, err := scan.ScanObjects(ctx, combinedPattern, scan.ScanOpts{
 			FromSHA:       fromSHA,
 			EntireHistory: entireHistory,
@@ -244,7 +243,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 		}
 
 		if len(results.Matches) == 0 {
-			infof(flags, "No matches found. Nothing to rewrite.\n")
+			infof(flags, "No matches found. Nothing to rewrite.")
 			return 0
 		}
 
@@ -307,14 +306,14 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 			SyncSkipped:       result.SyncSkipped,
 		})
 
-		infof(flags, "\nScrub complete:\n")
-		infof(flags, "  %d operations applied\n", len(recipe.Operations))
-		infof(flags, "  %d commits rewritten\n", result.RewrittenCount)
-		infof(flags, "  %d blobs replaced\n", result.BlobsReplaced)
-		infof(flags, "  %d commit messages modified\n", result.MessagesModified)
-		infof(flags, "  %d tag annotations rewritten\n", result.TagsRewrittenCount)
-		infof(flags, "  Old HEAD: %s\n", result.OldHeadSHA[:12])
-		infof(flags, "  New HEAD: %s\n", result.NewHeadSHA[:12])
+		infof(flags, "\nScrub complete:")
+		infof(flags, "  %d operations applied", len(recipe.Operations))
+		infof(flags, "  %d commits rewritten", result.RewrittenCount)
+		infof(flags, "  %d blobs replaced", result.BlobsReplaced)
+		infof(flags, "  %d commit messages modified", result.MessagesModified)
+		infof(flags, "  %d tag annotations rewritten", result.TagsRewrittenCount)
+		infof(flags, "  Old HEAD: %s", result.OldHeadSHA[:12])
+		infof(flags, "  New HEAD: %s", result.NewHeadSHA[:12])
 		printScopeNotice(flags, result.Ref)
 		printRotationNotice(flags, recheckCommandForRecipe(recipePath))
 	} else {
@@ -392,7 +391,7 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 
 		oldContent, err := git.CatFileBlob(ctx, oldSHA)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: reading old blob %s: %v\n", shortSHA(oldSHA), err)
+			warnf(flags, "reading old blob %s: %v", shortSHA(oldSHA), err)
 			continue
 		}
 
@@ -414,12 +413,12 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 
 		if !flags.json {
 			if len(paths) > 0 {
-				infof(flags, "--- %s (blob %s)\n", strings.Join(paths, ", "), shortSHA(oldSHA))
+				infof(flags, "--- %s (blob %s)", strings.Join(paths, ", "), shortSHA(oldSHA))
 			} else {
-				infof(flags, "--- blob %s\n", shortSHA(oldSHA))
+				infof(flags, "--- blob %s", shortSHA(oldSHA))
 			}
-			infof(flags, "+++ (replacement content)\n")
-			infof(flags, "%s\n", diff)
+			infof(flags, "+++ (replacement content)")
+			infof(flags, "%s", strings.TrimSuffix(diff, "\n"))
 		}
 	}
 
@@ -474,21 +473,21 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 			messageDiffs = append(messageDiffs, entry)
 
 			if !flags.json {
-				infof(flags, "--- commit %s message\n", shortSHA(sha))
+				infof(flags, "--- commit %s message", shortSHA(sha))
 				diff := unifiedDiff("commit-message", info.Message, newMessage)
-				infof(flags, "%s\n", diff)
+				infof(flags, "%s", strings.TrimSuffix(diff, "\n"))
 			}
 		}
 	}
 
 	if !flags.json {
-		infof(flags, "\nDiff preview: %d blobs would change", len(contentMap))
+		summary := fmt.Sprintf("\nDiff preview: %d blobs would change", len(contentMap))
 		if truncated {
-			infof(flags, " (showing %d of %d)", shown, len(contentMap))
+			summary += fmt.Sprintf(" (showing %d of %d)", shown, len(contentMap))
 		}
-		infof(flags, "\n")
+		infof(flags, "%s", summary)
 		if len(messageDiffs) > 0 {
-			infof(flags, "  %d commit messages would change\n", len(messageDiffs))
+			infof(flags, "  %d commit messages would change", len(messageDiffs))
 		}
 	}
 
@@ -520,7 +519,7 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 	// iterating the object store once per operation.
 	patterns := recipe.Patterns
 
-	infof(flags, "Scanning objects...\n")
+	infof(flags, "Scanning objects...")
 
 	var allResults []*scan.ScanResults
 	if entireHistory && len(patterns) > 1 {
@@ -648,7 +647,7 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 	flags.payload(result)
 
 	if totalMatches == 0 {
-		infof(flags, "No matches found. Nothing to rewrite.\n")
+		infof(flags, "No matches found. Nothing to rewrite.")
 		return 0
 	}
 
@@ -657,25 +656,25 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 	oldHeadSHA, _ := git.RevParse(ctx, "HEAD")
 	recordHistoryRewrite(ctx, flags, oldHeadSHA)
 
-	infof(flags, "\nDry-run summary:\n")
+	infof(flags, "\nDry-run summary:")
 	for _, op := range result.Operations {
 		opMatches := op.BlobMatches + op.CommitMatches + op.TagMatches
 		if opMatches == 0 {
-			infof(flags, "  Operation %d (%s): no matches\n", op.Index, op.Pattern)
+			infof(flags, "  Operation %d (%s): no matches", op.Index, op.Pattern)
 			continue
 		}
-		infof(flags, "  Operation %d (%s): %d blob, %d commit, %d tag matches\n",
+		infof(flags, "  Operation %d (%s): %d blob, %d commit, %d tag matches",
 			op.Index, op.Pattern, op.BlobMatches, op.CommitMatches, op.TagMatches)
 		if len(op.AffectedFiles) > 0 {
-			infof(flags, "    Affected files: %s\n", strings.Join(op.AffectedFiles, ", "))
+			infof(flags, "    Affected files: %s", strings.Join(op.AffectedFiles, ", "))
 		}
 	}
-	infof(flags, "\n  Total: %d blob, %d commit, %d tag matches\n",
+	infof(flags, "\n  Total: %d blob, %d commit, %d tag matches",
 		*result.TotalBlobMatches, *result.TotalCommitMatches, *result.TotalTagMatches)
-	infof(flags, "  Affected files: %d\n", *result.TotalAffectedFiles)
-	infof(flags, "  Estimated commits in range: %d\n", *result.EstimatedCommits)
+	infof(flags, "  Affected files: %d", *result.TotalAffectedFiles)
+	infof(flags, "  Estimated commits in range: %d", *result.EstimatedCommits)
 	if *result.BinarySkipped > 0 {
-		infof(flags, "  Binary blobs skipped: %d\n", *result.BinarySkipped)
+		infof(flags, "  Binary blobs skipped: %d", *result.BinarySkipped)
 	}
 
 	return 0

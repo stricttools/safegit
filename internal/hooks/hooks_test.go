@@ -13,6 +13,9 @@ import (
 	"time"
 )
 
+// noWarn discards the lines a hook run writes about itself.
+func noWarn(string) {}
+
 // setupGitDir creates a temporary .git structure with git's own hooks directory
 // and safegit's tool-owned live hook store.
 func setupGitDir(t *testing.T) string {
@@ -157,7 +160,7 @@ func TestRunSuccess(t *testing.T) {
 	writeHook(t, hookPath, "#!/bin/sh\necho running\nexit 0\n")
 
 	ctx := context.Background()
-	results, err := Run(ctx, store(gitDir), []byte("refs/heads/main abc123 refs/heads/main def456\n"), 30, DefaultStopCap, nil)
+	results, err := Run(ctx, store(gitDir), []byte("refs/heads/main abc123 refs/heads/main def456\n"), 30, DefaultStopCap, nil, noWarn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +186,7 @@ func TestRunFailure(t *testing.T) {
 	writeHook(t, filepath.Join(dDir, "02-never"), "#!/bin/sh\nexit 0\n")
 
 	ctx := context.Background()
-	results, err := Run(ctx, store(gitDir), []byte("refs/heads/main abc123 refs/heads/main def456\n"), 30, DefaultStopCap, nil)
+	results, err := Run(ctx, store(gitDir), []byte("refs/heads/main abc123 refs/heads/main def456\n"), 30, DefaultStopCap, nil, noWarn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +211,7 @@ func TestRunTimeout(t *testing.T) {
 
 	ctx := context.Background()
 	start := time.Now()
-	results, err := Run(ctx, store(gitDir), []byte("refs/heads/main abc123 refs/heads/main def456\n"), 1, DefaultStopCap, nil)
+	results, err := Run(ctx, store(gitDir), []byte("refs/heads/main abc123 refs/heads/main def456\n"), 1, DefaultStopCap, nil, noWarn)
 	elapsed := time.Since(start)
 	if err != nil {
 		t.Fatal(err)
@@ -238,7 +241,7 @@ func TestSetOutputCapturesHookOutput(t *testing.T) {
 	writeHook(t, hookPath, "#!/bin/sh\necho hello-from-hook\necho oops >&2\n")
 
 	ctx := context.Background()
-	results, err := Run(ctx, store(gitDir), []byte("refs/heads/main abc def456\n"), 30, DefaultStopCap, nil)
+	results, err := Run(ctx, store(gitDir), []byte("refs/heads/main abc def456\n"), 30, DefaultStopCap, nil, noWarn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +308,7 @@ func TestSlowReaderLosesNoHookOutput(t *testing.T) {
 	hookPath := filepath.Join(LocalDir(gitDir), "pre-pre-push")
 	writeHook(t, hookPath, "#!/bin/sh\necho hello-from-hook\n")
 
-	results, err := Run(context.Background(), store(gitDir), nil, 30, DefaultStopCap, nil)
+	results, err := Run(context.Background(), store(gitDir), nil, 30, DefaultStopCap, nil, noWarn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +336,7 @@ func TestHookWhoseBackgroundChildHoldsStdoutFailsWithoutWaiting(t *testing.T) {
 	writeHook(t, hookPath, "#!/bin/sh\nsleep 60 2>/dev/null &\necho $! > '"+pidFile+"'\necho started\nexit 0\n")
 
 	start := time.Now()
-	results, err := Run(context.Background(), store(gitDir), nil, 30, DefaultStopCap, nil)
+	results, err := Run(context.Background(), store(gitDir), nil, 30, DefaultStopCap, nil, noWarn)
 	elapsed := time.Since(start)
 	if err != nil {
 		t.Fatal(err)
@@ -388,7 +391,7 @@ func TestSlowDestinationLosesNoHookOutput(t *testing.T) {
 	writeHook(t, filepath.Join(LocalDir(gitDir), "pre-pre-push"),
 		"#!/bin/sh\nhead -c "+strconv.Itoa(size)+" /dev/zero | tr '\\0' a\n")
 
-	results, err := Run(context.Background(), store(gitDir), nil, 60, DefaultStopCap, nil)
+	results, err := Run(context.Background(), store(gitDir), nil, 60, DefaultStopCap, nil, noWarn)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -453,7 +456,7 @@ func TestHookThatCannotStartRecordsTheStartError(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tc.content), tc.mode); err != nil {
 				t.Fatal(err)
 			}
-			r, err := RunSingle(context.Background(), path, nil, 30, DefaultStopCap, nil)
+			r, err := RunSingle(context.Background(), path, nil, 30, DefaultStopCap, nil, noWarn)
 			if err != nil {
 				t.Fatalf("RunSingle: %v", err)
 			}
@@ -479,7 +482,7 @@ func TestHookWhoseInterpreterExitsNonzeroIsNotAStartError(t *testing.T) {
 	}
 	path := filepath.Join(t.TempDir(), "pre-pre-push")
 	writeHook(t, path, "#!/usr/bin/env safegit-test-missing-program\nexit 0\n")
-	r, err := RunSingle(context.Background(), path, nil, 30, DefaultStopCap, nil)
+	r, err := RunSingle(context.Background(), path, nil, 30, DefaultStopCap, nil, noWarn)
 	if err != nil {
 		t.Fatalf("RunSingle: %v", err)
 	}

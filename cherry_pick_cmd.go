@@ -69,7 +69,7 @@ func runCherryPick(flags globalFlags, args []string) int {
 
 	// The allowlist covers EVERY route, the state-control forms included: an
 	// option safegit does not implement is refused whichever verb it accompanies.
-	if code := cherryPickSubset.refuseUnsupportedOptions(parsed); code != 0 {
+	if code := cherryPickSubset.refuseUnsupportedOptions(flags, parsed); code != 0 {
 		return code
 	}
 	if parsed.Has("--continue", "--abort", "--quit") {
@@ -88,18 +88,18 @@ func runCherryPick(flags globalFlags, args []string) int {
 // absent, because "safegit does not do this" is a different answer from "this
 // failed" and an operator has to be able to tell them apart. Each needs its
 // entry in the divergences catalog.
-func refuseUnsupportedCherryPick(parsed gitArgs) int {
+func refuseUnsupportedCherryPick(flags globalFlags, parsed gitArgs) int {
 	if len(parsed.AfterDoubleDash) > 0 {
-		fmt.Fprintf(os.Stderr, "error: safegit cherry-pick takes no pathspec\n")
-		fmt.Fprintf(os.Stderr, "  a pathspec applies part of a commit and records a message claiming the whole of it.\n")
-		fmt.Fprintf(os.Stderr, "  Pick the commit, or make the partial change yourself and commit it.\n")
+		errorf(flags, "safegit cherry-pick takes no pathspec\n"+
+			"  a pathspec applies part of a commit and records a message claiming the whole of it.\n"+
+			"  Pick the commit, or make the partial change yourself and commit it.")
 		return exitcode.Usage
 	}
 
 	// BEFORE the count, because a rev-set is one argv token and counting tokens
 	// would call `main..side` a single commit.
 	for _, rev := range parsed.Revisions {
-		if code := refuseRevisionSet("cherry-pick", rev); code != 0 {
+		if code := refuseRevisionSet(flags, "cherry-pick", rev); code != 0 {
 			return code
 		}
 	}
@@ -107,12 +107,12 @@ func refuseUnsupportedCherryPick(parsed gitArgs) int {
 	switch len(parsed.Revisions) {
 	case 1:
 	case 0:
-		fmt.Fprintf(os.Stderr, "error: safegit cherry-pick names no commit to pick\n")
-		fmt.Fprintf(os.Stderr, "  usage: safegit cherry-pick <commit>\n")
+		errorf(flags, "safegit cherry-pick names no commit to pick\n"+
+			"  usage: safegit cherry-pick <commit>")
 		return exitcode.Usage
 	default:
-		fmt.Fprintf(os.Stderr, "error: safegit cherry-pick takes exactly one commit, and this names %d\n", len(parsed.Revisions))
-		fmt.Fprintf(os.Stderr, "  %s\n", sequentialFormReason("cherry-pick"))
+		errorf(flags, "safegit cherry-pick takes exactly one commit, and this names %d\n"+
+			"  %s", len(parsed.Revisions), sequentialFormReason("cherry-pick"))
 		return exitcode.Usage
 	}
 	return 0
@@ -130,7 +130,7 @@ func refuseUnsupportedCherryPick(parsed gitArgs) int {
 // DIVERGENCE: git's cherry-pick and revert take the full revision-set grammar;
 // safegit's take the name of one commit. Cataloged in docs/divergences.md as
 // "One commit per cherry-pick, one per revert; ranges are refused".
-func refuseRevisionSet(verb, rev string) int {
+func refuseRevisionSet(flags globalFlags, verb, rev string) int {
 	var operator string
 	switch {
 	case strings.Contains(rev, "..."):
@@ -147,10 +147,10 @@ func refuseRevisionSet(verb, rev string) int {
 		return 0
 	}
 
-	fmt.Fprintf(os.Stderr, "error: safegit %s does not take a commit range or a revision set (%q uses %s)\n", verb, rev, operator)
-	fmt.Fprintf(os.Stderr, "  a range puts git's own sequencer in charge -- it queues the commits and authors every\n")
-	fmt.Fprintf(os.Stderr, "  commit it makes -- and it does so even where the range holds a single commit.\n")
-	fmt.Fprintf(os.Stderr, "  %s\n", sequentialFormReason(verb))
+	errorf(flags, "safegit %s does not take a commit range or a revision set (%q uses %s)\n"+
+		"  a range puts git's own sequencer in charge -- it queues the commits and authors every\n"+
+		"  commit it makes -- and it does so even where the range holds a single commit.\n"+
+		"  %s", verb, rev, operator, sequentialFormReason(verb))
 	return exitcode.Usage
 }
 
@@ -170,13 +170,13 @@ func runRestructuredCherryPick(flags globalFlags, args []string, parsed gitArgs)
 	// FIRST, and before the repository is touched at all: a command line
 	// safegit itself refuses is refused without a lock, without an
 	// auto-initialization and without a git call.
-	if code := refuseUnsupportedCherryPick(parsed); code != 0 {
+	if code := refuseUnsupportedCherryPick(flags, parsed); code != 0 {
 		return code
 	}
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
@@ -185,7 +185,7 @@ func runRestructuredCherryPick(flags globalFlags, args []string, parsed gitArgs)
 	// ordinary commit does, so the parent must have answered the auto-bump
 	// question before anything is written.
 	if err := requireAutoBumpDecision(flags.ctx(), flags); err != nil {
-		fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
+		errorf(flags, "auto-bump parent: %v", err)
 		return exitcode.General
 	}
 
@@ -203,7 +203,7 @@ func runRestructuredCherryPick(flags globalFlags, args []string, parsed gitArgs)
 	// computed over an operation git already has in flight. The compute step is
 	// `cherry-pick --no-commit`, which git does not refuse the way it refuses a
 	// plain pick, so the refusal has to be safegit's own.
-	if code := refuseComputeOverInFlight(gitDir, "cherry-pick"); code != 0 {
+	if code := refuseComputeOverInFlight(flags, gitDir, "cherry-pick"); code != 0 {
 		return code
 	}
 
@@ -249,7 +249,7 @@ func runRestructuredCherryPick(flags globalFlags, args []string, parsed gitArgs)
 			return code
 		}
 		if err := parkComputedPick(gitDir, sourceSHA, resolveErr); err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			errorf(flags, "%v", err)
 			return exitcode.General
 		}
 		appendOperationEntry(flags, sgDir, "cherry-pick", pos, false, pickExtra(picked))
@@ -258,13 +258,13 @@ func runRestructuredCherryPick(flags globalFlags, args []string, parsed gitArgs)
 	}
 
 	if err := parkComputedPick(gitDir, sourceSHA, resolveErr); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
 	state, err := sequencer.Read(gitDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: reading the cherry-pick state: %v\n", err)
+		errorf(flags, "reading the cherry-pick state: %v", err)
 		return exitcode.General
 	}
 	if state.Kind != sequencer.KindCherryPick {
@@ -288,13 +288,12 @@ func runRestructuredCherryPick(flags globalFlags, args []string, parsed gitArgs)
 		// --no-commit` records nothing about the commit it applies), so an
 		// operator finding it would otherwise have no account of where it came
 		// from.
-		fmt.Fprintf(os.Stderr, "error: git's operation state changed while the cherry-pick was being computed (%s now); nothing was committed\n", state.String())
-		fmt.Fprintf(os.Stderr, "  nothing was in flight when this command started, so something else started or cleared a\n")
-		fmt.Fprintf(os.Stderr, "  git operation in this worktree while it ran.\n")
-		reportComputedPickLeftovers(ctx, gitDir)
-		fmt.Fprintf(os.Stderr, "  All of it is left exactly where it is, because something else is operating here and a\n")
-		fmt.Fprintf(os.Stderr, "  rollback could take that work with it. Inspect it with 'git status', then commit it or\n")
-		fmt.Fprintf(os.Stderr, "  drop it yourself.\n")
+		errorf(flags, "git's operation state changed while the cherry-pick was being computed (%s now); nothing was committed\n"+
+			"  nothing was in flight when this command started, so something else started or cleared a\n"+
+			"  git operation in this worktree while it ran.%s\n"+
+			"  All of it is left exactly where it is, because something else is operating here and a\n"+
+			"  rollback could take that work with it. Inspect it with 'git status', then commit it or\n"+
+			"  drop it yourself.", state.String(), computedPickLeftovers(ctx, gitDir))
 		return exitcode.General
 	}
 
@@ -349,9 +348,10 @@ func parkComputedPick(gitDir, sourceSHA string, resolveErr error) error {
 	return nil
 }
 
-// reportComputedPickLeftovers names what a cherry-pick whose state changed under
-// it has left in the repository: the pick's own state files that are actually
-// there, and the paths its compute step staged.
+// computedPickLeftovers names what a cherry-pick whose state changed under it
+// has left in the repository, as lines for the refusal, each beginning with a
+// newline: the pick's own state files that are actually there, and the paths
+// its compute step staged.
 //
 // The state-file set is read from sequencer.Paths -- the one declaration of what
 // a cherry-pick's state IS -- rather than spelled again here, and filtered to
@@ -364,7 +364,8 @@ func parkComputedPick(gitDir, sourceSHA string, resolveErr error) error {
 // Each half degrades on its own. A listing that cannot be read says so and the
 // rest of the message still prints: this is already the failure path, and a
 // second failure inside the report must not replace the report.
-func reportComputedPickLeftovers(ctx context.Context, gitDir string) {
+func computedPickLeftovers(ctx context.Context, gitDir string) string {
+	var b strings.Builder
 	var present []string
 	for _, name := range sequencer.Paths(sequencer.KindCherryPick) {
 		if _, err := os.Lstat(filepath.Join(gitDir, name)); err == nil {
@@ -372,27 +373,28 @@ func reportComputedPickLeftovers(ctx context.Context, gitDir string) {
 		}
 	}
 	if len(present) > 0 {
-		fmt.Fprintf(os.Stderr, "  Left behind, CHERRY_PICK_HEAD included -- safegit wrote that one itself, so the parked\n")
-		fmt.Fprintf(os.Stderr, "  pick would look to git exactly like a conflicted one:\n")
+		b.WriteString("\n  Left behind, CHERRY_PICK_HEAD included -- safegit wrote that one itself, so the parked" +
+			"\n  pick would look to git exactly like a conflicted one:")
 		for _, name := range present {
-			fmt.Fprintf(os.Stderr, "    %s\n", filepath.Join(gitDir, name))
+			fmt.Fprintf(&b, "\n    %s", filepath.Join(gitDir, name))
 		}
 	}
 
 	staged, err := git.IndexPathsChangedFrom(ctx, "HEAD")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "  The computed pick is still staged in the index; what it touched could not be listed: %v\n", err)
-		return
+		fmt.Fprintf(&b, "\n  The computed pick is still staged in the index; what it touched could not be listed: %v", err)
+		return b.String()
 	}
 	if len(staged) == 0 {
-		fmt.Fprintf(os.Stderr, "  The index holds nothing the branch does not already have.\n")
-		return
+		b.WriteString("\n  The index holds nothing the branch does not already have.")
+		return b.String()
 	}
 	sort.Strings(staged)
-	fmt.Fprintf(os.Stderr, "  Staged in the index and the working tree, uncommitted:\n")
+	b.WriteString("\n  Staged in the index and the working tree, uncommitted:")
 	for _, path := range staged {
-		fmt.Fprintf(os.Stderr, "    %s\n", path)
+		fmt.Fprintf(&b, "\n    %s", path)
 	}
+	return b.String()
 }
 
 // pickLeftAConflict reports whether the compute step stopped on a conflict, as
@@ -415,19 +417,20 @@ func pickExtra(picked string) map[string]interface{} {
 // states the operator is left in, and offers an abort only where there is still
 // something to abort.
 //
-// The residue detail comes first and the advice last, so the line an operator
+// The residue detail follows the headline and the advice comes last, so the line an operator
 // acts on is the one nearest their cursor.
-func refuseEmptyCherryPick(cleanup cleanEmptyParkOutcome) int {
-	cleanup.reportResidue()
-	fmt.Fprintf(os.Stderr, "error: this cherry-pick produces no change: the branch already carries the commit's effect\n")
+func refuseEmptyCherryPick(flags globalFlags, cleanup cleanEmptyParkOutcome) int {
+	msg := "this cherry-pick produces no change: the branch already carries the commit's effect" + cleanup.residueLines()
 	if cleanup.cleaned() {
-		fmt.Fprintf(os.Stderr, "  nothing was committed, and the cherry-pick state safegit parked has been cleaned up:\n")
-		fmt.Fprintf(os.Stderr, "  the branch, the index and the working tree stand where they did, and the next\n")
-		fmt.Fprintf(os.Stderr, "  safegit command just works.\n")
+		errorf(flags, "%s\n"+
+			"  nothing was committed, and the cherry-pick state safegit parked has been cleaned up:\n"+
+			"  the branch, the index and the working tree stand where they did, and the next\n"+
+			"  safegit command just works.", msg)
 		return exitcode.General
 	}
-	fmt.Fprintf(os.Stderr, "  nothing was committed, but the pick is STILL in progress; drop it with:\n")
-	fmt.Fprintf(os.Stderr, "    git cherry-pick --abort\n")
+	errorf(flags, "%s\n"+
+		"  nothing was committed, but the pick is STILL in progress; drop it with:\n"+
+		"    git cherry-pick --abort", msg)
 	return exitcode.General
 }
 

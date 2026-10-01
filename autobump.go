@@ -216,9 +216,7 @@ func previewAutoBumpParent(ctx context.Context, flags globalFlags, newHeadSHA, t
 	if err := recordParentBumpPreview(flags, plan, triggeredBy, operation, firstLineMsg); err != nil {
 		return err
 	}
-	if !flags.silent() {
-		fmt.Fprintf(os.Stderr, "  parent: would bump %s pointer (dry run; parent repo untouched)\n", plan.subRelPath)
-	}
+	infof(flags, "  parent: would bump %s pointer (dry run; parent repo untouched)", plan.subRelPath)
 	return nil
 }
 
@@ -385,9 +383,7 @@ func maybeAutoBumpParent(ctx context.Context, flags globalFlags, gitDir, newHead
 			},
 		})
 
-		if !flags.silent() {
-			fmt.Fprintf(os.Stderr, "  parent: bumped %s pointer (%s)\n", subRelPath, sha[:8])
-		}
+		infof(flags, "  parent: bumped %s pointer (%s)", subRelPath, sha[:8])
 	}
 
 	return nil

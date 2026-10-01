@@ -16,6 +16,10 @@ import (
 	"github.com/stricttools/safegit/internal/testutil"
 )
 
+// testNotices discards the pipeline's own lines; a test that asserts on them
+// passes writers of its own.
+var testNotices = Notices{Warn: func(string) {}, Info: func(string) {}}
+
 // directRefUpdate is this package's RefUpdate for tests: it runs the same
 // `git update-ref <ref> <new> <expected>` the production implementation mints
 // through the framework's effects handle.
@@ -41,7 +45,7 @@ func (directRefUpdate) Update(ctx context.Context, ref, newSHA, expected string)
 // newPipeline creates a Pipeline with default config for the given safegitDir.
 func newPipeline(sgDir string) *Pipeline {
 	cfg := repo.DefaultConfig()
-	return &Pipeline{SafegitDir: sgDir, Config: cfg, RefUpdate: directRefUpdate{}}
+	return &Pipeline{SafegitDir: sgDir, Config: cfg, RefUpdate: directRefUpdate{}, Notices: testNotices}
 }
 
 // commitLandsOnBranch verifies that ref points to sha.

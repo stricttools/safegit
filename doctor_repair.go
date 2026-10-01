@@ -50,32 +50,27 @@ func fixOrphanedAutostash(flags globalFlags, found *autostashRepair) {
 		return
 	}
 	if found.sha == "" {
-		fmt.Fprintf(os.Stderr, "warning: %s holds no object name; it is left in place rather than removed\n", found.path)
+		warnf(flags, "%s holds no object name; it is left in place rather than removed", found.path)
 		return
 	}
 
 	message := fmt.Sprintf("safegit doctor: recovered from an orphaned %s", sequencer.FileMergeAutostash)
 	if _, err := runRepairGit(flags, flags.root.resolve(), "stash:"+found.sha,
 		"stash", "store", "-m", message, found.sha); err != nil {
-		fmt.Fprintf(os.Stderr, "error: storing %s as a stash entry: %v\n"+
-			"  %s is left in place: removing it would leave the commit with no name at all\n",
-			found.sha, err, found.path)
+		errorf(flags, "storing %s as a stash entry: %v\n  %s is left in place: removing it would leave the commit with no name at all", found.sha, err, found.path)
 		return
 	}
 	if err := mintedRemover(flags, "git-state:")(found.path); err != nil {
-		fmt.Fprintf(os.Stderr, "error: removing %s after storing its commit as a stash entry: %v\n", found.path, err)
+		errorf(flags, "removing %s after storing its commit as a stash entry: %v", found.path, err)
 		return
 	}
 
-	if flags.silent() {
-		return
-	}
 	if flags.dryRun {
-		fmt.Printf("would store the orphaned %s (%s) as a stash entry and remove the file\n",
+		infof(flags, "would store the orphaned %s (%s) as a stash entry and remove the file",
 			sequencer.FileMergeAutostash, shortSHA(found.sha))
 		return
 	}
-	fmt.Printf("stored the orphaned %s (%s) as stash entry '%s' and removed the file\n",
+	infof(flags, "stored the orphaned %s (%s) as stash entry '%s' and removed the file",
 		sequencer.FileMergeAutostash, shortSHA(found.sha), message)
 }
 
@@ -187,7 +182,7 @@ func fixOrphanedUnmergedIndex(flags globalFlags, gitDir string, repair *unmerged
 
 	release, code := acquireOperationLock(flags, gitDir, "doctor")
 	if code != 0 {
-		fmt.Fprintf(os.Stderr, "error: the unmerged index was left alone: another safegit operation owns this worktree\n")
+		errorf(flags, "the unmerged index was left alone: another safegit operation owns this worktree")
 		return
 	}
 	defer release()
@@ -200,7 +195,7 @@ func fixOrphanedUnmergedIndex(flags globalFlags, gitDir string, repair *unmerged
 		// describe a different moment.
 		fresh, err := planUnmergedRepair(flags.ctx(), gitDir, worktree)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: re-reading the unmerged index: %v\n", err)
+			errorf(flags, "re-reading the unmerged index: %v", err)
 			return
 		}
 		if fresh == nil || len(fresh.paths) == 0 {
@@ -223,7 +218,7 @@ func fixOrphanedUnmergedIndex(flags globalFlags, gitDir string, repair *unmerged
 		if !p.onDisk {
 			if _, err := runRepairGit(flags, worktree, "index-entry:"+p.path,
 				"update-index", "--force-remove", "--", p.path); err != nil {
-				fmt.Fprintf(os.Stderr, "error: dropping %s from the index: %v\n", p.path, err)
+				errorf(flags, "dropping %s from the index: %v", p.path, err)
 				continue
 			}
 			dropped = append(dropped, p.path)
@@ -231,23 +226,20 @@ func fixOrphanedUnmergedIndex(flags globalFlags, gitDir string, repair *unmerged
 		}
 		if _, err := runRepairGit(flags, worktree, "index-entry:"+p.path,
 			"update-index", "--add", "--", p.path); err != nil {
-			fmt.Fprintf(os.Stderr, "error: staging %s: %v\n", p.path, err)
+			errorf(flags, "staging %s: %v", p.path, err)
 			continue
 		}
 		repaired = append(repaired, p.path)
 	}
 
-	if flags.silent() {
-		return
-	}
 	verb, dropVerb := "re-staged", "dropped"
 	if flags.dryRun {
 		verb, dropVerb = "would re-stage", "would drop"
 	}
 	if len(repaired) > 0 {
-		fmt.Printf("%s %d unmerged path(s) from the working tree: %s\n", verb, len(repaired), strings.Join(repaired, ", "))
+		infof(flags, "%s %d unmerged path(s) from the working tree: %s", verb, len(repaired), strings.Join(repaired, ", "))
 	}
 	if len(dropped) > 0 {
-		fmt.Printf("%s %d unmerged path(s) that are gone from disk: %s\n", dropVerb, len(dropped), strings.Join(dropped, ", "))
+		infof(flags, "%s %d unmerged path(s) that are gone from disk: %s", dropVerb, len(dropped), strings.Join(dropped, ", "))
 	}
 }

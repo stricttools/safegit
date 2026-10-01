@@ -198,7 +198,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		c := consent{granted: flags.approved, flag: "--approve-consequential"}
 		if !confirmDeliberate(flags, c,
 			"Force-push to %s (%s), overwriting whatever each ref's lease expectation does not cover?", remote, remoteURL) {
-			infof(flags, "Aborted.\n")
+			infof(flags, "Aborted.")
 			return exitcode.General
 		}
 	}
@@ -226,9 +226,9 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	}
 
 	if flags.verbose {
-		fmt.Fprintf(os.Stderr, "  remote: %s (%s)\n", remote, remoteURL)
+		debugf(flags, "  remote: %s (%s)", remote, remoteURL)
 		for _, r := range refs {
-			fmt.Fprintf(os.Stderr, "  ref: %s -> %s\n", shortRef(r.LocalRef), shortRef(r.RemoteRef))
+			debugf(flags, "  ref: %s -> %s", shortRef(r.LocalRef), shortRef(r.RemoteRef))
 		}
 	}
 
@@ -267,9 +267,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	case flags.dryRun:
 		reason := hookSkipDryRun
 		hooksSkipped = &reason
-		if !flags.silent() {
-			fmt.Fprintln(os.Stderr, "  pre-pre-push hooks are not run under --dry-run; the real push will run them")
-		}
+		infof(flags, "  pre-pre-push hooks are not run under --dry-run; the real push will run them")
 	}
 
 	// Discovery is separate from execution, and a dry run does it too.
@@ -292,7 +290,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		parent, isSubmodule := submodule.DetectParent(ctx)
 		if isSubmodule {
 			if flags.verbose {
-				fmt.Fprintf(os.Stderr, "  submodule detected, cascading hooks from parent %s\n", parent.GitDir)
+				debugf(flags, "  submodule detected, cascading hooks from parent %s", parent.GitDir)
 			}
 			hookPaths, err = hooks.DiscoverMulti([]hooks.Store{
 				{Worktree: parent.WorkTree, SharedGitDir: repo.SharedGitDir(ctx, parent.GitDir)},
@@ -318,8 +316,8 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		}
 
 		var sigExit int
-		hookResults, sigExit, err = runHooksInterruptibly(ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
-			return hooks.RunAll(hctx, hookPaths, hookStdin, timeoutSec, stopCap, hookEnv)
+		hookResults, sigExit, err = runHooksInterruptibly(flags, ctx, func(hctx context.Context) ([]hooks.HookResult, error) {
+			return hooks.RunAll(hctx, hookPaths, hookStdin, timeoutSec, stopCap, hookEnv, flags.sc.Warn)
 		})
 		if sigExit != 0 {
 			// Interrupted: nothing is pushed, the hook runs so far are
@@ -334,7 +332,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 			// error text and the exit code are the verdict.
 			printHookRuns(flags, hookResults)
 			flags.payload(buildPushPayload(flags, remote, nil, forceFlag, pushIsAtomic(validated), hookResults, hooksSkipped))
-			fmt.Fprintf(os.Stderr, "error: running hooks: %v\n", err)
+			errorf(flags, "running hooks: %v", err)
 			return exitcode.General
 		}
 
@@ -343,7 +341,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		// The payload is still emitted -- nothing pushed, the hook runs
 		// recorded -- so a machine consumer reads what ran next to the exit
 		// code that says it stopped the push.
-		if code := hookRunsExit(hookResults); code != 0 {
+		if code := hookRunsExit(flags, hookResults); code != 0 {
 			flags.payload(buildPushPayload(flags, remote, nil, forceFlag, pushIsAtomic(validated), hookResults, hooksSkipped))
 			return code
 		}
@@ -367,10 +365,10 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		// do the overwriting the lease just prevented -- so the retry loop must
 		// never see it.
 		if leaseRejected(gitStderr, forceFlag) {
-			fmt.Fprintf(os.Stderr,
+			errorf(flags,
 				"push refused: the remote moved after safegit read it, so the --force-with-lease expectation no longer matches\n"+
 					"  somebody else pushed to %s between the read and the push, and the lease kept their work\n"+
-					"  fetch and look at what arrived (git fetch %s), then decide again\n",
+					"  fetch and look at what arrived (git fetch %s), then decide again",
 				remote, remote)
 			return exitcode.PushLeaseRejected
 		}
@@ -383,9 +381,9 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 			// Exponential backoff: 1s, 2s, 4s
 			backoff := time.Duration(1<<(attempt-1)) * time.Second
 			if flags.verbose {
-				fmt.Fprintf(os.Stderr, "  retry %d/%d after %v\n", attempt+1, retryAttempts, backoff)
-			} else if !flags.silent() {
-				fmt.Fprintf(os.Stderr, "transport error, retrying in %v (attempt %d/%d)...\n", backoff, attempt+1, retryAttempts)
+				debugf(flags, "  retry %d/%d after %v", attempt+1, retryAttempts, backoff)
+			} else {
+				warnf(flags, "transport error, retrying in %v (attempt %d/%d)...", backoff, attempt+1, retryAttempts)
 			}
 			time.Sleep(backoff)
 			// Re-observe the remote and re-pin every lease before trying again.
@@ -426,7 +424,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	}
 
 	if pushErr != nil {
-		fmt.Fprintf(os.Stderr, "push failed: %v\n", pushErr)
+		errorf(flags, "push failed: %v", pushErr)
 		return exitcode.PushFailed
 	}
 
@@ -458,23 +456,23 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	// Output result
 	if !flags.dryRun {
 		for _, r := range refs {
-			infof(flags, "  %s -> %s\n", shortRef(r.LocalRef), shortRef(r.RemoteRef))
+			infof(flags, "  %s -> %s", shortRef(r.LocalRef), shortRef(r.RemoteRef))
 		}
 		if len(hookResults) > 0 {
-			infof(flags, "(%d pre-pre-push hook(s) passed)\n", len(hookResults))
+			infof(flags, "(%d pre-pre-push hook(s) passed)", len(hookResults))
 		}
 	}
 	return 0
 }
 
-// printHookRuns writes what push says about each hook run on stderr: its
-// ending under --verbose, and every process it left behind always.
+// printHookRuns writes what push says about each hook run: its ending under
+// --verbose, and every process it left behind always.
 func printHookRuns(flags globalFlags, hookResults []hooks.HookResult) {
 	for _, hr := range hookResults {
 		if flags.verbose {
-			fmt.Fprintf(os.Stderr, "  hook %s: %s (%v)\n", hr.Name, hookEnding(hr), hr.Duration)
+			debugf(flags, "  hook %s: %s (%v)", hr.Name, hookEnding(hr), hr.Duration)
 		}
-		printLeftovers(hr)
+		printLeftovers(flags, hr)
 	}
 }
 

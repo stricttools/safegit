@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/stricttools/safegit/internal/exitcode"
 	"github.com/stricttools/safegit/internal/repo"
@@ -32,19 +31,19 @@ func formatConfigValue(val interface{}) string {
 func runConfigShow(flags globalFlags) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
 	for _, key := range repo.ValidConfigKeys() {
 		val, _ := repo.GetConfigValue(cfg, key)
-		outf(flags, "%s = %s\n", key, formatConfigValue(val))
+		outf(flags, "%s = %s", key, formatConfigValue(val))
 	}
 	return 0
 }
@@ -52,46 +51,46 @@ func runConfigShow(flags globalFlags) int {
 func runConfigGet(flags globalFlags, key string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
 	val, err := repo.GetConfigValue(cfg, key)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
-	outf(flags, "%s\n", formatConfigValue(val))
+	outf(flags, "%s", formatConfigValue(val))
 	return 0
 }
 
 func runConfigSet(flags globalFlags, key, value string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
 	if err := repo.SetConfigValue(cfg, key, value); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
 	data, err := repo.MarshalConfig(cfg)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 	configPath := flags.configPath
@@ -101,11 +100,11 @@ func runConfigSet(flags globalFlags, key, value string) int {
 	// Minting the write on the handle is what makes `config set --dry-run`
 	// record the change instead of performing it.
 	if _, err := flags.effects().Write(configPath, data, strictcli.Resource("safegit-config:"+configPath)); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.General
 	}
-	if !flags.silent() && !flags.dryRun {
-		fmt.Printf("%s = %s\n", key, value)
+	if !flags.dryRun {
+		infof(flags, "%s = %s", key, value)
 	}
 	return 0
 }

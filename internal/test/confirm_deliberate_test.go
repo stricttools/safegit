@@ -199,8 +199,8 @@ func TestDoctorUninstallJSONDoesNotConfirm(t *testing.T) {
 	commitFileEnv(t, dir, confirmEnv, "file.txt", "content\n", "add file")
 	safegitDir := filepath.Join(dir, ".git", "safegit")
 
-	_, stderr, code := runSafegitEnv(t, dir, confirmEnv, "--json", "doctor", "--action", "uninstall")
-	assertRefusedForConsent(t, code, stderr)
+	stdout, stderr, code := runSafegitEnv(t, dir, confirmEnv, "--json", "doctor", "--action", "uninstall")
+	assertRefusedForConsent(t, code, reported(stdout, stderr))
 	if _, err := os.Stat(safegitDir); err != nil {
 		t.Errorf("--json must not answer the uninstall confirmation; %s is gone: %v", safegitDir, err)
 	}

@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"os"
 	"sort"
+	"strings"
 
 	"github.com/stricttools/safegit/internal/commit"
 	"github.com/stricttools/safegit/internal/conflict"
@@ -151,11 +151,11 @@ func materializeCommitted(ctx context.Context, committed []committedSide) error 
 // and is therefore moot" and "it disagrees, and the run must say so". Silently
 // accepting a contradicting declaration would leave an operator believing they
 // had chosen a side that was decided before their command ran.
-func (op continueOp) refuseContradictedDeclarations(ctx context.Context, stood string, sides map[string]conflict.Sides, committed []committedSide, declared []resolution) int {
+func (op continueOp) refuseContradictedDeclarations(flags globalFlags, ctx context.Context, stood string, sides map[string]conflict.Sides, committed []committedSide, declared []resolution) int {
 	if len(declared) == 0 {
 		return 0
 	}
-	if code := op.refuseStrayResolutions(sides, declared); code != 0 {
+	if code := op.refuseStrayResolutions(flags, sides, declared); code != 0 {
 		return code
 	}
 
@@ -174,7 +174,7 @@ func (op continueOp) refuseContradictedDeclarations(ctx context.Context, stood s
 		c := held[r.Path]
 		content, present, err := declaredContent(ctx, r, sides[r.Path])
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			errorf(flags, "%v", err)
 			return exitcode.General
 		}
 		if present == c.present && (!present || bytes.Equal(content, c.content)) {
@@ -194,18 +194,20 @@ func (op continueOp) refuseContradictedDeclarations(ctx context.Context, stood s
 	}
 	sort.Slice(found, func(i, j int) bool { return found[i].path < found[j].path })
 
-	fmt.Fprintf(os.Stderr, "error: %d declared resolution(s) name something commit %s does not hold:\n", len(found), shortSHA(stood))
+	var report strings.Builder
+	fmt.Fprintf(&report, "%d declared resolution(s) name something commit %s does not hold:", len(found), shortSHA(stood))
 	for _, f := range found {
-		fmt.Fprintf(os.Stderr, "  %s  (--resolve '%s=%s' wants %s)\n", f.path, f.path, f.choice, f.says)
+		fmt.Fprintf(&report, "\n  %s  (--resolve '%s=%s' wants %s)", f.path, f.path, f.choice, f.says)
 	}
-	fmt.Fprintf(os.Stderr, "  This %s was already concluded by commit %s, which stands on the branch: its tree IS the\n", op.kind, shortSHA(stood))
-	fmt.Fprintf(os.Stderr, "  resolution, and no declaration made now can change it. What is left is the cleanup a killed\n")
-	fmt.Fprintf(os.Stderr, "  run did not finish, and nothing was cleaned up here.\n")
-	fmt.Fprintf(os.Stderr, "  Finish it with the declarations dropped:\n")
-	fmt.Fprintf(os.Stderr, "    safegit %s\n", op.command)
-	fmt.Fprintf(os.Stderr, "  To end up with different content, finish the cleanup FIRST -- 'safegit undo' refuses while git\n")
-	fmt.Fprintf(os.Stderr, "  still calls this repository mid-%s -- and then either commit the change on top of it, or undo\n", op.kind)
-	fmt.Fprintf(os.Stderr, "  the conclusion and make the %s again.\n", op.kind)
+	fmt.Fprintf(&report, "\n  This %s was already concluded by commit %s, which stands on the branch: its tree IS the", op.kind, shortSHA(stood))
+	fmt.Fprintf(&report, "\n  resolution, and no declaration made now can change it. What is left is the cleanup a killed")
+	fmt.Fprintf(&report, "\n  run did not finish, and nothing was cleaned up here.")
+	fmt.Fprintf(&report, "\n  Finish it with the declarations dropped:")
+	fmt.Fprintf(&report, "\n    safegit %s", op.command)
+	fmt.Fprintf(&report, "\n  To end up with different content, finish the cleanup FIRST -- 'safegit undo' refuses while git")
+	fmt.Fprintf(&report, "\n  still calls this repository mid-%s -- and then either commit the change on top of it, or undo", op.kind)
+	fmt.Fprintf(&report, "\n  the conclusion and make the %s again.", op.kind)
+	errorf(flags, "%s", report.String())
 	return exitcode.ConclusionUnresolved
 }
 
@@ -262,10 +264,10 @@ func declaredContent(ctx context.Context, r resolution, s conflict.Sides) (conte
 // not available here, because the commit already stands and a declaration
 // cannot change it. Either the edit is put somewhere reachable first, or
 // --discard-unmatched-worktree elects its destruction.
-func (op continueOp) refuseCrashWorktreeOverwrite(ctx context.Context, stood string, sides map[string]conflict.Sides, committed []committedSide, discard bool) int {
+func (op continueOp) refuseCrashWorktreeOverwrite(flags globalFlags, ctx context.Context, stood string, sides map[string]conflict.Sides, committed []committedSide, discard bool) int {
 	root, err := git.AnchorRoot(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: resolving the directory git's paths are relative to, to read what is on disk: %v\n", err)
+		errorf(flags, "resolving the directory git's paths are relative to, to read what is on disk: %v", err)
 		return exitcode.General
 	}
 
@@ -273,7 +275,7 @@ func (op continueOp) refuseCrashWorktreeOverwrite(ctx context.Context, stood str
 	for _, c := range committed {
 		onDisk, present, err := worktreeContent(git.Anchor(root, c.path))
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: reading %s to see what would be destroyed: %v\n", c.path, err)
+			errorf(flags, "reading %s to see what would be destroyed: %v", c.path, err)
 			return exitcode.General
 		}
 		if !present {
@@ -282,7 +284,7 @@ func (op continueOp) refuseCrashWorktreeOverwrite(ctx context.Context, stood str
 		}
 		accepted, err := acceptedWorktreeContents(ctx, c.path, sides[c.path])
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			errorf(flags, "%v", err)
 			return exitcode.General
 		}
 		if c.content != nil {
@@ -311,25 +313,26 @@ func (op continueOp) refuseCrashWorktreeOverwrite(ctx context.Context, stood str
 			if v.deletes {
 				verb = "deleted"
 			}
-			fmt.Fprintf(os.Stderr, "note: %s is %s as --discard-unmatched-worktree elects; its content matched no side of the conflict and not what was committed\n", v.path, verb)
+			warnf(flags, "%s is %s as --discard-unmatched-worktree elects; its content matched no side of the conflict and not what was committed", v.path, verb)
 		}
 		return 0
 	}
 
-	fmt.Fprintf(os.Stderr, "error: %d working-tree file(s) hold content neither this %s nor the commit that concluded it accounts for:\n",
-		len(victims), op.kind)
+	var report strings.Builder
+	fmt.Fprintf(&report, "%d working-tree file(s) hold content neither this %s nor the commit that concluded it accounts for:", len(victims), op.kind)
 	for _, v := range victims {
 		effect := fmt.Sprintf("overwrite it with what commit %s holds", shortSHA(stood))
 		if v.deletes {
 			effect = fmt.Sprintf("delete it, which is what commit %s did with the path", shortSHA(stood))
 		}
-		fmt.Fprintf(os.Stderr, "  %s  (finishing the cleanup would %s)\n", v.path, effect)
+		fmt.Fprintf(&report, "\n  %s  (finishing the cleanup would %s)", v.path, effect)
 	}
-	fmt.Fprintf(os.Stderr, "  The file matches no index stage, nothing git wrote there and nothing the commit holds, so it is\n")
-	fmt.Fprintf(os.Stderr, "  a hand edit: its content is in no commit, no stage and no stash, and nothing could bring it back.\n")
-	fmt.Fprintf(os.Stderr, "  Nothing was cleaned up and commit %s still stands. Put that content somewhere you can reach it\n", shortSHA(stood))
-	fmt.Fprintf(os.Stderr, "  (commit it on a branch of its own, or copy it aside) and run the command again -- or, to throw it\n")
-	fmt.Fprintf(os.Stderr, "  away deliberately:\n")
-	fmt.Fprintf(os.Stderr, "    safegit %s --discard-unmatched-worktree\n", op.command)
+	fmt.Fprintf(&report, "\n  The file matches no index stage, nothing git wrote there and nothing the commit holds, so it is")
+	fmt.Fprintf(&report, "\n  a hand edit: its content is in no commit, no stage and no stash, and nothing could bring it back.")
+	fmt.Fprintf(&report, "\n  Nothing was cleaned up and commit %s still stands. Put that content somewhere you can reach it", shortSHA(stood))
+	fmt.Fprintf(&report, "\n  (commit it on a branch of its own, or copy it aside) and run the command again -- or, to throw it")
+	fmt.Fprintf(&report, "\n  away deliberately:")
+	fmt.Fprintf(&report, "\n    safegit %s --discard-unmatched-worktree", op.command)
+	errorf(flags, "%s", report.String())
 	return exitcode.ConclusionWouldOverwrite
 }

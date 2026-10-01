@@ -99,7 +99,7 @@ func runMerge(flags globalFlags, args []string) int {
 
 	// The allowlist covers EVERY route, the state-control forms included: an
 	// option safegit does not implement is refused whichever verb it accompanies.
-	if code := mergeSubset.refuseUnsupportedOptions(parsed); code != 0 {
+	if code := mergeSubset.refuseUnsupportedOptions(flags, parsed); code != 0 {
 		return code
 	}
 	if parsed.Has("--continue", "--abort", "--quit") {
@@ -115,31 +115,31 @@ func runMerge(flags globalFlags, args []string) int {
 // absent, because "safegit does not do this" is a different answer from "this
 // failed" and an operator has to be able to tell them apart. Each needs its
 // entry in the divergences catalog.
-func refuseUnsupportedMerge(parsed gitArgs) int {
+func refuseUnsupportedMerge(flags globalFlags, parsed gitArgs) int {
 	if len(parsed.AfterDoubleDash) > 0 {
-		fmt.Fprintf(os.Stderr, "error: safegit merge takes no pathspec\n")
-		fmt.Fprintf(os.Stderr, "  a pathspec limits a merge to part of the tree, and the result is a commit whose\n")
-		fmt.Fprintf(os.Stderr, "  parents claim a merge that only partly happened. Merge the whole branch.\n")
+		errorf(flags, "safegit merge takes no pathspec\n"+
+			"  a pathspec limits a merge to part of the tree, and the result is a commit whose\n"+
+			"  parents claim a merge that only partly happened. Merge the whole branch.")
 		return exitcode.Usage
 	}
 
 	switch len(parsed.Revisions) {
 	case 1:
 	case 0:
-		fmt.Fprintf(os.Stderr, "error: safegit merge names no branch to merge\n")
-		fmt.Fprintf(os.Stderr, "  usage: safegit merge <branch>\n")
+		errorf(flags, "safegit merge names no branch to merge\n"+
+			"  usage: safegit merge <branch>")
 		return exitcode.Usage
 	default:
-		fmt.Fprintf(os.Stderr, "error: safegit merge takes exactly one branch, and this names %d\n", len(parsed.Revisions))
-		fmt.Fprintf(os.Stderr, "  merging several branches in one commit -- an octopus merge -- is not part of\n")
-		fmt.Fprintf(os.Stderr, "  safegit's subset: %s.\n", octopusReason)
-		fmt.Fprintf(os.Stderr, "  Merge them one at a time. See docs/divergences.md.\n")
+		errorf(flags, "safegit merge takes exactly one branch, and this names %d\n"+
+			"  merging several branches in one commit -- an octopus merge -- is not part of\n"+
+			"  safegit's subset: %s.\n"+
+			"  Merge them one at a time. See docs/divergences.md.", len(parsed.Revisions), octopusReason)
 		return exitcode.Usage
 	}
 
 	if parsed.Has("--ff-only") && parsed.Has("--no-ff") {
-		fmt.Fprintf(os.Stderr, "error: --ff-only and --no-ff say opposite things about the same merge\n")
-		fmt.Fprintf(os.Stderr, "  --ff-only refuses anything but a fast-forward; --no-ff refuses the fast-forward itself.\n")
+		errorf(flags, "--ff-only and --no-ff say opposite things about the same merge\n"+
+			"  --ff-only refuses anything but a fast-forward; --no-ff refuses the fast-forward itself.")
 		return exitcode.Usage
 	}
 	return 0
@@ -211,7 +211,7 @@ func forMergeHeads(gitDir string) (int, error) {
 // DIVERGENCE: git merges every head FETCH_HEAD names, in one octopus commit;
 // safegit refuses. Cataloged in docs/divergences.md as "A fetch that marked
 // several branches is not a merge safegit will make".
-func refuseFetchHeadOctopus(gitDir, other, command string) int {
+func refuseFetchHeadOctopus(flags globalFlags, gitDir, other, command string) int {
 	if other != fetchHeadName {
 		return 0
 	}
@@ -220,13 +220,13 @@ func refuseFetchHeadOctopus(gitDir, other, command string) int {
 		return 0
 	}
 
-	fmt.Fprintf(os.Stderr, "error: safegit %s cannot merge FETCH_HEAD: the fetch marked %d branches for merging\n", command, heads)
-	fmt.Fprintf(os.Stderr, "  FETCH_HEAD is the one name git expands into several sides -- every branch the fetch\n")
-	fmt.Fprintf(os.Stderr, "  marked for merging becomes a parent -- so one argument here asks for an octopus merge,\n")
-	fmt.Fprintf(os.Stderr, "  and merging several branches in one commit is not part of safegit's subset:\n")
-	fmt.Fprintf(os.Stderr, "  %s.\n", octopusReason)
-	fmt.Fprintf(os.Stderr, "  Bring them in one at a time: 'safegit merge <branch>' per side, or 'safegit pull <remote> <branch>'\n")
-	fmt.Fprintf(os.Stderr, "  per branch. See docs/divergences.md.\n")
+	errorf(flags, "safegit %s cannot merge FETCH_HEAD: the fetch marked %d branches for merging\n"+
+		"  FETCH_HEAD is the one name git expands into several sides -- every branch the fetch\n"+
+		"  marked for merging becomes a parent -- so one argument here asks for an octopus merge,\n"+
+		"  and merging several branches in one commit is not part of safegit's subset:\n"+
+		"  %s.\n"+
+		"  Bring them in one at a time: 'safegit merge <branch>' per side, or 'safegit pull <remote> <branch>'\n"+
+		"  per branch. See docs/divergences.md.", command, heads, octopusReason)
 	return exitcode.Usage
 }
 
@@ -264,7 +264,7 @@ func refuseFetchHeadOctopus(gitDir, other, command string) int {
 // DIVERGENCE: git merges unrelated histories when told to; safegit refuses the
 // flag and the shape. Cataloged in docs/divergences.md as "Merging unrelated
 // histories is refused, flag and pre-flight both".
-func refuseUnrelatedHistories(ctx context.Context, other, command string) int {
+func refuseUnrelatedHistories(flags globalFlags, ctx context.Context, other, command string) int {
 	if git.HeadIsUnborn(ctx) {
 		return 0
 	}
@@ -274,31 +274,31 @@ func refuseUnrelatedHistories(ctx context.Context, other, command string) int {
 	}
 
 	if git.IsShallowRepository(ctx) {
-		fmt.Fprintf(os.Stderr, "error: safegit %s cannot merge %s: no merge base is visible in this repository\n", command, other)
-		fmt.Fprintf(os.Stderr, "  this is a SHALLOW clone -- part of its history was never fetched -- so the two sides\n")
-		fmt.Fprintf(os.Stderr, "  may well connect below the fetch depth, where nothing here can see it. git's own\n")
-		fmt.Fprintf(os.Stderr, "  words for what it finds are \"refusing to merge unrelated histories\", and it refuses\n")
-		fmt.Fprintf(os.Stderr, "  this merge too; what safegit will not do is guess which of the two states you are in.\n")
-		fmt.Fprintf(os.Stderr, "  Fetch the rest of the history, then run the same command again:\n")
-		fmt.Fprintf(os.Stderr, "    git fetch --unshallow\n")
-		fmt.Fprintf(os.Stderr, "  If the merge is still refused afterwards, the two sides really do share no commit,\n")
-		fmt.Fprintf(os.Stderr, "  and that refusal names the route for the deliberate import.\n")
-		fmt.Fprintf(os.Stderr, "  See docs/divergences.md.\n")
+		errorf(flags, "safegit %s cannot merge %s: no merge base is visible in this repository\n"+
+			"  this is a SHALLOW clone -- part of its history was never fetched -- so the two sides\n"+
+			"  may well connect below the fetch depth, where nothing here can see it. git's own\n"+
+			"  words for what it finds are \"refusing to merge unrelated histories\", and it refuses\n"+
+			"  this merge too; what safegit will not do is guess which of the two states you are in.\n"+
+			"  Fetch the rest of the history, then run the same command again:\n"+
+			"    git fetch --unshallow\n"+
+			"  If the merge is still refused afterwards, the two sides really do share no commit,\n"+
+			"  and that refusal names the route for the deliberate import.\n"+
+			"  See docs/divergences.md.", command, other)
 		return exitcode.General
 	}
 
-	fmt.Fprintf(os.Stderr, "error: safegit %s cannot merge %s: the two sides share no commit at all\n", command, other)
-	fmt.Fprintf(os.Stderr, "  there is no merge base between this branch and %s -- they are separate histories that\n", other)
-	fmt.Fprintf(os.Stderr, "  were never connected -- so the merge would record a second root rather than bring two\n")
-	fmt.Fprintf(os.Stderr, "  lines of work together. git's own words for it are \"refusing to merge unrelated\n")
-	fmt.Fprintf(os.Stderr, "  histories\", and git offers --allow-unrelated-histories to elect it anyway; safegit\n")
-	fmt.Fprintf(os.Stderr, "  does not, because the state is nearly always reached by accident: a wrong remote, a\n")
-	fmt.Fprintf(os.Stderr, "  wrong branch, or a repository re-initialized over another.\n")
-	fmt.Fprintf(os.Stderr, "  For the deliberate import -- bringing another project's history in, which a repository\n")
-	fmt.Fprintf(os.Stderr, "  does once in its life -- compute it with git and commit it with safegit:\n")
-	fmt.Fprintf(os.Stderr, "    git merge --no-commit --allow-unrelated-histories %s\n", other)
-	fmt.Fprintf(os.Stderr, "    safegit merge-continue\n")
-	fmt.Fprintf(os.Stderr, "  See docs/divergences.md.\n")
+	errorf(flags, "safegit %s cannot merge %s: the two sides share no commit at all\n"+
+		"  there is no merge base between this branch and %s -- they are separate histories that\n"+
+		"  were never connected -- so the merge would record a second root rather than bring two\n"+
+		"  lines of work together. git's own words for it are \"refusing to merge unrelated\n"+
+		"  histories\", and git offers --allow-unrelated-histories to elect it anyway; safegit\n"+
+		"  does not, because the state is nearly always reached by accident: a wrong remote, a\n"+
+		"  wrong branch, or a repository re-initialized over another.\n"+
+		"  For the deliberate import -- bringing another project's history in, which a repository\n"+
+		"  does once in its life -- compute it with git and commit it with safegit:\n"+
+		"    git merge --no-commit --allow-unrelated-histories %s\n"+
+		"    safegit merge-continue\n"+
+		"  See docs/divergences.md.", command, other, other, other)
 	return exitcode.General
 }
 
@@ -307,13 +307,13 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 	// FIRST, and before the repository is touched at all: a command line
 	// safegit itself refuses is refused without a lock, without an
 	// auto-initialization and without a git call.
-	if code := refuseUnsupportedMerge(parsed); code != 0 {
+	if code := refuseUnsupportedMerge(flags, parsed); code != 0 {
 		return code
 	}
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		errorf(flags, "%v", err)
 		return exitcode.NotInitialized
 	}
 	sgDir := repo.SafegitDir(gitDir)
@@ -322,7 +322,7 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 	// ordinary commit does, so the parent must have answered the auto-bump
 	// question before anything is written.
 	if err := requireAutoBumpDecision(flags.ctx(), flags); err != nil {
-		fmt.Fprintf(os.Stderr, "error: auto-bump parent: %v\n", err)
+		errorf(flags, "auto-bump parent: %v", err)
 		return exitcode.General
 	}
 
@@ -342,7 +342,7 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 	// current tree leaves the tree clean, and merge's compute step would then run
 	// against it. The refusal is structural rather than a consequence of the
 	// dirt.
-	if code := refuseComputeOverInFlight(gitDir, "merge"); code != 0 {
+	if code := refuseComputeOverInFlight(flags, gitDir, "merge"); code != 0 {
 		return code
 	}
 
@@ -351,21 +351,21 @@ func runRestructuredMerge(flags globalFlags, args []string, parsed gitArgs) int 
 		// happen: a preview of a command that cannot run is not a preview of
 		// anything. Asked here because the preview never reaches performMerge,
 		// which is where the same refusal covers every real run and `pull`.
-		if code := refuseFetchHeadOctopus(gitDir, parsed.Revisions[0], "merge"); code != 0 {
+		if code := refuseFetchHeadOctopus(flags, gitDir, parsed.Revisions[0], "merge"); code != 0 {
 			return code
 		}
 		// And the unborn forms, in the same order the real run asks them, so the
 		// preview REFUSES exactly the command lines the run refuses. Without it
 		// the preview would reach previewMerge's unborn short-circuit and answer
 		// "a fast-forward" for a command line that cannot run at all.
-		if code := refuseUnbornMergeForm(flags.ctx(), parsed.Has("--no-ff"), parsed.Has("--no-commit"), "--no-ff", "--no-commit", unbornMergeWayOut); code != 0 {
+		if code := refuseUnbornMergeForm(flags, flags.ctx(), parsed.Has("--no-ff"), parsed.Has("--no-commit"), "--no-ff", "--no-commit", unbornMergeWayOut); code != 0 {
 			return code
 		}
 		// And the unrelated-histories pre-flight, for the same reason and from
 		// the same place: performMerge is where every real run meets it, and a
 		// preview never reaches performMerge. Nothing is recorded here -- a
 		// preview writes no oplog entry, refusal or not.
-		if code := refuseUnrelatedHistories(flags.ctx(), parsed.Revisions[0], "merge"); code != 0 {
+		if code := refuseUnrelatedHistories(flags, flags.ctx(), parsed.Revisions[0], "merge"); code != 0 {
 			return code
 		}
 
@@ -480,7 +480,7 @@ func performMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition, re
 	// FIRST, because the ancestry question below cannot ask it: FETCH_HEAD may
 	// name several sides, and resolving it to a commit answers about the first
 	// one alone. See refuseFetchHeadOctopus.
-	if code := refuseFetchHeadOctopus(gitDir, req.other, req.op); code != 0 {
+	if code := refuseFetchHeadOctopus(flags, gitDir, req.other, req.op); code != 0 {
 		return mergePayload{}, false, code
 	}
 
@@ -494,7 +494,7 @@ func performMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition, re
 	// between them is the one the --ff-only neighbor draws: those are about what
 	// was typed, this is about where the branch stands, and only the second is a
 	// fact about the repository an audit trail is for.
-	if code := refuseUnbornMergeForm(ctx, req.noFF, req.park, req.noFFFlag, req.parkFlag, req.unbornWayOut); code != 0 {
+	if code := refuseUnbornMergeForm(flags, ctx, req.noFF, req.park, req.noFFFlag, req.parkFlag, req.unbornWayOut); code != 0 {
 		appendOperationEntry(flags, sgDir, req.op, pos, false, req.oplogExtra(oplogOutcomeFailed))
 		return mergePayload{}, false, code
 	}
@@ -504,7 +504,7 @@ func performMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition, re
 	// git's own refusal names nothing an operator can act on. RECORDED, on the
 	// same line the --ff-only neighbor draws -- no merge base is a fact about
 	// where the branches stand rather than about what was typed.
-	if code := refuseUnrelatedHistories(ctx, other, req.op); code != 0 {
+	if code := refuseUnrelatedHistories(flags, ctx, other, req.op); code != 0 {
 		appendOperationEntry(flags, sgDir, req.op, pos, false, req.oplogExtra(oplogOutcomeFailed))
 		return mergePayload{}, false, code
 	}
@@ -541,10 +541,9 @@ func performMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition, re
 	// docs/divergences.md as "The fast-forward-only refusal is safegit's, not
 	// git's", exit code included: safegit's General rather than git's 128.
 	if req.ffOnly && resolveErr == nil && !upToDate && !fastForward {
-		fmt.Fprintf(os.Stderr, "error: %s is not a fast-forward of %s, and %s was given\n",
-			other, refShortName(pos.ref), req.ffOnlyFlag)
-		fmt.Fprintf(os.Stderr, "  the two branches have both moved on, so bringing them together needs a merge commit.\n")
-		fmt.Fprint(os.Stderr, req.ffOnlyWayOut)
+		errorf(flags, "%s is not a fast-forward of %s, and %s was given\n"+
+			"  the two branches have both moved on, so bringing them together needs a merge commit.\n%s",
+			other, refShortName(pos.ref), req.ffOnlyFlag, strings.TrimSuffix(req.ffOnlyWayOut, "\n"))
 		// Recorded, like every other verdict on the merge itself. The
 		// command-line refusals above record nothing, and the line between them
 		// is where the answer comes from: those are about what was typed, this
@@ -585,7 +584,7 @@ func performMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition, re
 
 	state, err := sequencer.Read(gitDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: reading the merge state git just wrote: %v\n", err)
+		errorf(flags, "reading the merge state git just wrote: %v", err)
 		return mergePayload{}, false, exitcode.General
 	}
 	if state.Kind != sequencer.KindMerge {
@@ -653,7 +652,7 @@ func fastForwardMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition
 	ctx := flags.ctx()
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: loading config: %v\n", err)
+		errorf(flags, "loading config: %v", err)
 		return mergePayload{}, false, exitcode.General
 	}
 
@@ -661,10 +660,10 @@ func fastForwardMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition
 	lk, err := lock.Acquire(repo.SharedSafegitDir(ctx, gitDir), sgDir, pos.ref, "merge", timeout)
 	if err != nil {
 		if lock.IsTimeout(err) {
-			fmt.Fprintf(os.Stderr, "error: acquiring lock on %s: %v\n", pos.ref, err)
+			errorf(flags, "acquiring lock on %s: %v", pos.ref, err)
 			return mergePayload{}, false, exitcode.LockTimeout
 		}
-		fmt.Fprintf(os.Stderr, "error: acquiring lock on %s: %v\n", pos.ref, err)
+		errorf(flags, "acquiring lock on %s: %v", pos.ref, err)
 		return mergePayload{}, false, exitcode.General
 	}
 	defer lk.Release()
@@ -679,22 +678,21 @@ func fastForwardMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition
 	case !born && pos.oldTip == "":
 		current = git.ZeroSHA
 	case !born:
-		fmt.Fprintf(os.Stderr, "error: reading where %s stands: %v\n", refShortName(pos.ref), err)
+		errorf(flags, "reading where %s stands: %v", refShortName(pos.ref), err)
 		return mergePayload{}, false, exitcode.General
 	case current != pos.oldTip:
 		from := shortSHA(pos.oldTip)
 		if pos.oldTip == "" {
 			from = "not existing at all"
 		}
-		fmt.Fprintf(os.Stderr, "error: %s moved from %s to %s while the merge was being worked out\n",
-			refShortName(pos.ref), from, shortSHA(current))
-		fmt.Fprintf(os.Stderr, "  nothing was merged. Re-run the merge against the branch as it stands now.\n")
+		errorf(flags, "%s moved from %s to %s while the merge was being worked out\n"+
+			"  nothing was merged. Re-run the merge against the branch as it stands now.", refShortName(pos.ref), from, shortSHA(current))
 		appendOperationEntry(flags, sgDir, req.op, pos, false, req.oplogExtra(oplogOutcomeFailed))
 		return mergePayload{}, false, exitcode.CASExhausted
 	}
 
 	if err := (effectsRefUpdate{flags}).Update(ctx, pos.ref, otherSHA, current); err != nil {
-		fmt.Fprintf(os.Stderr, "error: fast-forwarding %s: %v\n", refShortName(pos.ref), err)
+		errorf(flags, "fast-forwarding %s: %v", refShortName(pos.ref), err)
 		appendOperationEntry(flags, sgDir, req.op, pos, false, req.oplogExtra(oplogOutcomeFailed))
 		return mergePayload{}, false, exitcode.General
 	}
@@ -703,7 +701,7 @@ func fastForwardMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition
 	// staged and the incoming files missing from disk. The same primitive
 	// scrub's post-rewrite sync uses, including its protection of tracked
 	// files that are also gitignored.
-	if _, err := git.SyncMainIndexWithWorktree(ctx, otherSHA); err != nil {
+	if _, err := git.SyncMainIndexWithWorktree(ctx, otherSHA, flags.sc.Warn); err != nil {
 		appendOperationEntry(flags, sgDir, req.op, pos, true, req.oplogExtra(mergeOutcomeFastForward))
 		// The commit-stands family, by the same reasoning that puts every other
 		// member in it: the ref move is real and a step after it did not finish.
@@ -712,10 +710,9 @@ func fastForwardMerge(flags globalFlags, gitDir, sgDir string, pos oplogPosition
 		// guess a script makes from a 1 is to retry an operation that happened.
 		detail := fmt.Sprintf("%s was fast-forwarded to %s and stands there, but %s failed: %v",
 			refShortName(pos.ref), shortSHA(otherSHA), stepFastForwardSync, err)
-		fmt.Fprintf(os.Stderr, "error: %s was fast-forwarded to %s and stands there, but putting the index and the\n",
-			refShortName(pos.ref), shortSHA(otherSHA))
-		fmt.Fprintf(os.Stderr, "  working tree in step with it failed: %v\n", err)
-		fmt.Fprintf(os.Stderr, "  until that is done, git reports the incoming changes as staged deletions.\n")
+		errorf(flags, "%s was fast-forwarded to %s and stands there, but putting the index and the\n"+
+			"  working tree in step with it failed: %v\n"+
+			"  until that is done, git reports the incoming changes as staged deletions.", refShortName(pos.ref), shortSHA(otherSHA), err)
 		return reportMergeWithoutCommit(flags, req, pos, mergeOutcomeFastForward, otherSHA,
 			residueEntry{Step: stepFastForwardSync, Detail: detail})
 	}
@@ -746,17 +743,14 @@ func reportMergeWithoutCommit(flags globalFlags, req mergeRequest, pos oplogPosi
 		Residue:        orEmptyResidue(residue),
 		DryRun:         flags.dryRun,
 	}
-	if flags.silent() {
-		return payload, true, aftercareExit(residue)
-	}
 	switch outcome {
 	case mergeOutcomeFastForward:
-		fmt.Printf("[%s %s] fast-forwarded\n", refShortName(pos.ref), shortSHA(newTip))
-		fmt.Printf(" no merge commit was created, so there is nothing for 'safegit undo' to reverse\n")
+		infof(flags, "[%s %s] fast-forwarded", refShortName(pos.ref), shortSHA(newTip))
+		infof(flags, " no merge commit was created, so there is nothing for 'safegit undo' to reverse")
 	case mergeOutcomeParked:
-		fmt.Printf("[%s] the merge is computed and staged; nothing is committed\n", refShortName(pos.ref))
+		infof(flags, "[%s] the merge is computed and staged; nothing is committed", refShortName(pos.ref))
 	case mergeOutcomeUpToDate:
-		fmt.Printf("[%s] already up to date\n", refShortName(pos.ref))
+		infof(flags, "[%s] already up to date", refShortName(pos.ref))
 	}
 	return payload, true, aftercareExit(residue)
 }

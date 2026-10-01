@@ -107,7 +107,7 @@ func TestLeftoverThatOutlivesSIGKILLIsNamedAtTheCap(t *testing.T) {
 		"while [ ! -s '"+pidFile+"' ]; do sleep 0.05; done\nexit 0\n")
 
 	results, elapsed := runWithin(t, testStopCap+10*time.Second, func() ([]HookResult, error) {
-		return Run(context.Background(), store(gitDir), nil, 30, testStopCap, nil)
+		return Run(context.Background(), store(gitDir), nil, 30, testStopCap, nil, noWarn)
 	})
 	pid := readPid(t, pidFile)
 	t.Cleanup(func() { killForReal(pid) })
@@ -152,7 +152,7 @@ func TestTimedOutHookThatOutlivesSIGKILLIsNamedAtTheCap(t *testing.T) {
 
 	const timeoutSec = 1
 	results, elapsed := runWithin(t, timeoutSec*time.Second+testStopCap+10*time.Second, func() ([]HookResult, error) {
-		return Run(context.Background(), store(gitDir), nil, timeoutSec, testStopCap, nil)
+		return Run(context.Background(), store(gitDir), nil, timeoutSec, testStopCap, nil, noWarn)
 	})
 	pid := readPid(t, pidFile)
 	t.Cleanup(func() { killForReal(pid) })

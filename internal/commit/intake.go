@@ -592,7 +592,7 @@ const (
 		"  --allow-non-portable-targets to record it as it is."
 )
 
-// noticeNonPortableLinks writes one stderr line per staged symlink whose target
+// noticeNonPortableLinks writes one warning per staged symlink whose target
 // text will not resolve in another checkout. It runs once per operation, after
 // intake has settled, so a CAS retry cannot repeat it.
 //
@@ -608,14 +608,14 @@ const (
 // about the in-repository case only and a plain falsehood printed over a link
 // to, say, a machine's own /etc: the notice does not resolve the target, and
 // neither does the judgment above.
-func noticeNonPortableLinks(repoRoot string, paths []string) {
+func noticeNonPortableLinks(warn func(string), repoRoot string, paths []string) {
 	for _, path := range paths {
 		target, shape := nonPortableLinkTarget(repoRoot, path)
 		switch shape {
 		case absoluteTarget:
-			fmt.Fprintf(os.Stderr, "notice: %s is a symlink to %s, an absolute path naming a location on this machine rather than a place in the repository; the commit records the link text, and another checkout resolves it against its own filesystem -- to nothing, or to a file the repository never carried\n", path, target)
+			warn(fmt.Sprintf("%s is a symlink to %s, an absolute path naming a location on this machine rather than a place in the repository; the commit records the link text, and another checkout resolves it against its own filesystem -- to nothing, or to a file the repository never carried", path, target))
 		case outsideTarget:
-			fmt.Fprintf(os.Stderr, "notice: %s is a symlink to %s, which is outside the repository; the commit records the link text, which will not resolve in another checkout\n", path, target)
+			warn(fmt.Sprintf("%s is a symlink to %s, which is outside the repository; the commit records the link text, which will not resolve in another checkout", path, target))
 		}
 	}
 }
@@ -642,9 +642,9 @@ func noticeNonPortableLinks(repoRoot string, paths []string) {
 // widened from targets that leave the repository to targets that will not
 // resolve elsewhere; the superseded entry is the one being replaced, never a
 // second one to add beside it.
-func refuseNonPortableLinks(repoRoot string, paths []string, allow bool) error {
+func refuseNonPortableLinks(warn func(string), repoRoot string, paths []string, allow bool) error {
 	if allow {
-		noticeNonPortableLinks(repoRoot, paths)
+		noticeNonPortableLinks(warn, repoRoot, paths)
 		return nil
 	}
 	var absolute, outside []string
@@ -827,7 +827,7 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 	}
 
 	sort.Strings(in.skipped)
-	if err := refuseNonPortableLinks(repoRoot, links, allowNonPortableTargets); err != nil {
+	if err := refuseNonPortableLinks(p.Notices.Warn, repoRoot, links, allowNonPortableTargets); err != nil {
 		return nil, err
 	}
 	return in, nil
@@ -887,8 +887,8 @@ func (p *Pipeline) resolveUntrack(
 		// unknown answer is not worth a line that might be the opposite of the
 		// truth.
 		if ignored, ierr := git.MatchesIgnoreRules(ctx, rel); ierr == nil && !ignored {
-			fmt.Fprintf(os.Stderr, "notice: %s is not gitignored; it stops being tracked, but nothing "+
-				"stops it from being committed again -- add a .gitignore pattern if that is what you meant\n", arg)
+			p.Notices.Warn(fmt.Sprintf("%s is not gitignored; it stops being tracked, but nothing "+
+				"stops it from being committed again -- add a .gitignore pattern if that is what you meant", arg))
 		}
 
 		srcIdx := len(in.sources)

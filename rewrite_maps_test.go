@@ -59,6 +59,17 @@ func readRewriteMapLines(t *testing.T, sgDir string) []map[string]interface{} {
 	return lines
 }
 
+// finalizeQuietly runs result.Finalize for `scrub file` inside a --quiet
+// dispatch and returns its error.
+func finalizeQuietly(t *testing.T, ctx context.Context, result *RewriteResult, hooks RewriteHooks) error {
+	t.Helper()
+	var err error
+	dispatch(t, []string{"--quiet"}, func(flags globalFlags) {
+		err = result.Finalize(ctx, flags, "scrub file", hooks)
+	})
+	return err
+}
+
 // setupFinalizeRepo creates a repo with two commits, rewrites the second
 // commit's message via walkAndRewrite, and returns everything needed to call
 // Finalize: the repo dir, context, sgDir, and a populated RewriteResult.
@@ -74,7 +85,7 @@ func setupFinalizeRepo(t *testing.T) (string, context.Context, string, *RewriteR
 	gitInDir(t, dir, "update-ref", "refs/remotes/origin/main", c2)
 
 	shas := []string{c1, c2}
-	shaMap, rewritten, err := walkAndRewrite(ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
+	shaMap, rewritten, err := walkAndRewrite(globalFlags{}, ctx, shas, func(ctx context.Context, sha string, info git.CommitInfo, remappedParents []string, shaMap map[string]string) (CommitTransform, error) {
 		var xform CommitTransform
 		if strings.Contains(info.Message, "SECRET") {
 			xform.Message = strings.ReplaceAll(info.Message, "SECRET", "REDACTED")
@@ -126,8 +137,7 @@ func TestFinalizeWritesStartRecordBeforeVerifyFailure(t *testing.T) {
 	failingVerify := func(ctx context.Context) error {
 		return fmt.Errorf("injected verification failure")
 	}
-	flags := globalFlags{quiet: true}
-	err := result.Finalize(ctx, flags, "scrub file", RewriteHooks{TierB: failingVerify})
+	err := finalizeQuietly(t, ctx, result, RewriteHooks{TierB: failingVerify})
 	if err != nil {
 		t.Fatalf("a Tier B finding must not abort Finalize: %v", err)
 	}
@@ -193,8 +203,7 @@ func TestFinalizeWritesCompleteRecord(t *testing.T) {
 	dir, ctx, sgDir, result := setupFinalizeRepo(t)
 	oldHead := result.OldHeadSHA
 
-	flags := globalFlags{quiet: true}
-	if err := result.Finalize(ctx, flags, "scrub file", RewriteHooks{}); err != nil {
+	if err := finalizeQuietly(t, ctx, result, RewriteHooks{}); err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
 
@@ -252,7 +261,7 @@ func TestFinalizeNoRewritesWritesNoRecords(t *testing.T) {
 		SgDir:      sgDir,
 		OpName:     "scrub-file",
 	}
-	if err := result.Finalize(ctx, globalFlags{quiet: true}, "scrub file", RewriteHooks{}); err != nil {
+	if err := finalizeQuietly(t, ctx, result, RewriteHooks{}); err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
 	if lines := readRewriteMapLines(t, sgDir); len(lines) != 0 {
