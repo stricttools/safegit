@@ -57,7 +57,7 @@ func scrubFileMode(kwargs map[string]interface{}) (mode string, replacementPath 
 func readReplacementSource(path string) []byte {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("reading the replacement file %q (paths given to --replace-with resolve against your current directory): %v", path, err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("reading the replacement file %q (paths given to --replace-with resolve against your current directory): %v", path, err))
 	}
 	return content
 }
@@ -159,7 +159,7 @@ func shellSingleQuote(s string) string {
 func scrubFileCommitCount(ctx context.Context, fromSHA string, entireHistory bool) int {
 	n, err := commitCountInRange(ctx, fromSHA, entireHistory)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("counting the commits in range: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("counting the commits in range: %v", err))
 	}
 	return n
 }
@@ -170,13 +170,13 @@ func scrubFileCommitRange(ctx context.Context, fromSHA string, entireHistory boo
 	if entireHistory {
 		out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", "HEAD")
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("listing commits: %v", err))
 		}
 		return git.SplitNonEmpty(out)
 	}
 	out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", fromSHA+"..HEAD")
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("listing commits: %v", err))
 	}
 	return append([]string{fromSHA}, git.SplitNonEmpty(out)...)
 }
@@ -198,12 +198,12 @@ func scrubFileCommitRange(ctx context.Context, fromSHA string, entireHistory boo
 func submoduleFromBoundary(ctx, subCtx context.Context, fromSHA string, sub submodule.SubmoduleInfo) string {
 	out, _, err := git.Run(ctx, "ls-tree", "--full-tree", fromSHA, "--", sub.RelativePath)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("reading the gitlink for submodule %s at --from %s: %v",
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("reading the gitlink for submodule %s at --from %s: %v",
 			sub.RelativePath, shortSHA(fromSHA), err))
 	}
 	fields := strings.Fields(out)
 	if len(fields) < 3 || fields[1] != "commit" {
-		die(exitcode.General, fmt.Sprintf(
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf(
 			"--from commit %s records no submodule commit for %s, so the range boundary cannot be mapped into it.\n"+
 				"Pass --from with a commit that already records %s, or pass --entire-history to rewrite every history in full, deliberately.",
 			shortSHA(fromSHA), sub.RelativePath, sub.RelativePath))
@@ -216,17 +216,17 @@ func submoduleFromBoundary(ctx, subCtx context.Context, fromSHA string, sub subm
 	// confusingly one step later.
 	resolved, err := git.RevParse(subCtx, gitlink+"^{commit}")
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf(
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf(
 			"--from maps to submodule commit %s in %s (through the gitlink), and that submodule's object store does not contain it.\n"+
 				"Fetch the submodule's history, or pass --entire-history to rewrite all of it deliberately.",
 			shortSHA(gitlink), sub.RelativePath))
 	}
 	isAnc, err := git.IsAncestorOf(subCtx, resolved, "HEAD")
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("checking ancestry of the mapped --from inside submodule %s: %v", sub.RelativePath, err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("checking ancestry of the mapped --from inside submodule %s: %v", sub.RelativePath, err))
 	}
 	if !isAnc {
-		die(exitcode.General, fmt.Sprintf(
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf(
 			"--from maps to submodule commit %s in %s (through the gitlink), which is not an ancestor of that submodule's HEAD.\n"+
 				"Check out the submodule branch that contains it, or pass --entire-history to rewrite all of it deliberately.",
 			shortSHA(resolved), sub.RelativePath))
@@ -287,10 +287,10 @@ func executeScrubRecipe(
 			return 0
 		}
 		if label, err := prepareAll(flags, companions); err != nil {
-			dieFinalize(label, err)
+			exitFinalize(label, err)
 		}
 		if label, err := publishAll(flags, cmd, companions); err != nil {
-			dieFinalize(label, err)
+			exitFinalize(label, err)
 		}
 		return exitcode.OK
 	}
@@ -303,7 +303,7 @@ func executeScrubRecipe(
 	}
 	combinedPattern, err := regexp.Compile(strings.Join(combinedPatternParts, "|"))
 	if err != nil {
-		die(exitcode.Usage, fmt.Sprintf("compiling combined pattern: %v", err))
+		strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("compiling combined pattern: %v", err))
 	}
 
 	// Scan for matching blobs. When scanEntireHistory is set, use EntireHistory
@@ -319,7 +319,7 @@ func executeScrubRecipe(
 	}
 	results, err := scan.ScanObjects(ctx, combinedPattern, scanOpts)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
 	}
 
 	// A search that matches nothing is a successful answer, not a failure --
@@ -335,7 +335,7 @@ func executeScrubRecipe(
 	if scope != nil {
 		scopedBlobSHAs, err = buildScopedBlobSet(ctx, *scope)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("building scoped blob set: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("building scoped blob set: %v", err))
 		}
 	}
 
@@ -388,7 +388,7 @@ func executeScrubRecipe(
 				// Build the set of blob SHAs at paths matching this op's scope.
 				opScopedBlobs, scopeErr := buildScopedBlobSet(ctx, *op.Scope)
 				if scopeErr != nil {
-					die(exitcode.General, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
+					strictcli.ExitNow(exitcode.General, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
 				}
 				for _, sha := range blobSHAList {
 					if opScopedBlobs[sha] {
@@ -403,7 +403,7 @@ func executeScrubRecipe(
 	infof(flags, "Building blob replacement map (%d candidate blobs)...\n", len(blobSHAList))
 	blobMap, err := buildRecipeBlobMap(ctx, recipe, blobSHAList, blobAllowedOps)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("building blob map: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("building blob map: %v", err))
 	}
 
 	infof(flags, "Found %d blobs to replace, %d commit message matches, %d tag matches\n",
@@ -422,7 +422,7 @@ func executeScrubRecipe(
 	// Capture old HEAD
 	oldHeadSHA, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
 	}
 
 	// Determine commit range
@@ -430,13 +430,13 @@ func executeScrubRecipe(
 	if entireHistory {
 		out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", "HEAD")
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("listing commits: %v", err))
 		}
 		shas = git.SplitNonEmpty(out)
 	} else {
 		out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", fromSHA+"..HEAD")
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("listing commits: %v", err))
 		}
 		shas = append([]string{fromSHA}, git.SplitNonEmpty(out)...)
 	}
@@ -513,7 +513,7 @@ func executeScrubRecipe(
 		return xform, nil
 	}, flags.verbose)
 	if err != nil {
-		dieFinalize("", err)
+		exitFinalize("", err)
 	}
 	remap.reportStale(flags)
 
@@ -589,10 +589,10 @@ func executeScrubRecipe(
 		},
 	})
 	if label, err := prepareAll(flags, all); err != nil {
-		dieFinalize(label, err)
+		exitFinalize(label, err)
 	}
 	if label, err := publishAll(flags, cmd, all); err != nil {
-		dieFinalize(label, err)
+		exitFinalize(label, err)
 	}
 
 	// Populate post-execution metrics for callers. (TagsRewrittenCount and

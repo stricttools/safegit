@@ -39,7 +39,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(exitcode.NotInitialized, err.Error())
+		strictcli.ExitNow(exitcode.NotInitialized, exitMessage(err))
 	}
 
 	sgDir := repo.SafegitDir(gitDir)
@@ -55,7 +55,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		dryArgs := append([]string{"rev-list", "--topo-order", "--reverse"}, refGlobs...)
 		out, _, err := git.Run(ctx, dryArgs...)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("listing commits: %v", err))
 		}
 		shas := git.SplitNonEmpty(out)
 
@@ -63,7 +63,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		for _, sha := range shas {
 			info, err := git.ParseCommit(ctx, sha)
 			if err != nil {
-				die(exitcode.General, fmt.Sprintf("parsing commit %s: %v", sha, err))
+				strictcli.ExitNow(exitcode.General, fmt.Sprintf("parsing commit %s: %v", sha, err))
 			}
 			nameMatch := oldName != "" && (info.Author.Name == oldName || info.Committer.Name == oldName)
 			emailMatch := oldEmail != "" && (info.Author.Email == oldEmail || info.Committer.Email == oldEmail)
@@ -145,7 +145,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 		countArgs := append([]string{"rev-list", "--topo-order", "--reverse"}, refGlobs...)
 		out, _, err := git.Run(ctx, countArgs...)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("listing commits: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("listing commits: %v", err))
 		}
 		total := len(git.SplitNonEmpty(out))
 		infof(flags, "Rewriting %d commits. This cannot be undone.\n", total)
@@ -154,21 +154,21 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	// Capture old HEAD before rewrite
 	oldHeadSHA, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
 	}
 
 	// Actual rewrite
 	infof(flags, "Capturing pre-rewrite snapshot...\n")
 	before, err := captureSnapshot(ctx)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("capturing pre-rewrite snapshot: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("capturing pre-rewrite snapshot: %v", err))
 	}
 
 	infof(flags, "Rewriting commits...\n")
 	intent := IdentityIntent()
 	shaMap, nameChanged, err := rewriteCommits(ctx, oldName, newName, oldEmail, newEmail, intent, flags.verbose)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("rewriting commits: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("rewriting commits: %v", err))
 	}
 
 	// Summary counts (computed before Finalize for JSON output)
@@ -242,7 +242,7 @@ func runRewriteAuthor(flags globalFlags, kwargs map[string]interface{}) int {
 	// identity-bearing trailer was rewritten, which the walk declared.
 	result.Intent = intent
 	if err := result.Finalize(ctx, flags, cmd, RewriteHooks{TierB: tierB}); err != nil {
-		dieFinalize("", err)
+		exitFinalize("", err)
 	}
 
 	// The one computation both renderings read: the three counts below are the

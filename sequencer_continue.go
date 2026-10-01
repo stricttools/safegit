@@ -19,6 +19,7 @@ import (
 	"github.com/stricttools/safegit/internal/repo"
 	"github.com/stricttools/safegit/internal/sequencer"
 	"github.com/stricttools/safegit/internal/trailer"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // The conclusion engine: one implementation behind the three flat commands
@@ -575,7 +576,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		if errors.Is(err, commit.ErrTreeUnchanged) {
 			return op.refuseEmptyConclusion()
 		}
-		die(pipelineExitCode(err), err.Error())
+		strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
 	}
 
 	if flags.dryRun {
@@ -1160,7 +1161,7 @@ func concludeParkedOperation(flags globalFlags, gitDir, sgDir string, state sequ
 			// worded, and the refusal words itself from what became of it.
 			return conclusionResult{}, req.onEmpty(cleanEmptyPark(flags, gitDir, state)), false
 		}
-		die(pipelineExitCode(err), err.Error())
+		strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
 	}
 
 	if !flags.dryRun {

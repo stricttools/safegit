@@ -48,7 +48,7 @@ func pipelineExitCode(err error) int {
 		return exitcode.CommitStands
 	}
 	var ce *commit.CommitError
-	if errors.As(err, &ce) {
+	if errors.As(err, &ce) && ce.Code != exitcode.OK {
 		return ce.Code
 	}
 	if lock.IsTimeout(err) {
@@ -271,22 +271,21 @@ func orEmpty(list []string) []string {
 func runCommit(flags globalFlags, messages []string, messageFile string, branch string, amend bool, allowEmpty bool, allowNonPortableTargets bool, trailers []string, files []string, hunks []string, untrack []string, moved []string, movedRetract []string) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(exitcode.NotInitialized)
+		strictcli.ExitNow(exitcode.NotInitialized, exitMessage(err))
 	}
 
 	// Validate: --message and --message-file are mutually exclusive
 	if len(messages) > 0 && messageFile != "" {
-		die(exitcode.Usage, "--message (-m) and --message-file (-F) are mutually exclusive")
+		strictcli.ExitNow(exitcode.Usage, "--message (-m) and --message-file (-F) are mutually exclusive")
 	}
 
 	if amend {
 		// --amend mode: amend (with files) or reword (without files)
 		if allowEmpty {
-			die(exitcode.Usage, "--allow-empty cannot be used with --amend")
+			strictcli.ExitNow(exitcode.Usage, "--allow-empty cannot be used with --amend")
 		}
 		if messageFile != "" {
-			die(exitcode.Usage, "--message-file (-F) cannot be used with --amend")
+			strictcli.ExitNow(exitcode.Usage, "--message-file (-F) cannot be used with --amend")
 		}
 
 		return runCommitAmend(flags, gitDir, messages, branch, allowNonPortableTargets, trailers, files, hunks, untrack, moved, movedRetract)
@@ -296,46 +295,43 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	if messageFile != "" {
 		data, err := os.ReadFile(messageFile)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("reading message file: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("reading message file: %v", err))
 		}
 		messages = append(messages, strings.TrimRight(string(data), "\n"))
 	}
 
 	if len(messages) == 0 {
-		die(exitcode.Usage, "commit message required (--message/-m or --message-file/-F)")
+		strictcli.ExitNow(exitcode.Usage, "commit message required (--message/-m or --message-file/-F)")
 	}
 	if len(files) == 0 && len(hunks) == 0 && len(untrack) == 0 && !allowEmpty {
-		die(exitcode.Usage, "no files specified (use -- file1 file2 ..., --hunks path:1,3 or --untrack path)")
+		strictcli.ExitNow(exitcode.Usage, "no files specified (use -- file1 file2 ..., --hunks path:1,3 or --untrack path)")
 	}
 
 	msg := joinMessages(messages)
 
 	fileSpecs, err := buildFileSpecs(files, hunks)
 	if err != nil {
-		die(exitcode.Usage, err.Error())
+		strictcli.ExitNow(exitcode.Usage, exitMessage(err))
 	}
 
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("loading config: %v", err))
 	}
 
 	// Before the pipeline runs at all: a submodule commit moves the parent's
 	// gitlink, and a parent that has not answered the auto-bump question is a
 	// refusal, not a commit followed by one.
 	if err := requireAutoBumpDecision(flags.ctx(), flags); err != nil {
-		die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 	}
 
 	// Outermost, around the pipeline's whole run: the in-flight-operation check
 	// inside it reads state a concurrent passthrough would otherwise be free to
 	// create between the check and the ref update. The pipeline's per-ref CAS
 	// lock is taken inside this one.
-	release, code := acquireOperationLock(flags, gitDir, "commit")
-	if code != 0 {
-		os.Exit(code)
-	}
+	release := mustAcquireOperationLock(flags, gitDir, "commit")
 	defer release()
 
 	if flags.verbose {
@@ -369,7 +365,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		residue = recordAftercareFailure(residue, partial.Step, err.Error())
 	} else if err != nil {
-		die(pipelineExitCode(err), err.Error())
+		strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
 	}
 
 	if flags.verbose {
@@ -511,22 +507,19 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 	sgDir := repo.SafegitDir(gitDir)
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("loading config: %v", err))
 	}
 
 	// Same refusal the plain commit path makes, for both the amend and the
 	// reword below: an unanswered auto-bump question in the parent stops the
 	// operation before it rewrites anything.
 	if err := requireAutoBumpDecision(flags.ctx(), flags); err != nil {
-		die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 	}
 
 	// Same ordering as the plain commit path: operation lock outermost, the
 	// pipeline's per-ref CAS lock inside it.
-	release, code := acquireOperationLock(flags, gitDir, "amend")
-	if code != 0 {
-		os.Exit(code)
-	}
+	release := mustAcquireOperationLock(flags, gitDir, "amend")
 	defer release()
 
 	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}}
@@ -553,7 +546,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 
 		fileSpecs, err := buildFileSpecs(files, hunks)
 		if err != nil {
-			die(exitcode.Usage, err.Error())
+			strictcli.ExitNow(exitcode.Usage, exitMessage(err))
 		}
 
 		if flags.verbose {
@@ -582,7 +575,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			residue = recordAftercareFailure(residue, partial.Step, err.Error())
 		} else if err != nil {
-			die(pipelineExitCode(err), err.Error())
+			strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
 		}
 
 		if flags.verbose {
@@ -634,7 +627,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 	} else {
 		// Reword: change the tip commit message without touching files
 		if len(messages) == 0 {
-			die(exitcode.Usage, "commit message required (-m) when using --amend without files")
+			strictcli.ExitNow(exitcode.Usage, "commit message required (-m) when using --amend without files")
 		}
 
 		msg := joinMessages(messages)
@@ -658,7 +651,7 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			residue = recordAftercareFailure(residue, partial.Step, err.Error())
 		} else if err != nil {
-			die(pipelineExitCode(err), err.Error())
+			strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
 		}
 
 		if flags.verbose {

@@ -154,20 +154,20 @@ func buildPushPayload(flags globalFlags, remote string, refs []pushRefInfo, forc
 func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote string, mode pushMode) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(exitcode.NotInitialized, err.Error())
+		strictcli.ExitNow(exitcode.NotInitialized, exitMessage(err))
 		return exitcode.NotInitialized
 	}
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("loading config: %v", err))
 		return exitcode.General
 	}
 	// Read before anything runs, so a cap safegit cannot honor refuses the
 	// push rather than surfacing only once a hook has to be stopped.
 	stopCap, err := hooks.StopCapFromEnvironment(os.LookupEnv)
 	if err != nil {
-		die(exitcode.General, err.Error())
+		strictcli.ExitNow(exitcode.General, exitMessage(err))
 		return exitcode.General
 	}
 
@@ -177,7 +177,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	ctx := flags.ctx()
 	remoteURL, err := resolveRemoteURL(ctx, remote)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
 		return exitcode.General
 	}
 
@@ -213,15 +213,15 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 		// resolve -- are about this repository and stay General.
 		var readErr *remoteReadError
 		if errors.As(err, &readErr) {
-			die(exitcode.PushFailed, err.Error())
+			strictcli.ExitNow(exitcode.PushFailed, exitMessage(err))
 			return exitcode.PushFailed
 		}
-		die(exitcode.General, fmt.Sprintf("resolving refs: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving refs: %v", err))
 		return exitcode.General
 	}
 
 	if len(refs) == 0 {
-		die(exitcode.General, "nothing to push (no matching refs)")
+		strictcli.ExitNow(exitcode.General, "nothing to push (no matching refs)")
 		return exitcode.General
 	}
 
@@ -395,11 +395,11 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 			// partially-applied push, assert something safegit never saw).
 			fresh, err := resolveRefsForPush(ctx, remote, mode)
 			if err != nil {
-				die(exitcode.PushFailed, fmt.Sprintf("re-reading %s before retrying the push: %v", remote, err))
+				strictcli.ExitNow(exitcode.PushFailed, fmt.Sprintf("re-reading %s before retrying the push: %v", remote, err))
 				return exitcode.PushFailed
 			}
 			if len(fresh) == 0 {
-				die(exitcode.PushFailed, "nothing to push (no matching refs) when re-reading the remote before a retry")
+				strictcli.ExitNow(exitcode.PushFailed, "nothing to push (no matching refs) when re-reading the remote before a retry")
 				return exitcode.PushFailed
 			}
 			// The re-read re-resolves the LOCAL side too, and that is a second
@@ -412,7 +412,7 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 			// operator re-runs the push, which validates and publishes what is
 			// actually there now.
 			if change, moved := localRefsMoved(validated, fresh); moved {
-				die(exitcode.PushFailed, fmt.Sprintf(
+				strictcli.ExitNow(exitcode.PushFailed, fmt.Sprintf(
 					"push refused: %s moved locally while the push was being retried\n"+
 						"  safegit resolved %s before pushing; it is now %s\n"+
 						"  the push set and the pre-pre-push hooks' input are decided once, and safegit does not re-run the hooks mid-retry\n"+

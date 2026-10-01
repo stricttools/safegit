@@ -127,12 +127,12 @@ func parseTargets(flags globalFlags, raw interface{}) map[string]bool {
 			continue
 		}
 		if !validTargets[p] {
-			die(exitcode.Usage, fmt.Sprintf("invalid --target value %q; valid values: blobs, commits, tags, trailers, files", p))
+			strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("invalid --target value %q; valid values: blobs, commits, tags, trailers, files", p))
 		}
 		targets[p] = true
 	}
 	if len(targets) == 0 {
-		die(exitcode.Usage, "--target requires at least one value; valid values: blobs, commits, tags, trailers, files")
+		strictcli.ExitNow(exitcode.Usage, "--target requires at least one value; valid values: blobs, commits, tags, trailers, files")
 	}
 	return targets
 }
@@ -221,7 +221,7 @@ func runScan(flags globalFlags, kwargs map[string]interface{}) int {
 		s := v.(string)
 		scope = &s
 		if _, err := path.Match(s, ""); err != nil {
-			die(exitcode.Usage, fmt.Sprintf("invalid --scope glob: %v", err))
+			strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("invalid --scope glob: %v", err))
 		}
 	}
 
@@ -238,7 +238,7 @@ func runScan(flags globalFlags, kwargs map[string]interface{}) int {
 	// Require a git repo.
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(exitcode.NotInitialized, err.Error())
+		strictcli.ExitNow(exitcode.NotInitialized, exitMessage(err))
 	}
 
 	ctx := flags.ctx()
@@ -246,7 +246,7 @@ func runScan(flags globalFlags, kwargs map[string]interface{}) int {
 	// Compile regex.
 	compiledPattern, err := regexp.Compile(pattern)
 	if err != nil {
-		die(exitcode.Usage, fmt.Sprintf("invalid regex pattern: %v", err))
+		strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("invalid regex pattern: %v", err))
 	}
 
 	// Resolve --from if provided.
@@ -254,20 +254,20 @@ func runScan(flags globalFlags, kwargs map[string]interface{}) int {
 	if from != nil {
 		fromSHA, err = git.RevParse(ctx, *from)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("resolving --from %q: %v", *from, err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving --from %q: %v", *from, err))
 		}
 		isAnc, err := git.IsAncestorOf(ctx, fromSHA, "HEAD")
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("checking ancestry of --from: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("checking ancestry of --from: %v", err))
 		}
 		if !isAnc {
-			die(exitcode.General, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
 		}
 	}
 
 	// Mutual exclusivity: --from and --entire-history cannot both be set.
 	if from != nil && entireHistory {
-		die(exitcode.Usage, "--from and --entire-history are mutually exclusive")
+		strictcli.ExitNow(exitcode.Usage, "--from and --entire-history are mutually exclusive")
 	}
 
 	// Default to entire-history when neither --from nor --entire-history is set.
@@ -280,18 +280,18 @@ func runScan(flags globalFlags, kwargs map[string]interface{}) int {
 	scanOpts := scan.ScanOpts{FromSHA: fromSHA, EntireHistory: entireHistory}
 	results, err := scan.ScanObjects(ctx, compiledPattern, scanOpts)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
 	}
 
 	// Enrich blob matches with file paths.
 	if err := scan.AddAttribution(ctx, results, scanOpts); err != nil {
-		die(exitcode.General, fmt.Sprintf("adding attribution: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("adding attribution: %v", err))
 	}
 
 	// Scan non-object files (working tree, .git/config, hooks).
 	nonObjectMatches, err := scan.ScanNonObjects(ctx, compiledPattern, gitDir)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("scanning non-object files: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning non-object files: %v", err))
 	}
 
 	// Categorize matches, applying scope filter to blobs.

@@ -18,7 +18,7 @@ import (
 // Four shapes are refused in production source, all of them positions where an
 // integer can only ever be an exit code:
 //
-//   - die(N, ...)             -- safegit's own fatal exit
+//   - strictcli.ExitNow(N, ...) -- a command's early exit through the framework
 //   - os.Exit(N)              -- the runtime's
 //   - strictcli.Exit(N)       -- a handler's outcome, which the framework exits with
 //   - Code: N                 -- a composite literal field, which is how
@@ -61,7 +61,7 @@ func TestNoProductionExitSiteUsesABareLiteral(t *testing.T) {
 		}
 		if d.IsDir() {
 			switch d.Name() {
-			case ".git", "testdata", "docs", "scripts", "experiments":
+			case ".git", "testdata", "docs", "scripts", "experiments", "screenshots":
 				return fs.SkipDir
 			}
 			return nil
@@ -96,10 +96,6 @@ func TestNoProductionExitSiteUsesABareLiteral(t *testing.T) {
 				}
 				name := ""
 				switch fun := node.Fun.(type) {
-				case *ast.Ident:
-					if fun.Name == "die" {
-						name = "die"
-					}
 				case *ast.SelectorExpr:
 					pkg, isIdent := fun.X.(*ast.Ident)
 					if !isIdent {
@@ -110,6 +106,8 @@ func TestNoProductionExitSiteUsesABareLiteral(t *testing.T) {
 						name = "os.Exit"
 					case pkg.Name == "strictcli" && fun.Sel.Name == "Exit":
 						name = "strictcli.Exit"
+					case pkg.Name == "strictcli" && fun.Sel.Name == "ExitNow":
+						name = "strictcli.ExitNow"
 					}
 				}
 				if name == "" {

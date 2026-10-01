@@ -2055,8 +2055,8 @@ func heldLockFiles(t *testing.T, safegitDir string) []string {
 // be moved earlier.
 //
 // Neither lock may be left behind by it. The path now RETURNS the commit-stands
-// family code rather than exiting, so both defers run; before that only die()
-// released them, and any other exit stranded both files -- the next contender in
+// family code rather than exiting, so both defers run; before that only the
+// process-exit helper released them, and any other exit stranded both files -- the next contender in
 // the submodule waiting out lock.acquireTimeoutSeconds before the staleness
 // rules let it reclaim them, and doctor reporting them in the meantime. The
 // assertion is about the lock files either way, which is what makes it survive

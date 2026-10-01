@@ -149,8 +149,8 @@ func TestReleasePendingRemovesHeldLocks(t *testing.T) {
 // newcomer's live lock and let two operations mutate the ref at once.
 //
 // Both removal paths are covered, because both used to remove by path: the
-// holder's own Release, and the ReleasePending sweep that die() runs on the
-// exit paths that never unwind.
+// holder's own Release, and the ReleasePending sweep every command handler
+// runs when it ends.
 func TestReleaseLeavesAReplacedLockAlone(t *testing.T) {
 	// replaceOutOfBand force-releases a held lock and publishes a different
 	// file at the same path -- the operator-forced unlock plus a third party's

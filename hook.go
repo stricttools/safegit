@@ -53,16 +53,16 @@ func hookDiscoveryExit(err error) int {
 	var local *hooks.LocalNotExecutableError
 	switch {
 	case errors.As(err, &legacy):
-		die(exitcode.HooksNotMigrated, legacy.Error())
+		strictcli.ExitNow(exitcode.HooksNotMigrated, exitMessage(legacy))
 		return exitcode.HooksNotMigrated
 	case errors.As(err, &tracked):
-		die(exitcode.HookNotExecutable, tracked.Error())
+		strictcli.ExitNow(exitcode.HookNotExecutable, exitMessage(tracked))
 		return exitcode.HookNotExecutable
 	case errors.As(err, &local):
-		die(exitcode.HookNotExecutable, local.Error())
+		strictcli.ExitNow(exitcode.HookNotExecutable, exitMessage(local))
 		return exitcode.HookNotExecutable
 	default:
-		die(exitcode.General, fmt.Sprintf("discovering hooks: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("discovering hooks: %v", err))
 		return exitcode.General
 	}
 }
@@ -529,7 +529,7 @@ func hookRemove(flags globalFlags, name string) int {
 	// name present in both stores names one hook this command can remove and one
 	// it cannot. The one it cannot is stated rather than silently left behind.
 	if len(local) == 0 && len(tracked) > 0 {
-		die(exitcode.General, fmt.Sprintf(
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf(
 			"%s is a hook the checkout provides (%s); it is part of the repository's content, so removing it means committing the deletion: "+
 				"delete the file and commit that change with `safegit commit`",
 			name, tracked[0].Path))
@@ -537,12 +537,12 @@ func hookRemove(flags globalFlags, name string) int {
 	}
 	if len(local) == 0 {
 		if len(legacy) > 0 {
-			die(exitcode.HooksNotMigrated, fmt.Sprintf(
+			strictcli.ExitNow(exitcode.HooksNotMigrated, fmt.Sprintf(
 				"%s is still in the pre-migration location (%s); run `safegit hook migrate` first, then remove it",
 				name, legacy[0].Path))
 			return exitcode.HooksNotMigrated
 		}
-		die(exitcode.General, fmt.Sprintf("no installed hook named %q (run `safegit hook list` to see what is there)", name))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("no installed hook named %q (run `safegit hook list` to see what is there)", name))
 		return exitcode.General
 	}
 	if len(local) > 1 {
@@ -550,7 +550,7 @@ func hookRemove(flags globalFlags, name string) int {
 		for _, loc := range local {
 			paths = append(paths, loc.Rel)
 		}
-		die(exitcode.General, fmt.Sprintf("%q names %d hooks (%s); give the full name to say which one",
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("%q names %d hooks (%s); give the full name to say which one",
 			name, len(local), strings.Join(paths, ", ")))
 		return exitcode.General
 	}
@@ -608,7 +608,7 @@ func hookMigrate(flags globalFlags) int {
 			continue
 		}
 		if _, err := os.Lstat(m.dest); err == nil {
-			die(exitcode.General, fmt.Sprintf(
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf(
 				"cannot migrate %s: %s already exists; merge the two by hand and remove the old one",
 				m.src, m.dest))
 			return exitcode.General

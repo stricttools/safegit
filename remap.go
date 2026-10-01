@@ -12,6 +12,7 @@ import (
 
 	"github.com/stricttools/safegit/internal/exitcode"
 	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // --remap-shas-in support: during a rewrite walk, files matching the given
@@ -98,7 +99,7 @@ func matchAnyScope(globs []string, filePath string) bool {
 func validateRemapGlobs(globs []string) {
 	for _, g := range globs {
 		if _, err := path.Match(g, ""); err != nil {
-			die(exitcode.Usage, fmt.Sprintf("invalid --remap-shas-in glob %q: %v", g, err))
+			strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("invalid --remap-shas-in glob %q: %v", g, err))
 		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/stricttools/safegit/internal/exitcode"
 	"github.com/stricttools/safegit/internal/lock"
 	"github.com/stricttools/safegit/internal/repo"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // acquireOperationLock takes the worktree operation lock for op and returns the
@@ -37,14 +38,34 @@ import (
 // to serialize against, and taking the lock would mean a command that promises
 // to change nothing creating and removing a file inside .git/safegit.
 func acquireOperationLock(flags globalFlags, gitDir, op string) (func(), int) {
+	release, code, message := operationLock(flags, gitDir, op)
+	if code != exitcode.OK {
+		fmt.Fprintf(os.Stderr, "error: %s\n", message)
+	}
+	return release, code
+}
+
+// mustAcquireOperationLock is acquireOperationLock for a caller that ends the
+// command when the lock cannot be taken: it returns the release function, or
+// ends the command through strictcli.ExitNow with the code and reason.
+func mustAcquireOperationLock(flags globalFlags, gitDir, op string) func() {
+	release, code, message := operationLock(flags, gitDir, op)
+	if code != exitcode.OK {
+		strictcli.ExitNow(code, message)
+	}
+	return release
+}
+
+// operationLock takes the worktree operation lock and returns the release
+// function, or a nil one with the exit code and the reason it could not.
+func operationLock(flags globalFlags, gitDir, op string) (func(), int, string) {
 	if flags.dryRun {
-		return func() {}, exitcode.OK
+		return func() {}, exitcode.OK, ""
 	}
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: loading config: %v\n", err)
-		return nil, exitcode.General
+		return nil, exitcode.General, fmt.Sprintf("loading config: %v", err)
 	}
 	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
 
@@ -56,14 +77,11 @@ func acquireOperationLock(flags globalFlags, gitDir, op string) (func(), int) {
 	lk, err := lock.Acquire(sgDir, sgDir, lock.OperationRef, op, timeout)
 	if err != nil {
 		if lock.IsTimeout(err) {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			fmt.Fprintf(os.Stderr, "  another safegit operation owns this worktree; wait for it, or release the lock with: safegit unlock %s\n", lock.OperationRef)
-			return nil, exitcode.LockTimeout
+			return nil, exitcode.LockTimeout, fmt.Sprintf("%v\n  another safegit operation owns this worktree; wait for it, or release the lock with: safegit unlock %s", err, lock.OperationRef)
 		}
-		fmt.Fprintf(os.Stderr, "error: acquiring the worktree operation lock: %v\n", err)
-		return nil, exitcode.General
+		return nil, exitcode.General, fmt.Sprintf("acquiring the worktree operation lock: %v", err)
 	}
-	return func() { _ = lk.Release() }, exitcode.OK
+	return func() { _ = lk.Release() }, exitcode.OK, ""
 }
 
 // acquireRewriteLock takes the repository-wide history-rewrite lock for one
@@ -88,7 +106,7 @@ func acquireOperationLock(flags globalFlags, gitDir, op string) (func(), int) {
 func acquireRewriteLock(ctx context.Context, flags globalFlags, gitDir, sgDir, op string) *lock.RefLock {
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("loading config: %v", err))
 	}
 	timeout := time.Duration(cfg.Lock.AcquireTimeoutSeconds) * time.Second
 	sharedDir := repo.SharedSafegitDir(ctx, gitDir)
@@ -99,9 +117,9 @@ func acquireRewriteLock(ctx context.Context, flags globalFlags, gitDir, sgDir, o
 		// operator what to look at. A timeout gets its own exit code so a
 		// caller can tell contention apart from every other lock failure.
 		if lock.IsTimeout(err) {
-			die(exitcode.LockTimeout, err.Error())
+			strictcli.ExitNow(exitcode.LockTimeout, exitMessage(err))
 		}
-		die(exitcode.General, fmt.Sprintf("acquiring rewrite lock: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("acquiring rewrite lock: %v", err))
 	}
 	return lk
 }

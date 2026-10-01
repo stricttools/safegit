@@ -835,8 +835,7 @@ func doctorFix(ctx context.Context, flags globalFlags, gitDir string) {
 
 	plan, err := planDoctorFix(ctx, gitDir, sgDir, lockDirs, flags.root.resolve())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(exitcode.General)
+		strictcli.ExitNow(exitcode.General, exitMessage(err))
 	}
 
 	verb := "removed"

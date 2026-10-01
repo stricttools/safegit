@@ -141,7 +141,7 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 		scope = &s
 		// Validate the glob pattern at parse time.
 		if _, err := path.Match(s, ""); err != nil {
-			die(exitcode.Usage, fmt.Sprintf("invalid --scope glob: %v", err))
+			strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("invalid --scope glob: %v", err))
 		}
 	}
 
@@ -153,7 +153,7 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 	// Validation
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(exitcode.NotInitialized, err.Error())
+		strictcli.ExitNow(exitcode.NotInitialized, exitMessage(err))
 	}
 
 	ctx := flags.ctx()
@@ -168,14 +168,14 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 		var err error
 		fromSHA, err = git.RevParse(ctx, *from)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("resolving --from %q: %v", *from, err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving --from %q: %v", *from, err))
 		}
 		isAnc, err := git.IsAncestorOf(ctx, fromSHA, "HEAD")
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("checking ancestry of --from: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("checking ancestry of --from: %v", err))
 		}
 		if !isAnc {
-			die(exitcode.General, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
 		}
 	}
 
@@ -186,7 +186,7 @@ func runScrubMatch(flags globalFlags, kwargs map[string]interface{}) int {
 	// Compile regex
 	compiledPattern, err := regexp.Compile(pattern)
 	if err != nil {
-		die(exitcode.Usage, fmt.Sprintf("invalid regex pattern: %v", err))
+		strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("invalid regex pattern: %v", err))
 	}
 
 	// Dry-run mode: purely read-only, no lock needed.
@@ -215,16 +215,16 @@ func scrubMatchDryRun(ctx context.Context, flags globalFlags, cmd string, compil
 	scanOpts := scan.ScanOpts{FromSHA: fromSHA, EntireHistory: entireHistory}
 	results, err := scan.ScanObjects(ctx, compiledPattern, scanOpts)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
 	}
 
 	if err := scan.AddAttribution(ctx, results, scanOpts); err != nil {
-		die(exitcode.General, fmt.Sprintf("adding attribution: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("adding attribution: %v", err))
 	}
 
 	nonObjectMatches, err := scan.ScanNonObjects(ctx, compiledPattern, gitDir)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("scanning non-object files: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning non-object files: %v", err))
 	}
 
 	// Scan submodules for matches.
@@ -245,7 +245,7 @@ func scrubMatchDryRun(ctx context.Context, flags globalFlags, cmd string, compil
 	// the document the operator consents from. A warning does not cure that.
 	subs, err := submodule.Enumerate(ctx, gitDir)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("enumerating submodules: %v\n"+
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("enumerating submodules: %v\n"+
 			"A preview cannot state what a scrub would rewrite without this.", err))
 	}
 	for _, sub := range subs {
@@ -531,7 +531,7 @@ func scrubMatchExecute(
 	parentOpts := scan.ScanOpts{EntireHistory: true}
 	results, err := scan.ScanObjects(ctx, compiledPattern, parentOpts)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
 	}
 
 	// Enumerate submodules. A failure is fatal for the same reason it is in the
@@ -540,7 +540,7 @@ func scrubMatchExecute(
 	// content where it is while reporting success. Nothing has moved yet.
 	subs, subErr := submodule.Enumerate(ctx, gitDir)
 	if subErr != nil {
-		die(exitcode.General, fmt.Sprintf("enumerating submodules: %v\n"+
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("enumerating submodules: %v\n"+
 			"A scrub cannot decide what it rewrites without this. Nothing was changed.", subErr))
 	}
 	// Ensure safegit dir exists for each initialized submodule.
@@ -585,7 +585,7 @@ func scrubMatchExecute(
 	if scope != nil {
 		scopedBlobSHAs, err = buildScopedBlobSet(ctx, *scope)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("building scoped blob set: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("building scoped blob set: %v", err))
 		}
 	}
 
@@ -628,7 +628,7 @@ func scrubMatchExecute(
 		subScanOpts := scan.ScanOpts{GitDir: sub.GitDir, WorkTree: sub.WorkTreePath, SubmodulePath: sub.RelativePath, EntireHistory: true}
 		subResults, err := scan.ScanObjects(ctx, compiledPattern, subScanOpts)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("scanning submodule %s: %v", sub.RelativePath, err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning submodule %s: %v", sub.RelativePath, err))
 		}
 		if len(subResults.Matches) == 0 {
 			continue
@@ -641,7 +641,7 @@ func scrubMatchExecute(
 			if subScope != "" {
 				subScopedBlobs, err = buildScopedBlobSetWithDir(ctx, subScope, sub.GitDir, sub.WorkTreePath)
 				if err != nil {
-					die(exitcode.General, fmt.Sprintf("building scoped blob set for submodule %s: %v", sub.RelativePath, err))
+					strictcli.ExitNow(exitcode.General, fmt.Sprintf("building scoped blob set for submodule %s: %v", sub.RelativePath, err))
 				}
 			}
 		}
@@ -738,7 +738,7 @@ func scrubMatchExecute(
 		for blobSHA := range si.uniqueBlobs {
 			content, err := git.CatFileBlob(subCtx, blobSHA)
 			if err != nil {
-				die(exitcode.General, fmt.Sprintf("submodule %s: reading blob %s: %v", si.sub.RelativePath, blobSHA, err))
+				strictcli.ExitNow(exitcode.General, fmt.Sprintf("submodule %s: reading blob %s: %v", si.sub.RelativePath, blobSHA, err))
 			}
 			if isBinaryContent(content) {
 				continue
@@ -754,7 +754,7 @@ func scrubMatchExecute(
 			}
 			newSHA, err := git.HashObjectWriteBytes(subCtx, modified)
 			if err != nil {
-				die(exitcode.General, fmt.Sprintf("submodule %s: writing replaced blob: %v", si.sub.RelativePath, err))
+				strictcli.ExitNow(exitcode.General, fmt.Sprintf("submodule %s: writing replaced blob: %v", si.sub.RelativePath, err))
 			}
 			subBlobMap[blobSHA] = newSHA
 			if flags.verbose {
@@ -805,7 +805,7 @@ func scrubMatchExecute(
 			return xform, nil
 		}, flags.verbose)
 		if err != nil {
-			dieFinalize(fmt.Sprintf("submodule %s", si.sub.RelativePath), err)
+			exitFinalize(fmt.Sprintf("submodule %s", si.sub.RelativePath), err)
 		}
 
 		subScrubResults = append(subScrubResults, submoduleScrubResult{
@@ -839,7 +839,7 @@ func scrubMatchExecute(
 		// must not run.
 		subOldHead, err := git.RevParse(subCtx, "HEAD")
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("submodule %s: resolving HEAD: %v", sr.sub.RelativePath, err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("submodule %s: resolving HEAD: %v", sr.sub.RelativePath, err))
 		}
 
 		// Tier A for the submodule: the pattern must be absent from the

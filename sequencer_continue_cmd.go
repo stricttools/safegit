@@ -435,7 +435,7 @@ func continueFlags(op continueOp, theirsHelp string) []strictcli.Flag {
 // which the help text repeats and the per-path listing prints at the moment the
 // operator has to choose.
 func registerContinue(app *strictcli.App, op continueOp, schema map[string]interface{}, theirsHelp, help string) {
-	app.Command(op.command, help, continueHandler(op),
+	app.Command(op.command, help, releasingLocks(continueHandler(op)),
 		strictcli.WithEffect(strictcli.EffectMutating),
 		strictcli.WithTags("json"),
 		strictcli.PayloadSchema(schema),

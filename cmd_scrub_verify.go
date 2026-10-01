@@ -93,7 +93,7 @@ func collectVerifyTargets(patterns []string, scope string, recipePath string) []
 	for _, p := range patterns {
 		compiled, err := regexp.Compile(p)
 		if err != nil {
-			die(exitcode.Usage, fmt.Sprintf("invalid --pattern %q: %v", p, err))
+			strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("invalid --pattern %q: %v", p, err))
 		}
 		targets = append(targets, verifyTarget{
 			pattern:  p,
@@ -106,7 +106,7 @@ func collectVerifyTargets(patterns []string, scope string, recipePath string) []
 	if recipePath != "" {
 		recipe, err := parseRecipe(recipePath)
 		if err != nil {
-			die(exitcode.Usage, fmt.Sprintf("reading recipe %q: %v", recipePath, err))
+			strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("reading recipe %q: %v", recipePath, err))
 		}
 		for i, op := range recipe.Operations {
 			t := verifyTarget{
@@ -131,7 +131,7 @@ func runScrubVerify(flags globalFlags, kwargs map[string]interface{}) int {
 	if v := kwargs["scope"]; v != nil {
 		scope = v.(string)
 		if _, err := path.Match(scope, ""); err != nil {
-			die(exitcode.Usage, fmt.Sprintf("invalid --scope glob: %v", err))
+			strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("invalid --scope glob: %v", err))
 		}
 	}
 
@@ -142,7 +142,7 @@ func runScrubVerify(flags globalFlags, kwargs map[string]interface{}) int {
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(exitcode.NotInitialized, err.Error())
+		strictcli.ExitNow(exitcode.NotInitialized, exitMessage(err))
 	}
 
 	ctx := flags.ctx()
@@ -154,7 +154,7 @@ func runScrubVerify(flags globalFlags, kwargs map[string]interface{}) int {
 	// health.
 	targets := collectVerifyTargets(patterns, scope, recipePath)
 	if len(targets) == 0 {
-		die(exitcode.Usage, "nothing to verify: no patterns were given and the recipe declared no operations")
+		strictcli.ExitNow(exitcode.Usage, "nothing to verify: no patterns were given and the recipe declared no operations")
 	}
 
 	compiled := make([]*regexp.Regexp, len(targets))
@@ -168,7 +168,7 @@ func runScrubVerify(flags globalFlags, kwargs map[string]interface{}) int {
 	// unreachable object still holds the secret.
 	allScanResults, err := scan.ScanObjectsMulti(ctx, compiled, scan.ScanOpts{EntireHistory: true})
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
 	}
 
 	// Attribution (blob SHA -> path) is only needed when some scoped pattern
@@ -196,7 +196,7 @@ func runScrubVerify(flags globalFlags, kwargs map[string]interface{}) int {
 		// selector is declared, and routing around it is how a scan and its
 		// attribution end up walking different object sets.
 		if err := scan.AddAttribution(ctx, &combined, scan.ScanOpts{EntireHistory: true}); err != nil {
-			die(exitcode.General, fmt.Sprintf("adding attribution: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("adding attribution: %v", err))
 		}
 		for i := range targets {
 			r := ranges[i]
@@ -219,7 +219,7 @@ func runScrubVerify(flags globalFlags, kwargs map[string]interface{}) int {
 			if !ok {
 				scopedBlobs, err = buildScopedBlobSet(ctx, t.scope)
 				if err != nil {
-					die(exitcode.General, fmt.Sprintf("building scoped blob set for %q: %v", t.scope, err))
+					strictcli.ExitNow(exitcode.General, fmt.Sprintf("building scoped blob set for %q: %v", t.scope, err))
 				}
 				scopedBlobSets[t.scope] = scopedBlobs
 			}

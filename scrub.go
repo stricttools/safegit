@@ -138,7 +138,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	// Validation
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(exitcode.NotInitialized, err.Error())
+		strictcli.ExitNow(exitcode.NotInitialized, exitMessage(err))
 	}
 
 	ctx := flags.ctx()
@@ -160,7 +160,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	// operator repairs the repository and re-runs the same command line.
 	subs, subErr := submodule.Enumerate(ctx, gitDir)
 	if subErr != nil {
-		die(exitcode.General, fmt.Sprintf("enumerating submodules: %v\n"+
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("enumerating submodules: %v\n"+
 			"A scrub cannot decide what it rewrites without this. Nothing was changed.", subErr))
 	}
 
@@ -202,21 +202,21 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		var err error
 		fromSHA, err = git.RevParse(ctx, *from)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("resolving --from %q: %v", *from, err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving --from %q: %v", *from, err))
 		}
 		isAnc, err := git.IsAncestorOf(ctx, fromSHA, "HEAD")
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("checking ancestry of --from: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("checking ancestry of --from: %v", err))
 		}
 		if !isAnc {
-			die(exitcode.General, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
 		}
 	}
 
 	// Capture old HEAD before any changes
 	oldHeadSHA, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
 	}
 
 	// Read the replacement source, if there is one. It is read HERE, through
@@ -230,7 +230,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		replacement = readReplacementSource(replacementPath)
 		newBlobSHA, err = git.HashObjectBytes(ctx, replacement)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("hashing the replacement file %q: %v", replacementPath, err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("hashing the replacement file %q: %v", replacementPath, err))
 		}
 	}
 
@@ -293,7 +293,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	if mode == "replace" {
 		newBlobSHA, err = git.HashObjectWriteBytes(ctx, replacement)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("writing the replacement blob from %q: %v", replacementPath, err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("writing the replacement blob from %q: %v", replacementPath, err))
 		}
 	}
 
@@ -357,14 +357,14 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 		return xform, nil
 	}, flags.verbose)
 	if err != nil {
-		// Through dieFinalize, like every other walk in the rewrite family: the
+		// Through exitFinalize, like every other walk in the rewrite family: the
 		// walk is one of the two seams that can produce a Tier A REFUSAL, and a
 		// refusal exits RewriteRefused ("nothing happened") rather than General.
 		// No transform on THIS walk raises one today -- `scrub file` removes a
 		// move record rather than transforming it, so there is no
 		// RecordTransformError to refuse over -- but the seam is shared and the
 		// exit code is not the walk's own choice to make.
-		dieFinalize("", err)
+		exitFinalize("", err)
 	}
 	remap.reportStale(flags)
 
@@ -422,7 +422,7 @@ func runScrubFile(flags globalFlags, kwargs map[string]interface{}) int {
 	}
 
 	if err := rewriteResult.Finalize(ctx, flags, cmd, RewriteHooks{TierA: tierA, TierB: tierB}); err != nil {
-		dieFinalize("", err)
+		exitFinalize("", err)
 	}
 
 	// The executed rewrite's own figures, added to the same struct the preview
@@ -485,7 +485,7 @@ func runScrubFileInSubmodule(
 
 	// Ensure safegit is initialized for the submodule.
 	if err := ensureInitialized(flags, sub.GitDir); err != nil {
-		die(exitcode.General, fmt.Sprintf("initializing safegit for submodule %s: %v", sub.RelativePath, err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("initializing safegit for submodule %s: %v", sub.RelativePath, err))
 	}
 
 	// Context-scoped git directory targeting: all git commands using subCtx
@@ -508,17 +508,17 @@ func runScrubFileInSubmodule(
 		// would "resolve" here and fail confusingly one step later.
 		resolved, err := git.RevParse(subCtx, *from+"^{commit}")
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf(
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf(
 				"--from %q does not name a commit in submodule %s (a parent-repository commit hash means nothing inside a submodule).\n"+
 					"Pass --from with a commit from the submodule's own history, or pass --entire-history to rewrite all of it deliberately.",
 				*from, sub.RelativePath))
 		}
 		isAnc, err := git.IsAncestorOf(subCtx, resolved, "HEAD")
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("checking ancestry of --from inside submodule %s: %v", sub.RelativePath, err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("checking ancestry of --from inside submodule %s: %v", sub.RelativePath, err))
 		}
 		if !isAnc {
-			die(exitcode.General, fmt.Sprintf(
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf(
 				"--from commit %s is not an ancestor of submodule %s's HEAD.\n"+
 					"Pass --from with a commit from the submodule's own history, or pass --entire-history to rewrite all of it deliberately.",
 				*from, sub.RelativePath))
@@ -537,7 +537,7 @@ func runScrubFileInSubmodule(
 		var err error
 		newBlobSHA, err = git.HashObjectBytes(subCtx, replacement)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("hashing the replacement file %q: %v", replacementPath, err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("hashing the replacement file %q: %v", replacementPath, err))
 		}
 	}
 
@@ -608,14 +608,14 @@ func runScrubFileInSubmodule(
 		var writeErr error
 		newBlobSHA, writeErr = git.HashObjectWriteBytes(subCtx, replacement)
 		if writeErr != nil {
-			die(exitcode.General, fmt.Sprintf("writing the replacement blob from %q into submodule %s: %v", replacementPath, sub.RelativePath, writeErr))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("writing the replacement blob from %q into submodule %s: %v", replacementPath, sub.RelativePath, writeErr))
 		}
 	}
 
 	// Capture old submodule HEAD before rewriting.
 	oldSubHeadSHA, err := git.RevParse(subCtx, "HEAD")
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("resolving submodule HEAD: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving submodule HEAD: %v", err))
 	}
 
 	// Walk and rewrite submodule commits. Note: --remap-shas-in is not
@@ -653,7 +653,7 @@ func runScrubFileInSubmodule(
 		return xform, nil
 	}, flags.verbose)
 	if err != nil {
-		dieFinalize("submodule walk and rewrite", err)
+		exitFinalize("submodule walk and rewrite", err)
 	}
 
 	// The submodule's rewritten commits now exist as unreachable objects. They
@@ -705,7 +705,7 @@ func runScrubFileInSubmodule(
 	// parent alone still has to say which commit the parent is at.
 	oldHeadSHA, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("resolving parent HEAD: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving parent HEAD: %v", err))
 	}
 	result.OldHead = oldHeadSHA
 
@@ -717,10 +717,10 @@ func runScrubFileInSubmodule(
 		infof(flags, "No submodule commits were rewritten; parent history unchanged.\n")
 		only := []*pendingRewrite{subPending}
 		if label, err := prepareAll(flags, only); err != nil {
-			dieFinalize(label, err)
+			exitFinalize(label, err)
 		}
 		if label, err := publishAll(flags, cmd, only); err != nil {
-			dieFinalize(label, err)
+			exitFinalize(label, err)
 		}
 
 		// The same struct the other exits carry, filled with what THIS run did:
@@ -749,7 +749,7 @@ func runScrubFileInSubmodule(
 	// that doesn't exist in the parent repo.
 	out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", "HEAD")
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("listing parent commits: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("listing parent commits: %v", err))
 	}
 	parentSHAs := git.SplitNonEmpty(out)
 
@@ -786,7 +786,7 @@ func runScrubFileInSubmodule(
 		return xform, nil
 	}, flags.verbose)
 	if err != nil {
-		dieFinalize("parent walk and rewrite", err)
+		exitFinalize("parent walk and rewrite", err)
 	}
 	parentRemap.reportStale(flags)
 
@@ -855,10 +855,10 @@ func runScrubFileInSubmodule(
 	}
 	infof(flags, "Verifying the submodule and parent rewrites before either is published...\n")
 	if label, err := prepareAll(flags, both); err != nil {
-		dieFinalize(label, err)
+		exitFinalize(label, err)
 	}
 	if label, err := publishAll(flags, cmd, both); err != nil {
-		dieFinalize(label, err)
+		exitFinalize(label, err)
 	}
 	subTagRewrites := subResult.TagRewrites
 

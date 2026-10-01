@@ -162,7 +162,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	// --dry-run and --diff are mutually exclusive: --diff shows content diffs,
 	// --dry-run shows match count summaries. Combining them is ambiguous.
 	if flags.dryRun && diffMode {
-		die(exitcode.Usage, "--dry-run and --diff are mutually exclusive")
+		strictcli.ExitNow(exitcode.Usage, "--dry-run and --diff are mutually exclusive")
 	}
 
 	from, entireHistory := scrubRange(kwargs)
@@ -175,7 +175,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	// Validation
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(exitcode.NotInitialized, err.Error())
+		strictcli.ExitNow(exitcode.NotInitialized, exitMessage(err))
 	}
 
 	ctx := flags.ctx()
@@ -187,7 +187,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	// Parse recipe
 	recipe, err := parseRecipe(recipePath)
 	if err != nil {
-		die(exitcode.Usage, fmt.Sprintf("parsing recipe: %v", err))
+		strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("parsing recipe: %v", err))
 	}
 
 	infof(flags, "Recipe loaded: %d operations\n", len(recipe.Operations))
@@ -197,14 +197,14 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 	if from != nil {
 		fromSHA, err = git.RevParse(ctx, *from)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("resolving --from %q: %v", *from, err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving --from %q: %v", *from, err))
 		}
 		isAnc, err := git.IsAncestorOf(ctx, fromSHA, "HEAD")
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("checking ancestry of --from: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("checking ancestry of --from: %v", err))
 		}
 		if !isAnc {
-			die(exitcode.General, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("--from commit %s is not an ancestor of HEAD", *from))
 		}
 	}
 
@@ -231,7 +231,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 		}
 		combinedPattern, err := regexp.Compile(strings.Join(combinedPatternParts, "|"))
 		if err != nil {
-			die(exitcode.Usage, fmt.Sprintf("compiling combined pattern: %v", err))
+			strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("compiling combined pattern: %v", err))
 		}
 
 		infof(flags, "Scanning objects...\n")
@@ -240,7 +240,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 			EntireHistory: entireHistory,
 		})
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
 		}
 
 		if len(results.Matches) == 0 {
@@ -261,7 +261,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 
 		contentMap, err := BuildRecipeBlobContent(ctx, recipe, blobSHAList, nil)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("building blob content map: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("building blob content map: %v", err))
 		}
 
 		return scrubRunDiff(ctx, flags, cmd, recipe, contentMap, fromSHA, entireHistory, limit)
@@ -377,7 +377,7 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 	// Build path attribution: SHA -> []paths
 	blobPaths, err := buildBlobPathMap(ctx)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("building blob path map: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("building blob path map: %v", err))
 	}
 
 	// Produce blob diffs
@@ -429,13 +429,13 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 	if entireHistory {
 		out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", "HEAD")
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("listing commits for diff: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("listing commits for diff: %v", err))
 		}
 		shas = git.SplitNonEmpty(out)
 	} else if fromSHA != "" {
 		out, _, err := git.Run(ctx, "rev-list", "--topo-order", "--reverse", fromSHA+"..HEAD")
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("listing commits for diff: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("listing commits for diff: %v", err))
 		}
 		shas = append([]string{fromSHA}, git.SplitNonEmpty(out)...)
 	}
@@ -527,14 +527,14 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 		var err error
 		allResults, err = scan.ScanObjectsMulti(ctx, patterns, scanOpts)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
 		}
 	} else {
 		allResults = make([]*scan.ScanResults, len(patterns))
 		for i, pat := range patterns {
 			results, err := scan.ScanObjects(ctx, pat, scanOpts)
 			if err != nil {
-				die(exitcode.General, fmt.Sprintf("scanning objects for operation %d: %v", i, err))
+				strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning objects for operation %d: %v", i, err))
 			}
 			allResults[i] = results
 		}
@@ -543,7 +543,7 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 	// Add attribution to each result set for file path info.
 	for i, results := range allResults {
 		if err := scan.AddAttribution(ctx, results, scanOpts); err != nil {
-			die(exitcode.General, fmt.Sprintf("adding attribution for operation %d: %v", i, err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("adding attribution for operation %d: %v", i, err))
 		}
 	}
 
@@ -553,7 +553,7 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 		if op.Scope != nil {
 			scopedBlobs, scopeErr := buildScopedBlobSet(ctx, *op.Scope)
 			if scopeErr != nil {
-				die(exitcode.General, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
+				strictcli.ExitNow(exitcode.General, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
 			}
 			opScopedBlobs[i] = scopedBlobs
 		}

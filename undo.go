@@ -195,19 +195,19 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	// safegit rejects the value. That is exitcode.Usage by the registry's own
 	// definition.
 	if count <= 0 {
-		die(exitcode.Usage, fmt.Sprintf("--count must be positive, got %d", count))
+		strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("--count must be positive, got %d", count))
 	}
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(exitcode.NotInitialized, err.Error())
+		strictcli.ExitNow(exitcode.NotInitialized, exitMessage(err))
 	}
 
 	sgDir := repo.SafegitDir(gitDir)
 
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("loading config: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("loading config: %v", err))
 	}
 
 	// Before any lock is taken and long before a ref moves: undoing a commit in a
@@ -216,16 +216,13 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	// followed by one. It is the same refusal, in the same place, that every
 	// other commit-family route makes.
 	if err := requireAutoBumpDecision(flags.ctx(), flags); err != nil {
-		die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 	}
 
 	// Outermost, and taken BEFORE the in-flight check below so the check reads a
 	// state no passthrough in this worktree can change while undo acts on it.
 	// The ref lock further down is the inner one.
-	release, code := acquireOperationLock(flags, gitDir, cmd)
-	if code != 0 {
-		os.Exit(code)
-	}
+	release := mustAcquireOperationLock(flags, gitDir, cmd)
 	defer release()
 
 	// Undoing while git has an operation in flight is incoherent on its face --
@@ -234,7 +231,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	// stages git needs to conclude it, leaving a repository that looks clean and
 	// mid-merge at once.
 	if err := coord.GuardInFlight(gitDir, cmd, nil); err != nil {
-		die(exitcode.CoordinationBusy, err.Error())
+		strictcli.ExitNow(exitcode.CoordinationBusy, exitMessage(err))
 	}
 
 	ctx := flags.ctx()
@@ -242,7 +239,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	// Resolve current branch
 	ref, err := git.HeadRef(ctx)
 	if err != nil || ref == "" {
-		die(exitcode.General, "HEAD is detached; undo requires a branch")
+		strictcli.ExitNow(exitcode.General, "HEAD is detached; undo requires a branch")
 	}
 
 	// Read all oplog entries. Undo walks the log backwards and reverses what
@@ -251,15 +248,15 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	// parse. Refuse instead of undoing the wrong operation.
 	allEntries, skipped, err := oplog.Read(sgDir)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("reading oplog: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("reading oplog: %v", err))
 	}
 	if skipped > 0 {
-		die(exitcode.General, fmt.Sprintf("operation log has %d unparseable line(s); undo needs a complete log and refuses to guess (inspect %s)", skipped, oplog.Path(sgDir)))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("operation log has %d unparseable line(s); undo needs a complete log and refuses to guess (inspect %s)", skipped, oplog.Path(sgDir)))
 	}
 
 	// Filter to entries for this ref (and session, unless bypass-session)
 	if !bypassSession && sessionID == "" {
-		die(exitcode.General, "no session ID found ("+sessionIDEnvVar+" not set); pass --bypass-session to undo across all sessions")
+		strictcli.ExitNow(exitcode.General, "no session ID found ("+sessionIDEnvVar+" not set); pass --bypass-session to undo across all sessions")
 	}
 
 	var entries []oplog.Entry
@@ -320,7 +317,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 			// Scrub and rewrite-author operations invalidate all prior SHAs in
 			// the oplog. We cannot safely undo anything before them.
 			if strings.HasPrefix(e.Op, "scrub-") || e.Op == "rewrite-author" {
-				die(exitcode.General, fmt.Sprintf("cannot undo %s — history rewrite invalidated prior oplog entries", e.Op))
+				strictcli.ExitNow(exitcode.General, fmt.Sprintf("cannot undo %s — history rewrite invalidated prior oplog entries", e.Op))
 			}
 			// Other non-undoable ops are simply skipped.
 			continue
@@ -352,23 +349,23 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		if liveSteps == 0 {
 			if notOurs != nil {
 				outcome, _ := notOurs.Extra["outcome"].(string)
-				die(exitcode.General, fmt.Sprintf(
+				strictcli.ExitNow(exitcode.General, fmt.Sprintf(
 					"no undoable operations found for %s in the oplog\n"+
 						"  the last thing safegit did to this branch was a %s (%s), which created no commit of its own.\n"+
 						"  undo reverses commits safegit authored; the commits this branch moved onto are git's,\n"+
 						"  and taking them back off is a reset rather than an undo.",
 					refShortName(ref), notOurs.Op, outcome))
 			}
-			die(exitcode.General, fmt.Sprintf("no undoable operations found for %s in the oplog", refShortName(ref)))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("no undoable operations found for %s in the oplog", refShortName(ref)))
 		}
-		die(exitcode.General, fmt.Sprintf("only %d undoable operations available, requested %d", liveSteps, count))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("only %d undoable operations available, requested %d", liveSteps, count))
 	}
 
 	// Determine the target key and SHA for the rollback
 	targetKey := undoableOps[targetEntry.Op]
 	targetSHARaw, fieldPresent := targetEntry.Extra[targetKey]
 	if !fieldPresent {
-		die(exitcode.General, fmt.Sprintf("oplog entry for %q is missing %q field", targetEntry.Op, targetKey))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("oplog entry for %q is missing %q field", targetEntry.Op, targetKey))
 	}
 
 	targetSHA, _ := targetSHARaw.(string)
@@ -381,7 +378,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 			isRootUndo = true
 		} else {
 			// amend/reword can't have empty oldSha
-			die(exitcode.General, fmt.Sprintf("oplog entry for %q has empty %q field", targetEntry.Op, targetKey))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("oplog entry for %q has empty %q field", targetEntry.Op, targetKey))
 		}
 	}
 
@@ -393,7 +390,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		// Fallback: resolve HEAD directly (shouldn't happen for well-formed oplog)
 		currentSHA, err = git.RevParse(ctx, "HEAD")
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
 		}
 	}
 
@@ -412,13 +409,13 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		// reading a world the preview has already described as changed.
 		bump, bumpErr := planParentBump(ctx, flags, targetSHA)
 		if bumpErr != nil {
-			die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", bumpErr))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("auto-bump parent: %v", bumpErr))
 		}
 
 		// Execution order: the real run moves the ref and then bumps the
 		// parent, so the records come out that way round.
 		if err := recordUndoRefUpdate(flags, ref, targetSHA, currentSHA, isRootUndo); err != nil {
-			die(exitcode.General, fmt.Sprintf("recording the ref update: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("recording the ref update: %v", err))
 		}
 		if bump != nil {
 			// The REAL Triggered-by value, not the placeholder: undo does not
@@ -426,7 +423,7 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 			// that already exists, and targetSHA is exactly what the execute path
 			// writes into the parent's commit message.
 			if err := recordParentBumpPreview(flags, bump, targetSHA, "undo", ""); err != nil {
-				die(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+				strictcli.ExitNow(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 			}
 		}
 
@@ -447,16 +444,16 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 	lk, err := lock.Acquire(sharedDir, sgDir, ref, "undo", timeout)
 	if err != nil {
 		if lock.IsTimeout(err) {
-			die(exitcode.LockTimeout, fmt.Sprintf("acquiring lock: %v", err))
+			strictcli.ExitNow(exitcode.LockTimeout, fmt.Sprintf("acquiring lock: %v", err))
 		}
-		die(exitcode.General, fmt.Sprintf("acquiring lock: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("acquiring lock: %v", err))
 	}
 	defer lk.Release()
 
 	// Perform the ref update -- through the effects handle, which is what makes
 	// the move visible in machine mode: recorded in a preview, performed here.
 	if err := recordUndoRefUpdate(flags, ref, targetSHA, currentSHA, isRootUndo); err != nil {
-		die(exitcode.General, fmt.Sprintf("%s (ref may have moved)", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("%s (ref may have moved)", err))
 	}
 
 	// Reconcile the shared index so git status/diff reflect the rollback while
@@ -505,12 +502,11 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 		fmt.Fprintf(os.Stderr, "note: undoing commit that triggered parent bump %s\n", bumpSHA[:8])
 	}
 
-	// A RETURN, not die(): the ref is already back where the oplog says, so a
-	// parent bump that failed is one more piece of aftercare residue rather than
-	// a reason to exit as though nothing happened. Returning also releases both
-	// locks held here -- the worktree operation lock taken at the top and the ref
-	// lock taken just above -- through their own defers, which os.Exit would
-	// have run past.
+	// A RETURN, not strictcli.ExitNow: the ref is already back where the oplog
+	// says, so a parent bump that failed is one more piece of aftercare residue
+	// rather than a refusal to report as though nothing happened. Both locks held
+	// here -- the worktree operation lock taken at the top and the ref lock taken
+	// just above -- are released through their own defers either way.
 	if err := maybeAutoBumpParent(ctx, flags, gitDir, targetSHA, "undo", ""); err != nil {
 		residue = reportAftercareFailure(residue, stepParentBump, err)
 	}
@@ -571,19 +567,19 @@ func runUndo(flags globalFlags, bypassSession bool, count int, sessionID string)
 // operations being reversed: undoing a merge commit undoes the merge, not the
 // branch that was merged in.
 //
-// It refuses through die(), so the same verdict reaches a --dry-run: a preview
+// It refuses through strictcli.ExitNow, so the same verdict reaches a --dry-run: a preview
 // that announced a rollback the real run refuses was the third half of this
 // same defect. The compare-and-swap stays where it is as the final race guard
 // -- this check is what produces an honest message.
 func refuseUnaccountedRange(ctx context.Context, ref, targetSHA, pinnedSHA string, reversing map[string]bool, all []oplog.Entry, sessionID string, bypassSession bool) {
 	branchSHA, err := git.RevParse(ctx, ref)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("reading where %s actually stands: %v", refShortName(ref), err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("reading where %s actually stands: %v", refShortName(ref), err))
 	}
 
 	lost, err := git.FirstParentRange(ctx, targetSHA, branchSHA)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("listing the commits undo would move %s back over: %v", refShortName(ref), err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("listing the commits undo would move %s back over: %v", refShortName(ref), err))
 	}
 
 	var foreign []string
@@ -593,7 +589,7 @@ func refuseUnaccountedRange(ctx context.Context, ref, targetSHA, pinnedSHA strin
 		}
 	}
 	if len(foreign) > 0 {
-		die(exitcode.General, unaccountedRangeMessage(ctx, ref, targetSHA, foreign, all, sessionID, bypassSession))
+		strictcli.ExitNow(exitcode.General, unaccountedRangeMessage(ctx, ref, targetSHA, foreign, all, sessionID, bypassSession))
 	}
 
 	// Nothing foreign in the range, but the branch is not where the log's last
@@ -602,7 +598,7 @@ func refuseUnaccountedRange(ctx context.Context, ref, targetSHA, pinnedSHA strin
 	// compare-and-swap would refuse this moments later with a plumbing message,
 	// and a preview would not refuse it at all.
 	if pinnedSHA != "" && branchSHA != pinnedSHA {
-		die(exitcode.General, fmt.Sprintf(
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf(
 			"%s is at %s, but safegit's log says its last recorded operation left it at %s\n"+
 				"  something moved the branch that undo has no record of -- a reset, a force-update, an amend made outside safegit.\n"+
 				"  undo will not roll back a branch it cannot account for. Inspect the branch (git log, git reflog) and move it yourself.",

@@ -29,9 +29,9 @@ import (
 // So every member exits exitcode.CommitStands, and every member REPORTS: the
 // envelope is emitted with the payload the run would have carried, so machine
 // mode never answers an operator with an empty stdout beside a ref that moved.
-// That is why these sites return rather than call die(): os.Exit runs below the
-// seam that emits the envelope. (Lock release is NOT the reason -- die()
-// releases pending locks already.)
+// These sites return the code rather than end through strictcli.ExitNow, which
+// records ONE error message: the run's report is its payload and one stderr line
+// per residue step, not a single refusal.
 
 // The aftercare steps, named once. Each string is what the payload's residue
 // member carries and what the stderr line reads, so an operator and a consumer

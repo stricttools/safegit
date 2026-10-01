@@ -12,6 +12,7 @@ import (
 	"github.com/stricttools/safegit/internal/git"
 	"github.com/stricttools/safegit/internal/oplog"
 	"github.com/stricttools/safegit/internal/trailer"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // TierAFunc is a command's own pre-refs verification. It runs while the
@@ -152,7 +153,7 @@ func refuseCorruptRecord(sha string, err error) error {
 	})
 }
 
-// dieFinalize exits with the exit code a rewrite failure calls for: a refusal
+// exitFinalize ends the command with the exit code a rewrite failure calls for: a refusal
 // says nothing happened (RewriteRefused), anything else is a failure partway
 // through the shared pipeline (General). prefix names the repository the
 // failure belongs to when a command rewrites more than one.
@@ -160,16 +161,16 @@ func refuseCorruptRecord(sha string, err error) error {
 // Both seams that can refuse route through here -- the walk, which refuses a
 // commit message it cannot transform without breaking a record, and Finalize's
 // own Tier A.
-func dieFinalize(prefix string, err error) {
-	msg := err.Error()
+func exitFinalize(prefix string, err error) {
+	msg := exitMessage(err)
 	if prefix != "" {
 		msg = prefix + ": " + msg
 	}
 	var refusal *rewriteRefusal
 	if errors.As(err, &refusal) {
-		die(exitcode.RewriteRefused, msg)
+		strictcli.ExitNow(exitcode.RewriteRefused, msg)
 	}
-	die(exitcode.General, msg)
+	strictcli.ExitNow(exitcode.General, msg)
 }
 
 // TierBExit returns the exit code the command should return. A Tier B finding

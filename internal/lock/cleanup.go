@@ -134,13 +134,12 @@ func (h *InterruptHold) Release() {
 
 // ReleasePending removes every lock this process still holds.
 //
-// It exists for the exit paths that do not unwind. A deferred Release covers a
-// function that returns; it does not cover os.Exit, which safegit's die() and
-// several handlers reach on a refusal. Without this, a command that acquired a
-// lock and then died on an unrelated error would leave its lock file behind for
-// the next contender to wait out and for doctor to report -- recoverable, since
-// the holder is dead and the lock is therefore stale, but noise the process
-// itself can prevent.
+// It is the backstop for a lock no deferred Release covers: every command
+// handler runs it when it ends, after the deferred cleanup of everything it
+// called, and the signal handler runs it before the process exits. Without it, a
+// lock left behind would be waited out by the next contender and reported by
+// doctor -- recoverable, since the holder is dead and the lock is therefore
+// stale, but noise the process itself can prevent.
 //
 // It is safe to call when no lock is held, and safe to call twice.
 //

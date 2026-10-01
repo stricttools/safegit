@@ -46,7 +46,7 @@ func runAuthorList(flags globalFlags) int {
 	// Format: author_name\x01author_email\x01committer_name\x01committer_email
 	out, _, err := git.Run(ctx, "log", "--all", "--format=%an\x01%ae\x01%cn\x01%ce")
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("reading git log: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("reading git log: %v", err))
 	}
 
 	lines := git.SplitNonEmpty(out)

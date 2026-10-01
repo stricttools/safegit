@@ -1,7 +1,7 @@
 // Package exitcode is safegit's single registry of process exit codes.
 //
 // Every numeric exit code safegit produces is a named constant here, and every
-// exit site in the tool -- die(), os.Exit(), a handler's int return, a
+// exit site in the tool -- strictcli.ExitNow(), a handler's int return, a
 // commit.CommitError's Code field -- names one of these constants rather than a
 // bare literal. `scripts/exit-inventory` enumerates those sites mechanically
 // from the AST; it is how the registry was derived and how a later reviewer

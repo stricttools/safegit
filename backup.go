@@ -36,7 +36,7 @@ const previewLeasePlaceholder = "<slot-sha>"
 func currentBranch(ctx context.Context, flags globalFlags, cmd string) string {
 	headRef, err := git.HeadRef(ctx)
 	if err != nil || headRef == "" {
-		die(exitcode.General, "HEAD is detached; backup slots are per branch, so check out a branch first")
+		strictcli.ExitNow(exitcode.General, "HEAD is detached; backup slots are per branch, so check out a branch first")
 	}
 	return strings.TrimPrefix(headRef, "refs/heads/")
 }
@@ -47,7 +47,7 @@ func currentBranch(ctx context.Context, flags globalFlags, cmd string) string {
 func remoteSlotSHA(ctx context.Context, flags globalFlags, cmd, remote, ref string) (string, bool) {
 	stdout, _, err := git.Run(ctx, "ls-remote", remote, ref)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("listing %s on %s: %v", ref, remote, err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("listing %s on %s: %v", ref, remote, err))
 	}
 	fields := strings.Fields(stdout)
 	if len(fields) == 0 {
@@ -67,7 +67,7 @@ func remoteSlotSHA(ctx context.Context, flags globalFlags, cmd, remote, ref stri
 // runBackupGit.
 func fetchSlotObjects(ctx context.Context, flags globalFlags, cmd, remote, ref string) string {
 	if _, stderr, err := git.Run(ctx, "fetch", remote, ref); err != nil {
-		die(exitcode.General, fmt.Sprintf("fetching %s from %s: %v\n%s", ref, remote, err, strings.TrimSpace(stderr)))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("fetching %s from %s: %v\n%s", ref, remote, err, strings.TrimSpace(stderr)))
 	}
 	return resolveFetchHead(ctx)
 }
@@ -79,7 +79,7 @@ func fetchSlotObjects(ctx context.Context, flags globalFlags, cmd, remote, ref s
 func resolveFetchHead(ctx context.Context) string {
 	sha, err := git.RevParse(ctx, "FETCH_HEAD")
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("resolving fetched backup: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving fetched backup: %v", err))
 	}
 	return sha
 }
@@ -260,7 +260,7 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(exitcode.NotInitialized, err.Error())
+		strictcli.ExitNow(exitcode.NotInitialized, exitMessage(err))
 	}
 	sgDir := repo.SafegitDir(gitDir)
 	ctx := flags.ctx()
@@ -270,12 +270,12 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 
 	headSHA, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
 	}
 
 	remoteURL, err := resolveRemoteURL(ctx, remote)
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
 	}
 
 	// A dry run previews from local state alone. Classifying the remote, reading
@@ -291,7 +291,7 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 	if flags.dryRun {
 		lease := "--force-with-lease=" + slot + ":" + previewLeasePlaceholder
 		if _, err := execGitPush(flags, []string{"push", "--no-verify", lease, remote, "HEAD:" + slot}); err != nil {
-			die(exitcode.General, fmt.Sprintf("recording the push: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("recording the push: %v", err))
 		}
 		infof(flags, "Would back up %s (%s) to backup slot %s on %s\n", branch, headSHA[:12], slot, remote)
 		infof(flags, "  equivalent git command: git push --no-verify --force-with-lease=%s:<slot sha observed at run time> %s HEAD:%s\n", slot, remote, slot)
@@ -316,11 +316,11 @@ func runBackupCreate(flags globalFlags, remote string, overwriteRemoteBackup, al
 		slotSHA = fetchSlotObjects(ctx, flags, cmd, remote, slot)
 		isAncestor, err := git.IsAncestorOf(ctx, slotSHA, headSHA)
 		if err != nil {
-			die(exitcode.General, fmt.Sprintf("comparing backup slot with HEAD: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("comparing backup slot with HEAD: %v", err))
 		}
 		diverged = !isAncestor
 		if diverged && !overwriteRemoteBackup {
-			die(exitcode.BackupDiverged, fmt.Sprintf(
+			strictcli.ExitNow(exitcode.BackupDiverged, fmt.Sprintf(
 				"remote backup contains work not in your current history\n"+
 					"  slot: %s on %s = %s\n"+
 					"  HEAD: %s\n"+
@@ -376,17 +376,17 @@ func runBackupList(flags globalFlags, remote string) int {
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(exitcode.NotInitialized, err.Error())
+		strictcli.ExitNow(exitcode.NotInitialized, exitMessage(err))
 	}
 	ctx := flags.ctx()
 
 	if _, err := resolveRemoteURL(ctx, remote); err != nil {
-		die(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
 	}
 
 	refs, err := git.LsRemoteBulk(ctx, remote, backupRefPrefix+"*")
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("listing backups on %s: %v", remote, err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("listing backups on %s: %v", remote, err))
 	}
 	if len(refs) == 0 {
 		infof(flags, "no backups on %s\n", remote)
@@ -421,7 +421,7 @@ func runBackupRestore(flags globalFlags, remote string) int {
 
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
-		die(exitcode.NotInitialized, err.Error())
+		strictcli.ExitNow(exitcode.NotInitialized, exitMessage(err))
 	}
 	sgDir := repo.SafegitDir(gitDir)
 
@@ -440,16 +440,16 @@ func runBackupRestore(flags globalFlags, remote string) int {
 
 	oldHead, err := git.RevParse(ctx, "HEAD")
 	if err != nil {
-		die(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
 	}
 
 	if _, err := resolveRemoteURL(ctx, remote); err != nil {
-		die(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving remote URL: %v", err))
 	}
 
 	slotSHA, slotExists := remoteSlotSHA(ctx, flags, cmd, remote, slot)
 	if !slotExists {
-		die(exitcode.BackupNoSlot, fmt.Sprintf(
+		strictcli.ExitNow(exitcode.BackupNoSlot, fmt.Sprintf(
 			"no backup slot %s on %s\n"+
 				"list what is there with: safegit backup list %s", slot, remote, remote))
 	}
@@ -468,10 +468,10 @@ func runBackupRestore(flags globalFlags, remote string) int {
 	// both wait on.
 	if flags.dryRun {
 		if err := mintSlotFetch(flags, remote, slot); err != nil {
-			die(exitcode.General, fmt.Sprintf("recording the fetch: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("recording the fetch: %v", err))
 		}
 		if _, _, err := runBackupGit(flags, "ref:HEAD", "merge", "--ff-only", slotSHA); err != nil {
-			die(exitcode.General, fmt.Sprintf("recording the fast-forward: %v", err))
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("recording the fast-forward: %v", err))
 		}
 		infof(flags, "Would fast-forward %s from backup slot %s on %s (%s -> %s)\n",
 			branch, slot, remote, oldHead[:12], slotSHA[:12])
@@ -481,7 +481,7 @@ func runBackupRestore(flags globalFlags, remote string) int {
 	}
 
 	if err := mintSlotFetch(flags, remote, slot); err != nil {
-		die(exitcode.General, fmt.Sprintf("fetching %s from %s: %v", slot, remote, err))
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf("fetching %s from %s: %v", slot, remote, err))
 	}
 	fetched := resolveFetchHead(ctx)
 
@@ -491,7 +491,7 @@ func runBackupRestore(flags globalFlags, remote string) int {
 	}
 	if err != nil {
 		fmt.Fprint(os.Stderr, stderr)
-		die(exitcode.General, fmt.Sprintf(
+		strictcli.ExitNow(exitcode.General, fmt.Sprintf(
 			"backup %s cannot be fast-forwarded onto %s: the branch has commits the backup does not contain\n"+
 				"  slot: %s = %s\n"+
 				"  HEAD: %s\n"+

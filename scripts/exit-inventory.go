@@ -11,7 +11,7 @@
 //
 // Five site kinds are recognized, by AST shape rather than by regex:
 //
-//	die(N, ...)              safegit's own fatal helper (main.go)
+//	strictcli.ExitNow(N, ...) a command's early exit through the framework
 //	os.Exit(N)               a direct process exit
 //	strictcli.Exit(N)        a handler's outcome, which the framework exits with
 //	return N                 a nonzero return from an int-returning function in
@@ -19,7 +19,7 @@
 //	                         helpers propagate exit codes this way
 //	err.Code                 a Code: field in a composite literal, which is how
 //	                         internal/commit's CommitError carries an exit code
-//	                         out to the caller that os.Exit()s it
+//	                         out to the caller that exits with it
 //
 // A site whose code is not an integer literal (a variable, a call, a named
 // constant that is not resolved here) is reported with code -1 and the
@@ -68,7 +68,7 @@ func main() {
 		}
 		if d.IsDir() {
 			name := d.Name()
-			if name == ".git" || name == "testdata" || name == "scripts" || name == "docs" {
+			if name == ".git" || name == "testdata" || name == "scripts" || name == "docs" || name == "experiments" || name == "screenshots" {
 				return fs.SkipDir
 			}
 			return nil
@@ -262,10 +262,6 @@ func singleIntResult(t *ast.FuncType) bool {
 // callKind names the exit-site call shapes; "" for everything else.
 func callKind(fun ast.Expr) string {
 	switch e := fun.(type) {
-	case *ast.Ident:
-		if e.Name == "die" {
-			return "die"
-		}
 	case *ast.SelectorExpr:
 		pkg, ok := e.X.(*ast.Ident)
 		if !ok {
@@ -276,6 +272,8 @@ func callKind(fun ast.Expr) string {
 			return "os.Exit"
 		case pkg.Name == "strictcli" && e.Sel.Name == "Exit":
 			return "strictcli.Exit"
+		case pkg.Name == "strictcli" && e.Sel.Name == "ExitNow":
+			return "strictcli.ExitNow"
 		}
 	}
 	return ""
