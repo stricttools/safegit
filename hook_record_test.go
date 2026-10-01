@@ -135,3 +135,33 @@ func TestHookRecordMembersAreSnakeCase(t *testing.T) {
 		}
 	}
 }
+
+// TestLeftoverStateIsNullWithoutProc: a leftover's state is the letter /proc
+// reported when safegit found it, and null where there was none to read -- the
+// platform has no /proc.
+func TestLeftoverStateIsNullWithoutProc(t *testing.T) {
+	recs := hookRecords([]hooks.HookResult{{
+		Name: "10-lint",
+		Leftovers: []hooks.LeftoverProcess{
+			{PID: 1, Command: "sleep", FoundState: "S"},
+			{PID: 2, Command: "node"},
+		},
+	}})
+	left := recs[0].LeftoverProcesses
+	if len(left) != 2 {
+		t.Fatalf("leftover_processes = %+v", left)
+	}
+	if left[0].State == nil || *left[0].State != "S" {
+		t.Errorf("state = %v, want \"S\"", left[0].State)
+	}
+	if left[1].State != nil {
+		t.Errorf("state = %q, want null", *left[1].State)
+	}
+	raw, err := json.Marshal(left[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"state":null`) {
+		t.Errorf("a leftover with no state must carry state null: %s", raw)
+	}
+}

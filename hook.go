@@ -365,6 +365,9 @@ type hookLeftoverRecord struct {
 	// Killed is true when safegit stopped the process, false when it is
 	// still running.
 	Killed bool `json:"killed"`
+	// State is the process state letter /proc reported when safegit found the
+	// process, and null where the platform has no /proc.
+	State *string `json:"state"`
 }
 
 // hookRecordSchema declares one hookRecord. `push` and `hook run` both embed
@@ -380,8 +383,9 @@ var hookRecordSchema = strictcli.SchemaObject(
 				"pid":     strictcli.SchemaType("integer"),
 				"command": strictcli.SchemaType("string"),
 				"killed":  strictcli.SchemaType("boolean"),
+				"state":   strictcli.SchemaType("string", "null"),
 			},
-			[]string{"pid", "command", "killed"},
+			[]string{"pid", "command", "killed", "state"},
 			false,
 		)),
 		"unidentified_leftovers":        strictcli.SchemaType("boolean"),
@@ -400,7 +404,12 @@ func hookRecords(results []hooks.HookResult) []hookRecord {
 	for _, r := range results {
 		left := make([]hookLeftoverRecord, 0, len(r.Leftovers))
 		for _, l := range r.Leftovers {
-			left = append(left, hookLeftoverRecord{PID: l.PID, Command: l.Command, Killed: l.Killed})
+			rec := hookLeftoverRecord{PID: l.PID, Command: l.Command, Killed: l.Killed}
+			if l.FoundState != "" {
+				state := l.FoundState
+				rec.State = &state
+			}
+			left = append(left, rec)
 		}
 		rec := hookRecord{
 			Name:                  r.Name,

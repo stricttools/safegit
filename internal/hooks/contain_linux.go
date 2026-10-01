@@ -157,7 +157,7 @@ func (c *container) sweep(clock stopClock, signalledGroup bool) ([]LeftoverProce
 	record := func(live map[int]procStat) {
 		for pid, st := range live {
 			if _, ok := found[pid]; !ok {
-				found[pid] = &LeftoverProcess{PID: pid, Command: st.comm}
+				found[pid] = &LeftoverProcess{PID: pid, Command: st.comm, FoundState: st.state}
 				order = append(order, pid)
 			}
 			if h, ok := handles[pid]; ok {
@@ -181,7 +181,7 @@ func (c *container) sweep(clock stopClock, signalledGroup bool) ([]LeftoverProce
 	}
 
 	for pid, st := range c.terminated {
-		found[pid] = &LeftoverProcess{PID: pid, Command: st.comm}
+		found[pid] = &LeftoverProcess{PID: pid, Command: st.comm, FoundState: st.state}
 		order = append(order, pid)
 	}
 	live := c.scan()

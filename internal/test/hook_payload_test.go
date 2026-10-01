@@ -41,7 +41,14 @@ type leftoverRecord struct {
 	PID     int    `json:"pid"`
 	Command string `json:"command"`
 	Killed  bool   `json:"killed"`
+	// State is the process state letter /proc reported when safegit found
+	// the process, and null where the platform has no /proc.
+	State *string `json:"state"`
 }
+
+// leftoverMembers is the closed set of members a leftover_processes entry
+// carries.
+var leftoverMembers = map[string]bool{"pid": true, "command": true, "killed": true, "state": true}
 
 // hookEntryMembers is the closed set of members an entry may carry. A verdict
 // member (a status, a reason, a pass/fail flag) is refused by this set.
@@ -80,6 +87,23 @@ func payloadHooks(t *testing.T, stdout string) []hookEntry {
 		}
 		if lp, ok := e["leftover_processes"]; ok && string(lp) == "null" {
 			t.Errorf("hooks[%d].leftover_processes is null; it is a list, empty when nothing was left:\n%s", i, raw)
+		} else if ok {
+			var entries []map[string]json.RawMessage
+			if err := json.Unmarshal(lp, &entries); err != nil {
+				t.Fatalf("hooks[%d].leftover_processes does not decode: %v", i, err)
+			}
+			for j, l := range entries {
+				for k := range leftoverMembers {
+					if _, has := l[k]; !has {
+						t.Errorf("hooks[%d].leftover_processes[%d] lacks %q:\n%s", i, j, k, raw)
+					}
+				}
+				for k := range l {
+					if !leftoverMembers[k] {
+						t.Errorf("hooks[%d].leftover_processes[%d] carries %q:\n%s", i, j, k, raw)
+					}
+				}
+			}
 		}
 	}
 	var typed struct {

@@ -117,9 +117,9 @@ func TestHookLeftoverProcessIsRecordedInThePayload(t *testing.T) {
 				t.Fatalf("hooks = %d entries, want 1", len(hooks))
 			}
 			checkEntry(t, hooks[0], "10-lint", 0, false)
-			want := leftoverRecord{PID: pid, Command: "sleep", Killed: true}
-			if len(hooks[0].LeftoverProcesses) != 1 || hooks[0].LeftoverProcesses[0] != want {
-				t.Errorf("leftover_processes = %+v, want [%+v]", hooks[0].LeftoverProcesses, want)
+			if left := hooks[0].LeftoverProcesses; len(left) != 1 ||
+				left[0].PID != pid || left[0].Command != "sleep" || !left[0].Killed || left[0].State == nil || len(*left[0].State) != 1 {
+				t.Errorf("leftover_processes = %+v, want the killed sleep %d with its one-letter state", left, pid)
 			}
 			assertNoVerdictMember(t, stdout)
 		})

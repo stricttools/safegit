@@ -78,6 +78,9 @@ type LeftoverProcess struct {
 	// the cap ("D" for uninterruptible sleep), and empty where the platform has
 	// no /proc or the process was killed.
 	State string
+	// FoundState is the process state /proc reported when safegit found the
+	// process ("S", "D", "Z", ...), and empty where the platform has no /proc.
+	FoundState string
 	// Hook marks the hook's own process, which the stop could not end.
 	Hook bool
 }
@@ -503,7 +506,7 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		if comm == "" {
 			comm = name
 		}
-		result.Leftovers = append([]LeftoverProcess{{PID: pid, Command: comm, State: state, Hook: true}}, result.Leftovers...)
+		result.Leftovers = append([]LeftoverProcess{{PID: pid, Command: comm, State: state, FoundState: state, Hook: true}}, result.Leftovers...)
 	}
 	unstopped := false
 	for _, l := range result.Leftovers {
