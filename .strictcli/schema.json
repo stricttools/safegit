@@ -475,6 +475,13 @@
           "reason": "committing in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
           "kind": "proc_mutate"
         }
+      ],
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+        }
       ]
     },
     "mv": {
@@ -619,6 +626,13 @@
           "name": "parent-bump",
           "reason": "moving paths in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
           "kind": "proc_mutate"
+        }
+      ],
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
         }
       ]
     },
@@ -828,6 +842,13 @@
           "name": "parent-bump",
           "reason": "concluding an operation in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
           "kind": "proc_mutate"
+        }
+      ],
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
         }
       ]
     },
@@ -1055,6 +1076,13 @@
           "reason": "concluding an operation in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
           "kind": "proc_mutate"
         }
+      ],
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+        }
       ]
     },
     "revert-continue": {
@@ -1281,13 +1309,27 @@
           "reason": "concluding an operation in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
           "kind": "proc_mutate"
         }
+      ],
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+        }
       ]
     },
     "switch": {
       "name": "switch",
       "help": "switch to another BRANCH, guarded twice before git runs: the worktree operation lock, held for the whole command, and then a check for uncommitted work. The command line is a deliberate subset of git's: an existing branch name, or -c to create one, and nothing else. A tag, an object name or any other commit-ish is refused, because switching onto one detaches HEAD -- the state safegit's commit, conclusion and undo paths all refuse -- and the refusal names the raw-git command for the rare deliberate case. --detach, -C, --force/--discard-changes, --orphan and --merge are refused, each naming why. There is NO file mode and no 'safegit checkout': git's checkout of files over the working tree destroys uncommitted work with no record anywhere, so safegit does not implement it at all",
       "effect": "mutating",
-      "passthrough": true
+      "passthrough": true,
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+        }
+      ]
     },
     "merge": {
       "name": "merge",
@@ -1404,25 +1446,53 @@
           "reason": "merging in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
           "kind": "proc_mutate"
         }
+      ],
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+        }
       ]
     },
     "rebase": {
       "name": "rebase",
       "help": "rebase the current branch onto upstream, guarded before git runs: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- then a check for uncommitted work, and then a refusal to rebase over ANOTHER operation git already has in flight (a rebase over a parked revert exits 0 and strands that revert's state files behind it, blocking every later commit). That last check is kind-scoped: it refuses an in-flight state that is not a REBASE, so a rebase's own --continue, --abort and --skip pass by construction. Those three stay git's either way: safegit has no verb that finishes a rebase. A rebase on an UNBORN branch -- one with no commits yet, so with nothing to replay -- is refused before git runs too, by a separate check beside that one. The command line is a deliberate subset of git's: exactly one upstream, --onto, -i, --autostash and --rebase-merges (whose optional value is attached only). The apply backend and its patch options, --exec and --root are refused, each naming why",
       "effect": "mutating",
-      "passthrough": true
+      "passthrough": true,
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+        }
+      ]
     },
     "reset": {
       "name": "reset",
       "help": "reset HEAD with guards that prevent accidental data loss. The worktree operation lock is taken for EVERY reset, because every reset moves HEAD; the uncommitted-work check applies to the modes that WRITE working-tree files -- --hard, --merge and --keep -- while --soft and --mixed move only the ref and the index. Which is which is derived from safegit's git classification table, never re-read from the argument list here. The command line is a deliberate subset of git's: one of the five modes with a commit. The PATHSPEC form is refused -- it writes the shared index entry by entry, which is the one file safegit's design keeps out of -- and so is --patch",
       "effect": "mutating",
-      "passthrough": true
+      "passthrough": true,
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+        }
+      ]
     },
     "bisect": {
       "name": "bisect",
       "help": "binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the STEPPING subcommands (start, good, bad, old, new, skip, run, replay, reset), each of which checks another commit out, and not to the reporting ones (terms, log, view). Which is which is derived from safegit's git classification table, never kept as a list here -- and so is which subcommands may be typed at all: a word outside that vocabulary is refused before git runs, as is every option. 'bisect start' on an UNBORN branch is refused before git runs as well: there is no range of commits to search there",
       "effect": "mutating",
-      "passthrough": true
+      "passthrough": true,
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+        }
+      ]
     },
     "push": {
       "name": "push",
@@ -1643,6 +1713,13 @@
           "reason": "--force-with-lease overwrites the remote ref, discarding whatever the lease expectation did not cover",
           "kind": "proc_mutate"
         }
+      ],
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+        }
       ]
     },
     "pull": {
@@ -1853,6 +1930,13 @@
           "reason": "pulling in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
           "kind": "proc_mutate"
         }
+      ],
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+        }
       ]
     },
     "doctor": {
@@ -1886,6 +1970,13 @@
               "help": "remove safegit's state from this REPOSITORY -- every worktree's state directory plus the shared locks and hook store, not only the worktree you are standing in -- after listing every path it is about to remove"
             }
           ]
+        }
+      ],
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
         }
       ]
     },
@@ -2018,6 +2109,13 @@
           "reason": "cherry-picking in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
           "kind": "proc_mutate"
         }
+      ],
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+        }
       ]
     },
     "revert": {
@@ -2149,6 +2247,13 @@
           "reason": "reverting in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
           "kind": "proc_mutate"
         }
+      ],
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+        }
       ]
     },
     "undo": {
@@ -2242,6 +2347,13 @@
           "reason": "undoing a submodule commit moves the parent's gitlink back, so safegit commits the parent too when commit.autoBumpParent is on",
           "kind": "proc_mutate"
         }
+      ],
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+        }
       ]
     },
     "unlock": {
@@ -2256,6 +2368,13 @@
             "type": "string"
           },
           "presence": "required"
+        }
+      ],
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
         }
       ]
     },
@@ -2543,6 +2662,13 @@
       ],
       "tags": [
         "json"
+      ],
+      "requires": [
+        {
+          "name": "git",
+          "help": "the git executable, which safegit runs for every repository operation",
+          "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+        }
       ]
     }
   },
@@ -2596,6 +2722,13 @@
               "reason": "a backup slot is a single overwritten slot, pinned by a lease to the SHA observed a moment earlier",
               "kind": "proc_mutate"
             }
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+            }
           ]
         },
         "list": {
@@ -2610,6 +2743,13 @@
                 "type": "string"
               },
               "presence": "optional"
+            }
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
             }
           ]
         },
@@ -2626,6 +2766,13 @@
               },
               "presence": "optional"
             }
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+            }
           ]
         }
       }
@@ -2637,7 +2784,14 @@
         "show": {
           "name": "show",
           "help": "show all configuration values currently in effect for this repository, including built-in defaults and any user overrides from the .git/safegit/config.json file, printed as key-value pairs to stdout for inspection and debugging purposes",
-          "effect": "read_only"
+          "effect": "read_only",
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+            }
+          ]
         },
         "get": {
           "name": "get",
@@ -2651,6 +2805,13 @@
                 "type": "string"
               },
               "presence": "required"
+            }
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
             }
           ]
         },
@@ -2675,6 +2836,13 @@
               },
               "presence": "required"
             }
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+            }
           ]
         }
       }
@@ -2686,7 +2854,14 @@
         "list": {
           "name": "list",
           "help": "list every pre-pre-push hook location safegit knows about, with its origin, its path and whether it is executable, so you can audit which checks run before every push. Three origins are shown: local, the tool-owned live store under the repository's common .git/safegit/hooks that hook install writes to and every worktree shares; tracked, the hooks the CHECKOUT provides in .safegit/hooks, which run because they are in that directory whether or not git tracks them, so cloning a repository and pushing from that checkout runs the repository's scripts; and legacy, the pre-migration location in git's own .git/hooks, which nothing runs any more and safegit hook migrate relocates. Non-executable and non-hook entries are listed too, because the hook an operator is asking about is usually the one that is NOT running",
-          "effect": "read_only"
+          "effect": "read_only",
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+            }
+          ]
         },
         "run": {
           "name": "run",
@@ -2784,6 +2959,13 @@
               },
               "presence": "optional"
             }
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+            }
           ]
         },
         "install": {
@@ -2798,6 +2980,13 @@
                 "type": "string"
               },
               "presence": "required"
+            }
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
             }
           ]
         },
@@ -2814,12 +3003,26 @@
               },
               "presence": "required"
             }
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+            }
           ]
         },
         "migrate": {
           "name": "migrate",
           "help": "move safegit's hooks out of git's own .git/hooks directory into the tool-owned .git/safegit/hooks store, relocating the pre-pre-push file and the pre-pre-push.d directory unconditionally because those two names are the only ones safegit ever wrote there, and reporting success with an explanation when there is nothing to move. Both ends are under the repository's COMMON git dir, which is git's own hook directory in every worktree, so migration run from a linked worktree relocates the repository's hooks",
-          "effect": "mutating"
+          "effect": "mutating",
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+            }
+          ]
         }
       }
     },
@@ -2864,6 +3067,13 @@
           },
           "tags": [
             "json"
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+            }
           ]
         },
         "check": {
@@ -2943,6 +3153,13 @@
           ],
           "tags": [
             "json"
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+            }
           ]
         },
         "rewrite": {
@@ -3118,6 +3335,13 @@
                   "name": "author-email"
                 }
               ]
+            }
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
             }
           ]
         }
@@ -3327,6 +3551,13 @@
           ],
           "tags": [
             "json"
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+            }
           ]
         },
         "match": {
@@ -3560,6 +3791,13 @@
           ],
           "tags": [
             "json"
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+            }
           ]
         },
         "run": {
@@ -3856,6 +4094,13 @@
           ],
           "tags": [
             "json"
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+            }
           ]
         },
         "verify": {
@@ -3979,6 +4224,13 @@
               "name": "verify-scope",
               "flag": "scope",
               "depends_on": "pattern"
+            }
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
             }
           ]
         }

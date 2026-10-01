@@ -97,9 +97,10 @@ const (
 	// the package comment.
 	Usage = 2
 
-	// NoRepository means the working directory is not inside a git repository
-	// (or git is not installed). Produced by every command that resolves the
-	// git directory, at that point -- which is every command except version,
+	// NoRepository means the working directory is not inside a git repository.
+	// (A git that cannot be found is refused before any command starts, as the
+	// declared git requirement, with exit 1.) Produced by every command that
+	// resolves the git directory, at that point -- which is every command except
 	// author list and author check, none of which resolve it (they read git
 	// log, and a failure there is General).
 	NoRepository = 3

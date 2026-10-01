@@ -437,7 +437,7 @@ func registerContinue(app *strictcli.App, op continueOp, schema map[string]inter
 			Reason: "concluding an operation in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
 			Kind:   strictcli.ProcMutate,
 		}),
-		strictcli.WithFlags(continueFlags(op, theirsHelp)...),
+		strictcli.WithFlags(continueFlags(op, theirsHelp)...), strictcli.WithRequires(gitRequirement),
 	)
 }
 

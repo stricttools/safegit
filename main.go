@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -197,6 +198,15 @@ var (
 		"rewrite every commit from the root of the repository to HEAD")
 )
 
+// gitRequirement is git itself, which every safegit command runs. It is
+// declared once and referenced from each command, so a command run where git
+// cannot be found is refused by the framework before it starts, naming git and
+// how to install it.
+var gitRequirement = strictcli.NewRequirement("git",
+	"the git executable, which safegit runs for every repository operation",
+	"with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH",
+	func() (string, error) { return exec.LookPath(gitexec.Binary) })
+
 // newApp builds the fully registered application without running it. main()
 // only runs what this returns, so a test can hold the same app and inspect
 // what was registered -- which is what pins every command's effect
@@ -330,7 +340,7 @@ func newApp() *strictcli.App {
 		),
 		strictcli.WithArgs(
 			strictcli.NewArg("files", "files to commit, taken literally -- a colon in an argument is part of the filename, and hunk selection is --hunks", strictcli.ArgOptional(), strictcli.Variadic()),
-		),
+		), strictcli.WithRequires(gitRequirement),
 	)
 
 	app.Command("mv", "move tracked paths and commit the moves with their records in one operation", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
@@ -360,7 +370,7 @@ func newApp() *strictcli.App {
 		),
 		strictcli.WithArgs(
 			strictcli.NewArg("pairs", "one move each, written 'old -> new'. End BOTH paths with a slash to move a whole directory, which is recorded as ONE subtree record however many files it holds. Quote a path C-style when it holds a space, a quote, a backslash or the arrow itself. Every pair is checked before the first file is touched -- the source must be tracked and on disk, the destination must be free and its directory must already exist unless --create-missing-directories says otherwise, the source must carry no uncommitted content changes, and no two pairs may speak for the same path or chain into one another -- and a failure part-way through puts back everything already moved. The commit is the move and nothing else: each path is carried across as the blob its parent commit held, which is why a path with uncommitted content changes is refused rather than moved -- commit the content first and then move it, or move it on disk yourself and commit both at once with 'safegit commit --moved'", strictcli.ArgRequired(), strictcli.Variadic()),
-		),
+		), strictcli.WithRequires(gitRequirement),
 	)
 
 	// The three conclusion commands, in git's own word order. They are flat
@@ -380,7 +390,7 @@ func newApp() *strictcli.App {
 		"the result of UNDOING the reverted commit, which is what its parent held -- not the reverted commit's own content",
 		"conclude a revert git stopped before committing. Every conflicted path is named with --resolve (or in a --resolve-file). For a SINGLE revert safegit writes the commit itself: one parent, YOU as both author and committer -- a revert is your own new change, not the reverted commit author's, which is git's own division and the opposite of what a cherry-pick does -- git's own message draft with its comment block stripped or -m, the repository's commit-msg hook run, and the revert's state files removed afterwards. Note the stage keywords: a revert applies an INVERSE patch, so theirs is what the reverted commit's parent held -- resolving to theirs keeps the revert, resolving to ours keeps the commit being reverted. A QUEUED sequence -- `git revert <a> <b>`, which only raw git can start, since safegit's revert undoes one commit -- is REFUSED, naming git's own 'revert --continue' and '--abort': the queue is part of the state a conclusion removes, so finishing one step of it would throw the rest away")
 
-	app.Passthrough("switch", switchHelp, releasingPassthroughLocks(pt), strictcli.WithEffect(strictcli.EffectMutating))
+	app.Passthrough("switch", switchHelp, releasingPassthroughLocks(pt), strictcli.WithEffect(strictcli.EffectMutating), strictcli.WithRequires(gitRequirement))
 	// merge is a passthrough REGISTRATION -- the operator's argv is git's own
 	// vocabulary and reaches the handler verbatim -- but it is no longer a
 	// guarded passthrough in behavior: safegit authors the commit. It declares
@@ -394,10 +404,10 @@ func newApp() *strictcli.App {
 			Name:   "parent-bump",
 			Reason: "merging in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
 			Kind:   strictcli.ProcMutate,
-		}))
-	app.Passthrough("rebase", "rebase the current branch onto upstream, guarded before git runs: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- then a check for uncommitted work, and then a refusal to rebase over ANOTHER operation git already has in flight (a rebase over a parked revert exits 0 and strands that revert's state files behind it, blocking every later commit). That last check is kind-scoped: it refuses an in-flight state that is not a REBASE, so a rebase's own --continue, --abort and --skip pass by construction. Those three stay git's either way: safegit has no verb that finishes a rebase. A rebase on an UNBORN branch -- one with no commits yet, so with nothing to replay -- is refused before git runs too, by a separate check beside that one. The command line is a deliberate subset of git's: exactly one upstream, --onto, -i, --autostash and --rebase-merges (whose optional value is attached only). The apply backend and its patch options, --exec and --root are refused, each naming why", releasingPassthroughLocks(pt), strictcli.WithEffect(strictcli.EffectMutating))
-	app.Passthrough("reset", "reset HEAD with guards that prevent accidental data loss. The worktree operation lock is taken for EVERY reset, because every reset moves HEAD; the uncommitted-work check applies to the modes that WRITE working-tree files -- --hard, --merge and --keep -- while --soft and --mixed move only the ref and the index. Which is which is derived from safegit's git classification table, never re-read from the argument list here. The command line is a deliberate subset of git's: one of the five modes with a commit. The PATHSPEC form is refused -- it writes the shared index entry by entry, which is the one file safegit's design keeps out of -- and so is --patch", releasingPassthroughLocks(pt), strictcli.WithEffect(strictcli.EffectMutating))
-	app.Passthrough("bisect", "binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the STEPPING subcommands (start, good, bad, old, new, skip, run, replay, reset), each of which checks another commit out, and not to the reporting ones (terms, log, view). Which is which is derived from safegit's git classification table, never kept as a list here -- and so is which subcommands may be typed at all: a word outside that vocabulary is refused before git runs, as is every option. 'bisect start' on an UNBORN branch is refused before git runs as well: there is no range of commits to search there", releasingPassthroughLocks(pt), strictcli.WithEffect(strictcli.EffectMutating))
+		}), strictcli.WithRequires(gitRequirement))
+	app.Passthrough("rebase", "rebase the current branch onto upstream, guarded before git runs: the worktree operation lock -- held for the whole rebase, an interactive one's editor session included, so a second safegit process in this worktree waits that long -- then a check for uncommitted work, and then a refusal to rebase over ANOTHER operation git already has in flight (a rebase over a parked revert exits 0 and strands that revert's state files behind it, blocking every later commit). That last check is kind-scoped: it refuses an in-flight state that is not a REBASE, so a rebase's own --continue, --abort and --skip pass by construction. Those three stay git's either way: safegit has no verb that finishes a rebase. A rebase on an UNBORN branch -- one with no commits yet, so with nothing to replay -- is refused before git runs too, by a separate check beside that one. The command line is a deliberate subset of git's: exactly one upstream, --onto, -i, --autostash and --rebase-merges (whose optional value is attached only). The apply backend and its patch options, --exec and --root are refused, each naming why", releasingPassthroughLocks(pt), strictcli.WithEffect(strictcli.EffectMutating), strictcli.WithRequires(gitRequirement))
+	app.Passthrough("reset", "reset HEAD with guards that prevent accidental data loss. The worktree operation lock is taken for EVERY reset, because every reset moves HEAD; the uncommitted-work check applies to the modes that WRITE working-tree files -- --hard, --merge and --keep -- while --soft and --mixed move only the ref and the index. Which is which is derived from safegit's git classification table, never re-read from the argument list here. The command line is a deliberate subset of git's: one of the five modes with a commit. The PATHSPEC form is refused -- it writes the shared index entry by entry, which is the one file safegit's design keeps out of -- and so is --patch", releasingPassthroughLocks(pt), strictcli.WithEffect(strictcli.EffectMutating), strictcli.WithRequires(gitRequirement))
+	app.Passthrough("bisect", "binary search through commits to find a bug. The worktree operation lock is taken for EVERY invocation; the uncommitted-work check applies to the STEPPING subcommands (start, good, bad, old, new, skip, run, replay, reset), each of which checks another commit out, and not to the reporting ones (terms, log, view). Which is which is derived from safegit's git classification table, never kept as a list here -- and so is which subcommands may be typed at all: a word outside that vocabulary is refused before git runs, as is every option. 'bisect start' on an UNBORN branch is refused before git runs as well: there is no range of commits to search there", releasingPassthroughLocks(pt), strictcli.WithEffect(strictcli.EffectMutating), strictcli.WithRequires(gitRequirement))
 	app.Command("push", "push refs to remote with pre-pre-push hooks and automatic retry. A hook that exits nonzero, times out, or leaves any process running when it ends aborts the push before any network contact, and every process it left is named on stderr; so does a hook that could not be started at all. A hook's output, stdout included, goes to stderr, so it never mixes into safegit's own stdout. The first hook that does not pass decides the exit code: 21 when it timed out, 20 otherwise. A SIGINT or SIGTERM while a hook runs stops that hook and what it started, as the timeout does -- saying so on stderr with the longest the stop can take, and ignoring a second signal meanwhile -- names what it left, and exits 128 + the signal number. Stopping a hook and what it started -- on timeout, on interruption, or for the processes a hook left when it ended -- is capped at 60s by default, and the environment variable SAFEGIT_HOOK_KILL_CAP_S sets the cap in whole seconds from 11 to 1800; any other value is refused before a hook runs. Every process gets SIGTERM and the cap minus 6s to exit, then SIGKILL; one still alive at the cap (a process in uninterruptible sleep outlives SIGKILL) is named on stderr as not stoppable, with its process state on Linux, recorded with killed false, and left running, and safegit exits anyway. Under --json the payload's hooks list records every hook that ran, in run order -- name, exit_code (null for a hook that timed out or that an interruption stopped, which was killed and has no exit status, and for one that could not be started), start_error (why exec refused the hook, e.g. 'exec: permission denied', or null), timed_out, duration_ms, leftover_processes (pid, command, killed), unidentified_leftovers, and leftover_identification_error (why a process still holding the hook's output could not be named, or null) -- and a push a hook stopped still emits its payload, with refs empty and the hooks list up to the hook that stopped it, as does a push that exits 1 because safegit could not run a hook under containment and an interrupted push, whose list ends at the hook the interruption stopped; the exit code and stderr say which hook did not pass and why", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		gf := globalsToFlags(ctx, kwargs)
 		prePushHook := optBool(kwargs["pre_push_hook"], true)
@@ -456,7 +466,7 @@ func newApp() *strictcli.App {
 		strictcli.WithArgs(
 			strictcli.NewArg("remote", "name of the remote repository to push to (defaults to origin)", strictcli.ArgOptional()),
 		),
-		strictcli.PayloadSchema(pushPayloadSchema),
+		strictcli.PayloadSchema(pushPayloadSchema), strictcli.WithRequires(gitRequirement),
 	)
 	app.Command("pull", pullHelp, releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		gf := globalsToFlags(ctx, kwargs)
@@ -507,7 +517,7 @@ func newApp() *strictcli.App {
 		strictcli.WithArgs(
 			strictcli.NewArg("remote", "name of the remote repository to pull from (defaults to origin)", strictcli.ArgOptional()),
 			strictcli.NewArg("branch", "name of the remote branch to fetch and merge into the current branch", strictcli.ArgOptional()),
-		),
+		), strictcli.WithRequires(gitRequirement),
 	)
 	bg := app.Group("backup", "push, list, and restore per-branch history backups held in the tool-owned refs/backups namespace on a remote, so uncommitted-to-the-world work survives a lost machine without ever touching refs/heads")
 	bg.Command("backup", "push the current branch to its backup slot refs/backups/<branch> on the remote, after fetching that slot and refusing when it holds commits your history does not contain; the push is pinned with --force-with-lease to the exact SHA that was just observed (or to \"this ref must not exist\" for a first backup), so a concurrent backup from another machine is rejected rather than clobbered; plain git equivalent: git push --force-with-lease=refs/backups/<branch>:<observed-sha> <remote> HEAD:refs/backups/<branch>", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
@@ -538,7 +548,7 @@ func newApp() *strictcli.App {
 		),
 		strictcli.WithArgs(
 			strictcli.NewArg("remote", "name of the remote repository holding the backup slots (defaults to origin)", strictcli.ArgOptional()),
-		),
+		), strictcli.WithRequires(gitRequirement),
 	)
 	bg.Command("list", "list every backup slot present on the remote with the branch name and the commit each slot points at, so you can see which branches are backed up from which machine before restoring one; plain git equivalent: git ls-remote <remote> 'refs/backups/*'", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		remote := "origin"
@@ -550,7 +560,7 @@ func newApp() *strictcli.App {
 		strictcli.WithEffect(strictcli.EffectReadOnly),
 		strictcli.WithArgs(
 			strictcli.NewArg("remote", "name of the remote repository holding the backup slots (defaults to origin)", strictcli.ArgOptional()),
-		),
+		), strictcli.WithRequires(gitRequirement),
 	)
 	bg.Command("restore", "fetch the current branch's backup slot from the remote and fast-forward the branch onto it, refusing when the local branch carries commits the backup does not contain so no local work is ever discarded; plain git equivalent: git fetch <remote> refs/backups/<branch> && git merge --ff-only FETCH_HEAD", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		remote := "origin"
@@ -562,18 +572,18 @@ func newApp() *strictcli.App {
 		strictcli.WithEffect(strictcli.EffectMutating),
 		strictcli.WithArgs(
 			strictcli.NewArg("remote", "name of the remote repository holding the backup slots (defaults to origin)", strictcli.ArgOptional()),
-		),
+		), strictcli.WithRequires(gitRequirement),
 	)
 	cg := app.Group("config", "show, get, or set safegit configuration key-value pairs")
 	cg.Command("show", "show all configuration values currently in effect for this repository, including built-in defaults and any user overrides from the .git/safegit/config.json file, printed as key-value pairs to stdout for inspection and debugging purposes", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(runConfigShow(globalsToFlags(ctx, kwargs)))
-	}), strictcli.WithEffect(strictcli.EffectReadOnly))
+	}), strictcli.WithEffect(strictcli.EffectReadOnly), strictcli.WithRequires(gitRequirement))
 	cg.Command("get", "get the current value of a single configuration key from the .git/safegit/config.json file, printing the raw value to stdout so it can be captured by scripts or used in automation pipelines", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		key := kwargs["key"].(string)
 		return strictcli.Exit(runConfigGet(globalsToFlags(ctx, kwargs), key))
 	}),
 		strictcli.WithEffect(strictcli.EffectReadOnly),
-		strictcli.WithArgs(strictcli.NewArg("key", "the configuration key whose current value should be retrieved", strictcli.ArgRequired())),
+		strictcli.WithArgs(strictcli.NewArg("key", "the configuration key whose current value should be retrieved", strictcli.ArgRequired())), strictcli.WithRequires(gitRequirement),
 	)
 	cg.Command("set", "set a configuration key to a new value in the .git/safegit/config.json file, creating the file if it does not exist yet, and persisting the change for all future safegit invocations in this repository", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		key := kwargs["key"].(string)
@@ -581,13 +591,13 @@ func newApp() *strictcli.App {
 		return strictcli.Exit(runConfigSet(globalsToFlags(ctx, kwargs), key, value))
 	}),
 		strictcli.WithEffect(strictcli.EffectMutating),
-		strictcli.WithArgs(strictcli.NewArg("key", "the configuration key to set to the specified value in config.json", strictcli.ArgRequired()), strictcli.NewArg("value", "the new value to assign to the specified configuration key", strictcli.ArgRequired())),
+		strictcli.WithArgs(strictcli.NewArg("key", "the configuration key to set to the specified value in config.json", strictcli.ArgRequired()), strictcli.NewArg("value", "the new value to assign to the specified configuration key", strictcli.ArgRequired())), strictcli.WithRequires(gitRequirement),
 	)
 
 	hg := app.Group("hook", "manage pre-pre-push hook scripts that run before every push")
 	hg.Command("list", "list every pre-pre-push hook location safegit knows about, with its origin, its path and whether it is executable, so you can audit which checks run before every push. Three origins are shown: local, the tool-owned live store under the repository's common .git/safegit/hooks that hook install writes to and every worktree shares; tracked, the hooks the CHECKOUT provides in .safegit/hooks, which run because they are in that directory whether or not git tracks them, so cloning a repository and pushing from that checkout runs the repository's scripts; and legacy, the pre-migration location in git's own .git/hooks, which nothing runs any more and safegit hook migrate relocates. Non-executable and non-hook entries are listed too, because the hook an operator is asking about is usually the one that is NOT running", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(hookList(globalsToFlags(ctx, kwargs)))
-	}), strictcli.WithEffect(strictcli.EffectReadOnly))
+	}), strictcli.WithEffect(strictcli.EffectReadOnly), strictcli.WithRequires(gitRequirement))
 	hg.Command("run", "run all installed pre-pre-push hooks (or a single named hook) immediately without performing an actual push, so you can verify that all configured hooks pass before committing to a real push operation. Discovery's own verdicts about the checkout reach here too: exit 24 while a hook is still in the pre-migration .git/hooks location, and exit 25 when a discovered hook is not executable, in EITHER store -- never a silent skip and never a 'no hooks to run', because a command whose whole purpose is to say whether the checks pass must not exit 0 because a check was passed over. A hook that exits 0 but leaves a process running when it ends fails too, and each process it left is named on stderr; a hook's output, stdout included, goes to stderr. Run without a name, the hooks run in order and stop at the first that does not pass, and that hook decides the exit code: 21 when it timed out, 20 when it could not be started, exited nonzero, or left a process running -- the same rule push uses. A SIGINT or SIGTERM while a hook runs stops that hook and what it started, as the timeout does -- saying so on stderr with the longest the stop can take, and ignoring a second signal meanwhile -- names what it left, and exits 128 + the signal number. Stopping a hook and what it started -- on timeout, on interruption, or for the processes a hook left when it ended -- is capped at 60s by default, and the environment variable SAFEGIT_HOOK_KILL_CAP_S sets the cap in whole seconds from 11 to 1800; any other value is refused before a hook runs. Every process gets SIGTERM and the cap minus 6s to exit, then SIGKILL; one still alive at the cap (a process in uninterruptible sleep outlives SIGKILL) is named on stderr as not stoppable, with its process state on Linux, recorded with killed false, and left running, and safegit exits anyway. Under --json the payload's hooks list records every hook that ran, in either form -- name, exit_code (null for a hook that timed out or that an interruption stopped, which was killed and has no exit status, and for one that could not be started), start_error (why exec refused the hook, or null), timed_out, duration_ms, leftover_processes (pid, command, killed), unidentified_leftovers, and leftover_identification_error (why a process still holding the hook's output could not be named, or null) -- including when the run exits 1 because safegit could not run a hook under containment, and when it is interrupted, the list then ending at the hook the interruption stopped; whether each passed is the exit code's and stderr's to say", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		var name string
 		if v := kwargs["name"]; v != nil {
@@ -602,26 +612,26 @@ func newApp() *strictcli.App {
 		// parameter, so the invocation cannot be minted either. Any preview here
 		// would be invented, so the flag is refused instead.
 		strictcli.WithDryRunUnsupported("running a hook executes an operator-supplied script whose effects safegit cannot know in advance, so there is nothing honest to preview; run 'safegit hook list' to see which scripts would run"),
-		strictcli.WithArgs(strictcli.NewArg("name", "name of a specific hook to run; omit to run all installed hooks", strictcli.ArgOptional())),
+		strictcli.WithArgs(strictcli.NewArg("name", "name of a specific hook to run; omit to run all installed hooks", strictcli.ArgOptional())), strictcli.WithRequires(gitRequirement),
 	)
 	hg.Command("install", "install a pre-pre-push hook by copying a script file into the live store under the repository's common .git/safegit/hooks directory and making it executable, so that safegit push runs it before any network I/O occurs. The store is keyed on the common git dir, so a hook installed from a linked worktree is the same hook every worktree of the repository runs. An existing destination is refused rather than overwritten", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		path := kwargs["path"].(string)
 		return strictcli.Exit(hookInstall(globalsToFlags(ctx, kwargs), path))
 	}),
 		strictcli.WithEffect(strictcli.EffectMutating),
-		strictcli.WithArgs(strictcli.NewArg("path", "filesystem path to the hook script file to install into safegit", strictcli.ArgRequired())),
+		strictcli.WithArgs(strictcli.NewArg("path", "filesystem path to the hook script file to install into safegit", strictcli.ArgRequired())), strictcli.WithRequires(gitRequirement),
 	)
 	hg.Command("remove", "remove one hook from the tool-owned live store under the repository's common .git/safegit/hooks directory by name, naming either the store-relative path such as pre-pre-push.d/20-lint or just the base name, so a hook can be retired or replaced without deleting files by hand; a name that resolves only to a hook the checkout provides in .safegit/hooks is refused, because removing that one means deleting the file and committing that, and a name carried by both stores removes the live one and says the other still runs", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		name := kwargs["name"].(string)
 		return strictcli.Exit(hookRemove(globalsToFlags(ctx, kwargs), name))
 	}),
 		strictcli.WithEffect(strictcli.EffectMutating),
-		strictcli.WithArgs(strictcli.NewArg("name", "name of the installed hook to remove, as shown by 'safegit hook list'", strictcli.ArgRequired())),
+		strictcli.WithArgs(strictcli.NewArg("name", "name of the installed hook to remove, as shown by 'safegit hook list'", strictcli.ArgRequired())), strictcli.WithRequires(gitRequirement),
 	)
 	hg.Command("migrate", "move safegit's hooks out of git's own .git/hooks directory into the tool-owned .git/safegit/hooks store, relocating the pre-pre-push file and the pre-pre-push.d directory unconditionally because those two names are the only ones safegit ever wrote there, and reporting success with an explanation when there is nothing to move. Both ends are under the repository's COMMON git dir, which is git's own hook directory in every worktree, so migration run from a linked worktree relocates the repository's hooks", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(hookMigrate(globalsToFlags(ctx, kwargs)))
 	}),
-		strictcli.WithEffect(strictcli.EffectMutating),
+		strictcli.WithEffect(strictcli.EffectMutating), strictcli.WithRequires(gitRequirement),
 	)
 	app.Command("doctor", "run diagnostic health checks on the repository and optionally repair issues", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(runDoctor(globalsToFlags(ctx, kwargs), kwargs))
@@ -636,7 +646,7 @@ func newApp() *strictcli.App {
 				strictcli.Ch("fix", "run all health checks and automatically repair any issues found"),
 				strictcli.Ch("uninstall", "remove safegit's state from this REPOSITORY -- every worktree's state directory plus the shared locks and hook store, not only the worktree you are standing in -- after listing every path it is about to remove"),
 			)),
-		),
+		), strictcli.WithRequires(gitRequirement),
 	)
 	ag := app.Group("author", "audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history")
 	ag.Command("list", "list all distinct author and committer identities across the entire commit history, showing name, email, role, and commit count for each unique identity — useful for auditing repositories with multiple contributors or detecting unwanted identity variations such as typos, old email addresses, or bot accounts that should be consolidated before a rewrite", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
@@ -644,7 +654,7 @@ func newApp() *strictcli.App {
 	}),
 		strictcli.WithEffect(strictcli.EffectReadOnly),
 		strictcli.WithTags("json"),
-		strictcli.PayloadSchema(authorListPayloadSchema),
+		strictcli.PayloadSchema(authorListPayloadSchema), strictcli.WithRequires(gitRequirement),
 	)
 	ag.Command("check", "check that all commits use the expected author and committer identity by scanning every commit in the repository history, reporting any deviations with the exact commit hashes and mismatched fields, and suggesting the corresponding safegit author rewrite command to fix each deviation found", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(runAuthorCheck(globalsToFlags(ctx, kwargs), kwargs))
@@ -655,7 +665,7 @@ func newApp() *strictcli.App {
 		strictcli.WithFlags(
 			strictcli.StringFlag("name", "expected author and committer display name that all commits should use", strictcli.Optional()),
 			strictcli.StringFlag("email", "expected author and committer email address that all commits should use", strictcli.Optional()),
-		),
+		), strictcli.WithRequires(gitRequirement),
 	)
 	ag.Command("rewrite", "rewrite author and committer name or email across all commit history using git filter-branch style rewriting, replacing every occurrence of the old identity with the new one in both author and committer fields while preserving timestamps, commit messages, tree contents, and parent relationships so the rewritten history is otherwise identical to the original", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(runRewriteAuthor(globalsToFlags(ctx, kwargs), kwargs))
@@ -681,7 +691,7 @@ func newApp() *strictcli.App {
 			strictcli.AllOrNone("author-name", strictcli.Member("old-name"), strictcli.Member("new-name")),
 			strictcli.AllOrNone("author-email", strictcli.Member("old-email"), strictcli.Member("new-email")),
 			strictcli.AtLeastOne("author-change", strictcli.Member("author-name"), strictcli.Member("author-email")),
-		),
+		), strictcli.WithRequires(gitRequirement),
 	)
 	app.Deprecated("rewrite-author", "use 'safegit author rewrite' instead")
 	sg := app.Group("scrub", "surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store")
@@ -705,7 +715,7 @@ func newApp() *strictcli.App {
 		),
 		strictcli.WithArgs(
 			strictcli.NewArg("file", "repository-relative path to the file that should be scrubbed from history", strictcli.ArgRequired()),
-		),
+		), strictcli.WithRequires(gitRequirement),
 	)
 	sg.Command("match", "replace every occurrence of a regex pattern in the blobs, commit messages and tag annotations of a SELECTED RANGE of history -- --from <sha> or --entire-history, one of which is required -- rewriting commit trees so that sensitive values like secrets and credentials are removed from every snapshot in that range. A move record is rewritten as a record rather than as text: the substitution applies to the decoded paths and the pair is re-encoded, so the output always parses, a pattern written against the escaped spelling matches nothing, and a substitution whose result would no longer be a move is refused before any ref moves", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(runScrubMatch(globalsToFlags(ctx, kwargs), kwargs))
@@ -725,7 +735,7 @@ func newApp() *strictcli.App {
 				scrubReplaceChoice, scrubMangleChoice),
 			strictcli.MemberChoiceFlag("range", "how much of the history is rewritten", strictcli.Required(),
 				scrubFromChoice, scrubEntireHistoryChoice),
-		),
+		), strictcli.WithRequires(gitRequirement),
 	)
 	sg.Command("run", "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(runScrubRun(globalsToFlags(ctx, kwargs), kwargs))
@@ -747,7 +757,7 @@ func newApp() *strictcli.App {
 		),
 		strictcli.WithArgs(
 			strictcli.NewArg("recipe", "path to the TOML recipe file containing scrub operations", strictcli.ArgRequired()),
-		),
+		), strictcli.WithRequires(gitRequirement),
 	)
 	sg.Command("verify", "confirm that the patterns named on the command line -- repeatable --pattern regexes, the operations of a scrub recipe file, or both -- are absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-pattern pass or fail results with match locations for any violations found", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(runScrubVerify(globalsToFlags(ctx, kwargs), kwargs))
@@ -769,7 +779,7 @@ func newApp() *strictcli.App {
 		strictcli.WithConstraints(
 			strictcli.AtLeastOne("verify-input", strictcli.Member("pattern"), strictcli.Member("recipe")),
 			strictcli.Requires("verify-scope", "scope", "pattern"),
-		),
+		), strictcli.WithRequires(gitRequirement),
 	)
 	// cherry-pick is a passthrough REGISTRATION for the same reason merge is --
 	// the operator's argv is git's own vocabulary and reaches the handler
@@ -784,7 +794,7 @@ func newApp() *strictcli.App {
 			Name:   "parent-bump",
 			Reason: "cherry-picking in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
 			Kind:   strictcli.ProcMutate,
-		}))
+		}), strictcli.WithRequires(gitRequirement))
 	// revert is a passthrough REGISTRATION for the same reason merge and
 	// cherry-pick are, and the same division applies: the operator's argv is
 	// git's vocabulary, the subset refusals are the handler's, and the commit is
@@ -796,7 +806,7 @@ func newApp() *strictcli.App {
 			Name:   "parent-bump",
 			Reason: "reverting in a submodule moves the parent's gitlink, so safegit commits the parent too when commit.autoBumpParent is on",
 			Kind:   strictcli.ProcMutate,
-		}))
+		}), strictcli.WithRequires(gitRequirement))
 	app.Command("undo", "reverse the last safegit-authored operation using the oplog -- a commit, an mv, an amend, a reword, a merge, pull, cherry-pick or revert safegit's own commit pipeline authored, or a conclusion (merge-continue, cherry-pick-continue, revert-continue). A fast-forward is REFUSED rather than reversed: the tip it moved onto is a commit git created and safegit never rolls a branch back over one. It moves a REF and never the working tree", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		bypassSession := optBool(kwargs["bypass_session"], false)
 		count := optInt(kwargs["count"], 1)
@@ -816,14 +826,14 @@ func newApp() *strictcli.App {
 		strictcli.WithFlags(
 			strictcli.BoolFlag("bypass-session", "undo across all sessions by ignoring the session ID ownership check; omitted means only this session's operations are undone", strictcli.Optional()),
 			strictcli.IntFlag("count", "number of oplog operations to undo in a single invocation; omitted means one", strictcli.Optional()),
-		),
+		), strictcli.WithRequires(gitRequirement),
 	)
 	app.Command("unlock", "release one of safegit's OWN lock files -- a per-ref lock, this worktree's operation lock, or the repository-wide rewrite lock -- left behind by a safegit process that was killed while holding it. It has nothing to do with git's .git/index.lock or any other lock git takes for itself. A lock whose holder is still alive is refused; ordinarily nothing needs this command, because a stale lock is reclaimed automatically by the next contender and 'safegit doctor --action fix' sweeps them, so it is the last-resort path for a filesystem where that reclamation cannot work", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		ref := kwargs["ref"].(string)
 		return strictcli.Exit(runUnlock(globalsToFlags(ctx, kwargs), ref))
 	}),
 		strictcli.WithEffect(strictcli.EffectMutating),
-		strictcli.WithArgs(strictcli.NewArg("ref", "which lock to release: a branch name (main), a full ref (refs/tags/v1), or a tool-owned lock -- safegit/rewrite for the repository-wide history-rewrite lock, safegit/operation for this worktree's operation lock", strictcli.ArgRequired())),
+		strictcli.WithArgs(strictcli.NewArg("ref", "which lock to release: a branch name (main), a full ref (refs/tags/v1), or a tool-owned lock -- safegit/rewrite for the repository-wide history-rewrite lock, safegit/operation for this worktree's operation lock", strictcli.ArgRequired())), strictcli.WithRequires(gitRequirement),
 	)
 	app.Command("scan", "search git history for regex pattern matches across all objects and working tree files, scanning blobs, commit messages, tag annotations, and trailers with optional scope filtering and commit range selection", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(runScan(globalsToFlags(ctx, kwargs), kwargs))
@@ -837,7 +847,7 @@ func newApp() *strictcli.App {
 			strictcli.StringFlag("from", "first commit hash to include when scanning history (mutually exclusive with --entire-history)", strictcli.Optional()),
 			strictcli.BoolFlag("entire-history", "scan all commits from the root of the repository to HEAD (mutually exclusive with --from)", strictcli.Default(false)),
 			strictcli.StringFlag("target", "comma-separated list of match types to include: blobs,commits,tags,trailers,files (default: all)", strictcli.Optional()),
-		),
+		), strictcli.WithRequires(gitRequirement),
 	)
 
 	return app
@@ -991,7 +1001,7 @@ func mustGitDir() string {
 	ctx := context.Background()
 	gitDir, err := git.GitDir(ctx)
 	if err != nil {
-		strictcli.ExitNow(exitcode.NoRepository, "not a git repository (or git is not installed)")
+		strictcli.ExitNow(exitcode.NoRepository, "not a git repository")
 	}
 	return gitDir
 }
