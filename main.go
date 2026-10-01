@@ -58,6 +58,12 @@ type globalFlags struct {
 	// a pointer so the cache survives globalFlags being copied by value into
 	// every handler.
 	root *executionRoot
+	// canceled is this dispatch's cancellation: done when the framework's
+	// Context is -- by the first SIGINT or SIGTERM while the handler runs, or
+	// when the dispatch ends. Every git subprocess safegit starts runs under a
+	// context derived from it (see ctx), so a signal stops git at once. Nil in
+	// unit tests that never dispatch.
+	canceled context.Context
 }
 
 // executionRoot resolves the repository root once per dispatch.
@@ -92,7 +98,10 @@ func repoRootOrEmpty() string {
 
 // ctx builds this dispatch's execution context, and is the ONE place a context
 // for a git call is created: a bare context.Background() in a handler is a git
-// call that escaped the pin.
+// call that escaped the pin, and the framework's cancellation.
+//
+// It is derived from the dispatch's cancellation (see canceled), so a SIGINT or
+// SIGTERM stops every git subprocess built from it at once.
 //
 // Every git subprocess safegit itself constructs from this context runs with
 // its working directory pinned to the repository root. A large part of git's
@@ -115,7 +124,13 @@ func repoRootOrEmpty() string {
 // preview (see internal/commit's BeginPreview), since only they know when the
 // throwaway store can be created and cleaned up.
 func (g globalFlags) ctx() context.Context {
-	ctx := gitexec.WithRoot(context.Background(), g.root.resolve())
+	base := g.canceled
+	if base == nil {
+		// A globalFlags a unit test built without a dispatch: there is no
+		// framework cancellation to follow.
+		base = context.Background()
+	}
+	ctx := gitexec.WithRoot(base, g.root.resolve())
 	if g.dryRun {
 		ctx = gitexec.WithPreview(ctx)
 	}
@@ -920,7 +935,19 @@ func globalsToFlags(ctx *strictcli.Context, globals map[string]interface{}) glob
 		ctx.JSON(),
 	)
 	gf.sc = ctx
+	gf.canceled = frameworkCancellation(ctx)
 	return gf
+}
+
+// frameworkCancellation returns a context canceled when sc.Done() closes. The
+// goroutine ends with the dispatch, because Done closes then too.
+func frameworkCancellation(sc *strictcli.Context) context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-sc.Done()
+		cancel()
+	}()
+	return ctx
 }
 
 // loadConfig loads the safegit config, using the override path if --config-file was set.
