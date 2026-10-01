@@ -151,7 +151,7 @@ func buildPushPayload(flags globalFlags, remote string, refs []pushRefInfo, forc
 	}
 }
 
-func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote string, mode pushMode) int {
+func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote string, mode pushMode, stopCap time.Duration) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		strictcli.ExitNow(exitcode.NotInitialized, exitMessage(err))
@@ -161,13 +161,6 @@ func runPush(flags globalFlags, noPrePrePush bool, forceWithLease bool, remote s
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
 		strictcli.ExitNow(exitcode.General, fmt.Sprintf("loading config: %v", err))
-		return exitcode.General
-	}
-	// Read before anything runs, so a cap safegit cannot honor refuses the
-	// push rather than surfacing only once a hook has to be stopped.
-	stopCap, err := hooks.StopCapFromEnvironment(os.LookupEnv)
-	if err != nil {
-		strictcli.ExitNow(exitcode.General, exitMessage(err))
 		return exitcode.General
 	}
 

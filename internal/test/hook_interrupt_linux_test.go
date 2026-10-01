@@ -150,8 +150,8 @@ func (s *syncBuffer) String() string {
 
 // stoppingLine is the warning safegit writes when an interruption makes it
 // begin stopping a hook: the hook's name, and the longest the stop can take,
-// which is the cap on stopping a hook -- 60s unless SAFEGIT_HOOK_KILL_CAP_S
-// says otherwise.
+// which is the cap on stopping a hook -- 60s unless --hook-kill-cap-s, or the
+// SAFEGIT_HOOK_KILL_CAP_S variable bound to it, says otherwise.
 func stoppingLine(name, limit string) string {
 	return "stopping hook " + name + " and the processes it started; this can take up to " + limit + "\n"
 }

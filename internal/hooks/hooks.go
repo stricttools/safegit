@@ -309,13 +309,13 @@ func RunSingle(ctx context.Context, hookPath string, stdin []byte, timeoutSec in
 // stoppable and left: a process in uninterruptible sleep outlives SIGKILL, and
 // waiting for it would make the cap a lie.
 const (
-	// DefaultStopCap is the cap when SAFEGIT_HOOK_KILL_CAP_S is not set.
+	// DefaultStopCap is the cap when the command was given none.
 	DefaultStopCap = 60 * time.Second
-	// MaxStopCap is the largest cap SAFEGIT_HOOK_KILL_CAP_S may set.
+	// MaxStopCap is the largest cap a command may be given.
 	MaxStopCap = 1800 * time.Second
 	// MinStopCap is the smallest: the fixed end of the stop plus a SIGTERM
 	// grace no shorter than minTermGrace.
-	MinStopCap = stopWindow + minTermGrace
+	MinStopCap = StopWindow + minTermGrace
 
 	// killWindow is how long processes get to die of SIGKILL and be reaped.
 	killWindow = 5 * time.Second
@@ -326,37 +326,27 @@ const (
 	// waiting for data counts: a destination that takes its time over the
 	// output already read never trips it before the cap.
 	readGrace = time.Second
-	// stopWindow is the fixed end of every stop, after the SIGTERM grace:
+	// StopWindow is the fixed end of every stop, after the SIGTERM grace:
 	// killWindow, then readGrace. The SIGTERM grace is the cap minus this.
-	stopWindow = killWindow + readGrace
+	StopWindow = killWindow + readGrace
 	// minTermGrace is the shortest SIGTERM grace a cap may leave: the grace
 	// every stop gave before the cap existed.
 	minTermGrace = 5 * time.Second
 )
 
-// StopCapVariable names the environment variable that sets the cap on stopping
-// a hook, in whole seconds.
-const StopCapVariable = "SAFEGIT_HOOK_KILL_CAP_S"
-
-// StopCapFromEnvironment returns the cap StopCapVariable sets through lookup
-// (os.LookupEnv), or DefaultStopCap when it is not set. A value that is not a
-// whole number of seconds from MinStopCap to MaxStopCap is an error naming the
-// variable, the value and the range: a cap safegit cannot honor is refused
-// rather than replaced by one it can.
-func StopCapFromEnvironment(lookup func(string) (string, bool)) (time.Duration, error) {
-	raw, set := lookup(StopCapVariable)
-	if !set {
-		return DefaultStopCap, nil
-	}
-	secs, err := strconv.Atoi(raw)
-	if err != nil || secs < int(MinStopCap/time.Second) || secs > int(MaxStopCap/time.Second) {
-		return 0, fmt.Errorf("%s=%q is not allowed: the cap on stopping a hook and the processes it started must be a whole number of seconds from %d to %d; unset the variable for the default of %d",
-			StopCapVariable, raw, int(MinStopCap/time.Second), int(MaxStopCap/time.Second), int(DefaultStopCap/time.Second))
+// StopCapFromSeconds returns the cap a command was given in whole seconds. A
+// value outside MinStopCap to MaxStopCap is an error naming the range: a cap
+// safegit cannot honor is refused rather than replaced by one it can. The
+// caller names where the value came from.
+func StopCapFromSeconds(secs int) (time.Duration, error) {
+	if secs < int(MinStopCap/time.Second) || secs > int(MaxStopCap/time.Second) {
+		return 0, fmt.Errorf("the cap on stopping a hook and the processes it started must be a whole number of seconds from %d to %d",
+			int(MinStopCap/time.Second), int(MaxStopCap/time.Second))
 	}
 	return time.Duration(secs) * time.Second, nil
 }
 
-// FormatStopCap words a cap in whole seconds, as the variable sets it: "60s".
+// FormatStopCap words a cap in whole seconds, as a command is given it: "60s".
 func FormatStopCap(limit time.Duration) string {
 	return strconv.Itoa(int(limit/time.Second)) + "s"
 }
@@ -375,7 +365,7 @@ type stopClock struct {
 func startStop(limit time.Duration) stopClock {
 	now := time.Now()
 	return stopClock{
-		term: now.Add(limit - stopWindow),
+		term: now.Add(limit - StopWindow),
 		kill: now.Add(limit - readGrace),
 		end:  now.Add(limit),
 	}

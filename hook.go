@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/stricttools/safegit/internal/exitcode"
 	"github.com/stricttools/safegit/internal/git"
@@ -115,7 +117,7 @@ func hookList(flags globalFlags) int {
 }
 
 // hookRun runs a specific hook by name (or all if no name given).
-func hookRun(flags globalFlags, name string) int {
+func hookRun(flags globalFlags, name string, stopCap time.Duration) int {
 	gitDir := mustGitDir()
 	if err := ensureInitialized(flags, gitDir); err != nil {
 		errorf(flags, "%v", err)
@@ -125,11 +127,6 @@ func hookRun(flags globalFlags, name string) int {
 	cfg, err := loadConfig(flags, gitDir)
 	if err != nil {
 		errorf(flags, "loading config: %v", err)
-		return exitcode.General
-	}
-	stopCap, err := hooks.StopCapFromEnvironment(os.LookupEnv)
-	if err != nil {
-		errorf(flags, "%v", err)
 		return exitcode.General
 	}
 
@@ -653,4 +650,35 @@ func synthesizeHookStdin(ctx context.Context) ([]byte, error) {
 	// object name, git's "this ref does not exist there" convention.
 	line := fmt.Sprintf("%s %s %s %s\n", headRef, localSHA, headRef, git.ZeroSHA)
 	return []byte(line), nil
+}
+
+// hookKillCapVariable is the environment variable --hook-kill-cap-s is bound
+// to, through the framework's flag environment binding.
+const hookKillCapVariable = "SAFEGIT_HOOK_KILL_CAP_S"
+
+// hookKillCapHelp is --hook-kill-cap-s's help, shared by push and hook run.
+var hookKillCapHelp = fmt.Sprintf("the cap on stopping a hook and the processes it started -- on timeout, on interruption, or for the processes a hook left when it ended -- in whole seconds from %d to %d: every process gets SIGTERM and the cap minus %ds to exit, then SIGKILL. When the flag is not given, the environment variable %s sets it; omitted means %d",
+	int(hooks.MinStopCap/time.Second), int(hooks.MaxStopCap/time.Second), int(hooks.StopWindow/time.Second), hookKillCapVariable, int(hooks.DefaultStopCap/time.Second))
+
+// hookKillCap resolves --hook-kill-cap-s for push and hook run, before anything
+// runs: absent means the default, and a value outside the range ends the command
+// naming where the value came from -- the flag, or the environment variable
+// bound to it -- and the remedy for that source.
+func hookKillCap(ctx *strictcli.Context, kwargs map[string]interface{}) time.Duration {
+	v := kwargs["hook_kill_cap_s"]
+	if v == nil {
+		return hooks.DefaultStopCap
+	}
+	secs := v.(int)
+	limit, err := hooks.StopCapFromSeconds(secs)
+	if err == nil {
+		return limit
+	}
+	given, remedy := fmt.Sprintf("--hook-kill-cap-s %d", secs), "omit the flag"
+	if ctx.Source("hook_kill_cap_s") == "env" {
+		given, remedy = fmt.Sprintf("%s=%q", hookKillCapVariable, strconv.Itoa(secs)), "unset the variable"
+	}
+	strictcli.ExitNow(exitcode.General, fmt.Sprintf("%s is not allowed: %v; %s for the default of %d",
+		given, err, remedy, int(hooks.DefaultStopCap/time.Second)))
+	return 0
 }
