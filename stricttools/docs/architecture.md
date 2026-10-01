@@ -437,7 +437,7 @@ The hook's stdin, stdout and stderr are pipes safegit hands to the hook as files
 
 `safegit push --no-pre-push-hook` skips the entire pre-pre-push phase and goes straight to the git push. (The flag is `--pre-push-hook` / `--no-pre-push-hook`; omitted, the hooks run.) This escape hatch exists for human operators who need to push urgently when a hook is broken or misconfigured. For AI agent environments, the negated form should be disallowed via Claude Code permission settings to prevent agents from routinely bypassing validation checks.
 
-A `--dry-run` never runs the hooks whatever the flag says -- a hook is an arbitrary script, so running one is a mutation a preview may not perform -- and it says so on stderr and in the payload's `pre_pre_push_hooks_skipped` member. Where both hold, the payload reports `disabled` rather than `dry-run`: a preview of a run that turned the hooks off must report the operator's decision, because the real push will not run them either.
+A `--dry-run` never runs the hooks whatever the flag says -- a hook is an arbitrary script, so running one is a mutation a preview may not perform -- and it says so in its output and in the payload's `pre_pre_push_hooks_skipped` member. Where both hold, the payload reports `disabled` rather than `dry-run`: a preview of a run that turned the hooks off must report the operator's decision, because the real push will not run them either.
 
 ## Failure Modes
 

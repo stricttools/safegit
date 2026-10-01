@@ -146,7 +146,7 @@ A relative target that resolves inside the repository is portable and commits as
 
 The remedies differ, so the refusal states the one that fits the shape. A relative target that leaves the repository has to be pointed back inside. An absolute target gets both halves of the answer, because the judgment never resolves it and the group therefore holds both cases: spell it relative to the link if it points inside the repository, and if it points outside there is nothing portable to spell -- point the link inside instead. A commit naming offenders of both shapes gets ONE refusal with the offenders grouped by shape, each group followed by its own remedy.
 
-`--allow-non-portable-targets` elects committing such a link anyway, and restores the one-line notice on stderr saying the link will not resolve elsewhere. The election is a fact about ONE invocation and is recorded nowhere, so a repository that deliberately carries such a link needs the flag on EVERY later commit that names that link or sweeps it up by directory expansion.
+`--allow-non-portable-targets` elects committing such a link anyway, and restores the one-line warning saying the link will not resolve elsewhere. The election is a fact about ONE invocation and is recorded nowhere, so a repository that deliberately carries such a link needs the flag on EVERY later commit that names that link or sweeps it up by directory expansion.
 
 The judgment is made in the commit family's intake and nowhere else: `safegit commit` and its `--amend` form, over the paths that invocation stages -- the ones named on the command line, a `--moved` commit's paths among them, and the ones a directory argument expands to. Two other ways link content reaches a tree do not pass through it: `safegit mv` moving an already-tracked link carries the blob across and never re-reads it, and a conclusion's `--resolve path=worktree|ours|theirs` stages a conflicted path's content directly.
 
@@ -1958,7 +1958,7 @@ safegit hook migrate
 
 ## version
 
-Print the safegit binary version, Go runtime version with platform architecture, and the installed git version in a human-readable format. This command provides all the version information needed for bug reports, compatibility checks, and verifying that the correct safegit binary is installed on the system.
+`safegit version` is the CLI framework's own command: it prints one line, `safegit <version>`, and under `--json` it prints `{"name": "safegit", "version": "<version>"}` on stdout. safegit registers no version command of its own, so the Go runtime and the git version are not part of the answer; `git --version` reports the latter.
 
 ### Examples
 
@@ -1969,9 +1969,7 @@ safegit version
 Output:
 
 ```
-safegit 0.22.0
-go      go1.23.0 linux/amd64
-git     git version 2.47.0
+safegit <the installed version>
 ```
 
 ## Configuration Reference

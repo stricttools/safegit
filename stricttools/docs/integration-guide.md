@@ -251,16 +251,17 @@ When safegit detects it is running inside a git submodule, two additional behavi
 
 ## Machine mode (`--json`)
 
-`--json` selects the CLI framework's machine mode, on every command. **stdout then carries exactly one document: the envelope.** safegit's own data is its `payload` member, the recorded effects of a `--dry-run` are its `preview` member, and everything safegit would have said in human text is either absent or a diagnostic:
+`--json` selects the CLI framework's machine mode, on every command. **stdout then carries exactly one document: the envelope.** safegit's own data is its `payload` member, the recorded effects of a `--dry-run` are its `preview` member, the text a command answers with at a terminal (a `config get` value, a `doctor` finding, the `hook list` listing) is its `output` member, and every other line safegit writes -- progress, `--verbose` detail, warnings, advisory notes and errors -- is an entry of `diagnostics`, with its level:
 
 ```json
 {
-  "interface_version": 2,
+  "interface_version": 3,
   "app": "safegit",
   "app_version": "<the running safegit's version>",
   "command": "scrub.file",
   "exit_code": 0,
   "payload": {"version": 1, "dry_run": true, "file": "secret.txt", "commit_count": 3},
+  "output": null,
   "dry_run": true,
   "writes": null,
   "preview": [
@@ -272,64 +273,58 @@ When safegit detects it is running inside a git submodule, two additional behavi
 }
 ```
 
-Parse the whole stream: there is no trailing would-do log to cut off, and no second document to skip.
+Parse the whole stream: there is no trailing would-do log to cut off, and no second document to skip. What machine mode leaves on stderr is output safegit relays rather than writes: a pre-pre-push hook's own output, git's output from a guarded command or a push (captured, then written to stderr), and the output of the repository's own commit hooks.
 
 ### Where the machine contract ends
 
-The one-document promise is about stdout on a run that reaches the framework's
-emission point. A consumer has to handle three failure shapes, and they are not
-interchangeable:
+The one-document promise holds for every run the framework dispatches,
+failures included. A failure ends the command through the framework's exit
+step, so the document is written with `exit_code` set and the reason as the last
+`error` entry of `diagnostics`; nothing about a failure is only on stderr. What
+differs between failures is the payload:
 
 1. **A nonzero exit that still carries a payload.** The commit-stands family
    (exit **26**) is the shape this exists for: the operation's ref move is real
-   and its aftercare did not finish. The envelope is emitted, `exit_code` is 26,
-   and the payload names what stands and what was left -- the created SHA, the
-   `residue` list of the aftercare steps that failed, and, on a conclusion, the
-   `autostash` member. **Payload carries aftercare**: a partial outcome is
-   reported in the document, never only in prose. A push a pre-pre-push hook
-   stopped (exit **20**, or **21** for a timeout) answers this way too, and so
-   does a `hook run` whose hook did not pass: the payload's `hooks` list
-   records every hook that ran, and a stopped push's `refs` is empty because
-   nothing was pushed. The same holds when either exits **1** because safegit
-   could not run a hook under containment: the list holds every hook that ran
-   before it. Read the payload on a nonzero exit rather than assuming it is
-   null.
-2. **An envelope whose payload is null.** A refusal that reaches dispatch emits
-   the envelope with `exit_code` set and `payload: null`, because a payload
-   schema describes a performed operation and there is no error-payload channel
-   to describe a refused one. `safegit mv`'s dirty-move refusal (exit 19) is the
-   worked example: the complete, never-truncated list of offending paths goes to
-   **stderr**, which machine mode never suppresses, while the envelope carries
-   only the exit code. The same holds for the previews of `merge`,
-   `cherry-pick`, `revert` and `pull`: a preview computes the outcome and stops
-   before the pipeline conclusion that would build the payload, so those four
-   emit `payload: null` under `--dry-run --json`. `preview` usually carries the
-   compute step's recorded argv, with two exceptions worth knowing before you
-   parse it. A merge preview that answers **"a fast-forward"** records NOTHING,
-   because the real run performs that one itself with a compare-and-swap and
-   never invokes git's merge machinery; a merge preview that answers **an
-   `--ff-only` refusal** records nothing either, because safegit decides that
-   refusal before git runs. In both cases recording the compute step would name a
-   subprocess nothing runs. The consequence is stated rather than hidden: such a
-   run answers with `exit_code: 0`, `payload: null` and `preview: []`, which in
-   machine mode is indistinguishable from a preview that found nothing to say.
-   For the refusal that is the whole truth -- nothing would be performed. For the
-   fast-forward it is a gap: its ref move is not minted as an effect on the
-   preview path, so there is nothing else for the envelope to carry, and a
-   machine consumer that needs the verdict must run the preview in human mode,
-   where the sentence is printed.
-3. **No envelope at all.** Some refusals exit before the framework's dispatch
-   returns, and those write to stderr and exit with nothing on stdout.
-   `safegit commit`'s refusals are the class to know: every one probed answers
-   this way -- the general failure (1), a rejected command line (2), a path that
-   matched nothing (11), a move the repository does not bear out (19) and the
-   non-portable symlink target (29). `safegit mv` is the contrast, and it is
-   worth stating because the two look alike from outside: its refusal of the
-   same move class (19) DOES emit a null-payload envelope. This set is
-   deliberately shrinking: every post-ref-update failure was moved onto shape 1
-   precisely so that the paths where an operation half-happened always answer
-   with a document. Treat empty stdout plus a nonzero exit as a valid outcome,
-   not as a parse failure.
+   and its aftercare did not finish. `exit_code` is 26, and the payload names
+   what stands and what was left -- the created SHA, the `residue` list of the
+   aftercare steps that failed, and, on a conclusion, the `autostash` member.
+   **Payload carries aftercare**: a partial outcome is reported in the
+   document, never only in prose. A push a pre-pre-push hook stopped (exit
+   **20**, or **21** for a timeout) answers this way too, and so does a
+   `hook run` whose hook did not pass: the payload's `hooks` list records every
+   hook that ran, and a stopped push's `refs` is empty because nothing was
+   pushed. The same holds when either exits **1** because safegit could not run
+   a hook under containment, and when a signal interrupts the hooks (128 + the
+   signal number): the list holds every hook that ran. Read the payload on a
+   nonzero exit rather than assuming it is null.
+2. **A payload that is null.** A refusal emits the document with `exit_code`
+   set and `payload: null`, because a payload schema describes a performed
+   operation and there is no error-payload channel to describe a refused one.
+   `safegit mv`'s dirty-move refusal (exit 19) is a worked example: its error
+   diagnostic carries the complete, never-truncated list of offending paths.
+   The previews of `merge`, `cherry-pick`, `revert` and `pull` carry a null
+   payload too: a preview computes the outcome and stops before the pipeline
+   conclusion that would build the payload, so those four emit `payload: null`
+   under `--dry-run --json`. `preview` usually carries the compute step's
+   recorded argv, with two exceptions worth knowing before you parse it. A merge
+   preview that answers **"a fast-forward"** records NOTHING, because the real
+   run performs that one itself with a compare-and-swap and never invokes git's
+   merge machinery; a merge preview that answers **an `--ff-only` refusal**
+   records nothing either, because safegit decides that refusal before git
+   runs. In both cases recording the compute step would name a subprocess
+   nothing runs, so such a run answers with `payload: null` and `preview: []`;
+   the sentence a terminal would print is an `info` entry of `diagnostics`.
+3. **No document at all.** A `SIGINT` or `SIGTERM` that reaches safegit while it
+   holds one of its own locks, outside a hook run, ends the process at once
+   through safegit's own signal handler, which releases the locks and exits 128
+   + the signal number without a document. Treat empty stdout plus that exit
+   code as a valid outcome, not as a parse failure. A signal at any other
+   moment ends the command through the framework, which writes the document
+   with that exit code and a `canceled by signal` error diagnostic.
+
+A command line the framework refuses before dispatch -- an unknown flag, a
+missing required one -- writes the document with `command: null` and exit 1,
+and the reason on stderr.
 
 One capture limit, stated because it changes an exit code: under `--json` the
 guarded commands capture the child git's output instead of streaming it, and the
@@ -341,15 +336,15 @@ is unaffected.
 
 Two members are the framework's and are the same on every safegit command. `writes` is the write set of a command declaring an update contract; safegit declares none, so it is always `null` -- present, never absent. `preview` is the effect log, and it is populated in BOTH modes: on a real run each record carries `"recorded": false`, meaning the effect was performed rather than recorded. **Read `dry_run` to tell the two apart, never the presence of `preview`.**
 
-Each command that produces a payload **declares its JSON Schema**, and the framework validates the value against that declaration before writing it -- a wrong shape fails the run instead of shipping. `safegit --dump-schema` publishes every declaration verbatim.
+Each command that produces a payload **declares its JSON Schema**, and the framework validates the value against that declaration before writing it -- a wrong shape fails the run instead of shipping. `safegit help --json` prints the help document, which publishes every declaration verbatim.
 
 The properties worth knowing:
 
 - **Write `--json` before a guarded command's name.** `safegit --json merge feature` selects machine mode; `safegit merge --json feature` does not. The framework reads its own flags anywhere in the command line up to the name of a command that takes git's vocabulary -- `switch`, `merge`, `cherry-pick`, `revert`, `rebase`, `reset`, `bisect` -- and after that name argv belongs to that command's git-shaped parser, whose allowlist refuses the flag (exit 2) naming the pre-command form. The same holds for `--dry-run`, `--quiet`, `--verbose` and `--approve-consequential`. Every other command accepts them on either side.
-- **The envelope is exempt from `--quiet`.** `--json --quiet` emits the complete document; quiet governs the human stream only.
+- **The document is exempt from `--quiet`.** `--json --quiet` emits the complete document, `diagnostics` included; quiet governs the human stream only.
 - **`--json` does not imply approval.** A non-interactive `--json` run of a *consequential* command (`scrub file`/`match`/`run`, `author rewrite`) must pass `--approve-consequential` explicitly. Ordinary mutating commands such as `commit` need nothing. A `--json backup backup` to a remote safegit cannot prove is private is the one place `--approve-consequential` is not the answer either: that question belongs to the target, so it takes `--allow-public-remote`.
 - **A successful run of a payload-producing command always carries its payload.** `scrub match` and `scrub run` used to emit a null payload on their nothing-matched early returns, so a machine consumer could not tell "the run said nothing matched" from "the run produced nothing"; both now answer with the payload in every completing shape, which is the one-envelope invariant doing its job.
 - **git's own push output moves.** `push` captures git's streams rather than passing them through, and under `--json` git's stdout is re-routed to stderr, so the envelope stays the only document on stdout.
-- **There is no JSON error OBJECT, but a failure is not always silent on stdout.** A command that fails writes its message to stderr and exits nonzero, and safegit never writes a second, error-shaped document: the envelope is the only document machine mode has. What a failure produces on stdout is one of the three shapes above -- an envelope with a payload (the commit-stands family, and a push or `hook run` a hook did not pass or a signal interrupted, the latter at 128 + the signal number), an envelope with `payload: null`, or nothing at all where the path exits before dispatch or a signal ends the process (128 + the signal number, as a signal to a command holding a lock does). The human-readable reason is on stderr in all three.
+- **There is no JSON error OBJECT.** safegit never writes a second, error-shaped document: the envelope is the only document machine mode has, and a failure's reason is its last `error` diagnostic.
 
 This makes safegit suitable for embedding in tool pipelines that parse structured output.

@@ -186,8 +186,8 @@ const legacyScrubPolicyFile = "scrub-policies.jsonl"
 //
 // It goes through outf: --quiet is about progress chatter, and a list of
 // directories that are about to be deleted is the command's own statement of
-// what it does. Machine mode suppresses it, where the envelope's preview
-// carries the same set.
+// what it does. Under --json it is the document's output member, beside the
+// preview, which carries the same set.
 func printUninstallPlan(flags globalFlags, targets []repo.UninstallTarget) {
 	verb := "will remove"
 	if flags.dryRun {

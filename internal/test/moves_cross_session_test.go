@@ -211,11 +211,10 @@ func TestCrossSessionNoAdoption_UnderQuiet(t *testing.T) {
 }
 
 // TestCrossSessionNoAdoption_UnderMachineMode is the machine-mode half of the
-// same observability question. globalFlags.silent() is `quiet || json`, so
-// --json suppressed the stderr notice too, and a tool driving safegit received
-// no representation of the adopted deletion at all. Machine mode adopts nothing
-// either -- and the envelope's payload now says, positively, which paths the
-// commit holds.
+// same observability question. Machine mode once suppressed the stderr notice
+// too, and a tool driving safegit received no representation of the adopted
+// deletion at all. Machine mode adopts nothing either -- and the envelope's
+// payload says, positively, which paths the commit holds.
 func TestCrossSessionNoAdoption_UnderMachineMode(t *testing.T) {
 	dir := newRepo(t)
 

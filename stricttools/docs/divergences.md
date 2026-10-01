@@ -1673,44 +1673,46 @@ safegit's pre-pre-push hooks, which are its own subsystem.
 
 - **git's idiom:** git writes progress, prompts, notices and results to whichever
   stream is convenient, and interleaves them freely.
-- **safegit:** stdout carries the command's own result and nothing else — under
-  `--json`, exactly one document, the framework's envelope. A command that
-  DECLARES a payload schema answers with its data in that envelope's `payload`,
-  validated against the declaration at emission. Not every command declares one,
-  and the reporting commands are split: `version`, `scan`, `author list`,
-  `author check` and `hook run` carry a payload, while `config show`, `config
-  get`, `hook list`, `hook migrate`, `backup list` and `doctor` answer with
-  `payload: null` and report their result on the human channel that
-  machine mode replaces — so a machine consumer of those reads the exit code,
-  and the result text is not on stdout at all.
-  Everything that is not the result goes to stderr: notices, warnings, prompts,
-  a guarded child's output in machine mode, and git's own stdout during a
-  push under `--json`. That holds for the guarded commands too — `switch`,
-  `pull`, `merge`, `rebase`, `reset`, `bisect`, `cherry-pick` and `revert` stream
-  git's output live at a terminal and CAPTURE it under `--json`, re-emitting both
-  of the child's streams on stderr afterwards. Nothing is discarded, and two
-  costs are stated rather than hidden: a machine-mode run of a long operation
-  says nothing until it finishes, because the framework offers no tee and a
-  second copy written by safegit would duplicate every line at a terminal; and
-  the capture decodes as text, so a child writing non-UTF-8 bytes fails that
-  decode and the run degrades to the general failure code instead of reporting
-  git's own verdict. At a terminal, where the output is streamed rather than
-  captured, the same command is unaffected.
+- **safegit:** every line safegit writes goes through the CLI framework's
+  writers, each to one place. At a terminal, stdout carries the command's result
+  and its progress (`--quiet` hides the progress, never the result), and stderr
+  carries errors, warnings and advisory notes, each prefixed once (`error: `,
+  `warning: `), and the prompts. Under `--json`, stdout carries exactly one
+  document, the framework's envelope: a command that DECLARES a payload schema
+  answers with its data in the `payload`, validated against the declaration at
+  emission; the text a command answers with at a terminal is the `output`
+  member, so `config show`, `config get`, `hook list`, `hook migrate`,
+  `backup list` and `doctor`, which declare no payload, still deliver their
+  result in the document; and every progress line, warning, note and error is a
+  `diagnostics` entry with its level. What reaches stderr directly is output
+  safegit relays rather than writes: a hook's output, the repository's own
+  commit hooks' output, and git's own output from a guarded command or a push.
+  The guarded commands -- `switch`, `pull`, `merge`, `rebase`, `reset`,
+  `bisect`, `cherry-pick` and `revert` -- stream git's output live at a terminal
+  and CAPTURE it under `--json`, re-emitting both of the child's streams on
+  stderr afterwards. Nothing is discarded, and two costs are stated rather than
+  hidden: a machine-mode run of a long operation says nothing until it
+  finishes, because the framework offers no tee and a second copy written by
+  safegit would duplicate every line at a terminal; and the capture decodes as
+  text, so a child writing non-UTF-8 bytes fails that decode and the run
+  degrades to the general failure code instead of reporting git's own verdict.
+  At a terminal, where the output is streamed rather than captured, the same
+  command is unaffected.
 
   There is no JSON error OBJECT — safegit never writes a second, error-shaped
-  document, because the envelope is the only document machine mode has. What a
-  failure produces on stdout is one of three shapes, and a consumer has to
-  handle all three: an envelope WITH a payload (exit 26, where the payload names
-  the commit that stands and the aftercare that did not finish; and exits 20
-  and 21 from `push` and `hook run`, where the payload's `hooks` list records the
-  hook runs, and a stopped push's `refs` is empty -- and their exit 1 when
-  safegit could not run a hook under containment, recording the runs before
-  it), an envelope
-  with `payload: null` (a refusal that reached dispatch — a payload schema
-  describes a performed operation, and there is no error-payload channel), or
-  nothing at all where the path exits before dispatch or a signal ends the
-  process (128 + the signal number). The human-readable reason
-  is on stderr in all three.
+  document, because the envelope is the only document machine mode has. A
+  failure ends through the framework's exit step, so the document is written
+  with the failure's exit code and its reason as the last `error` diagnostic;
+  what differs is the payload: the payload the run supplied (exit 26, where the
+  payload names the commit that stands and the aftercare that did not finish;
+  and exits 20 and 21 from `push` and `hook run`, where the payload's `hooks`
+  list records the hook runs, and a stopped push's `refs` is empty -- and their
+  exit 1 when safegit could not run a hook under containment, and their signal
+  exit when a signal interrupted the hooks, recording the runs before it), or
+  `payload: null` (a refusal — a payload schema describes a performed
+  operation, and there is no error-payload channel). The one run with no
+  document is a signal that reaches safegit while it holds one of its own locks
+  outside a hook run: it exits at once with 128 + the signal number.
 - **Ruling:** ours — deliberate
 
 ### `--dry-run` is uniform, and refused where it would lie
