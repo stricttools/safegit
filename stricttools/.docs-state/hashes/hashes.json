@@ -151,12 +151,6 @@
     "schema_hash": "ea2d264ad5947979b428cecb893a8ff4cab06d550d85d045d1a0498c3463c184",
     "seed_hash": "b14fedc0b1986d34ab139926ca59438706ddab51b40f1a989a233aef9917c579"
   },
-  "en/cli-version.md": {
-    "content": "39a2b8e3cc6f8488c418c04e5153b70efdd9ca655d959802b7203cfa6f43ed72",
-    "description": "5acc4282b09c1d81c28dbfe446c4f9d3b9d15417f277a85f3dfcb5828e4a0470",
-    "schema_hash": "f2105f9f55d8554b738a036a02e5b6f400ec6eb0a97c5a8e4086f708c4391040",
-    "seed_hash": "5acc4282b09c1d81c28dbfe446c4f9d3b9d15417f277a85f3dfcb5828e4a0470"
-  },
   "en/commands-guide.md": {
     "content": "75ae976a16878d042f8ec73f56a028670f98e31a956caf05f5d2b57c50b641cb",
     "description": "8479b40af2481684795169686dde3f3558cb34fed5c26a37dfc2853db92149f1"

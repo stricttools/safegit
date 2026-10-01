@@ -482,6 +482,11 @@
         },
         {
           "level": 3,
+          "text": "Flags",
+          "anchor": "flags"
+        },
+        {
+          "level": 3,
           "text": "Arguments",
           "anchor": "arguments"
         },
@@ -879,18 +884,6 @@
           "level": 2,
           "text": "Arguments",
           "anchor": "arguments"
-        }
-      ]
-    },
-    {
-      "path": "cli-version.md",
-      "title": "safegit version",
-      "type": "doc",
-      "headings": [
-        {
-          "level": 1,
-          "text": "safegit version",
-          "anchor": "safegit-version"
         }
       ]
     },
@@ -2035,6 +2028,11 @@
           "level": 3,
           "text": "`Pipeline`",
           "anchor": "pipeline"
+        },
+        {
+          "level": 3,
+          "text": "`Notices`",
+          "anchor": "notices"
         },
         {
           "level": 3,
@@ -4488,6 +4486,11 @@
         },
         {
           "level": 3,
+          "text": "`Notices`",
+          "anchor": "notices"
+        },
+        {
+          "level": 3,
           "text": "`FileSpec`",
           "anchor": "filespec"
         },
@@ -6009,8 +6012,8 @@
         },
         {
           "level": 3,
-          "text": "`StopCapVariable`",
-          "anchor": "stopcapvariable"
+          "text": "`StopWindow`",
+          "anchor": "stopwindow"
         },
         {
           "level": 3,
@@ -6109,8 +6112,8 @@
         },
         {
           "level": 3,
-          "text": "`StopCapFromEnvironment`",
-          "anchor": "stopcapfromenvironment"
+          "text": "`StopCapFromSeconds`",
+          "anchor": "stopcapfromseconds"
         },
         {
           "level": 3,
@@ -7991,7 +7994,7 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-09-30T16:14:14.981673+00:00",
+  "last_gen": "2026-10-01T19:22:53.710029+00:00",
   "theme": "minimal",
   "vocabulary": {
     "accepted": [

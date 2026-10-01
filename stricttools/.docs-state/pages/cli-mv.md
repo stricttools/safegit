@@ -18,7 +18,7 @@ move tracked paths and commit the moves with their records in one operation
 
 | Name | Short | Type | Presence | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--m` | `-m` | list[str] | required |  | commit message paragraph; repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body |
+| `--message` | `-m` | list[str] | required |  | commit message paragraph; repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body |
 | `--create-missing-directories`, `--no-create-missing-directories` |  | bool | optional |  | make the destination's parent directories when they are not there, removing again what this invocation made if the move is rolled back; omitted, and with --no-create-missing-directories, a destination whose directory does not exist is refused and nothing is moved |
 
 ## Arguments

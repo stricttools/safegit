@@ -18,8 +18,8 @@ stage and commit specified files in a single atomic operation
 
 | Name | Short | Type | Presence | Env | Description |
 | --- | --- | --- | --- | --- | --- |
-| `--m` | `-m` | list[str] | optional |  | commit message paragraph; repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body |
-| `--F` | `-F` | str | optional |  | read the full commit message body from a file instead of --m flags |
+| `--message` | `-m` | list[str] | optional |  | commit message paragraph; repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body |
+| `--message-file` | `-F` | str | optional |  | read the full commit message from a file instead of --message flags; mutually exclusive with --message |
 | `--branch` |  | str | optional |  | commit the staged files onto a different branch without switching to it |
 | `--amend`, `--no-amend` |  | bool | optional |  | amend the current HEAD commit by replacing it with updated content; omitted means a new commit |
 | `--allow-empty`, `--no-allow-empty` |  | bool | optional |  | allow creating a commit even when no files have been changed; omitted means an empty commit is refused |
