@@ -13,7 +13,7 @@ import (
 	"github.com/stricttools/safegit/internal/scan"
 	"github.com/stricttools/safegit/internal/submodule"
 	"github.com/stricttools/safegit/internal/trailer"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // scrubRange reads the `range` selector both `scrub match` and `scrub run`

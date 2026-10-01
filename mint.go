@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // mintedRemover returns the file removal safegit's cleanup paths perform: the

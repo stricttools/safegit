@@ -5,7 +5,7 @@ import (
 
 	"github.com/stricttools/safegit/internal/git"
 	"github.com/stricttools/safegit/internal/gitexec"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // The preview side of the history rewrites, shared by `scrub file`,

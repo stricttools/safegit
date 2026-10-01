@@ -35,6 +35,7 @@ type machineEnvelope struct {
 	Command          *string                  `json:"command"`
 	ExitCode         int                      `json:"exit_code"`
 	Payload          json.RawMessage          `json:"payload"`
+	Output           *string                  `json:"output"`
 	DryRun           bool                     `json:"dry_run"`
 	Preview          []map[string]interface{} `json:"preview"`
 	PreviewError     map[string]interface{}   `json:"preview_error"`
@@ -50,11 +51,10 @@ func decodeEnvelope(t *testing.T, stdout string) machineEnvelope {
 	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
 		t.Fatalf("stdout is not a strictcli envelope: %v\nstdout: %s", err, stdout)
 	}
-	// The envelope contract's own version. It became 2 when the framework
-	// added the update-command construct's `writes` member; safegit declares
-	// no update command, so no envelope it emits carries one, but the version
-	// it prints is the framework's and it is pinned here as such.
-	if env.InterfaceVersion != 2 {
+	// The envelope contract's own version. It became 3 when the framework
+	// added the `output` member, which carries what a command wrote through
+	// ctx.Out; the version is the framework's and it is pinned here as such.
+	if env.InterfaceVersion != 3 {
 		t.Fatalf("unexpected envelope interface_version %d", env.InterfaceVersion)
 	}
 	return env
@@ -149,7 +149,7 @@ func TestConsequentialNonInteractiveMessageIsPinned(t *testing.T) {
 // TestReadOnlyCommandNeedsNoConsent: a `read_only` command never prompts.
 func TestReadOnlyCommandNeedsNoConsent(t *testing.T) {
 	dir := newRepo(t)
-	_, stderr, code := runSafegitEnv(t, dir, nil, "version")
+	_, stderr, code := runSafegitEnv(t, dir, nil, "config", "show")
 	if code != 0 {
 		t.Fatalf("a read-only command must run without consent, got %d: %s", code, stderr)
 	}
@@ -750,37 +750,28 @@ func TestCommitDryRunEnvelopeCarriesOneRecordedMutation(t *testing.T) {
 	}
 }
 
-// TestDumpSchemaPublishesTheObserveAllowlist: the observe authorization is part
+// TestHelpDocumentPublishesTheObserveAllowlist: the observe authorization is part
 // of safegit's published interface, not a private detail -- a consumer reading
 // the schema can see exactly which git invocations the tool considers
 // observations. It is generated from the argv classification table's read view,
 // so what is published here is the table's own answer.
-func TestDumpSchemaPublishesTheObserveAllowlist(t *testing.T) {
+func TestHelpDocumentPublishesTheObserveAllowlist(t *testing.T) {
 	dir := newRepo(t)
-	// The dump derives its project_id from the module it is run in, and writes
-	// the schema under that directory -- so the probe runs in a throwaway
-	// module rather than in safegit's own checkout, whose committed dump the
-	// release pipeline owns.
-	testutil.WriteFile(t, dir, "go.mod", "module example.test/schema-probe\n\ngo 1.25\n")
-
-	stdout, stderr, code := runSafegit(t, dir, "--dump-schema")
+	// `help --json` prints the help document on stdout and writes no file.
+	stdout, stderr, code := runSafegit(t, dir, "help", "--json")
 	if code != 0 {
-		t.Fatalf("--dump-schema failed (%d): %s", code, stderr)
+		t.Fatalf("help --json failed (%d): %s", code, stderr)
 	}
-	path := strings.TrimSpace(stdout)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("reading the dumped schema at %q: %v", path, err)
-	}
+	data := []byte(stdout)
 
 	var schema struct {
 		Allowlist [][]string `json:"proc_observe_allowlist"`
 	}
 	if err := json.Unmarshal(data, &schema); err != nil {
-		t.Fatalf("the dumped schema does not parse: %v", err)
+		t.Fatalf("the help document does not parse: %v", err)
 	}
 	if len(schema.Allowlist) == 0 {
-		t.Fatal("the dumped schema publishes no proc_observe_allowlist")
+		t.Fatal("the help document publishes no proc_observe_allowlist")
 	}
 
 	verbs := make(map[string]bool, len(schema.Allowlist))

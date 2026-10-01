@@ -13,7 +13,7 @@ import (
 	"github.com/stricttools/safegit/internal/git"
 	"github.com/stricttools/safegit/internal/repo"
 	"github.com/stricttools/safegit/internal/scan"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // ScrubRunResult is what `scrub run` reports -- in both modes and in both

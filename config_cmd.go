@@ -6,7 +6,7 @@ import (
 
 	"github.com/stricttools/safegit/internal/exitcode"
 	"github.com/stricttools/safegit/internal/repo"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // formatConfigValue formats a config value for display.

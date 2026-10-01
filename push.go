@@ -15,7 +15,7 @@ import (
 	"github.com/stricttools/safegit/internal/oplog"
 	"github.com/stricttools/safegit/internal/repo"
 	"github.com/stricttools/safegit/internal/submodule"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // pushMode selects which refs to push.

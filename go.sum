@@ -4,11 +4,13 @@ github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 h1:1EYB5IzjZawrrnELUi78f9fPu57Hu
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.3/go.mod h1:JXeL+ps8p7/KNMjDQk3TCwPpBy0wYklyWTfbkIzdIFU=
 github.com/smm-h/go-toml-edit v0.4.0 h1:SewwlafoSSxp2O52Ro5S/xC74vutGoUo84Sa7GcbMJQ=
 github.com/smm-h/go-toml-edit v0.4.0/go.mod h1:S54Qz/7GFldPeR7Zdv16YtBgQjNwD2xai0i/KFMOQ0Q=
-github.com/smm-h/strictcli/go v0.34.0 h1:EgqXJ5eEQQ26C1Y5oI9QKaU/9ES24JuWOTRR6GrpVrg=
-github.com/smm-h/strictcli/go v0.34.0/go.mod h1:6mGIkQYXOG1UYkwBclbTmj8Rw9fP8jjEEDXSDsH0bNI=
+github.com/stricttools/strictcli/go v0.38.0 h1:ehbZjD704EGmw5gebpnAV5VTktNQ5kHV/QbbAwd/Vek=
+github.com/stricttools/strictcli/go v0.38.0/go.mod h1:HkNzHaH9J5uWOVcklbDmifc5MqwiFOOs9T8bP2504iw=
 github.com/stricttools/testisolation/go v0.3.1 h1:XZ4J1zWA1LY0S1veOXewrj/yp9dqC5Dsu44BbmKbncI=
 github.com/stricttools/testisolation/go v0.3.1/go.mod h1:Msq2nI3vbl4+ehyZeMbouhquAni1GQrX6Q6UYAyh8AE=
 github.com/toml-lang/toml-test/v2 v2.2.0 h1:q3ELZu7oPnpl9TClC6OOcAccXwj+jwAyFP8WvzBdK1M=
 github.com/toml-lang/toml-test/v2 v2.2.0/go.mod h1:TQdjhQItoZ0R+OODNiHUuxxxErtaE0Xsod2ENZbMvxI=
+golang.org/x/sys v0.47.0 h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=
+golang.org/x/sys v0.47.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
 golang.org/x/text v0.14.0 h1:ScX5w1eTa3QqT8oi6+ziP7dTV1S2+ALU0bI+0zXKWiQ=
 golang.org/x/text v0.14.0/go.mod h1:18ZOQIKpY8NJVqYksKHtTdi31H5itFRjB5/qKTNYzSU=

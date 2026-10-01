@@ -14,7 +14,7 @@ import (
 	"github.com/stricttools/safegit/internal/lock"
 	"github.com/stricttools/safegit/internal/repo"
 	"github.com/stricttools/safegit/internal/sequencer"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // `safegit merge <branch>`, restructured.

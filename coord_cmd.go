@@ -14,7 +14,7 @@ import (
 	"github.com/stricttools/safegit/internal/oplog"
 	"github.com/stricttools/safegit/internal/repo"
 	"github.com/stricttools/safegit/internal/sequencer"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // runGitMutation runs a tree- or ref-mutating git command through the effects

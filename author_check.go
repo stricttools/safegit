@@ -7,7 +7,7 @@ import (
 
 	"github.com/stricttools/safegit/internal/exitcode"
 	"github.com/stricttools/safegit/internal/git"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // authorCheckDeviation records a commit whose author or committer

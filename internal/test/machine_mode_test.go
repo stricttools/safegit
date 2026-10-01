@@ -114,41 +114,34 @@ func TestMachineModeFlagIsNotDeclaredBySafegit(t *testing.T) {
 }
 
 // TestMachineModeReachesEveryCommand: --json is framework-owned, so it works on
-// commands that never had machine output before. `version` reports the same
-// three versions in both renderings; `hook list`, which declares no payload,
-// still answers with a well-formed envelope carrying a null payload rather than
-// with its human text.
+// commands that never had machine output before. `hook list`, which declares
+// no payload, still answers with a well-formed envelope carrying a null
+// payload rather than with its human text.
 func TestMachineModeReachesEveryCommand(t *testing.T) {
 	dir := newRepo(t)
 
-	stdout, stderr, code := runSafegit(t, dir, "--json", "version")
-	if code != 0 {
-		t.Fatalf("version --json failed (%d): %s", code, stderr)
-	}
-	env := decodeEnvelope(t, stdout)
-	if env.Command == nil || *env.Command != "version" {
-		t.Errorf("envelope command = %v, want version", env.Command)
-	}
-	var v map[string]string
-	if err := json.Unmarshal(env.Payload, &v); err != nil {
-		t.Fatalf("version payload is not an object: %v", err)
-	}
-	human, _, code := runSafegit(t, dir, "version")
-	if code != 0 {
-		t.Fatalf("human version failed")
-	}
-	for _, want := range []string{v["safegit"], v["go"], v["git"]} {
-		if !strings.Contains(human, want) {
-			t.Errorf("the human rendering does not carry %q:\n%s", want, human)
-		}
-	}
-
-	stdout, stderr, code = runSafegit(t, dir, "--json", "hook", "list")
+	stdout, stderr, code := runSafegit(t, dir, "--json", "hook", "list")
 	if code != 0 {
 		t.Fatalf("hook list --json failed (%d): %s", code, stderr)
 	}
-	env = decodeEnvelope(t, stdout)
+	env := decodeEnvelope(t, stdout)
 	if string(env.Payload) != "null" {
 		t.Errorf("a command that declares no payload must carry null, got %s", env.Payload)
 	}
 }
+
+// TestVersionIsTheFrameworkCommand: `safegit version` is the framework's own
+// command, printing the one version line; safegit registers no version
+// command of its own.
+func TestVersionIsTheFrameworkCommand(t *testing.T) {
+	dir := newRepo(t)
+	stdout, stderr, code := runSafegit(t, dir, "version")
+	if code != 0 {
+		t.Fatalf("version failed (%d): %s", code, stderr)
+	}
+	lines := strings.Split(strings.TrimSpace(stdout), "\n")
+	if len(lines) != 1 || !strings.HasPrefix(lines[0], "safegit ") {
+		t.Fatalf("version printed %q, want the framework's one line 'safegit <version>'", stdout)
+	}
+}
+

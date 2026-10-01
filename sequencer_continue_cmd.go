@@ -6,7 +6,7 @@ import (
 	"github.com/stricttools/safegit/internal/conflict"
 	"github.com/stricttools/safegit/internal/git"
 	"github.com/stricttools/safegit/internal/sequencer"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // The three conclusion commands' surface: their handlers, their payloads and
@@ -416,7 +416,7 @@ func continueFlags(op continueOp, theirsHelp string) []strictcli.Flag {
 		strictcli.StringFlag("resolve-file",
 			"read resolutions from a TOML file of [[resolutions]] tables, each with a path and a choice key; combinable with --resolve, and a path named by both is a hard error; omitted means the --resolve flags are the whole declaration",
 			strictcli.Optional()),
-		strictcli.StringFlag("m",
+		strictcli.StringFlag("message",
 			"commit message paragraph, replacing git's own draft; repeating it joins the values with a blank line between them; omitted means git's draft for this operation with its comment block stripped",
 			strictcli.Short("m"), strictcli.Repeatable(), strictcli.Unique(false), strictcli.Optional()),
 		strictcli.StringFlag("trailer",
@@ -454,7 +454,7 @@ func continueHandler(op continueOp) func(*strictcli.Context, map[string]interfac
 		gf := globalsToFlags(ctx, kwargs)
 		return strictcli.Exit(runContinue(gf,
 			op,
-			kwargsStrSlice(kwargs["m"]),
+			kwargsStrSlice(kwargs["message"]),
 			kwargsStrSlice(kwargs["trailer"]),
 			kwargsStrSlice(kwargs["resolve"]),
 			optStr(kwargs["resolve_file"], ""),

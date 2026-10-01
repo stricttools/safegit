@@ -13,7 +13,7 @@ import (
 	"github.com/stricttools/safegit/internal/hooks"
 	"github.com/stricttools/safegit/internal/lock"
 	"github.com/stricttools/safegit/internal/repo"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // hookStore names this repository's hook stores for the hooks package: the work

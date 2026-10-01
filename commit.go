@@ -14,7 +14,7 @@ import (
 	"github.com/stricttools/safegit/internal/lock"
 	"github.com/stricttools/safegit/internal/repo"
 	"github.com/stricttools/safegit/internal/trailer"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // pipelineExitCode is the one place a commit-pipeline error becomes an exit
@@ -275,9 +275,9 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		os.Exit(exitcode.NotInitialized)
 	}
 
-	// Validate: -m and -F are mutually exclusive
+	// Validate: --message and --message-file are mutually exclusive
 	if len(messages) > 0 && messageFile != "" {
-		die(exitcode.Usage, "-m and -F are mutually exclusive")
+		die(exitcode.Usage, "--message (-m) and --message-file (-F) are mutually exclusive")
 	}
 
 	if amend {
@@ -286,7 +286,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 			die(exitcode.Usage, "--allow-empty cannot be used with --amend")
 		}
 		if messageFile != "" {
-			die(exitcode.Usage, "-F cannot be used with --amend")
+			die(exitcode.Usage, "--message-file (-F) cannot be used with --amend")
 		}
 
 		return runCommitAmend(flags, gitDir, messages, branch, allowNonPortableTargets, trailers, files, hunks, untrack, moved, movedRetract)
@@ -302,7 +302,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 	}
 
 	if len(messages) == 0 {
-		die(exitcode.Usage, "commit message required (-m or -F)")
+		die(exitcode.Usage, "commit message required (--message/-m or --message-file/-F)")
 	}
 	if len(files) == 0 && len(hunks) == 0 && len(untrack) == 0 && !allowEmpty {
 		die(exitcode.Usage, "no files specified (use -- file1 file2 ..., --hunks path:1,3 or --untrack path)")

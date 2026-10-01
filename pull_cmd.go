@@ -8,7 +8,7 @@ import (
 	"github.com/stricttools/safegit/internal/git"
 	"github.com/stricttools/safegit/internal/gitexec"
 	"github.com/stricttools/safegit/internal/repo"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // `safegit pull`: fetch, then the pipeline-authored merge.

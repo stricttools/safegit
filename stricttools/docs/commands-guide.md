@@ -56,8 +56,8 @@ Use `safegit commit` instead of `git add` + `git commit` whenever multiple sessi
 
 | Flag | Short | Presence | Description |
 |------|-------|----------|-------------|
-| `-m` | `-m` | optional | Commit message paragraph; repeatable, and the values are joined with a blank line between them, so `-m subject -m body` is a subject and a body |
-| `-F` | `-F` | optional | Read the full commit message body from a file (mutually exclusive with `-m`) |
+| `--message` | `-m` | optional | Commit message paragraph; repeatable, and the values are joined with a blank line between them, so `-m subject -m body` is a subject and a body |
+| `--message-file` | `-F` | optional | Read the full commit message from a file (mutually exclusive with `--message`) |
 | `--branch` | | optional | Commit onto a different branch without switching to it |
 | `--amend` | | optional; omitted means a new commit | Amend the current HEAD commit by replacing it with updated content |
 | `--allow-empty` | | optional; omitted means an empty commit is refused | Allow creating a commit even when no files have been changed |
@@ -177,7 +177,7 @@ Use `safegit mv` when the move has not happened yet. Use `safegit commit --moved
 
 | Flag | Presence | Description |
 |------|----------|-------------|
-| `-m` | required; repeatable, no default | Commit message paragraph. Repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body. There is no default message: a message the framework chose would be a message the framework wrote into history |
+| `--message` (`-m`) | required; repeatable, no default | Commit message paragraph. Repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body. There is no default message: a message the framework chose would be a message the framework wrote into history |
 | `--create-missing-directories` | optional; omitted means a destination whose directory does not exist is refused | Make the destination's parent directories when they are not there, removing again what this invocation made if the move is rolled back |
 
 ### Arguments
@@ -350,7 +350,7 @@ A draft that is absent, or empty once its comments are stripped, with no `-m` to
 |------|----------|-------------|
 | `--resolve` | optional; omitted means every conflicted path is unresolved, which is a refusal listing them | Resolve one conflicted path, as `path=ours\|theirs\|worktree\|delete`. Repeatable, once per path |
 | `--resolve-file` | optional; omitted means the `--resolve` flags are the whole declaration | Read resolutions from a TOML file of `[[resolutions]]` tables. Combinable with `--resolve` |
-| `-m` | optional; omitted means git's draft with its comment block stripped | Commit message paragraph; repeatable, joined with a blank line between values |
+| `--message` (`-m`) | optional; omitted means git's draft with its comment block stripped | Commit message paragraph; repeatable, joined with a blank line between values |
 | `--trailer` | optional | Add a key-value trailer line to the commit message (repeatable) |
 
 ### Shared refusals

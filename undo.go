@@ -15,7 +15,7 @@ import (
 	"github.com/stricttools/safegit/internal/lock"
 	"github.com/stricttools/safegit/internal/oplog"
 	"github.com/stricttools/safegit/internal/repo"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // undoableOps maps op types to the extra key that holds the rollback target SHA.

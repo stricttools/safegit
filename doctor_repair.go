@@ -10,7 +10,7 @@ import (
 	"github.com/stricttools/safegit/internal/git"
 	"github.com/stricttools/safegit/internal/gitexec"
 	"github.com/stricttools/safegit/internal/sequencer"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // The two repairs `safegit doctor --action fix` makes to GIT's own leftovers,

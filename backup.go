@@ -13,7 +13,7 @@ import (
 	"github.com/stricttools/safegit/internal/gitexec"
 	"github.com/stricttools/safegit/internal/oplog"
 	"github.com/stricttools/safegit/internal/repo"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // backupRefPrefix is the safegit-owned remote namespace. Each branch gets one

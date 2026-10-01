@@ -10,7 +10,7 @@ import (
 	"github.com/stricttools/safegit/internal/gitexec"
 	"github.com/stricttools/safegit/internal/repo"
 	"github.com/stricttools/safegit/internal/sequencer"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // `safegit revert <commit>`, restructured -- and there is no second form.

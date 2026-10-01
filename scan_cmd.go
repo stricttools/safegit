@@ -11,7 +11,7 @@ import (
 	"github.com/stricttools/safegit/internal/git"
 	"github.com/stricttools/safegit/internal/scan"
 	"github.com/stricttools/safegit/internal/trailer"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // ScanResult is the JSON output for `safegit scan`.

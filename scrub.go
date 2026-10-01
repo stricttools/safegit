@@ -12,7 +12,7 @@ import (
 	"github.com/stricttools/safegit/internal/repo"
 	"github.com/stricttools/safegit/internal/submodule"
 	"github.com/stricttools/safegit/internal/trailer"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // ScrubFileResult is what `scrub file` reports -- in both modes and in both

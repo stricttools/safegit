@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"runtime"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -17,7 +16,7 @@ import (
 	"github.com/stricttools/safegit/internal/repo"
 	"github.com/stricttools/safegit/internal/stage"
 	"github.com/stricttools/safegit/internal/trailer"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // Set via -ldflags "-X main.version=..." at build time.
@@ -259,9 +258,9 @@ func newApp() *strictcli.App {
 
 	app.Command("commit", "stage and commit specified files in a single atomic operation", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		gf := globalsToFlags(ctx, kwargs)
-		messages := kwargsStrSlice(kwargs["m"])
+		messages := kwargsStrSlice(kwargs["message"])
 		var messageFile string
-		if v := kwargs["F"]; v != nil {
+		if v := kwargs["message_file"]; v != nil {
 			messageFile = v.(string)
 		}
 		var branch string
@@ -288,8 +287,8 @@ func newApp() *strictcli.App {
 			Kind:   strictcli.ProcMutate,
 		}),
 		strictcli.WithFlags(
-			strictcli.StringFlag("m", "commit message paragraph; repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body", strictcli.Short("m"), strictcli.Repeatable(), strictcli.Unique(false), strictcli.Optional()),
-			strictcli.StringFlag("F", "read the full commit message body from a file instead of --m flags", strictcli.Short("F"), strictcli.Optional()),
+			strictcli.StringFlag("message", "commit message paragraph; repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body", strictcli.Short("m"), strictcli.Repeatable(), strictcli.Unique(false), strictcli.Optional()),
+			strictcli.StringFlag("message-file", "read the full commit message from a file instead of --message flags; mutually exclusive with --message", strictcli.Short("F"), strictcli.Optional()),
 			strictcli.StringFlag("branch", "commit the staged files onto a different branch without switching to it", strictcli.Optional()),
 			strictcli.BoolFlag("amend", "amend the current HEAD commit by replacing it with updated content; omitted means a new commit", strictcli.Optional()),
 			strictcli.BoolFlag("allow-empty", "allow creating a commit even when no files have been changed; omitted means an empty commit is refused", strictcli.Optional()),
@@ -333,7 +332,7 @@ func newApp() *strictcli.App {
 	app.Command("mv", "move tracked paths and commit the moves with their records in one operation", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		gf := globalsToFlags(ctx, kwargs)
 		createMissingDirs := optBool(kwargs["create_missing_directories"], false)
-		return strictcli.Exit(runMv(gf, kwargsStrSlice(kwargs["m"]), kwargsStrSlice(kwargs["pairs"]), createMissingDirs))
+		return strictcli.Exit(runMv(gf, kwargsStrSlice(kwargs["message"]), kwargsStrSlice(kwargs["pairs"]), createMissingDirs))
 	},
 		strictcli.WithEffect(strictcli.EffectMutating),
 		strictcli.WithTags("json"),
@@ -348,7 +347,7 @@ func newApp() *strictcli.App {
 			// chose would be a message the framework wrote into history, which
 			// is exactly what the mutating-default ban forbids -- and "moved
 			// some files" is not a commit message anyone wanted.
-			strictcli.StringFlag("m", "commit message paragraph; repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body", strictcli.Short("m"), strictcli.Repeatable(), strictcli.Unique(false), strictcli.Required()),
+			strictcli.StringFlag("message", "commit message paragraph; repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body", strictcli.Short("m"), strictcli.Repeatable(), strictcli.Unique(false), strictcli.Required()),
 			// The election that turns the missing-destination-directory refusal
 			// into a creation. A directory this command minted unasked is
 			// indistinguishable, afterwards, from one the operator already had,
@@ -836,10 +835,6 @@ func newApp() *strictcli.App {
 			strictcli.StringFlag("target", "comma-separated list of match types to include: blobs,commits,tags,trailers,files (default: all)", strictcli.Optional()),
 		),
 	)
-	app.Command("version", "print safegit version, Go runtime version, and git version", func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
-		runVersion(globalsToFlags(ctx, kwargs))
-		return strictcli.Exit(exitcode.OK)
-	}, strictcli.WithEffect(strictcli.EffectReadOnly), strictcli.PayloadSchema(versionPayloadSchema))
 
 	return app
 }
@@ -936,55 +931,6 @@ func globalsToFlags(ctx *strictcli.Context, globals map[string]interface{}) glob
 	)
 	gf.sc = ctx
 	return gf
-}
-
-// versionResult is what `version` reports, in both renderings.
-type versionResult struct {
-	Safegit string `json:"safegit"`
-	Go      string `json:"go"`
-	OS      string `json:"os"`
-	Arch    string `json:"arch"`
-	Git     string `json:"git"`
-}
-
-// versionPayloadSchema declares what `version` puts in the envelope's payload.
-var versionPayloadSchema = strictcli.SchemaObject(
-	map[string]interface{}{
-		"safegit": strictcli.SchemaType("string"),
-		"go":      strictcli.SchemaType("string"),
-		"os":      strictcli.SchemaType("string"),
-		"arch":    strictcli.SchemaType("string"),
-		"git":     strictcli.SchemaType("string"),
-	},
-	[]string{"safegit", "go", "os", "arch", "git"},
-	false,
-)
-
-func runVersion(flags globalFlags) {
-	v := versionResult{
-		Safegit: version,
-		Go:      runtime.Version(),
-		OS:      runtime.GOOS,
-		Arch:    runtime.GOARCH,
-		Git:     gitVersion(flags.ctx()),
-	}
-	flags.payload(v)
-	outf(flags, "safegit %s\n", v.Safegit)
-	outf(flags, "go      %s %s/%s\n", v.Go, v.OS, v.Arch)
-	outf(flags, "git     %s\n", v.Git)
-}
-
-// gitVersion reports the git binary's own version banner verbatim, which is
-// what `safegit version` prints and puts in its payload. It does NOT go through
-// git.Version: that one parses the banner down to major/minor/patch for the
-// feature floors, dropping the vendor suffix ("(Apple Git-154)") an operator
-// reporting a bug needs to see.
-func gitVersion(ctx context.Context) string {
-	out, _, err := git.Run(ctx, "--version")
-	if err != nil {
-		return "unknown"
-	}
-	return strings.TrimSpace(out)
 }
 
 // loadConfig loads the safegit config, using the override path if --config-file was set.

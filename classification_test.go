@@ -6,7 +6,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 	"github.com/stricttools/testisolation/go/hygiene"
 )
 
@@ -22,7 +22,7 @@ import (
 // baseline is that a preview is possible, and WithDryRunUnsupported is the only
 // opt-out).
 //
-// Read-only (9): version, scan, config show, config get, author list,
+// Read-only (8): scan, config show, config get, author list,
 // author check, backup list, hook list, scrub verify. Each one inspects the
 // object store, the config file or the remote's ref list and writes nothing;
 // `backup list` is a network read (git ls-remote) but still a read.
@@ -114,7 +114,6 @@ var classification = map[string]struct {
 	"undo":                 {strictcli.EffectMutating, false, true, false},
 	"unlock":               {strictcli.EffectMutating, false, true, false},
 	"scan":                 {strictcli.EffectReadOnly, false, true, false},
-	"version":              {strictcli.EffectReadOnly, false, true, false},
 	"author.list":          {strictcli.EffectReadOnly, false, true, false},
 	"author.check":         {strictcli.EffectReadOnly, false, true, false},
 	"author.rewrite":       {strictcli.EffectMutating, true, true, false},

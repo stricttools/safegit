@@ -8,7 +8,7 @@ import (
 
 	"github.com/stricttools/safegit/internal/exitcode"
 	"github.com/stricttools/safegit/internal/scan"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // Where a verified pattern came from. The two spellings are the two input

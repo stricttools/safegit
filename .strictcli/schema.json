@@ -58,7 +58,8 @@
       "interactive": false,
       "config_fields": [],
       "grants": [],
-      "forwarding": null
+      "forwarding": null,
+      "requires": []
     },
     "group": {
       "commands": {},
@@ -336,7 +337,7 @@
       },
       "flags": [
         {
-          "name": "m",
+          "name": "message",
           "help": "commit message paragraph; repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body",
           "value_schema": {
             "type": "array",
@@ -348,8 +349,8 @@
           "presence": "optional"
         },
         {
-          "name": "F",
-          "help": "read the full commit message body from a file instead of --m flags",
+          "name": "message-file",
+          "help": "read the full commit message from a file instead of --message flags; mutually exclusive with --message",
           "value_schema": {
             "type": "string"
           },
@@ -575,7 +576,7 @@
       },
       "flags": [
         {
-          "name": "m",
+          "name": "message",
           "help": "commit message paragraph; repeating it joins the values with a blank line between them, so the first is the subject and the rest are the body",
           "value_schema": {
             "type": "array",
@@ -787,7 +788,7 @@
           "presence": "optional"
         },
         {
-          "name": "m",
+          "name": "message",
           "help": "commit message paragraph, replacing git's own draft; repeating it joins the values with a blank line between them; omitted means git's draft for this operation with its comment block stripped",
           "value_schema": {
             "type": "array",
@@ -1013,7 +1014,7 @@
           "presence": "optional"
         },
         {
-          "name": "m",
+          "name": "message",
           "help": "commit message paragraph, replacing git's own draft; repeating it joins the values with a blank line between them; omitted means git's draft for this operation with its comment block stripped",
           "value_schema": {
             "type": "array",
@@ -1239,7 +1240,7 @@
           "presence": "optional"
         },
         {
-          "name": "m",
+          "name": "message",
           "help": "commit message paragraph, replacing git's own draft; repeating it joins the values with a blank line between them; omitted means git's draft for this operation with its comment block stripped",
           "value_schema": {
             "type": "array",
@@ -2543,39 +2544,6 @@
       "tags": [
         "json"
       ]
-    },
-    "version": {
-      "name": "version",
-      "help": "print safegit version, Go runtime version, and git version",
-      "effect": "read_only",
-      "payload_schema": {
-        "additionalProperties": false,
-        "properties": {
-          "arch": {
-            "type": "string"
-          },
-          "git": {
-            "type": "string"
-          },
-          "go": {
-            "type": "string"
-          },
-          "os": {
-            "type": "string"
-          },
-          "safegit": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "safegit",
-          "go",
-          "os",
-          "arch",
-          "git"
-        ],
-        "type": "object"
-      }
     }
   },
   "groups": {

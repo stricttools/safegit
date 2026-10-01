@@ -17,7 +17,7 @@ import (
 	"github.com/stricttools/safegit/internal/scan"
 	"github.com/stricttools/safegit/internal/submodule"
 	"github.com/stricttools/safegit/internal/trailer"
-	"github.com/smm-h/strictcli/go/strictcli"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // ScrubMatchResult is what `scrub match` reports -- in both modes and in both
