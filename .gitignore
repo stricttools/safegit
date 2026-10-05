@@ -40,11 +40,6 @@ dist/
 build/
 target/
 
-# Scratch space for git-behavior probes; guards skip it, contents are
-# disposable (see experiments/README.md, the one committed file there)
-/experiments/*
-!/experiments/README.md
-
 .rlsbl/releases/in-progress.json
 .rlsbl/releases/scrub-result.json
 .rlsbl-monorepo/releasables/*/releases/in-progress.json

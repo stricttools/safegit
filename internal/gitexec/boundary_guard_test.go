@@ -94,8 +94,7 @@ var skipDirs = map[string]bool{
 	"docs": true, "scripts": true, "todo": true,
 	// experiments is the declared scratch space for git-behavior probes
 	// (throwaway repos included); its contents are gitignored and
-	// disposable, and guards deliberately do not scan it. See
-	// experiments/README.md.
+	// disposable, and guards deliberately do not scan it.
 	"experiments": true,
 }
 
