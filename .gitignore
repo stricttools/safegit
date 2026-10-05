@@ -32,7 +32,9 @@ stricttools/.docs-cache/versions/
 stricttools/.docs-state/data/
 
 .rlsbl/lock
-.claude/
+# The generated .claude/CLAUDE.md is committed; the local settings are not.
+.claude/settings.json
+.claude/settings.local.json
 
 # Benchmark temp files
 .bench-*
