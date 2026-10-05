@@ -2136,6 +2136,11 @@
         },
         {
           "level": 3,
+          "text": "`linkLeavesRepositoryError.Error`",
+          "anchor": "linkleavesrepositoryerrorerror"
+        },
+        {
+          "level": 3,
           "text": "Phase A: parallel-safe object construction",
           "anchor": "phase-a-parallel-safe-object-construction"
         },
@@ -2416,6 +2421,11 @@
         },
         {
           "level": 3,
+          "text": "`IgnoreRule`",
+          "anchor": "ignorerule"
+        },
+        {
+          "level": 3,
           "text": "`AuthorInfo`",
           "anchor": "authorinfo"
         },
@@ -2678,6 +2688,11 @@
           "level": 3,
           "text": "`MatchesIgnoreRules`",
           "anchor": "matchesignorerules"
+        },
+        {
+          "level": 3,
+          "text": "`ExcludingRule`",
+          "anchor": "excludingrule"
         },
         {
           "level": 3,
@@ -3535,6 +3550,11 @@
           "level": 3,
           "text": "Grammar is never decided by what is on disk",
           "anchor": "grammar-is-never-decided-by-what-is-on-disk"
+        },
+        {
+          "level": 3,
+          "text": "A trailing slash that follows a link out of the repository names the ways forward",
+          "anchor": "a-trailing-slash-that-follows-a-link-out-of-the-repository-names-the-ways-forward"
         },
         {
           "level": 3,
@@ -4588,6 +4608,11 @@
           "level": 3,
           "text": "`Pipeline.Execute`",
           "anchor": "pipelineexecute"
+        },
+        {
+          "level": 3,
+          "text": "`linkLeavesRepositoryError.Error`",
+          "anchor": "linkleavesrepositoryerrorerror"
         }
       ]
     },
@@ -5121,6 +5146,11 @@
         },
         {
           "level": 3,
+          "text": "`IgnoreRule`",
+          "anchor": "ignorerule"
+        },
+        {
+          "level": 3,
           "text": "`AuthorInfo`",
           "anchor": "authorinfo"
         },
@@ -5383,6 +5413,11 @@
           "level": 3,
           "text": "`MatchesIgnoreRules`",
           "anchor": "matchesignorerules"
+        },
+        {
+          "level": 3,
+          "text": "`ExcludingRule`",
+          "anchor": "excludingrule"
         },
         {
           "level": 3,
@@ -7994,7 +8029,7 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-10-01T19:22:53.710029+00:00",
+  "last_gen": "2026-10-05T21:42:38.762940+00:00",
   "theme": "minimal",
   "vocabulary": {
     "accepted": [
