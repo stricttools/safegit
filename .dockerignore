@@ -1,5 +1,6 @@
 todo
-stricttools
+.strictmetadata
+**/.claude
 **/.rlsbl
 **/CLAUDE.md
 **/.strictcli

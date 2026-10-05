@@ -24,12 +24,8 @@ dist/
 # Added by rlsbl
 *.local-only
 
-# Selfdoc / Cloudflare
+# Cloudflare
 .wrangler/
-# stricttools/.docs-state/manifest.json and stricttools/.docs-state/hashes/ are committed (fleet pattern):
-# they are generated project state, not build output. Only the caches are local.
-stricttools/.docs-cache/versions/
-stricttools/.docs-state/data/
 
 .rlsbl/lock
 # The generated .claude/CLAUDE.md is committed; the local settings are not.
