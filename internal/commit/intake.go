@@ -2,6 +2,7 @@ package commit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
@@ -323,7 +324,18 @@ func canonicalRel(repoRoot, arg string, followFinal bool) (string, error) {
 	absPath = resolveParentSymlinks(repoRoot, absPath)
 
 	if followFinal {
-		absPath = followFinalLink(repoRoot, absPath)
+		followed := followFinalLink(repoRoot, absPath)
+		if insideRoot(repoRoot, absPath) && !insideRoot(repoRoot, followed) {
+			// Only a symlink as the final component is followed from inside the
+			// repository, so this is a link in the repository leading out of it.
+			link, _ := filepath.Rel(repoRoot, absPath)
+			target, rerr := os.Readlink(absPath)
+			if rerr != nil {
+				target = followed
+			}
+			return "", &linkLeavesRepositoryError{arg: arg, link: filepath.ToSlash(link), target: target}
+		}
+		absPath = followed
 	}
 
 	rel, err := filepath.Rel(repoRoot, absPath)
@@ -337,6 +349,84 @@ func canonicalRel(repoRoot, arg string, followFinal bool) (string, error) {
 		return "", nil
 	}
 	return rel, nil
+}
+
+// linkLeavesRepositoryError is canonicalRel's refusal of an argument spelled
+// with a trailing separator whose final component is a symlink in the
+// repository leading out of it. It is still the outside-the-repository refusal;
+// the intake turns it into one that names the ways forward (linkLeavesRefusal),
+// which needs the tree the commit is built on.
+type linkLeavesRepositoryError struct {
+	arg    string // the argument as typed
+	link   string // the link's repository-relative path
+	target string // the link text
+}
+
+func (e *linkLeavesRepositoryError) Error() string {
+	return fmt.Sprintf("file %s is outside the repository: %s is a symlink to %s, which leads outside the "+
+		"repository, and the trailing slash reads through the link", e.arg, e.link, e.target)
+}
+
+// maxListedLinkPaths bounds how many tracked paths linkLeavesRefusal lists.
+const maxListedLinkPaths = 20
+
+// linkLeavesRefusal is the refusal of an argument whose trailing slash follows
+// a link out of the repository. Every alternative it offers works as written:
+// the paths the commit's base tracks under the link, each of which records its
+// deletion (or, under --untrack, its removal from tracking); and, for a
+// positional argument, the link itself -- offered only when the link is not
+// gitignored, and with --allow-non-portable-targets, because a link leading out
+// of the repository is always a non-portable target.
+func (p *Pipeline) linkLeavesRefusal(ctx context.Context, e *linkLeavesRepositoryError, baseRev string, tree *treeIndex, untrack bool) error {
+	under, err := tree.under(e.link)
+	if err != nil {
+		return err
+	}
+	var tracked []string
+	for _, path := range under {
+		entry, ok, eerr := tree.entry(path)
+		if eerr != nil {
+			return eerr
+		}
+		if ok && entry.ObjectType == "commit" {
+			continue
+		}
+		tracked = append(tracked, path)
+	}
+
+	lines := []string{e.Error()}
+	if len(tracked) > 0 {
+		if untrack {
+			lines = append(lines, fmt.Sprintf("  to stop tracking what %s tracks under %s, name those paths with --untrack:",
+				describeBase(baseRev), e.link))
+		} else {
+			lines = append(lines, fmt.Sprintf("  to record the deletion of what %s tracks under %s, name those paths:",
+				describeBase(baseRev), e.link))
+		}
+		shown := tracked
+		if len(shown) > maxListedLinkPaths {
+			shown = shown[:maxListedLinkPaths]
+		}
+		for _, path := range shown {
+			lines = append(lines, "    "+path)
+		}
+		if rest := len(tracked) - len(shown); rest > 0 {
+			lines = append(lines, fmt.Sprintf("    and %d more under %s/", rest, e.link))
+		}
+	}
+	if !untrack {
+		ignored, ierr := git.MatchesIgnoreRules(ctx, e.link)
+		if ierr != nil {
+			return fmt.Errorf("checking whether %s is gitignored: %w", e.link, ierr)
+		}
+		if ignored {
+			lines = append(lines, fmt.Sprintf("  %s itself is gitignored, so the link cannot be committed", e.link))
+		} else {
+			lines = append(lines, fmt.Sprintf("  to commit the link itself, name %s without the trailing slash and pass "+
+				"--allow-non-portable-targets: its target will not resolve in another checkout", e.link))
+		}
+	}
+	return &CommitError{Code: exitcode.General, Message: strings.Join(lines, "\n"), Err: e}
 }
 
 // followFinalLink reads a path spelled with a trailing separator THROUGH its
@@ -727,6 +817,10 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 	for i, spec := range specs {
 		rel, err := canonicalRel(repoRoot, spec.Path, namesThroughLink(spec.Path))
 		if err != nil {
+			var leaves *linkLeavesRepositoryError
+			if errors.As(err, &leaves) {
+				return nil, p.linkLeavesRefusal(ctx, leaves, baseRev, tree, false)
+			}
 			return nil, err
 		}
 		rels[i] = rel
@@ -859,6 +953,10 @@ func (p *Pipeline) resolveUntrack(
 	for _, arg := range untrack {
 		rel, err := canonicalRel(repoRoot, arg, namesThroughLink(arg))
 		if err != nil {
+			var leaves *linkLeavesRepositoryError
+			if errors.As(err, &leaves) {
+				return nil, p.linkLeavesRefusal(ctx, leaves, baseRev, tree, true)
+			}
 			return nil, err
 		}
 

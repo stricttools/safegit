@@ -217,6 +217,23 @@ Every future change that introduces a decision of this kind adds its entry here.
   link, and a side beyond a link is refused naming the path and the link.
 - **Ruling:** ours — deliberate
 
+### A trailing slash that follows a link out of the repository names the ways forward
+
+- **git's idiom:** `git add logs/` with `logs` a symlink fails with
+  `fatal: pathspec 'logs/' is beyond a symbolic link`, and says nothing about
+  what could be committed instead.
+- **safegit:** the argument is still refused as outside the repository, and the
+  refusal names the link and its target, then lists what the commit's base
+  tracks under the link -- each of those paths, named instead, records its
+  deletion (under `--untrack`, its removal from tracking) -- and, for a
+  positional argument whose link is not gitignored, offers the link itself:
+  `logs` without the slash, with `--allow-non-portable-targets`, because a link
+  leading out of the repository never resolves in another checkout. A
+  gitignored link is not offered; the refusal says it is ignored. Every
+  alternative it names commits as written.
+- **Ruling:** ours — deliberate [%%] (adopted on trust in a recommendation, not
+  decided deliberately; walk it back freely)
+
 ### Committing in a submodule refuses until the parent has decided about the gitlink
 
 - **git's idiom:** committing in a submodule leaves the parent repository's

@@ -150,6 +150,8 @@ The remedies differ, so the refusal states the one that fits the shape. A relati
 
 The judgment is made in the commit family's intake and nowhere else: `safegit commit` and its `--amend` form, over the paths that invocation stages -- the ones named on the command line, a `--moved` commit's paths among them, and the ones a directory argument expands to. Two other ways link content reaches a tree do not pass through it: `safegit mv` moving an already-tracked link carries the blob across and never re-reads it, and a conclusion's `--resolve path=worktree|ours|theirs` stages a conflicted path's content directly.
 
+A trailing slash on a link -- `logs/` -- reads through it, and when the link leads out of the repository the argument is refused as outside it. The refusal names the link, its target, and the alternatives that work: the paths the commit's base tracks under the link, each of which records its deletion when named instead (with `--untrack`, its removal from tracking), and -- unless the link is gitignored -- `logs` without the slash, with `--allow-non-portable-targets`, to commit the link itself.
+
 A gitignored path named on the command line is refused before git runs, naming the ignore file, the line, and the rule: narrow the rule so it no longer matches the path, or leave the path out of the commit. Where a negation line below a glob would re-include the path, the refusal gives it as the example.
 
 ### Safety Guarantees

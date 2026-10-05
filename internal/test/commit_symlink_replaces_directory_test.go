@@ -14,6 +14,7 @@ package test
 // target's own content, which the repository never carried.
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -202,6 +203,158 @@ func TestCommitDeletionUnderAnIgnoredLinkLeavingTheRepository(t *testing.T) {
 			}
 		})
 	}
+}
+
+// assertLinkLeavesRefused runs a commit whose trailing slash follows logs out
+// of the repository and checks the refusal: exit 1, its first line naming the
+// argument, the link, and its target, every line in want present, every line in
+// absent missing, and nothing committed. It returns stderr.
+func assertLinkLeavesRefused(t *testing.T, dir, before, target string, args, want, absent []string) string {
+	t.Helper()
+	_, stderr, code := runSafegit(t, dir, append([]string{"commit", "-m", "reach through"}, args...)...)
+	if code != exitcode.General {
+		t.Fatalf("exit %d, want %d (General); stderr:\n%s", code, exitcode.General, stderr)
+	}
+	head := "file logs/ is outside the repository: logs is a symlink to " + target +
+		", which leads outside the repository, and the trailing slash reads through the link"
+	for _, w := range append([]string{head}, want...) {
+		if !strings.Contains(stderr, w) {
+			t.Errorf("the refusal must say %q; stderr:\n%s", w, stderr)
+		}
+	}
+	for _, a := range absent {
+		if strings.Contains(stderr, a) {
+			t.Errorf("the refusal must not say %q; stderr:\n%s", a, stderr)
+		}
+	}
+	if after := testutil.Rev(t, dir, "HEAD"); after != before {
+		t.Errorf("HEAD moved: %s -> %s", before, after)
+	}
+	return stderr
+}
+
+const (
+	linkLeavesTrackedLine = "  to record the deletion of what %s tracks under logs, name those paths:\n    logs/.gitignore\n"
+	linkLeavesCommitLink  = "  to commit the link itself, name logs without the trailing slash and pass " +
+		"--allow-non-portable-targets: its target will not resolve in another checkout"
+	linkLeavesIgnored = "  logs itself is gitignored, so the link cannot be committed"
+)
+
+// TestCommitTrailingSlashThroughALinkLeavingTheRepositoryIgnored: `logs/` with
+// logs an ignored symlink leading out of the repository is refused, naming the
+// link, its target, and the tracked path under it, and saying the link itself is
+// ignored rather than offering to commit it. The path it names commits.
+func TestCommitTrailingSlashThroughALinkLeavingTheRepositoryIgnored(t *testing.T) {
+	dir, target, before := ignoredLinkLeavingTheRepository(t)
+	assertLinkLeavesRefused(t, dir, before, target, []string{"--", "logs/"},
+		[]string{fmt.Sprintf(linkLeavesTrackedLine, "refs/heads/main"), linkLeavesIgnored},
+		[]string{"--allow-non-portable-targets"})
+
+	stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "logs/.gitignore is gone", "--", "logs/.gitignore")
+	if code != 0 {
+		t.Fatalf("the suggested commit failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	if got := testutil.TreePaths(t, dir, "HEAD"); strings.Join(got, " ") != "inner/f seed.txt" {
+		t.Errorf("HEAD tree = %v, want only the deletion of logs/.gitignore recorded", got)
+	}
+}
+
+// TestCommitTrailingSlashThroughALinkLeavingTheRepository: the same refusal for
+// a link nothing ignores offers both ways forward, and each one, performed as
+// written, commits.
+func TestCommitTrailingSlashThroughALinkLeavingTheRepository(t *testing.T) {
+	refused := func(t *testing.T) (dir, target, before string) {
+		target = outsideLogTarget(t, true)
+		dir, before = trackedDirReplacedByLink(t, target)
+		assertLinkLeavesRefused(t, dir, before, target, []string{"--", "logs/"},
+			[]string{fmt.Sprintf(linkLeavesTrackedLine, "refs/heads/main"), linkLeavesCommitLink},
+			[]string{linkLeavesIgnored})
+		return dir, target, before
+	}
+	t.Run("the tracked path", func(t *testing.T) {
+		dir, _, before := refused(t)
+		stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "logs/.gitignore is gone", "--", "logs/.gitignore")
+		if code != 0 {
+			t.Fatalf("the suggested commit failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		}
+		if parents := testutil.Parents(t, dir, "HEAD"); len(parents) != 1 || parents[0] != before {
+			t.Fatalf("expected one new commit on top of %s, got parents %v", before, parents)
+		}
+		if got := testutil.TreePaths(t, dir, "HEAD"); strings.Join(got, " ") != "seed.txt" {
+			t.Errorf("HEAD tree = %v, want only the deletion of logs/.gitignore recorded", got)
+		}
+	})
+	t.Run("the link itself", func(t *testing.T) {
+		dir, target, before := refused(t)
+		stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "logs becomes a link",
+			"--allow-non-portable-targets", "--", "logs")
+		if code != 0 {
+			t.Fatalf("the suggested commit failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		}
+		assertLinkReplacedDirectory(t, dir, before, target)
+	})
+}
+
+// TestUntrackTrailingSlashThroughALinkLeavingTheRepository: --untrack logs/
+// is refused the same way, offering the tracked paths as --untrack arguments
+// and never the link, which --untrack cannot commit. The suggestion untracks.
+func TestUntrackTrailingSlashThroughALinkLeavingTheRepository(t *testing.T) {
+	dir, target, before := ignoredLinkLeavingTheRepository(t)
+	assertLinkLeavesRefused(t, dir, before, target, []string{"--untrack", "logs/"},
+		[]string{"  to stop tracking what refs/heads/main tracks under logs, name those paths with --untrack:\n    logs/.gitignore\n"},
+		[]string{"--allow-non-portable-targets", linkLeavesIgnored})
+
+	stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "untrack", "--untrack", "logs/.gitignore")
+	if code != 0 {
+		t.Fatalf("the suggested commit failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	if got := testutil.TreePaths(t, dir, "HEAD"); strings.Join(got, " ") != "inner/f seed.txt" {
+		t.Errorf("HEAD tree = %v, want only logs/.gitignore untracked", got)
+	}
+}
+
+// TestCommitTrailingSlashThroughALinkLeavingTheRepositoryNothingTracked: a link
+// with nothing tracked under it gets no list of paths, only the link itself,
+// and committing it as suggested works.
+func TestCommitTrailingSlashThroughALinkLeavingTheRepositoryNothingTracked(t *testing.T) {
+	dir := newRepo(t)
+	target := outsideLogTarget(t, false)
+	if err := os.Symlink(target, filepath.Join(dir, "logs")); err != nil {
+		t.Fatal(err)
+	}
+	before := testutil.Rev(t, dir, "HEAD")
+	assertLinkLeavesRefused(t, dir, before, target, []string{"--", "logs/"},
+		[]string{linkLeavesCommitLink}, []string{"name those paths"})
+
+	stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "logs is a link", "--allow-non-portable-targets", "--", "logs")
+	if code != 0 {
+		t.Fatalf("the suggested commit failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	if got := catFileBlob(t, dir, "logs"); got != target {
+		t.Errorf("symlink blob = %q, want the link text %q", got, target)
+	}
+}
+
+// TestCommitTrailingSlashThroughALinkLeavingTheRepositoryManyTracked: the list
+// of tracked paths is bounded, and says how many it left out.
+func TestCommitTrailingSlashThroughALinkLeavingTheRepositoryManyTracked(t *testing.T) {
+	dir := newRepo(t)
+	for i := 0; i < 23; i++ {
+		testutil.WriteFile(t, dir, fmt.Sprintf("logs/f%02d", i), "x\n")
+	}
+	testutil.Git(t, dir, "add", "logs")
+	testutil.Git(t, dir, "commit", "-m", "track logs/")
+	target := outsideLogTarget(t, false)
+	if err := os.RemoveAll(filepath.Join(dir, "logs")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, "logs")); err != nil {
+		t.Fatal(err)
+	}
+	before := testutil.Rev(t, dir, "HEAD")
+	assertLinkLeavesRefused(t, dir, before, target, []string{"--", "logs/"},
+		[]string{"    logs/f00\n", "    logs/f19\n", "    and 3 more under logs/\n"},
+		[]string{"logs/f20"})
 }
 
 // TestCommitIgnoredLinkReplacingTrackedDirectoryIsRefusedByItsRule: naming
