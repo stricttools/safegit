@@ -125,6 +125,85 @@ func TestCommitLinkReplacingTrackedDirectory(t *testing.T) {
 	}
 }
 
+// ignoredLinkLeavingTheRepository tracks logs/.gitignore and inner/f, replaces
+// logs/ on disk with an absolute symlink to a directory outside the repository
+// that holds a .gitignore of its own, and ignores the link through an
+// uncommitted /logs rule. The link is never committed: the only change a commit
+// is asked to record is the deletion of the tracked path under it. It returns
+// the repository, the link's target and HEAD.
+func ignoredLinkLeavingTheRepository(t *testing.T) (dir, target, before string) {
+	t.Helper()
+	dir = newRepo(t)
+	testutil.WriteFile(t, dir, "logs/.gitignore", "*\n!.gitignore\n")
+	testutil.WriteFile(t, dir, "inner/f", "inner\n")
+	testutil.Git(t, dir, "add", "logs/.gitignore", "inner/f")
+	testutil.Git(t, dir, "commit", "-m", "track logs/ and inner/")
+
+	target = outsideLogTarget(t, true)
+	if err := os.RemoveAll(filepath.Join(dir, "logs")); err != nil {
+		t.Fatalf("removing logs/: %v", err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, "logs")); err != nil {
+		t.Fatalf("creating the logs symlink: %v", err)
+	}
+	testutil.WriteFile(t, dir, ".gitignore", "/logs\n")
+	// --no-index: the index still tracks logs/.gitignore, and without it
+	// check-ignore reports nothing for a path with tracked entries below it.
+	if out := testutil.Git(t, dir, "check-ignore", "--no-index", "logs"); out != "logs" {
+		t.Fatalf("fixture: logs must be ignored, git check-ignore said %q", out)
+	}
+	if status := testutil.Git(t, dir, "status", "--porcelain", "--untracked-files=all"); strings.Contains(status, "?? logs") {
+		t.Fatalf("fixture: logs must not show as untracked; status:\n%s", status)
+	}
+	return dir, target, testutil.Rev(t, dir, "HEAD")
+}
+
+// TestCommitDeletionUnderAnIgnoredLinkLeavingTheRepository: the tracked
+// logs/.gitignore sits under logs, which is now an ignored, uncommitted symlink
+// to a directory outside the repository. Recording the deletion of that one
+// path -- named directly, as --untrack, by its absolute path, or as ../ from a
+// subdirectory -- is a commit of a path IN the repository: it must not be
+// refused as outside the repository, must not read the target's .gitignore, and
+// must not commit the link.
+func TestCommitDeletionUnderAnIgnoredLinkLeavingTheRepository(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		// args builds the command line from the repository root.
+		args func(dir string) []string
+		// sub is the directory below the root the command runs from.
+		sub string
+	}{
+		{"path named", func(string) []string { return []string{"--", "logs/.gitignore"} }, ""},
+		{"untrack", func(string) []string { return []string{"--untrack", "logs/.gitignore"} }, ""},
+		{"absolute path", func(dir string) []string { return []string{"--", filepath.Join(dir, "logs", ".gitignore")} }, ""},
+		{"../ from a subdirectory", func(string) []string { return []string{"--", "../logs/.gitignore"} }, "inner"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, target, before := ignoredLinkLeavingTheRepository(t)
+			args := append([]string{"commit", "-m", "logs/.gitignore is gone"}, tc.args(dir)...)
+			stdout, stderr, code := runSafegit(t, filepath.Join(dir, tc.sub), args...)
+			if code != 0 {
+				t.Fatalf("commit failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+			}
+			if parents := testutil.Parents(t, dir, "HEAD"); len(parents) != 1 || parents[0] != before {
+				t.Fatalf("expected one new commit on top of %s, got parents %v", before, parents)
+			}
+			got := testutil.TreePaths(t, dir, "HEAD")
+			want := []string{"inner/f", "seed.txt"}
+			if strings.Join(got, "\n") != strings.Join(want, "\n") {
+				t.Errorf("HEAD tree = %v, want %v: only the deletion of logs/.gitignore may be recorded", got, want)
+			}
+			info, err := os.Lstat(filepath.Join(dir, "logs"))
+			if err != nil || info.Mode()&os.ModeSymlink == 0 {
+				t.Errorf("logs must still be a symlink on disk (err %v)", err)
+			}
+			if b, err := os.ReadFile(filepath.Join(target, ".gitignore")); err != nil || string(b) != "machine-local\n" {
+				t.Errorf("the link target's .gitignore changed: %q (err %v)", b, err)
+			}
+		})
+	}
+}
+
 // TestCommitLinkReplacingTrackedDirectoryPointsInside: the link points at a
 // directory inside the repository. The link is still committed as a link, and
 // the directory it points at contributes nothing.
