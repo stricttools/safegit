@@ -1347,6 +1347,38 @@ func TestMatchesIgnoreRulesLeavesTheIndexOutOfTheQuestion(t *testing.T) {
 	}
 }
 
+// TestExcludingRuleNamesTheRule: the rule that excludes a path comes back with
+// its file, line, and pattern, a nested .gitignore named by its own path; a
+// negated match re-includes the path and no match at all are both "not
+// excluded", the one answer a negation and silence share.
+func TestExcludingRuleNamesTheRule(t *testing.T) {
+	dir := testutil.InitBareRepo(t)
+	testutil.Chdir(t, dir)
+	ctx := context.Background()
+
+	testutil.WriteFile(t, dir, ".gitignore", "/secret.env\n*.log\n!keep.log\n")
+	testutil.WriteFile(t, dir, "sub/.gitignore", "tmp*\n")
+
+	for _, tc := range []struct {
+		path string
+		want IgnoreRule
+	}{
+		{"secret.env", IgnoreRule{Source: ".gitignore", Line: "1", Pattern: "/secret.env"}},
+		{"debug.log", IgnoreRule{Source: ".gitignore", Line: "2", Pattern: "*.log"}},
+		{"sub/tmp1", IgnoreRule{Source: "sub/.gitignore", Line: "1", Pattern: "tmp*"}},
+	} {
+		got, ok, err := ExcludingRule(ctx, tc.path)
+		if err != nil || !ok || got != tc.want {
+			t.Errorf("ExcludingRule(%s) = %+v, %t, %v; want %+v, true, nil", tc.path, got, ok, err, tc.want)
+		}
+	}
+	for _, p := range []string{"keep.log", "kept.txt"} {
+		if got, ok, err := ExcludingRule(ctx, p); err != nil || ok {
+			t.Errorf("ExcludingRule(%s) = %+v, %t, %v; want not excluded", p, got, ok, err)
+		}
+	}
+}
+
 // TestLsTreePathsRecursiveMatchesNamesLiterally: the path-limited listing takes
 // NAMES, and every name it is given is the file it means.
 //

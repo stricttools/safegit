@@ -732,6 +732,42 @@ func MatchesIgnoreRules(ctx context.Context, filePath string) (bool, error) {
 	return false, err
 }
 
+// IgnoreRule is the ignore rule that excludes a path: the file holding it as
+// git names it (repository-relative for a .gitignore in the work tree and for
+// .git/info/exclude, absolute for a global excludes file), its line number, and
+// the pattern as written.
+type IgnoreRule struct {
+	Source  string
+	Line    string
+	Pattern string
+}
+
+// ExcludingRule returns the ignore rule that excludes a path, asked of the
+// rules alone as MatchesIgnoreRules asks it. ok is false when no rule matches,
+// and when the deciding rule is a negation, which re-includes the path.
+func ExcludingRule(ctx context.Context, filePath string) (rule IgnoreRule, ok bool, err error) {
+	out, stderr, err := RunWithEnvStdin(ctx, nil, []byte(filePath+"\x00"),
+		"check-ignore", "--no-index", "--verbose", "-z", "--stdin")
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 && strings.TrimSpace(stderr) == "" {
+			return IgnoreRule{}, false, nil
+		}
+		return IgnoreRule{}, false, err
+	}
+	// --verbose -z prints the source, its line, the pattern, and the path, each
+	// ended by a NUL.
+	fields := strings.Split(out, "\x00")
+	if len(fields) < 4 {
+		return IgnoreRule{}, false, fmt.Errorf("unexpected git check-ignore output for %s: %q", filePath, out)
+	}
+	rule = IgnoreRule{Source: fields[0], Line: fields[1], Pattern: fields[2]}
+	if strings.HasPrefix(rule.Pattern, "!") {
+		return IgnoreRule{}, false, nil
+	}
+	return rule, true, nil
+}
+
 // IsAncestorOf checks whether commitSHA is an ancestor of (or equal to)
 // descendantSHA. Uses git merge-base --is-ancestor which exits 0 if true,
 // 1 if false, and other codes on error.

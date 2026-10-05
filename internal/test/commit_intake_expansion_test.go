@@ -172,6 +172,88 @@ func TestCommitExplicitlyNamedIgnoredFileIsRefused(t *testing.T) {
 	}
 }
 
+// TestCommitIgnoredFileRefusalNamesTheRuleAndAFixThatWorks: the refusal of a
+// named ignored file names the ignore file, the line, and the rule, and offers
+// a narrower rule where one would work -- a negation line below a glob, anchored
+// at the .gitignore's own directory -- and not where git could not honor it,
+// because the file's directory is itself excluded. Each fix it names, performed
+// as written, lets the commit through.
+func TestCommitIgnoredFileRefusalNamesTheRuleAndAFixThatWorks(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		ignore    map[string]string // .gitignore path -> content
+		file      string
+		message   string
+		narrowed  map[string]string // the fix: .gitignore path -> new content
+		noExample bool
+	}{
+		{
+			name:     "a glob at the root",
+			ignore:   map[string]string{".gitignore": "*.log\n"},
+			file:     "debug.log",
+			message:  "file debug.log is gitignored, through line 1 of .gitignore (`*.log`), and safegit never commits an ignored path: narrow that rule so it no longer matches debug.log -- for example, add the line `!/debug.log` to .gitignore below line 1 -- or leave debug.log out of this commit",
+			narrowed: map[string]string{".gitignore": "*.log\n!/debug.log\n"},
+		},
+		{
+			name:     "a glob in a nested .gitignore",
+			ignore:   map[string]string{"sub/.gitignore": "# scratch\n*.tmp\n"},
+			file:     "sub/a.tmp",
+			message:  "file sub/a.tmp is gitignored, through line 2 of sub/.gitignore (`*.tmp`), and safegit never commits an ignored path: narrow that rule so it no longer matches sub/a.tmp -- for example, add the line `!/a.tmp` to sub/.gitignore below line 2 -- or leave sub/a.tmp out of this commit",
+			narrowed: map[string]string{"sub/.gitignore": "# scratch\n*.tmp\n!/a.tmp\n"},
+		},
+		{
+			name:      "a rule naming the file",
+			ignore:    map[string]string{".gitignore": "/secret.env\n"},
+			file:      "secret.env",
+			message:   "file secret.env is gitignored, through line 1 of .gitignore (`/secret.env`), and safegit never commits an ignored path: narrow that rule so it no longer matches secret.env or leave secret.env out of this commit",
+			narrowed:  map[string]string{".gitignore": ""},
+			noExample: true,
+		},
+		{
+			name:      "a glob excluding the directory",
+			ignore:    map[string]string{".gitignore": "out*/\n"},
+			file:      "output/x.txt",
+			message:   "file output/x.txt is gitignored, through line 1 of .gitignore (`out*/`), and safegit never commits an ignored path: narrow that rule so it no longer matches output/x.txt or leave output/x.txt out of this commit",
+			narrowed:  map[string]string{".gitignore": ""},
+			noExample: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := newRepo(t)
+			for p, content := range tc.ignore {
+				testutil.WriteFile(t, dir, p, content)
+			}
+			testutil.WriteFile(t, dir, tc.file, "content\n")
+			before := testutil.Rev(t, dir, "HEAD")
+
+			_, stderr, code := runSafegit(t, dir, "commit", "-m", "commit it", "--", tc.file)
+			if code != exitcode.General {
+				t.Fatalf("exit %d, want %d (General); stderr:\n%s", code, exitcode.General, stderr)
+			}
+			if !strings.Contains(stderr, tc.message) {
+				t.Errorf("the refusal must say %q; stderr:\n%s", tc.message, stderr)
+			}
+			if tc.noExample && strings.Contains(stderr, "for example") {
+				t.Errorf("no negation line can re-include %s, so none may be offered; stderr:\n%s", tc.file, stderr)
+			}
+			if after := testutil.Rev(t, dir, "HEAD"); after != before {
+				t.Fatalf("HEAD moved despite the refusal: %s -> %s", before, after)
+			}
+
+			for p, content := range tc.narrowed {
+				testutil.WriteFile(t, dir, p, content)
+			}
+			stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "commit it", "--", tc.file)
+			if code != 0 {
+				t.Fatalf("commit after the suggested fix failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+			}
+			if !testutil.Contains(testutil.TreePaths(t, dir, "HEAD"), tc.file) {
+				t.Errorf("%s is not in HEAD after the suggested fix", tc.file)
+			}
+		})
+	}
+}
+
 // --- B. a named path that contributes nothing ---
 
 // TestCommitNamedMissingFileIsAnError: a path that is neither on disk nor in

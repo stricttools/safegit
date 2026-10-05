@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -778,7 +779,7 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 		named[rel] = namedPath{arg: spec.Path, hunks: spec.Hunks != nil}
 
 		if !isDir {
-			if err := p.validateNamedPath(ctx, repoRoot, rel, baseRev, spec); err != nil {
+			if err := p.validateNamedPath(ctx, repoRoot, rel, baseRev, tree, spec); err != nil {
 				return nil, err
 			}
 			links = append(links, rel)
@@ -800,7 +801,7 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 			}
 		}
 		if expanded.self {
-			if err := p.validateNamedPath(ctx, repoRoot, rel, baseRev, spec); err != nil {
+			if err := p.validateNamedPath(ctx, repoRoot, rel, baseRev, tree, spec); err != nil {
 				return nil, err
 			}
 		}
@@ -998,7 +999,7 @@ func (p *Pipeline) namesADirectory(ctx context.Context, repoRoot, rel string, ha
 
 // validateNamedPath applies the rules that hold for a path the caller named
 // explicitly (as opposed to one an expansion produced).
-func (p *Pipeline) validateNamedPath(ctx context.Context, repoRoot, rel, baseRev string, spec FileSpec) error {
+func (p *Pipeline) validateNamedPath(ctx context.Context, repoRoot, rel, baseRev string, tree *treeIndex, spec FileSpec) error {
 	arg := spec.Path
 	abs := git.Anchor(repoRoot, rel)
 	if info, err := os.Lstat(abs); err == nil && info.Mode()&os.ModeSymlink != 0 && spec.Hunks != nil {
@@ -1032,10 +1033,76 @@ func (p *Pipeline) validateNamedPath(ctx context.Context, repoRoot, rel, baseRev
 	// Present on disk: an explicitly named gitignored path is a refusal. It is
 	// a refusal only HERE -- an expansion skips ignored paths instead, because
 	// they are names the caller never typed.
-	if ignored, _ := git.IsIgnored(ctx, rel); ignored {
-		return fmt.Errorf("file %s is gitignored", arg)
+	return refuseIgnoredNamedPath(ctx, rel, arg, tree)
+}
+
+// refuseIgnoredNamedPath refuses a named gitignored path before git runs,
+// naming the rule that ignores it.
+//
+// Two questions, and either refuses. git's own index-aware one, asked of the
+// shared .git/index, is the refusal safegit always made: a tracked file matching
+// a pattern stays committable, while one whose removal is already staged there
+// is refused. And the question the staging step's `git add` asks of the index
+// the commit stages into, which is seeded from the base tree: a path with no
+// entry of its own there is judged by the ignore rules alone. The index-aware
+// question answers "not ignored" for a path with tracked entries BELOW it -- a
+// symlink that replaced a tracked directory -- and asking it alone let git's
+// own refusal, with its advice to pass -f, through.
+func refuseIgnoredNamedPath(ctx context.Context, rel, arg string, tree *treeIndex) error {
+	ignoredInIndex, _ := git.IsIgnored(ctx, rel)
+	if !ignoredInIndex {
+		if _, inBase, err := tree.entry(rel); err != nil {
+			return err
+		} else if inBase {
+			return nil
+		}
 	}
-	return nil
+	rule, ignored, err := git.ExcludingRule(ctx, rel)
+	if err != nil {
+		return fmt.Errorf("checking whether %s is gitignored: %w", arg, err)
+	}
+	if !ignored {
+		return nil
+	}
+	fix := fmt.Sprintf("narrow that rule so it no longer matches %s", rel)
+	if negation, ok, nerr := negationLine(ctx, rel, rule); nerr != nil {
+		return nerr
+	} else if ok {
+		fix += fmt.Sprintf(" -- for example, add the line `%s` to %s below line %s --", negation, rule.Source, rule.Line)
+	}
+	return &CommitError{
+		Code: exitcode.General,
+		Message: fmt.Sprintf("file %s is gitignored, through line %s of %s (`%s`), and safegit never commits "+
+			"an ignored path: %s or leave %s out of this commit", arg, rule.Line, rule.Source, rule.Pattern, fix, arg),
+	}
+}
+
+// negationLine returns a line that re-includes rel when appended below the
+// rule that ignores it, when one would work: the rule is a glob, so other
+// paths still need it, and no directory above rel is ignored, because git
+// never re-includes a path whose directory is excluded. The line is anchored
+// at the directory of the .gitignore holding the rule; a rule from any other
+// source is read against the repository root.
+func negationLine(ctx context.Context, rel string, rule git.IgnoreRule) (string, bool, error) {
+	if !strings.ContainsAny(rule.Pattern, "*?[") {
+		return "", false, nil
+	}
+	for dir := path.Dir(rel); dir != "."; dir = path.Dir(dir) {
+		ignored, err := git.MatchesIgnoreRules(ctx, dir+"/")
+		if err != nil {
+			return "", false, fmt.Errorf("checking whether %s is gitignored: %w", dir, err)
+		}
+		if ignored {
+			return "", false, nil
+		}
+	}
+	anchored := rel
+	if path.Base(rule.Source) == ".gitignore" && !filepath.IsAbs(rule.Source) {
+		if base := path.Dir(rule.Source); base != "." {
+			anchored = strings.TrimPrefix(rel, base+"/")
+		}
+	}
+	return "!/" + anchored, true, nil
 }
 
 // expansion is what a directory argument produced: the paths to stage, the

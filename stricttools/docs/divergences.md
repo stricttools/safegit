@@ -100,7 +100,15 @@ Every future change that introduces a decision of this kind adds its entry here.
   flag of any kind. The refusal applies only to paths the caller typed: a
   directory expansion **skips** ignored files instead, because those are names
   the caller never wrote, and the skipped set is reported in the command's JSON
-  payload so a machine consumer can see what was passed over.
+  payload so a machine consumer can see what was passed over. It is safegit's
+  own refusal, made before git runs, and it names the ignore file, the line, and
+  the rule, with the two ways forward: narrow the rule, or leave the path out of
+  the commit. Where a negation line below a glob would re-include the path, it
+  is offered as the example narrower rule; it is not offered where git could not
+  honor it, because the path's directory is itself excluded. git's own refusal,
+  with its advice to pass `-f`, never reaches the caller -- including for a
+  symlink that replaced a tracked directory, which git's index-aware ignore check
+  calls not ignored because tracked paths sit below it.
 - **Ruling:** ours — deliberate
 
 ### Directory expansion stops at a nested repository

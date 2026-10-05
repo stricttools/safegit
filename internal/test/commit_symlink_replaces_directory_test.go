@@ -204,6 +204,56 @@ func TestCommitDeletionUnderAnIgnoredLinkLeavingTheRepository(t *testing.T) {
 	}
 }
 
+// TestCommitIgnoredLinkReplacingTrackedDirectoryIsRefusedByItsRule: naming
+// the link itself when it is gitignored is safegit's own refusal, naming the
+// ignore file, line, and rule -- never git add's "paths are ignored" with its
+// advice to pass -f, which safegit does not have. Each way forward it names
+// works: narrowing the rule, or leaving the link out of the commit.
+func TestCommitIgnoredLinkReplacingTrackedDirectoryIsRefusedByItsRule(t *testing.T) {
+	refused := func(t *testing.T) (dir, target, before string) {
+		dir, target, before = ignoredLinkLeavingTheRepository(t)
+		_, stderr, code := runSafegit(t, dir, "commit", "-m", "logs becomes a link",
+			"--allow-non-portable-targets", "--", "logs/.gitignore", "logs")
+		if code != exitcode.General {
+			t.Fatalf("exit %d, want %d (General); stderr:\n%s", code, exitcode.General, stderr)
+		}
+		want := "file logs is gitignored, through line 1 of .gitignore (`/logs`), and safegit never commits " +
+			"an ignored path: narrow that rule so it no longer matches logs or leave logs out of this commit"
+		if !strings.Contains(stderr, want) {
+			t.Errorf("the refusal must say %q; stderr:\n%s", want, stderr)
+		}
+		for _, raw := range []string{"git add", "-f", "hint:"} {
+			if strings.Contains(stderr, raw) {
+				t.Errorf("git's own refusal leaked through (%q); stderr:\n%s", raw, stderr)
+			}
+		}
+		if after := testutil.Rev(t, dir, "HEAD"); after != before {
+			t.Errorf("HEAD moved: %s -> %s", before, after)
+		}
+		return dir, target, before
+	}
+	t.Run("narrow the rule", func(t *testing.T) {
+		dir, target, before := refused(t)
+		testutil.WriteFile(t, dir, ".gitignore", "")
+		stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "logs becomes a link",
+			"--allow-non-portable-targets", "--", "logs/.gitignore", "logs")
+		if code != 0 {
+			t.Fatalf("commit after narrowing the rule failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		}
+		assertLinkReplacedDirectory(t, dir, before, target)
+	})
+	t.Run("leave it out", func(t *testing.T) {
+		dir, _, _ := refused(t)
+		stdout, stderr, code := runSafegit(t, dir, "commit", "-m", "logs/.gitignore is gone", "--", "logs/.gitignore")
+		if code != 0 {
+			t.Fatalf("commit leaving logs out failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		}
+		if got := testutil.TreePaths(t, dir, "HEAD"); strings.Join(got, " ") != "inner/f seed.txt" {
+			t.Errorf("HEAD tree = %v, want only the deletion of logs/.gitignore recorded", got)
+		}
+	})
+}
+
 // TestCommitLinkReplacingTrackedDirectoryPointsInside: the link points at a
 // directory inside the repository. The link is still committed as a link, and
 // the directory it points at contributes nothing.
