@@ -1,0 +1,5 @@
+# Written by selfdoc from its layout declaration: what this directory holds
+# is not committed; its manifest and this file are.
+*
+!.gitignore
+!manifest.toml
