@@ -145,8 +145,10 @@ Every future change that introduces a decision of this kind adds its entry here.
   subshell rooted at its absolute path, `(cd <boundary> && safegit commit -m
   <message> -- <paths>)`, beside the other way forward, leaving them out. In a
   submodule that commit then meets the parent's `commit.autoBumpParent` decision
-  like any commit there. `--moved` refuses a side inside another repository
-  with exit 19, next to its symbolic-link check.
+  like any commit there. `--moved` and `safegit mv` refuse a side inside another
+  repository with exit 19, next to their symbolic-link check; an `mv` pair with
+  both sides in the same repository prints the `safegit mv` to run there. `mv`
+  into a submodule used to exit 0 and delete the gitlink.
 - **Ruling:** ours — deliberate
 
 ### A symlink target that will not resolve in another checkout is refused

@@ -314,9 +314,10 @@ func checkMvWorld(flags globalFlags, ctx context.Context, repoRoot string, ignor
 	}
 	sort.Strings(sorted)
 
+	bounds := commit.NewRepositoryBoundaries(ctx, repoRoot, "HEAD")
 	var refusals []string
 	for i := range pairs {
-		if why := checkMvPair(ctx, repoRoot, ignoreCase, createMissingDirs, tracked, sorted, &pairs[i]); why != "" {
+		if why := checkMvPair(ctx, repoRoot, ignoreCase, createMissingDirs, tracked, sorted, bounds, &pairs[i]); why != "" {
 			refusals = append(refusals, fmt.Sprintf("%s: %s", pairs[i].arg, why))
 		}
 	}
@@ -335,7 +336,7 @@ func checkMvWorld(flags globalFlags, ctx context.Context, repoRoot string, ignor
 
 // checkMvPair is the whole check one pair gets, and it fills in the entries the
 // move carries. An empty answer means the pair holds.
-func checkMvPair(ctx context.Context, repoRoot string, ignoreCase, createMissingDirs bool, tracked map[string]git.TreeEntry, sorted []string, p *mvPair) string {
+func checkMvPair(ctx context.Context, repoRoot string, ignoreCase, createMissingDirs bool, tracked map[string]git.TreeEntry, sorted []string, bounds *commit.RepositoryBoundaries, p *mvPair) string {
 	absOld := git.Anchor(repoRoot, p.oldPrefix())
 	absNew := git.Anchor(repoRoot, p.newPrefix())
 
@@ -350,6 +351,15 @@ func checkMvPair(ctx context.Context, repoRoot string, ignoreCase, createMissing
 		if link := commit.LinkAbove(repoRoot, path); link != "" {
 			return fmt.Sprintf("%s is beyond a symbolic link: %s is a symlink, and a move never reads or writes through one", path, link)
 		}
+	}
+
+	// A path inside another repository is that repository's content. Moving
+	// one out of it takes a file this repository never tracked; moving one into
+	// it writes into the other repository's tree -- and into a submodule, the
+	// commit used to replace the gitlink with a directory. Asked next to the
+	// link question, before anything is read at either path.
+	if why := mvBoundaryReason(repoRoot, bounds, p); why != "" {
+		return why
 	}
 
 	info, err := os.Lstat(absOld)
@@ -429,6 +439,45 @@ func checkMvPair(ctx context.Context, repoRoot string, ignoreCase, createMissing
 	// than about where the move lands: a file carrying uncommitted edits cannot
 	// be moved, because this command commits the rename and nothing else.
 	return dirtyMoveReason(ctx, repoRoot, p)
+}
+
+// mvBoundaryReason is the refusal for a pair with a side inside another
+// repository. An empty answer means both sides are this repository's.
+//
+// A pair whose two sides lie in the same checked-out repository is a move that
+// repository can make itself, and the refusal prints the command for it.
+func mvBoundaryReason(repoRoot string, bounds *commit.RepositoryBoundaries, p *mvPair) string {
+	oldBd, oldInside, err := bounds.Above(p.old)
+	if err != nil {
+		return fmt.Sprintf("whether %s lies inside another repository cannot be answered: %v", p.old, err)
+	}
+	newBd, newInside, err := bounds.Above(p.new)
+	if err != nil {
+		return fmt.Sprintf("whether %s lies inside another repository cannot be answered: %v", p.new, err)
+	}
+	switch {
+	case oldInside && newInside && oldBd.Dir == newBd.Dir:
+		why := fmt.Sprintf("%s and %s lie inside another git repository: %s is %s, and safegit mv moves only this repository's paths",
+			p.oldPrefix(), p.newPrefix(), oldBd.Dir, oldBd.Describe())
+		checkedOut, err := bounds.CheckedOut(oldBd)
+		if err != nil {
+			return fmt.Sprintf("whether %s is checked out cannot be answered: %v", oldBd.Dir, err)
+		}
+		innerOld := strings.TrimPrefix(p.old, oldBd.Dir+"/")
+		innerNew := strings.TrimPrefix(p.new, oldBd.Dir+"/")
+		if checkedOut && innerOld != "" && innerNew != "" {
+			why += "; move it in that repository: " + commit.BoundaryCommand(repoRoot, oldBd,
+				"mv -m <message> "+commit.ShellQuote(trailer.EncodePair(innerOld, innerNew)))
+		}
+		return why
+	case oldInside:
+		return fmt.Sprintf("%s lies inside another git repository: %s is %s, and a move never carries content out of another repository",
+			p.oldPrefix(), oldBd.Dir, oldBd.Describe())
+	case newInside:
+		return fmt.Sprintf("%s lies inside another git repository: %s is %s, and a move never carries content into another repository",
+			p.newPrefix(), newBd.Dir, newBd.Describe())
+	}
+	return ""
 }
 
 // dirtyMoveReason is the refusal for a pair whose content has been edited and

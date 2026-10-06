@@ -276,9 +276,10 @@ const (
 	// --amend and reword forms.
 	//
 	// `mv` produces it for the same class of verdict read the other way round:
-	// a pair whose source is untracked or absent from disk, whose destination
-	// is already occupied, or whose file/subtree spelling disagrees with what
-	// the path actually is. The refusal names EVERY pair that is wrong, and
+	// a pair one of whose sides lies inside another git repository, whose
+	// source is untracked or absent from disk, whose destination is already
+	// occupied, or whose file/subtree spelling disagrees with what the path
+	// actually is. The refusal names EVERY pair that is wrong, and
 	// nothing has been moved or committed when it fires.
 	//
 	// Two declarations that contradict EACH OTHER -- nested sources, nested

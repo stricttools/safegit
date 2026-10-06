@@ -309,11 +309,11 @@
    mv.go:283  return in refuseMvOverlaps  code=exitcode.Usage  | return exitcode.Usage
    mv.go:302  return in checkMvWorld  code=exitcode.MoveNotBorneOut  | return exitcode.MoveNotBorneOut
    mv.go:307  return in checkMvWorld  code=exitcode.General  | return exitcode.General
-   mv.go:331  return in checkMvWorld  code=exitcode.MoveNotBorneOut  | return exitcode.MoveNotBorneOut
-   mv.go:772  return in commitMvMoves  code=exitcode.General  | return exitcode.General
-   mv.go:781  return in commitMvMoves  code=exitcode.Usage  | return exitcode.Usage
-   mv.go:811  return in commitMvMoves  code=pipelineExitCode(err)  | return pipelineExitCode(err)
-   mv.go:851  return in commitMvMoves  code=aftercareExit(residue)  | return aftercareExit(residue)
+   mv.go:332  return in checkMvWorld  code=exitcode.MoveNotBorneOut  | return exitcode.MoveNotBorneOut
+   mv.go:821  return in commitMvMoves  code=exitcode.General  | return exitcode.General
+   mv.go:830  return in commitMvMoves  code=exitcode.Usage  | return exitcode.Usage
+   mv.go:860  return in commitMvMoves  code=pipelineExitCode(err)  | return pipelineExitCode(err)
+   mv.go:900  return in commitMvMoves  code=aftercareExit(residue)  | return aftercareExit(residue)
    operation_lock.go:53  strictcli.ExitNow in mustAcquireOperationLock  code=code  | strictcli.ExitNow(code, message)
    operation_lock.go:108  strictcli.ExitNow in acquireRewriteLock  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("loading config: %v", err))
    operation_lock.go:119  strictcli.ExitNow in acquireRewriteLock  code=exitcode.LockTimeout  | strictcli.ExitNow(exitcode.LockTimeout, exitMessage(err))
