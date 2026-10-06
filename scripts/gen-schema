@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
-# Regenerate the committed strictcli help document, .strictcli/schema.json, the
-# way the release does: the program's own `help --json`, with the document's
-# version being the one the VERSION file declares.
+# Regenerate the committed strictcli help document,
+# .strictmetadata/.cli-schema/schema.json, the way the release does: the
+# program's own `help --json`, with the document's version being the one the
+# VERSION file declares.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 version="$(tr -d '[:space:]' < VERSION)"
 # help --json writes the --json envelope to stderr; it is shown only when the
 # run fails.
-if ! err="$(go run -ldflags "-X main.version=${version}" . help --json 2>&1 >.strictcli/schema.json)"; then
+mkdir -p .strictmetadata/.cli-schema
+if ! err="$(go run -ldflags "-X main.version=${version}" . help --json 2>&1 >.strictmetadata/.cli-schema/schema.json)"; then
 	printf '%s\n' "$err" >&2
 	exit 1
 fi
