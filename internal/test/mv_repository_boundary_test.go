@@ -33,8 +33,7 @@ func TestMvAcrossARepositoryBoundaryIsRefused(t *testing.T) {
 				if code != exitcode.MoveNotBorneOut {
 					t.Fatalf("exit %d, want %d (MoveNotBorneOut): %s", code, exitcode.MoveNotBorneOut, stderr)
 				}
-				// mv judges against HEAD, and says so in its own vocabulary.
-				if !strings.Contains(stderr, f.inner+" is "+strings.Replace(f.describes, "refs/heads/main", "HEAD", 1)) {
+				if !strings.Contains(stderr, f.inner+" is "+f.describes) {
 					t.Errorf("refusal does not name the boundary:\n%s", stderr)
 				}
 				if !mvExists(t, dir, p.src) || mvExists(t, dir, p.dst) {

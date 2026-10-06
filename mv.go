@@ -314,7 +314,14 @@ func checkMvWorld(flags globalFlags, ctx context.Context, repoRoot string, ignor
 	}
 	sort.Strings(sorted)
 
-	bounds := commit.NewRepositoryBoundaries(ctx, repoRoot, "HEAD")
+	// The boundary refusal names the base the way the commit family does: by
+	// the branch HEAD is on. A detached HEAD has no branch, and HEAD is then
+	// the name of the base itself.
+	base := "HEAD"
+	if ref, err := git.HeadRef(ctx); err == nil {
+		base = ref
+	}
+	bounds := commit.NewRepositoryBoundaries(ctx, repoRoot, base)
 	var refusals []string
 	for i := range pairs {
 		if why := checkMvPair(ctx, repoRoot, ignoreCase, createMissingDirs, tracked, sorted, bounds, &pairs[i]); why != "" {
