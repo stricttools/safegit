@@ -32,8 +32,18 @@
     }
   ],
   "root_files": [
-    ".strictmetadata/docs/_README.md",
-    ".strictmetadata/docs/_CLAUDE.md"
+    {
+      "template": ".strictmetadata/docs/_README.md",
+      "outputs": [
+        "README.md"
+      ]
+    },
+    {
+      "template": ".strictmetadata/docs/_CLAUDE.md",
+      "outputs": [
+        ".claude/CLAUDE.md"
+      ]
+    }
   ],
   "topology": {
     "slug": "safegit",
