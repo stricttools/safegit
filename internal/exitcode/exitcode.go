@@ -187,9 +187,15 @@ const (
 	// the commit is built on, it is a directory holding neither files on disk
 	// nor paths in that tree, it is a file whose content the commit would not
 	// change, or it is an --untrack target the commit's parent does not track,
-	// which leaves no index entry to remove. Naming a path is a statement about
-	// what the commit contains, so a path that cannot affect it is a refusal
-	// rather than a silent omission. Produced by commit, including --amend.
+	// which leaves no index entry to remove. A path that belongs to another git
+	// repository is refused under it too, whether named as a positional path,
+	// in --hunks or in --untrack: one below a nested repository, a gitlink the
+	// commit's base tree records, or a submodule .gitmodules registers, and an
+	// unrecorded nested repository's own directory. Such a path is that
+	// repository's content, which a commit of this one cannot record. Naming a
+	// path is a statement about what the commit contains, so a path that cannot
+	// affect it is a refusal rather than a silent omission. Produced by commit,
+	// including --amend.
 	PathMatchedNothing = 11
 
 	// BinaryHunkSpec means a hunk spec (--hunks file:1,3) was given for a file
@@ -248,9 +254,9 @@ const (
 	// repository.
 	//
 	// A declared move (--moved) reaches it when the world it describes does not
-	// agree with it -- the old path not tracked in the tree the commit is built
-	// on, the old path still sitting on disk, the new path neither on disk nor
-	// in that tree -- and when the COMMIT ITSELF does not bear it out, which is
+	// agree with it -- a side lying inside another git repository, the old path
+	// not tracked in the tree the commit is built on, the old path still sitting
+	// on disk, the new path neither on disk nor in that tree -- and when the COMMIT ITSELF does not bear it out, which is
 	// the same two questions asked of the tree the commit writes: the old path
 	// still in it, or the new path missing from it. A declaration stages
 	// nothing, so a destination no argument named is a record pointing at a path

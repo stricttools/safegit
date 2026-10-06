@@ -317,6 +317,7 @@ When a commit specifies individual hunks rather than whole files, safegit constr
 | File is untracked | Staged whole, as an addition. |
 | File is deleted | The deletion is staged. |
 | Path named but contributing nothing | Refused with exit 11, naming the argument. |
+| Path inside another git repository (a nested repository, a submodule or a gitlink) | Refused with exit 11 before anything is staged, grouped by repository, with the command that commits it there. |
 
 There is no unstage. The temporary index is created fresh for every attempt of every invocation and thrown away with it, so there is no accumulated staging to take back: what a commit contains is exactly what its command line named. The cleanup half of `git rm --cached` -- dropping a path from the index while leaving it on disk -- is `safegit commit --untrack <path>`, which is a commit, not a staging operation.
 

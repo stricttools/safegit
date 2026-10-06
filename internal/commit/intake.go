@@ -788,14 +788,19 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 	skipped := make(map[string]bool)
 	named := make(map[string]namedPath)
 	var links []string
+	bounds := newRepositoryBoundaries(ctx, repoRoot, baseRev, tree)
 
-	// The untrack targets are resolved first, so the staging loop below can see
-	// which paths are being removed: naming one explicitly on both sides is a
-	// contradiction, while an expansion that happens to sweep one up just
-	// leaves it to the removal.
-	dropped, err := p.resolveUntrack(ctx, repoRoot, baseRev, tree, in, seen, untrack)
-	if err != nil {
-		return nil, err
+	untrackRels := make([]string, len(untrack))
+	for i, arg := range untrack {
+		rel, err := canonicalRel(repoRoot, arg, namesThroughLink(arg))
+		if err != nil {
+			var leaves *linkLeavesRepositoryError
+			if errors.As(err, &leaves) {
+				return nil, p.linkLeavesRefusal(ctx, leaves, baseRev, tree, true)
+			}
+			return nil, err
+		}
+		untrackRels[i] = rel
 	}
 
 	// Every argument is canonicalized up front, because the staging loop needs
@@ -829,13 +834,36 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 		}
 	}
 
+	// A path that belongs to another repository is refused before anything
+	// else is asked of it -- before the ignore check, before expansion -- and
+	// every such argument is refused at once, grouped by boundary.
+	checked := make([]boundaryArg, 0, len(specs)+len(untrack))
+	for i, spec := range specs {
+		checked = append(checked, boundaryArg{arg: spec.Path, rel: rels[i], hunks: spec.Hunks})
+	}
+	for i, arg := range untrack {
+		checked = append(checked, boundaryArg{arg: arg, rel: untrackRels[i], untrack: true})
+	}
+	if err := refuseInsideOtherRepositories(repoRoot, bounds, checked); err != nil {
+		return nil, err
+	}
+
+	// The untrack targets are resolved before the staging loop below, so it
+	// can see which paths are being removed: naming one explicitly on both
+	// sides is a contradiction, while an expansion that happens to sweep one
+	// up just leaves it to the removal.
+	dropped, err := p.resolveUntrack(ctx, baseRev, tree, in, seen, untrack, untrackRels)
+	if err != nil {
+		return nil, err
+	}
+
 	for i, spec := range specs {
 		rel := rels[i]
 
 		srcIdx := len(in.sources)
 		src := intakeSource{arg: spec.Path, path: rel}
 
-		isDir, err := p.namesADirectory(ctx, repoRoot, rel, spec.Hunks != nil, tree)
+		isDir, err := p.namesADirectory(repoRoot, rel, spec.Hunks != nil, tree, bounds)
 		if err != nil {
 			return nil, err
 		}
@@ -884,7 +912,7 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 			continue
 		}
 
-		expanded, err := p.expandDirectory(ctx, repoRoot, rel, tree)
+		expanded, err := p.expandDirectory(ctx, repoRoot, rel, tree, bounds)
 		if err != nil {
 			return nil, err
 		}
@@ -941,25 +969,20 @@ func (p *Pipeline) resolveFiles(ctx context.Context, repoRoot, baseRev string, s
 // NOT apply here. Untracking a path BECAUSE it is now ignored is the whole
 // point of the flag; what the refusal still blocks is the opposite direction,
 // adding ignored content to a commit.
+//
+// untrack holds the arguments as typed and rels their canonical forms, index
+// for index.
 func (p *Pipeline) resolveUntrack(
 	ctx context.Context,
-	repoRoot, baseRev string,
+	baseRev string,
 	tree *treeIndex,
 	in *intake,
 	seen map[string]bool,
-	untrack []string,
+	untrack, rels []string,
 ) (map[string]bool, error) {
 	dropped := make(map[string]bool)
-	for _, arg := range untrack {
-		rel, err := canonicalRel(repoRoot, arg, namesThroughLink(arg))
-		if err != nil {
-			var leaves *linkLeavesRepositoryError
-			if errors.As(err, &leaves) {
-				return nil, p.linkLeavesRefusal(ctx, leaves, baseRev, tree, true)
-			}
-			return nil, err
-		}
-
+	for i, arg := range untrack {
+		rel := rels[i]
 		targets, isDir, err := p.untrackTargets(rel, tree)
 		if err != nil {
 			return nil, err
@@ -1051,11 +1074,11 @@ func (p *Pipeline) untrackTargets(rel string, tree *treeIndex) (targets []string
 //
 // A submodule is never a directory here. Its gitlink is one entry in the parent
 // tree -- a commit pointer, not a subtree -- and safegit stages it only when the
-// caller names it, never as a by-product of naming something above it. A nested
-// repository that is not yet a gitlink is treated the same way: expansion stops
-// at the boundary rather than sweeping another repository's working tree into
-// this repository's commit.
-func (p *Pipeline) namesADirectory(ctx context.Context, repoRoot, rel string, hasHunks bool, tree *treeIndex) (bool, error) {
+// caller names it, never as a by-product of naming something above it. Every
+// other repository boundary (RepositoryBoundaries.At) is treated the same way;
+// an unrecorded nested repository named itself never reaches here, because
+// refuseInsideOtherRepositories has already refused it.
+func (p *Pipeline) namesADirectory(repoRoot, rel string, hasHunks bool, tree *treeIndex, bounds *RepositoryBoundaries) (bool, error) {
 	if hasHunks {
 		// A hunk selection is a statement about one file's content.
 		return false, nil
@@ -1079,8 +1102,8 @@ func (p *Pipeline) namesADirectory(ctx context.Context, repoRoot, rel string, ha
 	info, statErr := os.Lstat(abs)
 	onDiskDir := statErr == nil && info.IsDir() && !underLink(repoRoot, rel)
 	if onDiskDir {
-		if isNestedRepository(abs) {
-			return false, nil
+		if _, boundary, err := bounds.At(rel); err != nil || boundary {
+			return false, err
 		}
 		return true, nil
 	}
@@ -1218,7 +1241,7 @@ type expansion struct {
 // expandDirectory returns every path under a directory prefix that the commit
 // should stage: the union of what is on disk and what the base tree holds, so
 // that a file deleted from disk is included as the deletion it is.
-func (p *Pipeline) expandDirectory(ctx context.Context, repoRoot, prefix string, tree *treeIndex) (*expansion, error) {
+func (p *Pipeline) expandDirectory(ctx context.Context, repoRoot, prefix string, tree *treeIndex, bounds *RepositoryBoundaries) (*expansion, error) {
 	found := make(map[string]bool)
 
 	fromTree, err := tree.under(prefix)
@@ -1238,7 +1261,7 @@ func (p *Pipeline) expandDirectory(ctx context.Context, repoRoot, prefix string,
 		found[path] = true
 	}
 
-	walked, err := walkForCommit(ctx, repoRoot, prefix)
+	walked, err := walkForCommit(ctx, repoRoot, prefix, bounds)
 	if err != nil {
 		return nil, err
 	}
@@ -1281,13 +1304,14 @@ type diskWalk struct {
 
 // walkForCommit lists the files on disk under a repo-relative directory prefix,
 // skipping git's own directory, everything the ignore rules exclude, and
-// anything inside a nested repository.
+// every repository boundary (RepositoryBoundaries.At) -- the same predicate
+// that refuses a named path inside one, so the two never disagree.
 //
 // The ignore question is asked once per directory level, for that level's whole
 // listing at once, so an ignored directory is answered for as a directory and
 // never descended into -- which is both what git does and the difference
 // between one question and one per file inside a build output tree.
-func walkForCommit(ctx context.Context, repoRoot, prefix string) (*diskWalk, error) {
+func walkForCommit(ctx context.Context, repoRoot, prefix string, bounds *RepositoryBoundaries) (*diskWalk, error) {
 	walk := &diskWalk{}
 	queue := []string{prefix}
 	for len(queue) > 0 {
@@ -1353,7 +1377,9 @@ func walkForCommit(ctx context.Context, repoRoot, prefix string) (*diskWalk, err
 				continue
 			}
 			if e.IsDir() {
-				if isNestedRepository(git.Anchor(repoRoot, path)) {
+				if _, boundary, err := bounds.At(path); err != nil {
+					return nil, err
+				} else if boundary {
 					continue
 				}
 				queue = append(queue, path)
@@ -1363,14 +1389,6 @@ func walkForCommit(ctx context.Context, repoRoot, prefix string) (*diskWalk, err
 		}
 	}
 	return walk, nil
-}
-
-// isNestedRepository reports whether a directory carries its own .git, which
-// makes it a submodule working tree or an unrelated repository sitting inside
-// this one. Either way it is a boundary an expansion stops at.
-func isNestedRepository(absDir string) bool {
-	_, err := os.Lstat(filepath.Join(absDir, ".git"))
-	return err == nil
 }
 
 // changedPaths reduces a name-status diff to its sorted paths. It always

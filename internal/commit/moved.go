@@ -102,9 +102,10 @@ func resolveMoved(ctx context.Context, repoRoot, parentRev, replacedMessage stri
 	}
 
 	tree := newTreeIndex(ctx, parentRev)
+	bounds := newRepositoryBoundaries(ctx, repoRoot, parentRev, tree)
 	lines := make([]string, 0, len(declarations)+len(superseded))
 	for _, d := range declarations {
-		if err := validateMoved(ctx, repoRoot, parentRev, tree, d); err != nil {
+		if err := validateMoved(ctx, repoRoot, parentRev, tree, bounds, d); err != nil {
 			return nil, nil, err
 		}
 		record, err := trailer.NewRecord(d.old, d.new, trailer.OriginDeclared)
@@ -375,6 +376,8 @@ func overlapSideName(kind trailer.OverlapKind) string {
 //
 //   - does either side lie beyond a symbolic link? Such a path is not in the
 //     working tree, and what the filesystem shows there is the link target's.
+//   - does either side lie inside another repository? Such a path is that
+//     repository's content, never a place this repository's content moved.
 //   - is the old path something the commit's parent TRACKED? A move out of a
 //     path nothing ever held is not a move.
 //   - is the old path GONE from the working tree? A path still sitting there
@@ -389,7 +392,7 @@ func overlapSideName(kind trailer.OverlapKind) string {
 // on its own -- the inference in infer_moves.go -- it does so only to find what
 // the delta already witnesses, and every one of its fences exists to keep that
 // reading from becoming a guess.)
-func validateMoved(ctx context.Context, repoRoot, parentRev string, tree *treeIndex, d movedDeclaration) error {
+func validateMoved(ctx context.Context, repoRoot, parentRev string, tree *treeIndex, bounds *RepositoryBoundaries, d movedDeclaration) error {
 	// A path beyond a symbolic link is not in the working tree, as git sees it:
 	// what the filesystem shows there is the link target's content. Asked first,
 	// and of each side's own spelling, so a subtree side keeps its trailing
@@ -399,6 +402,20 @@ func validateMoved(ctx context.Context, repoRoot, parentRev string, tree *treeIn
 		if link := LinkAbove(repoRoot, path); link != "" {
 			return movedRefusal("--moved %s: %s is beyond a symbolic link: %s is a symlink, and a move never reads or writes through one",
 				d.arg, path, link)
+		}
+	}
+
+	// A side inside another repository -- the same question, asked of the
+	// same spellings, `safegit mv` asks.
+	for _, path := range []string{d.old, d.new} {
+		bd, inside, err := bounds.Above(path)
+		if err != nil {
+			return err
+		}
+		if inside {
+			return movedRefusal("--moved %s: %s lies inside another git repository: %s is %s, and a declared move never "+
+				"crosses into or out of another repository; declare it in that repository's own commit, or leave it out of this one",
+				d.arg, strings.TrimSuffix(path, "/"), bd.Dir, bd.Describe())
 		}
 	}
 

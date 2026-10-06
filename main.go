@@ -344,7 +344,7 @@ func newApp() *strictcli.App {
 			strictcli.StringFlag("moved-retract", "retract a move record declared earlier in this branch's history, by its id -- the token a 'Moved:' trailer begins with (repeatable, one id each). The id must name a record that exists and is not already retracted in the history this commit is built on; one that does not is refused rather than written. To write an unchecked retraction, use --trailer 'Moved-Retract: <id>'. Omitted means the commit retracts nothing", strictcli.Repeatable(), strictcli.Unique(true), strictcli.Optional()),
 		),
 		strictcli.WithArgs(
-			strictcli.NewArg("files", "files to commit, taken literally -- a colon in an argument is part of the filename, and hunk selection is --hunks", strictcli.ArgOptional(), strictcli.Variadic()),
+			strictcli.NewArg("files", "files to commit, taken literally -- a colon in an argument is part of the filename, and hunk selection is --hunks. A path inside another git repository -- a nested repository, a submodule or a gitlink -- is refused with exit 11, naming the command that commits it in that repository, and so is an unrecorded nested repository's own directory", strictcli.ArgOptional(), strictcli.Variadic()),
 		), strictcli.WithRequires(gitRequirement),
 	)
 

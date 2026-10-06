@@ -114,12 +114,39 @@ Every future change that introduces a decision of this kind adds its entry here.
 ### Directory expansion stops at a nested repository
 
 - **git's idiom:** `git add dir/` where `dir/sub` is its own repository records
-  a gitlink for `sub`, with a warning about an embedded repository.
-- **safegit:** expanding a directory argument stops at any directory carrying
-  its own `.git` — a submodule or an unrelated repository sitting inside this
-  one. A submodule's gitlink is staged only when the caller names the gitlink
-  itself, never as a by-product of naming something above it, so a commit can
-  never move another repository's pointer by accident.
+  a gitlink for `sub`, with a warning about an embedded repository; so does
+  `git add dir/sub` itself.
+- **safegit:** expanding a directory argument stops at every repository
+  boundary — a directory git itself accepts as a repository (its `.git` a valid
+  git directory or gitfile), a gitlink the commit's base tree records, or a
+  submodule `.gitmodules` registers — decided by the same predicate that refuses
+  a named path inside one (next entry), so the two never disagree. A
+  submodule's gitlink is staged only when the caller names the gitlink itself,
+  never as a by-product of naming something above it, so a commit can never move
+  another repository's pointer by accident. Naming an unrecorded nested
+  repository's own directory is refused (exit 11) rather than recorded as an
+  embedded gitlink with no `.gitmodules` entry: it is a separate repository, not
+  a submodule, so the ways forward are leaving it out of the commit or adding it
+  to `.gitignore`.
+- **Ruling:** ours — deliberate
+
+### A path inside another repository is refused
+
+- **git's idiom:** it depends on the shape. `git add` of a file inside an
+  untracked nested repository exits 0 and stages nothing; inside a submodule it
+  is a fatal "is in submodule"; `git mv top sub/top` moves the file into the
+  submodule's working tree without objection.
+- **safegit:** every named path below a repository boundary — a nested
+  repository, a recorded gitlink, or a registered submodule — is refused before
+  the ignore check and before anything is staged or moved. In the commit family
+  (positional paths, `--hunks`, `--untrack`, `--amend`) it exits 11, every
+  offender in one refusal grouped by boundary, each group naming its shape and
+  printing the commit that records those paths in their own repository as a
+  subshell rooted at its absolute path, `(cd <boundary> && safegit commit -m
+  <message> -- <paths>)`, beside the other way forward, leaving them out. In a
+  submodule that commit then meets the parent's `commit.autoBumpParent` decision
+  like any commit there. `--moved` refuses a side inside another repository
+  with exit 19, next to its symbolic-link check.
 - **Ruling:** ours — deliberate
 
 ### A symlink target that will not resolve in another checkout is refused
