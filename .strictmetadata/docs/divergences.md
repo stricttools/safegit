@@ -365,8 +365,9 @@ Every future change that introduces a decision of this kind adds its entry here.
   effect, and public otherwise; a repository with no record is public. A commit
   in a confidential repository writes that repository's names into the
   machine-local confidential-name index (`<user config directory>/strictspec/confidential-names.toml`),
-  keyed by its origin remote, and is not scanned; a confidential repository
-  with no origin remote is refused, naming `git remote add origin`. A commit in
+  keyed by the record's open releasable-name identities (no remote is needed),
+  and is not scanned; a confidential record with no open releasable-name
+  identity is refused, naming `rlsbl transition identity --facet releasable-name`. A commit in
   a public repository removes that repository's own entry from the index, if it
   has one, and is then scanned against every name the index holds: the message,
   every line the commit adds or changes (a line already present in the version

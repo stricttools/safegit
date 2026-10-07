@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path"
 	"strings"
 	"time"
 
@@ -27,9 +26,10 @@ import (
 //
 // Every commit keeps the machine-local confidential-name index
 // (<os.UserConfigDir()>/strictspec/confidential-names.toml) current for the
-// repository it commits in: a confidential repository's entry is upserted with
-// the names it protects, and a public repository's entry, if it has one, is
-// removed. Then a commit in a public repository is scanned against every name
+// repository it commits in: a confidential repository's entry, keyed by its
+// record's open releasable-name identities, is upserted with the names it
+// protects, and a public repository's entry, if it has one, is removed. No
+// remote is needed and no network is asked. Then a commit in a public repository is scanned against every name
 // in the index -- its message, every added or changed line, and every new path
 // -- and a match refuses it. A commit in a confidential repository is not
 // scanned: those names are its own.
@@ -80,53 +80,29 @@ func commitScreen(ctx context.Context, w lifecycle.FileWriter, indexPath string,
 	if err != nil {
 		return nil, fmt.Errorf("reading the lifecycle-and-license record, which decides whether this commit is scanned for confidential names: %w", err)
 	}
-	origin, hasOrigin, err := git.ConfigGet(ctx, "remote.origin.url")
+	origin, _, err := git.ConfigGet(ctx, "remote.origin.url")
 	if err != nil {
-		return nil, fmt.Errorf("reading the origin remote, which keys this repository's entry in the confidential-name index: %w", err)
+		return nil, fmt.Errorf("reading the origin remote, whose name is one of this repository's names: %w", err)
 	}
 	idx, err := index.Load(indexPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading the confidential-name index: %w", err)
 	}
-
-	if record.Confidential(on) {
-		if !hasOrigin {
-			return nil, fmt.Errorf("this repository is confidential (a releasable has a proprietary license period in effect in %s), "+
-				"so the names it protects belong in the confidential-name index at %s, which keys every entry by the repository's "+
-				"origin remote, and this repository has no origin remote. Add it (git remote add origin <url>), then commit again",
-				lifecycle.RecordFile, indexPath)
-		}
-		name, err := repositoryName(origin)
-		if err != nil {
-			return nil, err
-		}
-		names, err := record.ConfidentialNames(on, name)
-		if err != nil {
-			return nil, err
-		}
-		if err := idx.Upsert(w, origin, names); err != nil {
-			return nil, fmt.Errorf("recording this repository's confidential names in the index at %s: %w", indexPath, err)
-		}
+	repoNames, err := index.RepositoryNames(root, origin)
+	if err != nil {
+		return nil, err
+	}
+	update, err := index.Plan(record, on, repoNames...)
+	if err != nil {
+		return nil, fmt.Errorf("recording this repository's confidential names in the index at %s: %w", indexPath, err)
+	}
+	if err := idx.Apply(w, update); err != nil {
+		return nil, fmt.Errorf("bringing this repository's entry in the confidential-name index at %s in step with its record: %w", indexPath, err)
+	}
+	if update.Confidential() {
 		return confidentialRepositoryScreen{}, nil
 	}
-
-	if hasOrigin {
-		if err := idx.Remove(w, origin); err != nil {
-			return nil, fmt.Errorf("removing this public repository's entry from the confidential-name index at %s: %w", indexPath, err)
-		}
-	}
 	return confidentialNameScan{names: idx.Names(), indexPath: indexPath}, nil
-}
-
-// repositoryName is the last path segment of the normalized origin, which is
-// the name ConfidentialNames protects when no releasable carries a public
-// license.
-func repositoryName(origin string) (string, error) {
-	norm, err := index.NormalizeOrigin(origin)
-	if err != nil {
-		return "", fmt.Errorf("reading the origin remote %q: %w", origin, err)
-	}
-	return path.Base(strings.TrimPrefix(norm, "file://")), nil
 }
 
 // confidentialRepositoryScreen is the screen of a confidential repository: it

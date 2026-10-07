@@ -32,14 +32,14 @@ func confidentialIndexEnv(t *testing.T) ([]string, string) {
 	return env, filepath.Join(configDir, "strictspec", "confidential-names.toml")
 }
 
-// writeConfidentialIndex writes an index holding the given entries, each an
-// already-normalized origin and its names.
+// writeConfidentialIndex writes an index holding the given entries, each keyed
+// by one releasable name and holding its names.
 func writeConfidentialIndex(t *testing.T, path string, entries map[string][]string) {
 	t.Helper()
 	var b strings.Builder
 	b.WriteString("format_version = 1\n")
-	for origin, names := range entries {
-		b.WriteString("\n[[repositories]]\norigin = \"" + origin + "\"\nnames = [")
+	for subject, names := range entries {
+		b.WriteString("\n[[repositories]]\nsubjects = [\"" + subject + "\"]\nnames = [")
 		for i, n := range names {
 			if i > 0 {
 				b.WriteString(", ")
@@ -72,17 +72,29 @@ func readConfidentialIndex(t *testing.T, path string) string {
 
 // writeProprietaryRecord writes a lifecycle-and-license record in which
 // subject has had a proprietary license since 2020, which makes the repository
-// confidential.
+// confidential, and its releasable-name identity, which keys the repository's
+// entry in the confidential-name index.
 func writeProprietaryRecord(t *testing.T, dir, subject string) {
 	t.Helper()
+	writeRecord(t, dir, subject, "proprietary", true)
+}
+
+// writeRecord writes a lifecycle-and-license record licensing subject under
+// license since 2020, with subject's releasable-name identity when named is
+// set.
+func writeRecord(t *testing.T, dir, subject, license string, named bool) {
+	t.Helper()
+	record := "format_version = 1\n\n[[licenses]]\nsubject = \"" + subject + "\"\nlicense = \"" + license + "\"\nfrom = 2020-01-01\nreason = \"the " + subject + " license\"\n"
+	if named {
+		record += "\n[[identities]]\nsubject = \"" + subject + "\"\nfacet = \"releasable-name\"\nvalue = \"" + subject + "\"\nregistry = \"\"\ntag_patterns = [\"v*\"]\nfrom = 2020-01-01\nreason = \"its name\"\n"
+	}
 	testutil.WriteFile(t, dir, ".strictmetadata/lifecycle-and-license/manifest.toml", "owner = \"strictspec\"\n")
-	testutil.WriteFile(t, dir, ".strictmetadata/lifecycle-and-license/lifecycle-and-license.toml",
-		"format_version = 1\n\n[[licenses]]\nsubject = \""+subject+"\"\nlicense = \"proprietary\"\nfrom = 2020-01-01\nreason = \"the "+subject+" is proprietary\"\n")
+	testutil.WriteFile(t, dir, ".strictmetadata/lifecycle-and-license/lifecycle-and-license.toml", record)
 }
 
 // otherConfidentialRepository is the index entry of a confidential repository
 // other than the one a test commits in.
-var otherConfidentialRepository = map[string][]string{"github.com/example/portal": {"portal"}}
+var otherConfidentialRepository = map[string][]string{"portal": {"portal"}}
 
 func TestCommitInARepositoryWithoutARecordRefusesAConfidentialLine(t *testing.T) {
 	dir := newRepo(t)
@@ -217,7 +229,7 @@ func TestConfidentialRepositoryIsNotScannedAndRecordsItsNames(t *testing.T) {
 	}
 
 	got := readConfidentialIndex(t, indexPath)
-	if !strings.Contains(got, `origin = "git.invalid/example/gadget-works"`) {
+	if !strings.Contains(got, `subjects = ["widget"]`) {
 		t.Fatalf("the index has no entry for the confidential repository:\n%s", got)
 	}
 	for _, name := range []string{`"widget"`, `"gadget-works"`, `"portal"`} {
@@ -227,24 +239,42 @@ func TestConfidentialRepositoryIsNotScannedAndRecordsItsNames(t *testing.T) {
 	}
 }
 
-func TestConfidentialRepositoryWithoutAnOriginIsRefused(t *testing.T) {
+// The index keys a repository by its record's releasable-name identities, so
+// a confidential repository without an origin remote records its names.
+func TestConfidentialRepositoryWithoutAnOriginRecordsItsNames(t *testing.T) {
 	dir := newRepo(t)
 	env, indexPath := confidentialIndexEnv(t)
 	writeProprietaryRecord(t, dir, "widget")
 
 	testutil.WriteFile(t, dir, "notes.txt", "notes\n")
+	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "notes", "--", "notes.txt"); code != 0 {
+		t.Fatalf("a confidential repository with no origin remote was refused (code %d): %s", code, stderr)
+	}
+	got := readConfidentialIndex(t, indexPath)
+	if !strings.Contains(got, `subjects = ["widget"]`) || !strings.Contains(got, `"widget"`) || !strings.Contains(got, `"`+filepath.Base(dir)+`"`) {
+		t.Errorf("the commit did not record the repository's names under its releasable name:\n%s", got)
+	}
+}
+
+func TestConfidentialRepositoryWithoutAReleasableNameIsRefused(t *testing.T) {
+	dir := newRepo(t)
+	env, indexPath := confidentialIndexEnv(t)
+	writeRecord(t, dir, "widget", "proprietary", false)
+
+	testutil.WriteFile(t, dir, "notes.txt", "notes\n")
 	_, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "notes", "--", "notes.txt")
 	if code == 0 {
-		t.Fatalf("a confidential repository with no origin remote committed without recording its names")
+		t.Fatalf("a confidential repository with no releasable-name identity committed without recording its names")
 	}
-	if !strings.Contains(stderr, "git remote add origin") {
+	if !strings.Contains(stderr, "rlsbl transition identity --facet releasable-name") {
 		t.Errorf("the refusal does not name the fix:\n%s", stderr)
 	}
 
-	// The refusal's fix: add the origin remote, and the commit goes through.
-	testutil.Git(t, dir, "remote", "add", "origin", "https://git.invalid/example/gadget-works.git")
+	// The refusal's fix: record the releasable-name identity, and the commit
+	// goes through.
+	writeProprietaryRecord(t, dir, "widget")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "notes", "--", "notes.txt"); code != 0 {
-		t.Fatalf("the commit was refused after the origin was added (code %d): %s", code, stderr)
+		t.Fatalf("the commit was refused after the identity was recorded (code %d): %s", code, stderr)
 	}
 	if !strings.Contains(readConfidentialIndex(t, indexPath), `"widget"`) {
 		t.Errorf("the commit did not record the repository's names")
@@ -254,20 +284,20 @@ func TestConfidentialRepositoryWithoutAnOriginIsRefused(t *testing.T) {
 func TestPublicRepositoryRemovesItsOwnIndexEntry(t *testing.T) {
 	dir := newRepo(t)
 	env, indexPath := confidentialIndexEnv(t)
-	testutil.Git(t, dir, "remote", "add", "origin", "https://git.invalid/example/gadget-works.git")
+	writeRecord(t, dir, "widget", "MIT", true)
 	writeConfidentialIndex(t, indexPath, map[string][]string{
-		"git.invalid/example/gadget-works": {"widget"},
-		"github.com/example/portal":        {"portal"},
+		"widget": {"widget"},
+		"portal": {"portal"},
 	})
 
-	// No record: the repository is public, so its old entry goes, and the
-	// names it held no longer refuse anything here.
+	// The record licenses widget publicly, so the repository's old entry goes,
+	// and the names it held no longer refuse anything here.
 	testutil.WriteFile(t, dir, "notes.txt", "the widget is public now\n")
 	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "notes", "--", "notes.txt"); code != 0 {
 		t.Fatalf("the commit was refused (code %d): %s", code, stderr)
 	}
 	got := readConfidentialIndex(t, indexPath)
-	if strings.Contains(got, "gadget-works") {
+	if strings.Contains(got, `"widget"`) {
 		t.Errorf("the public repository's entry was not removed:\n%s", got)
 	}
 	if !strings.Contains(got, `"portal"`) {
