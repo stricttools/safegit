@@ -89,6 +89,10 @@ word = "subreaper"
 meaning = "A Linux child subreaper (prctl PR_SET_CHILD_SUBREAPER): a process that adopts orphaned descendants, which safegit becomes while a hook runs."
 
 [[accepted]]
+word = "subshell"
+meaning = "a child shell process that runs a command group"
+
+[[accepted]]
 word = "Thiel"
 meaning = "Sebastian Thiel, creator and maintainer of gitoxide, cited in the research survey."
 
