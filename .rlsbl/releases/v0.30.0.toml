@@ -21,3 +21,7 @@ This release also carries the work of the 0.29.4 attempt, which was abandoned af
 # blog = false
 include = ["go"]
 exclude = []
+candidate_sha = "3d6dd8ca70a5f2adcaa991fef8d02b82ac16c5ff"
+
+[tree_hashes]
+"." = "316295a7de55c8eb50a8eae10f8af2690e0941b6"
