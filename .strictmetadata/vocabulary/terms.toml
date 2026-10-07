@@ -17,6 +17,10 @@ word = "daemonized"
 meaning = "Turned into a daemon: a process that detaches and keeps running after the hook that started it exits."
 
 [[accepted]]
+word = "gitfile"
+meaning = "a .git file in a worktree or submodule that points at the real git directory"
+
+[[accepted]]
 word = "gitsight"
 meaning = "The code-analysis company that backs go-git, per the research survey."
 
