@@ -145,6 +145,34 @@ type Pipeline struct {
 	// PhaseADone is called (if non-nil) after Phase A completes but before
 	// the ref lock is acquired. Used by tests to inject concurrent commits.
 	PhaseADone func()
+
+	// Screen inspects what a commit is about to record before its commit
+	// object is built, and refuses it by returning an error. Nil means the
+	// caller elected no screen: the commit command sets one (the
+	// confidential-name scan of a public repository, or the explicit no-scan
+	// screen of a confidential one), and the other pipeline authors -- mv, the
+	// conclusions, merge, cherry-pick, and revert -- set none.
+	Screen Screen
+}
+
+// Screen is a check over a commit's content, run once per attempt after the
+// tree is written and the commit-msg hook has had the message, and before the
+// commit object exists. It is handed the message as the commit will carry it
+// (before safegit's own session trailer) and the commit's raw delta against
+// the tree it replaces: the parent's tree for a commit, the replaced tip's
+// tree for an amend, and nothing for a reword, which changes no path. A
+// returned error refuses the commit with nothing written; a *CommitError
+// carries its own exit code.
+type Screen interface {
+	Inspect(ctx context.Context, message string, changed []git.ChangedPath) error
+}
+
+// screen runs the pipeline's Screen when the caller set one.
+func (p *Pipeline) screen(ctx context.Context, message string, changed []git.ChangedPath) error {
+	if p.Screen == nil {
+		return nil
+	}
+	return p.Screen.Inspect(ctx, message, changed)
 }
 
 // Notices are the two writers the pipeline's own lines go through.
@@ -700,6 +728,9 @@ func (p *Pipeline) tryCommit(
 	message, err := hooks.commitMsg(ctx, tmpIdx.IndexPath,
 		trailer.AppendCustom(req.Message, commitTrailers(req.Trailers, nil, allMoved)))
 	if err != nil {
+		return nil, false, err
+	}
+	if err := p.screen(ctx, message, changed); err != nil {
 		return nil, false, err
 	}
 

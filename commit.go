@@ -332,6 +332,10 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		strictcli.ExitNow(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 	}
 
+	// The confidential-name screen, decided from the lifecycle-and-license
+	// record before anything is locked (see confidential.go).
+	screen := mustCommitScreen(flags)
+
 	// Outermost, around the pipeline's whole run: the in-flight-operation check
 	// inside it reads state a concurrent passthrough would otherwise be free to
 	// create between the check and the ref update. The pipeline's per-ref CAS
@@ -350,7 +354,7 @@ func runCommit(flags globalFlags, messages []string, messageFile string, branch 
 		}
 	}
 
-	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags), SessionID: flags.sessionID}
+	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags), SessionID: flags.sessionID, Screen: screen}
 	result, err := p.Execute(flags.ctx(), commit.CommitRequest{
 		Message:                 msg,
 		FileSpecs:               fileSpecs,
@@ -521,12 +525,16 @@ func runCommitAmend(flags globalFlags, gitDir string, messages []string, branch 
 		strictcli.ExitNow(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
 	}
 
+	// The same confidential-name screen the plain commit path runs, for the
+	// amend and the reword alike.
+	screen := mustCommitScreen(flags)
+
 	// Same ordering as the plain commit path: operation lock outermost, the
 	// pipeline's per-ref CAS lock inside it.
 	release := mustAcquireOperationLock(flags, gitDir, "amend")
 	defer release()
 
-	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags), SessionID: flags.sessionID}
+	p := &commit.Pipeline{SafegitDir: sgDir, Config: *cfg, RefUpdate: effectsRefUpdate{flags}, Notices: commitNotices(flags), SessionID: flags.sessionID, Screen: screen}
 
 	// Both arms accumulate their aftercare failures rather than dying on one:
 	// the amended (or reworded) commit is the branch's tip either way, and the
