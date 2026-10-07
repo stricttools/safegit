@@ -353,6 +353,30 @@ Every future change that introduces a decision of this kind adds its entry here.
   dangerous one.
 - **Ruling:** ours — deliberate
 
+### A commit naming a confidential term in a public repository is refused
+
+- **git's idiom:** git commits whatever content it is handed. What a repository
+  may mention is not git's question.
+- **safegit:** `safegit commit`, its `--amend` form, and the reword form read the
+  repository's lifecycle-and-license record
+  (`.strictmetadata/lifecycle-and-license/lifecycle-and-license.toml`) from the
+  working tree, offline, and never ask the hosting service. A repository is
+  confidential while one of its releasables has a proprietary license period in
+  effect, and public otherwise; a repository with no record is public. A commit
+  in a confidential repository writes that repository's names into the
+  machine-local confidential-name index (`<user config directory>/strictspec/confidential-names.toml`),
+  keyed by its origin remote, and is not scanned; a confidential repository
+  with no origin remote is refused, naming `git remote add origin`. A commit in
+  a public repository removes that repository's own entry from the index, if it
+  has one, and is then scanned against every name the index holds: the message,
+  every line the commit adds or changes (a line already present in the version
+  it replaces is not its to answer for), and every new path. A match is a
+  refusal naming the file, the line, the column, and the term, with nothing
+  written. Matching ignores case and counts whole tokens only. Under `--dry-run`
+  the index writes are recorded, not made. Only the commit command is scanned;
+  the other commands that write commits are not.
+- **Ruling:** ours — deliberate
+
 ---
 
 ## Where the working directory reaches
