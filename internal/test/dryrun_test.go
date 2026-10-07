@@ -187,14 +187,14 @@ func assertNoSafegitDir(t *testing.T, dir, what string) {
 	}
 }
 
-// scrubMode names one of the three scrub entry points and builds its argv for a
+// scrubMode names one of the rewriting scrub entry points and builds its argv for a
 // given repo.
 type scrubMode struct {
 	name string
 	args func(initialSHA, recipePath string) []string
 }
 
-// scrubDryRunModes returns the three scrub entry points in their --dry-run form.
+// scrubDryRunModes returns the rewriting scrub entry points in their --dry-run form.
 func scrubDryRunModes() []scrubMode {
 	return []scrubMode{
 		{"scrub file", func(initialSHA, _ string) []string {
@@ -208,6 +208,10 @@ func scrubDryRunModes() []scrubMode {
 		{"scrub run", func(_, recipePath string) []string {
 			return []string{"--dry-run", "scrub", "run",
 				"--reason", "preview", "--entire-history", recipePath}
+		}},
+		{"scrub squash", func(initialSHA, _ string) []string {
+			return []string{"--dry-run", "scrub", "squash", "--first", initialSHA, "--last", "HEAD",
+				"--message", "squashed", "--reason", "preview"}
 		}},
 	}
 }

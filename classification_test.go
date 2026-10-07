@@ -80,7 +80,7 @@ import (
 //   - unlock -- removes one stale lock file, and refuses while its holder is
 //     alive.
 //
-// Mutating AND consequential (4): scrub file, scrub match, scrub run,
+// Mutating AND consequential: scrub file, scrub match, scrub run, scrub squash,
 // author rewrite. Each rewrites history: every commit from the rewrite point
 // forward gets a new SHA, the change is not in the oplog, and anyone who
 // already pulled the old history has to recover by hand.
@@ -131,6 +131,7 @@ var classification = map[string]struct {
 	"scrub.file":           {strictcli.EffectMutating, true, true, false},
 	"scrub.match":          {strictcli.EffectMutating, true, true, false},
 	"scrub.run":            {strictcli.EffectMutating, true, true, false},
+	"scrub.squash":         {strictcli.EffectMutating, true, true, false},
 	"scrub.verify":         {strictcli.EffectReadOnly, false, true, false},
 }
 
@@ -141,7 +142,7 @@ var groupTree = map[string][]string{
 	"backup": {"backup", "list", "restore"},
 	"config": {"get", "set", "show"},
 	"hook":   {"install", "list", "migrate", "remove", "run"},
-	"scrub":  {"file", "match", "run", "verify"},
+	"scrub":  {"file", "match", "run", "squash", "verify"},
 }
 
 // collectCommands flattens the app's command tree into dotted paths.
