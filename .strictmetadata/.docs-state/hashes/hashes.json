@@ -1,8 +1,8 @@
 {
   "_hash_version": 3,
   "en/architecture.md": {
-    "content": "9c583b3a7b14eb5ff782a4ef22b56721e3365ad838f81f05b347435b483ef2ab",
-    "description": "4302e1fbd9dc3df27ac8753aee78d1c4300524fde901016abd3bf864fc8387c0"
+    "content": "da97da7b99d21153beeb6ff89961664f76604d889a2dacfcb658c774abef9f03",
+    "description": "fb1c2d8c071a176091f90e8ae82fbe642d19436b004ce966f93074701c39fb92"
   },
   "en/cli-author.md": {
     "content": "6fe66e1ff22018c1de6df3cf0c1a074eb5b660bee8fe18c4f478dcd1ecc0b38f",
@@ -42,7 +42,7 @@
   "en/cli-commit.md": {
     "content": "351a255732be309f244a2df58c0c00d1e72f55f52bd7e2e6349378169d7fc251",
     "description": "5e6d1c355403d853234ed672602ee82852af4e747d07d5196cac90649407e6fb",
-    "schema_hash": "b49b80c1d239706601a8ae64b2d417e3cd197362f6691d9268e96d255e4ff3c6",
+    "schema_hash": "69b61548a7c4f2526ee85c4db8bf9a7c6fb9fbea5e49a066a985b55bfbe2e954",
     "seed_hash": "5e6d1c355403d853234ed672602ee82852af4e747d07d5196cac90649407e6fb"
   },
   "en/cli-config.md": {
@@ -83,7 +83,7 @@
   "en/cli-mv.md": {
     "content": "2411b0b629950b4652278688d376caaef2f486c69124540571afc069d24f6358",
     "description": "6c03e7767b51d10d5187c41727c67f9e95f61f08260c162cdbe849f04205b70f",
-    "schema_hash": "fa01a62114ba606fa376316c64dcf8f9bb82e20e393d6c32c297952ba58e241d",
+    "schema_hash": "86b7263cb3cbf87716912ded6cc98987ec52fa3a47b6edb574264adc5908ec4d",
     "seed_hash": "6c03e7767b51d10d5187c41727c67f9e95f61f08260c162cdbe849f04205b70f"
   },
   "en/cli-pull.md": {
@@ -152,8 +152,8 @@
     "seed_hash": "b14fedc0b1986d34ab139926ca59438706ddab51b40f1a989a233aef9917c579"
   },
   "en/commands-guide.md": {
-    "content": "7929980415a713667ee9809ccfeb8706a6b6ad7407926bf487ce9de07683f01b",
-    "description": "8479b40af2481684795169686dde3f3558cb34fed5c26a37dfc2853db92149f1"
+    "content": "80b605be1469e814d659e5cd67a2fd7bf8fb130efcfe97d987177b34a7691050",
+    "description": "c660ba8aaed65917fb46348810dd966e1977c1082ed02fd65cf617d85103aa10"
   },
   "en/concurrency-guide.md": {
     "content": "a822004eea024256cb197930bc2fcb2ff36194bf013fd0a25867c2853da44e17",
@@ -161,8 +161,8 @@
     "source_docstring": "55a5b46c45005dde3222eaa639a1167bd610548d34ce0b320ff3c57360006c58"
   },
   "en/divergences.md": {
-    "content": "f7f856af516aab7a4c178e7660e82a3002302039240316f81df4220a6fc62e15",
-    "description": "53fa9e8f521aaef698c6e43312c24195e53e88716b7eb351c180ec2228471952"
+    "content": "d3491bec9c06bade93468ef999f419e971331c68106655d487986a22bc2012f2",
+    "description": "3af4b704519d08bd664a59960f022672389a6a42b53cfd598ca56945909f0b81"
   },
   "en/gen-index.md": {
     "content": "c75d3d6bcfafece6681724d1a3a680d08291e3add7b170f9ceb8271188fcfe55",
@@ -175,8 +175,8 @@
     "source_docstring": "119de46e78dc35b9fd56e9d8244526d922d59ca0eecc9633e839fc4d08623e0d"
   },
   "en/integration-guide.md": {
-    "content": "f7956ece8bb5197f26b511f47b8128606348f32dff90fd5bd948bc1e7db19f02",
-    "description": "b3773a857d7cbb6a90add0f1972d758fde1d1f78c2e0916af039105fedd3def5"
+    "content": "3d2de041ec1544fcd45bcf523a890019c6bbc498af4891187ab5f4576326ac7b",
+    "description": "6a93f5e954951ef52b9b4a9cde75d0d46e81f7a3bb03d2cbce4bb88d196a27a6"
   },
   "en/internal-commit.md": {
     "content": "213f1a5c7dc3b63f9530f93a459fd56d7fb51844d4b743b28a3c90360495e469",
