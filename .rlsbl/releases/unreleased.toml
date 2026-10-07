@@ -19,5 +19,5 @@ This release also carries the work of the 0.29.4 attempt, which was abandoned af
 # preid = ""
 # Set to true to generate a blog post for this release
 # blog = false
-include = ["go", "docker"]
+include = ["go"]
 exclude = []

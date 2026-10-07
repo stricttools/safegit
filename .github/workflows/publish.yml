@@ -18,9 +18,6 @@ concurrency:
   cancel-in-progress: false
 permissions:
   contents: write
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 jobs:
   gate:
     name: Gate on CI
@@ -328,53 +325,3 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
-  docker:
-    needs: gate
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.tag || github.event.release.tag_name }}
-      # No secret scan here: build-push-action builds and pushes the image in
-      # one step, so there is no pre-publish artifact on disk to scan. The
-      # scan this workflow used to run was a whole-tree `gitleaks dir .`,
-      # which flags files that never ship and has blocked a release
-      # mid-flight. Artifact-scoped scanning is the rule; scanning the tree is
-      # not an acceptable stand-in.
-      - name: Check if already published
-        id: check-docker
-        env:
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-        run: |
-          IMAGE="${REGISTRY}/${IMAGE_NAME}"
-          TAG="${RELEASE_TAG#v}"
-          if docker manifest inspect "${IMAGE}:${TAG}" > /dev/null 2>&1; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Already published: ${IMAGE}:${TAG}"
-          fi
-      - uses: docker/login-action@v3
-        if: steps.check-docker.outputs.skip != 'true'
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/metadata-action@v5
-        if: steps.check-docker.outputs.skip != 'true'
-        id: meta
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=raw,value=latest,enable=${{ !contains(inputs.tag || github.ref_name, '-') }}
-      - uses: docker/build-push-action@v6
-        if: steps.check-docker.outputs.skip != 'true'
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          build-args: VERSION=${{ inputs.tag || github.ref_name }}

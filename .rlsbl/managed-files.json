@@ -2,10 +2,8 @@
   "version": 1,
   "files": {
     ".github/workflows/ci-go.yml": "cd72baa42058216f8c54ce0ef8c7978b875493af484a0930b82d4857c8711abe",
-    ".github/workflows/ci-docker.yml": "6e957f7f5d17d342f38ebcd9a2145aeaeb7491d32116e01f2eef89846d19a0d5",
     "VERSION": "9d2e9b905735be07ee35c3132a0d7a6d5e2766e6c7ade3aeb0770b9b40adfec9",
     ".goreleaser.yml": "cbe0473dcc675e3eb507ec9f0ffcfe3cefacb6e754e553af4e3c9339d2480523",
-    ".dockerignore": "c0bb4f094b6b503931b2deed2f1146fa90327365ca0496205e8a5cd3cdead6bc",
     ".github/workflows/publish.yml": "518770552162cb0585b6450b73f2253b8881ef0903a074e10905e9c3bb6f3044",
     "CHANGELOG.md": "780396bf3e65d204362f8bc3ff6a265b4080b9578207d5cdfcacc20c772f345d",
     ".gitignore": "56f3d2b94b2376b3c50bd163e199b933bb664b5a08080577e5cb53be687b7595",

@@ -1,7 +1,6 @@
 {
   "targets": [
-    "go",
-    "docker"
+    "go"
   ],
   "pipelines": {
     "go": {
@@ -12,11 +11,6 @@
         "."
       ],
       "artifact": "binary"
-    },
-    "docker": {
-      "type": "docker",
-      "target": "docker",
-      "local": false
     }
   },
   "publish_mode": "ci",
