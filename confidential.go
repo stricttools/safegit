@@ -39,13 +39,13 @@ import (
 // --dry-run, like every other mutation safegit makes.
 type effectsFileWriter struct{ flags globalFlags }
 
-func (w effectsFileWriter) WriteFile(path string, data []byte) error {
-	_, err := w.flags.effects().Write(path, data)
+func (w effectsFileWriter) WriteFile(p string, data []byte) error {
+	_, err := w.flags.effects().Write(p, data)
 	return err
 }
 
-func (w effectsFileWriter) MkdirAll(path string) error {
-	_, err := w.flags.effects().Mkdir(path)
+func (w effectsFileWriter) MkdirAll(p string) error {
+	_, err := w.flags.effects().Mkdir(p)
 	return err
 }
 
