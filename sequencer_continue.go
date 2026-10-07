@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	tomledit "github.com/smm-h/go-toml-edit"
+	tomledit "github.com/stricttools/go-toml-edit"
 	"github.com/stricttools/safegit/internal/commit"
 	"github.com/stricttools/safegit/internal/conflict"
 	"github.com/stricttools/safegit/internal/coord"

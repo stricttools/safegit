@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"sort"
 
-	tomledit "github.com/smm-h/go-toml-edit"
+	tomledit "github.com/stricttools/go-toml-edit"
 	"github.com/stricttools/safegit/internal/git"
 )
 
