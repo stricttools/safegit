@@ -1,6 +1,6 @@
 +++
 title = "Commands Guide"
-description = "Complete reference for every safegit command, with flags, machine-mode output, examples, and safety guarantees."
+description = "Reference for safegit's commands: flags, machine-mode output, examples, safety guarantees, and how the guarded git commands coordinate with concurrent sessions."
 +++
 
 # Commands Guide

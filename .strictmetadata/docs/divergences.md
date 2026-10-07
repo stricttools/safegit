@@ -1,6 +1,6 @@
 +++
 title = "Divergences"
-description = "The catalog of every place where safegit's design philosophy and git's own idiom pulled in different directions, with what git does, what safegit does, and which way each ruling went."
+description = "Where safegit departs from git's own behavior, by area (committing, moves, hooks, output and exit codes, consent, publishing, history rewriting), with what git does, what safegit does, and why."
 +++
 
 # Where safegit follows git, and where it deliberately does not

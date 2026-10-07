@@ -1,6 +1,6 @@
 +++
 title = "Architecture"
-description = "Design rationale and architectural specification for safegit: why it exists, how the commit pipeline works, and how failure modes are handled."
+description = "Design rationale and architecture of safegit: why it exists, its data model, the commit and hunk-staging pipeline, move records, the pre-pre-push hook contract, and how failures are handled."
 nav_order = 2
 +++
 
