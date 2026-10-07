@@ -8,8 +8,8 @@ import (
 	"github.com/stricttools/strictcli/go/strictcli"
 )
 
-// The preview side of the history rewrites, shared by `scrub file`,
-// `scrub match`, `scrub run` and `author rewrite`.
+// The preview side of the history rewrites, shared by the scrub commands that
+// rewrite and by `author rewrite`.
 //
 // A rewrite's dry run used to be hand-rolled: it printed a human summary,
 // separately built a per-mode JSON struct out of different numbers, and minted

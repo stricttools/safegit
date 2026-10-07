@@ -40,17 +40,17 @@ func (c IntendedChange) PathList() string {
 	return strings.Join(paths, ", ")
 }
 
-// IntentKind says what KIND of expectation a rewrite carries, because the two
+// IntentClass says what class of expectation a rewrite carries, because the
 // answers a verifier can act on are different questions -- and because the
-// zero value must be neither of them.
-type IntentKind int
+// zero value must be none of them.
+type IntentClass int
 
 const (
 	// IntentUnset is the zero value and is always an error: a rewrite that
 	// reaches Finalize without declaring what it meant to do cannot be
 	// verified, and silently skipping the verification is exactly the hole the
 	// declaration exists to close.
-	IntentUnset IntentKind = iota
+	IntentUnset IntentClass = iota
 
 	// IntentPerPath means the rewrite declared, per commit, which paths and
 	// which messages it changes. Every scrub carries this.
@@ -62,21 +62,56 @@ const (
 	// byte-identical, and a message may change only where the walk declared it
 	// rewrote an identity-bearing trailer. `author rewrite` carries this.
 	IntentIdentityOnly
+
+	// IntentSquash means the rewrite folds one first-parent range of commits
+	// into a single commit and changes nothing else: every commit of the range
+	// maps to the one squash commit, which carries the tree of the range's last
+	// commit, the parents of its first, and the declared message, and every
+	// other rewritten commit must come through with its tree, message, and
+	// identity untouched. `scrub squash` carries this.
+	IntentSquash
 )
 
 // RewriteIntent is the declaration a rewrite hands to Finalize.
 type RewriteIntent struct {
-	Kind IntentKind
+	Class IntentClass
 
 	// Changes is keyed by OLD commit SHA. A commit with no entry declares
 	// nothing changed in it. Under IntentIdentityOnly only the MessageChanged
-	// member is ever set.
+	// member is ever set, and under IntentSquash none is.
 	Changes map[string]IntendedChange
+
+	// Squash is the squash a rewrite declared, set under IntentSquash and nil
+	// under every other class.
+	Squash *SquashDeclaration
+}
+
+// SquashDeclaration is what a squash rewrite decided: which commits it folds
+// and what the one commit they become must carry.
+type SquashDeclaration struct {
+	// Members are the folded commits, oldest first: one first-parent range
+	// with no merge commit in it.
+	Members []string
+	// Message is the squash commit's message.
+	Message string
+}
+
+// contains reports whether oldSHA is one of the folded commits.
+func (d *SquashDeclaration) contains(oldSHA string) bool {
+	if d == nil {
+		return false
+	}
+	for _, m := range d.Members {
+		if m == oldSHA {
+			return true
+		}
+	}
+	return false
 }
 
 // PerPathIntent starts an empty per-path declaration for a walk to fill in.
 func PerPathIntent() *RewriteIntent {
-	return &RewriteIntent{Kind: IntentPerPath, Changes: make(map[string]IntendedChange)}
+	return &RewriteIntent{Class: IntentPerPath, Changes: make(map[string]IntendedChange)}
 }
 
 // IdentityIntent declares a rewrite that changes identity headers only. Its
@@ -84,14 +119,24 @@ func PerPathIntent() *RewriteIntent {
 // changed, because an identity-bearing trailer (Signed-off-by, Co-authored-by)
 // names the same person the headers do.
 func IdentityIntent() *RewriteIntent {
-	return &RewriteIntent{Kind: IntentIdentityOnly, Changes: make(map[string]IntendedChange)}
+	return &RewriteIntent{Class: IntentIdentityOnly, Changes: make(map[string]IntendedChange)}
+}
+
+// SquashIntent declares a rewrite that folds members (oldest first) into one
+// commit carrying message.
+func SquashIntent(members []string, message string) *RewriteIntent {
+	return &RewriteIntent{
+		Class:   IntentSquash,
+		Changes: make(map[string]IntendedChange),
+		Squash:  &SquashDeclaration{Members: append([]string(nil), members...), Message: message},
+	}
 }
 
 // Declare records what the operation decided for one commit. Repeated calls for
 // the same commit accumulate, so a transform that runs several steps (a blob
 // map, then a hash remap) can declare each step as it happens.
 func (ri *RewriteIntent) Declare(oldSHA string, paths []string, messageChanged bool) {
-	if ri == nil || ri.Kind == IntentUnset {
+	if ri == nil || ri.Class == IntentUnset {
 		return
 	}
 	if ri.Changes == nil {
@@ -139,9 +184,16 @@ func (ri *RewriteIntent) For(oldSHA string) IntendedChange {
 
 // validate refuses a declaration that cannot be verified.
 func (ri *RewriteIntent) validate() error {
-	if ri == nil || ri.Kind == IntentUnset {
+	if ri == nil || ri.Class == IntentUnset {
 		return fmt.Errorf("the rewrite reached Finalize without declaring what it intended to change; " +
 			"this is a safegit bug -- every rewrite must set RewriteResult.Intent")
+	}
+	if (ri.Class == IntentSquash) != (ri.Squash != nil) {
+		return fmt.Errorf("the rewrite's declaration carries a squash only under the squash class; " +
+			"this is a safegit bug")
+	}
+	if ri.Squash != nil && len(ri.Squash.Members) == 0 {
+		return fmt.Errorf("the squash declaration names no commit to fold; this is a safegit bug")
 	}
 	return nil
 }

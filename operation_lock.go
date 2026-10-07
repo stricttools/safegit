@@ -89,8 +89,8 @@ func operationLock(flags globalFlags, gitDir, op string) (func(), int, string) {
 //
 // gitDir and sgDir name the repository whose lock is taken: the parent's for
 // an ordinary rewrite, a submodule's own git and safegit directories when the
-// operation reaches into one. Every one of the four rewriting commands
-// (scrub file, scrub match, scrub run, author rewrite) takes it here.
+// operation reaches into one. Every rewriting command (the scrub commands
+// that rewrite and author rewrite) takes it here.
 //
 // Ordering across repositories, declared here because this is where the second
 // lock is taken: a rewrite that spans a parent and a submodule takes the

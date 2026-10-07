@@ -701,7 +701,7 @@ func newApp() *strictcli.App {
 		), strictcli.WithRequires(gitRequirement),
 	)
 	app.Deprecated("rewrite-author", "use 'safegit author rewrite' instead")
-	sg := app.Group("scrub", "surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store")
+	sg := app.Group("scrub", "surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, squash folds one first-parent range into a single commit, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store")
 	sg.Command("file", "replace or remove a specific file across every commit in a SELECTED RANGE of history -- --from <commit> or --entire-history, one of which is required -- rewriting each affected commit tree to either substitute the file's contents with those of a sanitized file or delete it entirely from every snapshot in that range. A --delete also removes the move records naming that path, whole, since the path they refer to is being erased; a --replace-with edits no message, because the path still exists and a record naming it is still true", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(runScrubFile(globalsToFlags(ctx, kwargs), kwargs))
 	}),
@@ -764,6 +764,22 @@ func newApp() *strictcli.App {
 		),
 		strictcli.WithArgs(
 			strictcli.NewArg("recipe", "path to the TOML recipe file containing scrub operations", strictcli.ArgRequired()),
+		), strictcli.WithRequires(gitRequirement),
+	)
+	sg.Command("squash", "fold one first-parent range of HEAD's history -- --first through --last, both inclusive, with no merge commit inside -- into ONE commit carrying the tree of --last, the parents of --first, the author and committer of --last, and the --message given. Every later commit HEAD reaches is rewritten onto it with its own tree, message, and identity unchanged, a branch or tag pointing at a folded commit moves to the squash commit, and the rewrite journal records every folded commit against the squash commit, so release tooling can follow each one. The rewrite is verified against that declaration before any ref moves", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+		return strictcli.Exit(runScrubSquash(globalsToFlags(ctx, kwargs), kwargs))
+	}),
+		strictcli.WithEffect(strictcli.EffectMutating),
+		strictcli.PayloadSchema(scrubSquashPayloadSchema),
+		// The same irreversible rewrite as the other scrubs: every commit from
+		// the range onward gets a new SHA, and the folded commits stop existing.
+		strictcli.WithConsequential(),
+		strictcli.WithTags("json"),
+		strictcli.WithFlags(
+			strictcli.StringFlag("first", "the oldest commit of the range to fold, inclusive; it must be on HEAD's first-parent history", strictcli.Required()),
+			strictcli.StringFlag("last", "the newest commit of the range to fold, inclusive; it must be on HEAD's first-parent history, no older than --first", strictcli.Required()),
+			strictcli.StringFlag("message", "the squash commit's whole message", strictcli.Required()),
+			strictcli.StringFlag("reason", "mandatory audit trail message explaining why this scrub operation is needed", strictcli.Required()),
 		), strictcli.WithRequires(gitRequirement),
 	)
 	sg.Command("verify", "confirm that the patterns named on the command line -- repeatable --pattern regexes, the operations of a scrub recipe file, or both -- are absent from every object in the git object store, scanning blobs, commit messages, and tag annotations and reporting detailed per-pattern pass or fail results with match locations for any violations found", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {

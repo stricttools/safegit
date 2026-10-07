@@ -2042,6 +2042,26 @@ safegit's pre-pre-push hooks, which are its own subsystem.
   only way to ask for one.
 - **Ruling:** ours — deliberate
 
+### A squash is a scrub over a declared first-parent range
+
+- **git's idiom:** commits are squashed with an interactive rebase: an editor
+  opens on a todo list, `squash` and `fixup` lines fold commits into their
+  predecessors, the messages are combined, and git replays and authors
+  everything after them.
+- **safegit:** `scrub squash --first <commit> --last <commit> --message <text>`
+  folds one range of HEAD's FIRST-PARENT history, both ends inclusive, into one
+  commit, with no editor and no todo list. A range with a merge commit inside it
+  is refused, naming the merge, because folding it would drop the history it
+  merged in. The squash commit carries the tree of `--last`, the parents of
+  `--first`, the author and committer of `--last`, and the message given, never
+  a combination of the folded messages. It is a history rewrite like every
+  other scrub: consequential, refused on a dirty tree, verified against its
+  declaration before any ref moves (every later commit must come through with
+  its tree, message, and identity unchanged), and journaled, with every folded
+  commit recorded against the squash commit so release tooling can follow it. A
+  tag pointing at a folded commit moves to the squash commit.
+- **Ruling:** ours — deliberate
+
 ### A rewrite is verified before any ref moves
 
 - **git's idiom:** `filter-branch` rewrites and moves the refs; verifying that it

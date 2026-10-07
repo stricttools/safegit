@@ -47,6 +47,12 @@ func verifyIntendedChanges(ctx context.Context, shaMap map[string]string, intent
 		}
 		rewritten[oldSHA] = true
 
+		// A folded commit is checked once, as part of its squash, below: its
+		// parents and tree are by design not its own any more.
+		if intent.Squash.contains(oldSHA) {
+			continue
+		}
+
 		oldInfo, err := git.ParseCommit(ctx, oldSHA)
 		if err != nil {
 			failures = append(failures, fmt.Sprintf("reading original commit %s: %v", shortSHA(oldSHA), err))
@@ -60,7 +66,7 @@ func verifyIntendedChanges(ctx context.Context, shaMap map[string]string, intent
 
 		failures = append(failures, verifyParentTopology(oldSHA, oldInfo, newInfo, shaMap)...)
 
-		switch intent.Kind {
+		switch intent.Class {
 		case IntentIdentityOnly:
 			// An identity rewrite never touches content: every tree must come
 			// through byte-identical. A message may change only where the walk
@@ -71,7 +77,9 @@ func verifyIntendedChanges(ctx context.Context, shaMap map[string]string, intent
 					shortSHA(oldSHA), shortSHA(oldInfo.Tree), shortSHA(newInfo.Tree)))
 			}
 			failures = append(failures, verifyMessageAgainstIntent(oldSHA, oldInfo, newInfo, intent.For(oldSHA))...)
-		case IntentPerPath:
+		case IntentPerPath, IntentSquash:
+			// Under a squash every commit outside the folded range declares
+			// nothing, so it must come through untouched but for its parents.
 			declared := intent.For(oldSHA)
 			failures = append(failures, verifyIdentityPreserved(oldSHA, oldInfo, newInfo)...)
 			failures = append(failures, verifyMessageAgainstIntent(oldSHA, oldInfo, newInfo, declared)...)
@@ -81,6 +89,10 @@ func verifyIntendedChanges(ctx context.Context, shaMap map[string]string, intent
 			}
 			failures = append(failures, pathFailures...)
 		}
+	}
+
+	if intent.Squash != nil {
+		failures = append(failures, verifySquash(ctx, shaMap, intent.Squash)...)
 	}
 
 	// The rewrote-count tripwire: a commit the operation decided to change must
@@ -95,6 +107,58 @@ func verifyIntendedChanges(ctx context.Context, shaMap map[string]string, intent
 		}
 	}
 
+	return failures
+}
+
+// verifySquash checks a squash against its declaration: every folded commit
+// maps to one new commit, which is none of them, and that commit carries the
+// tree of the last folded commit, the remapped parents of the first, the
+// author and committer of the last, and the declared message.
+func verifySquash(ctx context.Context, shaMap map[string]string, d *SquashDeclaration) []string {
+	first, last := d.Members[0], d.Members[len(d.Members)-1]
+	squash := shaMap[first]
+	var failures []string
+	for _, m := range d.Members {
+		got, ok := shaMap[m]
+		switch {
+		case !ok:
+			failures = append(failures, fmt.Sprintf("commit %s: the squash folds it, but the rewrite has no mapping for it", shortSHA(m)))
+		case got != squash:
+			failures = append(failures, fmt.Sprintf("commit %s: the squash folds it into %s, but the rewrite maps it to %s",
+				shortSHA(m), shortSHA(squash), shortSHA(got)))
+		case got == m:
+			failures = append(failures, fmt.Sprintf("commit %s: the squash folds it, but the rewrite left it in place", shortSHA(m)))
+		}
+	}
+	if len(failures) > 0 || squash == "" {
+		return failures
+	}
+
+	firstInfo, err := git.ParseCommit(ctx, first)
+	if err != nil {
+		return []string{fmt.Sprintf("reading the first folded commit %s: %v", shortSHA(first), err)}
+	}
+	lastInfo, err := git.ParseCommit(ctx, last)
+	if err != nil {
+		return []string{fmt.Sprintf("reading the last folded commit %s: %v", shortSHA(last), err)}
+	}
+	squashInfo, err := git.ParseCommit(ctx, squash)
+	if err != nil {
+		return []string{fmt.Sprintf("reading the squash commit %s: %v", shortSHA(squash), err)}
+	}
+
+	if squashInfo.Tree != lastInfo.Tree {
+		failures = append(failures, fmt.Sprintf("squash commit %s: its tree is %s, want the last folded commit's %s",
+			shortSHA(squash), shortSHA(squashInfo.Tree), shortSHA(lastInfo.Tree)))
+	}
+	failures = append(failures, verifyParentTopology(first, firstInfo, squashInfo, shaMap)...)
+	if squashInfo.Author != lastInfo.Author || squashInfo.Committer != lastInfo.Committer {
+		failures = append(failures, fmt.Sprintf("squash commit %s: its author and committer are not the last folded commit's",
+			shortSHA(squash)))
+	}
+	if strings.TrimRight(squashInfo.Message, "\n") != strings.TrimRight(d.Message, "\n") {
+		failures = append(failures, fmt.Sprintf("squash commit %s: its message is not the declared one", shortSHA(squash)))
+	}
 	return failures
 }
 
