@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "name": "safegit",
+  "name": "release-checkout",
   "slug": "safegit",
   "version": "0.29.4",
   "description": "The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood",
@@ -1961,6 +1961,21 @@
         },
         {
           "level": 3,
+          "text": "`NestedRepository`",
+          "anchor": "nestedrepository"
+        },
+        {
+          "level": 3,
+          "text": "`RecordedGitlink`",
+          "anchor": "recordedgitlink"
+        },
+        {
+          "level": 3,
+          "text": "`RegisteredSubmodule`",
+          "anchor": "registeredsubmodule"
+        },
+        {
+          "level": 3,
           "text": "`StepIndexReconcile`",
           "anchor": "stepindexreconcile"
         },
@@ -2013,6 +2028,21 @@
           "level": 3,
           "text": "`RewordResult`",
           "anchor": "rewordresult"
+        },
+        {
+          "level": 3,
+          "text": "`BoundaryShape`",
+          "anchor": "boundaryshape"
+        },
+        {
+          "level": 3,
+          "text": "`RepositoryBoundary`",
+          "anchor": "repositoryboundary"
+        },
+        {
+          "level": 3,
+          "text": "`RepositoryBoundaries`",
+          "anchor": "repositoryboundaries"
         },
         {
           "level": 3,
@@ -2076,6 +2106,21 @@
         },
         {
           "level": 3,
+          "text": "`NewRepositoryBoundaries`",
+          "anchor": "newrepositoryboundaries"
+        },
+        {
+          "level": 3,
+          "text": "`BoundaryCommand`",
+          "anchor": "boundarycommand"
+        },
+        {
+          "level": 3,
+          "text": "`ShellQuote`",
+          "anchor": "shellquote"
+        },
+        {
+          "level": 3,
           "text": "`NativeHooks`",
           "anchor": "nativehooks"
         },
@@ -2108,6 +2153,26 @@
           "level": 3,
           "text": "`Pipeline.Reword`",
           "anchor": "pipelinereword"
+        },
+        {
+          "level": 3,
+          "text": "`RepositoryBoundary.Describe`",
+          "anchor": "repositoryboundarydescribe"
+        },
+        {
+          "level": 3,
+          "text": "`RepositoryBoundaries.Above`",
+          "anchor": "repositoryboundariesabove"
+        },
+        {
+          "level": 3,
+          "text": "`RepositoryBoundaries.At`",
+          "anchor": "repositoryboundariesat"
+        },
+        {
+          "level": 3,
+          "text": "`RepositoryBoundaries.CheckedOut`",
+          "anchor": "repositoryboundariescheckedout"
         },
         {
           "level": 3,
@@ -3528,6 +3593,11 @@
         },
         {
           "level": 3,
+          "text": "A path inside another repository is refused",
+          "anchor": "a-path-inside-another-repository-is-refused"
+        },
+        {
+          "level": 3,
           "text": "A symlink target that will not resolve in another checkout is refused",
           "anchor": "a-symlink-target-that-will-not-resolve-in-another-checkout-is-refused"
         },
@@ -4436,6 +4506,21 @@
         },
         {
           "level": 3,
+          "text": "`NestedRepository`",
+          "anchor": "nestedrepository"
+        },
+        {
+          "level": 3,
+          "text": "`RecordedGitlink`",
+          "anchor": "recordedgitlink"
+        },
+        {
+          "level": 3,
+          "text": "`RegisteredSubmodule`",
+          "anchor": "registeredsubmodule"
+        },
+        {
+          "level": 3,
           "text": "`StepIndexReconcile`",
           "anchor": "stepindexreconcile"
         },
@@ -4488,6 +4573,21 @@
           "level": 3,
           "text": "`RewordResult`",
           "anchor": "rewordresult"
+        },
+        {
+          "level": 3,
+          "text": "`BoundaryShape`",
+          "anchor": "boundaryshape"
+        },
+        {
+          "level": 3,
+          "text": "`RepositoryBoundary`",
+          "anchor": "repositoryboundary"
+        },
+        {
+          "level": 3,
+          "text": "`RepositoryBoundaries`",
+          "anchor": "repositoryboundaries"
         },
         {
           "level": 3,
@@ -4551,6 +4651,21 @@
         },
         {
           "level": 3,
+          "text": "`NewRepositoryBoundaries`",
+          "anchor": "newrepositoryboundaries"
+        },
+        {
+          "level": 3,
+          "text": "`BoundaryCommand`",
+          "anchor": "boundarycommand"
+        },
+        {
+          "level": 3,
+          "text": "`ShellQuote`",
+          "anchor": "shellquote"
+        },
+        {
+          "level": 3,
           "text": "`NativeHooks`",
           "anchor": "nativehooks"
         },
@@ -4583,6 +4698,26 @@
           "level": 3,
           "text": "`Pipeline.Reword`",
           "anchor": "pipelinereword"
+        },
+        {
+          "level": 3,
+          "text": "`RepositoryBoundary.Describe`",
+          "anchor": "repositoryboundarydescribe"
+        },
+        {
+          "level": 3,
+          "text": "`RepositoryBoundaries.Above`",
+          "anchor": "repositoryboundariesabove"
+        },
+        {
+          "level": 3,
+          "text": "`RepositoryBoundaries.At`",
+          "anchor": "repositoryboundariesat"
+        },
+        {
+          "level": 3,
+          "text": "`RepositoryBoundaries.CheckedOut`",
+          "anchor": "repositoryboundariescheckedout"
         },
         {
           "level": 3,
@@ -8029,7 +8164,7 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-10-05T21:42:38.762940+00:00",
+  "last_gen": "2026-10-07T12:50:28.340951+00:00",
   "theme": "minimal",
   "vocabulary": {
     "accepted": [
@@ -8047,6 +8182,10 @@
       },
       {
         "word": "daemonized",
+        "aliases": []
+      },
+      {
+        "word": "gitfile",
         "aliases": []
       },
       {
@@ -8115,6 +8254,10 @@
       },
       {
         "word": "subreaper",
+        "aliases": []
+      },
+      {
+        "word": "subshell",
         "aliases": []
       },
       {

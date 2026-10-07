@@ -34,7 +34,7 @@ stage and commit specified files in a single atomic operation
 
 | Name | Type | Presence | Description |
 | --- | --- | --- | --- |
-| `files` | list[str] (variadic) | optional | files to commit, taken literally -- a colon in an argument is part of the filename, and hunk selection is --hunks |
+| `files` | list[str] (variadic) | optional | files to commit, taken literally -- a colon in an argument is part of the filename, and hunk selection is --hunks. A path inside another git repository -- a nested repository, a submodule or a gitlink -- is refused with exit 11, naming the command that commits it in that repository, and so is an unrecorded nested repository's own directory |
 
 ## Grants
 

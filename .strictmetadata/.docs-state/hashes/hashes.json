@@ -40,7 +40,7 @@
     "seed_hash": "d98b6e400219098930485f17d2670e12592da1ecfcf957ab71d6e1341d306e6f"
   },
   "en/cli-commit.md": {
-    "content": "351a255732be309f244a2df58c0c00d1e72f55f52bd7e2e6349378169d7fc251",
+    "content": "3049da4a0eb4344f78c06661b6a4f0cf1b3e8057554c21df2ca1e704b36cb798",
     "description": "5e6d1c355403d853234ed672602ee82852af4e747d07d5196cac90649407e6fb",
     "schema_hash": "69b61548a7c4f2526ee85c4db8bf9a7c6fb9fbea5e49a066a985b55bfbe2e954",
     "seed_hash": "5e6d1c355403d853234ed672602ee82852af4e747d07d5196cac90649407e6fb"
@@ -81,7 +81,7 @@
     "seed_hash": "848ed69cddfabaa6bc54c7ebad016e84cb36c64a0c1e85145df0dbba107f0f72"
   },
   "en/cli-mv.md": {
-    "content": "2411b0b629950b4652278688d376caaef2f486c69124540571afc069d24f6358",
+    "content": "80e08c9b8ef29067f9fbeed81ad97cc17788f9c106a2cf719f607f62448d2cba",
     "description": "6c03e7767b51d10d5187c41727c67f9e95f61f08260c162cdbe849f04205b70f",
     "schema_hash": "86b7263cb3cbf87716912ded6cc98987ec52fa3a47b6edb574264adc5908ec4d",
     "seed_hash": "6c03e7767b51d10d5187c41727c67f9e95f61f08260c162cdbe849f04205b70f"
@@ -166,8 +166,8 @@
   },
   "en/gen-index.md": {
     "content": "c75d3d6bcfafece6681724d1a3a680d08291e3add7b170f9ceb8271188fcfe55",
-    "description": "a3e79823fea3612122feec2cf714e6f794464b28114a6af124b2ae9f49b4c7d5",
-    "seed_hash": "a3e79823fea3612122feec2cf714e6f794464b28114a6af124b2ae9f49b4c7d5"
+    "description": "1fdb13028de93b1b0476671eb7cf4bdfd3d1a123ee97abd4e357c501556622f0",
+    "seed_hash": "1fdb13028de93b1b0476671eb7cf4bdfd3d1a123ee97abd4e357c501556622f0"
   },
   "en/index.md": {
     "content": "1dc0eb82bdf3e81469da3ab87dd3cbe804472f27f0a6d4978a09640e9b057d92",
