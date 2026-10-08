@@ -53,7 +53,7 @@ type globalFlags struct {
 	// sc is the framework context for this dispatch. It is the only route to
 	// ctx.Effects(), so carrying it here gives every existing handler the
 	// effects handle without rewriting ~60 call signatures. Nil in unit tests
-	// that never dispatch; effects() is the guarded accessor.
+	// that never dispatch; Effects() is the guarded accessor.
 	sc *strictcli.Context
 	// root caches this dispatch's repository root, resolved at most once. It is
 	// a pointer so the cache survives globalFlags being copied by value into
@@ -145,7 +145,7 @@ func (g globalFlags) ctx() context.Context {
 
 // effects returns the effects handle for this dispatch. Handlers mint every
 // mutation through it so that --dry-run records instead of executing.
-func (g globalFlags) effects() *strictcli.Effects { return g.sc.Effects() }
+func (g globalFlags) Effects() *strictcli.Effects { return g.sc.Effects() }
 
 // payload supplies this dispatch's machine payload. The framework validates it
 // against the command's declared schema and emits it as the envelope's payload

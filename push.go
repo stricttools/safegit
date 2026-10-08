@@ -758,7 +758,7 @@ func execGitPush(flags globalFlags, args []string) (stderrText string, err error
 			break
 		}
 	}
-	done, err := flags.effects().Run(argv,
+	done, err := flags.Effects().Run(argv,
 		strictcli.Check(false),
 		strictcli.UseGrant(grant),
 		strictcli.Resource("remote-refs:"+remoteOf(args)),

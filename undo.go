@@ -163,7 +163,7 @@ func recordUndoRefUpdate(flags globalFlags, ref, targetSHA, currentSHA string, i
 	if err != nil {
 		return err
 	}
-	done, err := flags.effects().Run(argv, strictcli.Resource("ref:"+ref), strictcli.Check(false))
+	done, err := flags.Effects().Run(argv, strictcli.Resource("ref:"+ref), strictcli.Check(false))
 	if err != nil {
 		return err
 	}

@@ -64,7 +64,7 @@ func runGitMutation(flags globalFlags, door gitexec.DoorID, args ...string) int 
 	if !flags.json {
 		opts = append(opts, strictcli.Stream(true))
 	}
-	done, err := flags.effects().Run(argv, opts...)
+	done, err := flags.Effects().Run(argv, opts...)
 	if err != nil {
 		errorf(flags, "%v", err)
 		return exitcode.General

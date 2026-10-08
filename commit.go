@@ -491,7 +491,7 @@ func (u effectsRefUpdate) Update(_ context.Context, ref, newSHA, expected string
 	if err != nil {
 		return err
 	}
-	done, err := u.flags.effects().Run(argv, strictcli.Resource("ref:"+ref), strictcli.Check(false))
+	done, err := u.flags.Effects().Run(argv, strictcli.Resource("ref:"+ref), strictcli.Check(false))
 	if err != nil {
 		// A framework-level refusal: no child ran, and the message is the
 		// framework's own.

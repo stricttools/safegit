@@ -111,7 +111,7 @@ func runBackupGit(flags globalFlags, resource string, args ...string) (stdout, s
 	if err != nil {
 		return "", "", err
 	}
-	done, err := flags.effects().Run(argv, strictcli.Resource(resource), strictcli.Check(false))
+	done, err := flags.Effects().Run(argv, strictcli.Resource(resource), strictcli.Check(false))
 	if err != nil {
 		return "", "", err
 	}

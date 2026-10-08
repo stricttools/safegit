@@ -106,7 +106,7 @@ func runParentBumpCommit(flags globalFlags, parentWorkTree, subRelPath, msg stri
 	if err != nil {
 		return strictcli.Completed{}, fmt.Errorf("resolving safegit binary: %v", err)
 	}
-	completed, err := flags.effects().Run(
+	completed, err := flags.Effects().Run(
 		[]interface{}{safegitBin, "commit", "-m", msg, "--", subRelPath},
 		strictcli.Cwd(parentWorkTree),
 		strictcli.UseGrant("parent-bump"),

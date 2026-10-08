@@ -188,3 +188,49 @@ func TestRefusedConclusionNeverTouchesTheWorkingTree(t *testing.T) {
 		t.Error("a refused conclusion deleted a working-tree file")
 	}
 }
+
+// TestConclusionWritesASymlinkSideAsALink pins the symlink branch: a side that
+// holds a symlink is written back as a link to that side's target, not as a
+// regular file holding the target's text.
+func TestConclusionWritesASymlinkSideAsALink(t *testing.T) {
+	dir := newRepo(t)
+	link := filepath.Join(dir, "link")
+	relink := func(target string) {
+		t.Helper()
+		if err := os.Remove(link); err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+	}
+	relink("base-target")
+	safegitCommitEnv(t, dir, conclusionSession, "base", "link")
+	testutil.Git(t, dir, "branch", "feature")
+	testutil.Git(t, dir, "switch", "feature")
+	relink("feature-target")
+	safegitCommitEnv(t, dir, conclusionSession, "feature link", "link")
+	testutil.Git(t, dir, "switch", "main")
+	relink("main-target")
+	safegitCommitEnv(t, dir, conclusionSession, "main link", "link")
+	if _, _, code := runSafegitEnv(t, dir, conclusionSession, "merge", "feature"); code == 0 {
+		t.Fatal("safegit merge feature succeeded; the fixture needs a conflict on the link")
+	}
+
+	if _, stderr, code := runSafegitEnv(t, dir, conclusionSession,
+		"merge-continue", "--resolve", "link=theirs"); code != 0 {
+		t.Fatalf("merge-continue failed (code %d): %s", code, stderr)
+	}
+
+	info, err := os.Lstat(link)
+	if err != nil {
+		t.Fatalf("the resolved link is missing: %v", err)
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the resolved path is not a symlink (mode %v)", info.Mode())
+	}
+	if target, _ := os.Readlink(link); target != "feature-target" {
+		t.Errorf("the link points at %q, want the theirs target %q", target, "feature-target")
+	}
+	assertWorkingTreeClean(t, dir, "symlink theirs")
+}

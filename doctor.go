@@ -248,7 +248,7 @@ func runDoctor(flags globalFlags, kwargs map[string]interface{}) int {
 		// Through the effects handle, so --dry-run records each removal instead
 		// of performing it and the enumeration above is the whole of what a
 		// preview does.
-		fx := flags.effects()
+		fx := flags.Effects()
 		for _, t := range targets {
 			if _, err := fx.Remove(t.Path, strictcli.Resource("safegit-state:"+t.Path)); err != nil {
 				errorf(flags, "removing %s: %v", t.Path, err)

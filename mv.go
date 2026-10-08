@@ -750,12 +750,12 @@ func (fs *mvFilesystem) ensureParent(absPath string) error {
 		}
 		top = parent
 	}
-	if _, err := fs.flags.effects().Mkdir(dir, strictcli.Resource("path:"+dir)); err != nil {
+	if _, err := fs.flags.Effects().Mkdir(dir, strictcli.Resource("path:"+dir)); err != nil {
 		return err
 	}
 	fs.ensured[dir] = true
 	fs.undo = append(fs.undo, func() error {
-		_, err := fs.flags.effects().Remove(top, strictcli.Resource("path:"+top))
+		_, err := fs.flags.Effects().Remove(top, strictcli.Resource("path:"+top))
 		return err
 	})
 	return nil
@@ -763,11 +763,11 @@ func (fs *mvFilesystem) ensureParent(absPath string) error {
 
 // rename is one minted rename plus its inverse.
 func (fs *mvFilesystem) rename(from, to string) error {
-	if _, err := fs.flags.effects().Rename(from, to, strictcli.Resource("path:"+to)); err != nil {
+	if _, err := fs.flags.Effects().Rename(from, to, strictcli.Resource("path:"+to)); err != nil {
 		return err
 	}
 	fs.undo = append(fs.undo, func() error {
-		_, err := fs.flags.effects().Rename(to, from, strictcli.Resource("path:"+from))
+		_, err := fs.flags.Effects().Rename(to, from, strictcli.Resource("path:"+from))
 		return err
 	})
 	return nil

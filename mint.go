@@ -24,7 +24,7 @@ func mintedRemover(flags globalFlags, resource string) func(string) error {
 		if _, err := os.Lstat(path); err != nil {
 			return err
 		}
-		if _, err := flags.effects().Remove(path, strictcli.Resource(resource+path)); err != nil {
+		if _, err := flags.Effects().Remove(path, strictcli.Resource(resource+path)); err != nil {
 			return err
 		}
 		return nil

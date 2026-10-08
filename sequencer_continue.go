@@ -583,7 +583,7 @@ func runContinue(flags globalFlags, op continueOp, messages []string, trailers [
 		out.previewParentBump(ctx, flags, result, op.command, message, previewCommitPlaceholder)
 	} else {
 		out.concludeAftercare(ctx, flags, gitDir, state, result, edits, func(ctx context.Context) error {
-			return materializeResolutions(ctx, sides, declared)
+			return materializeResolutions(ctx, flags.Effects(), sides, declared)
 		}, op.command, message)
 	}
 
@@ -933,7 +933,7 @@ func (op continueOp) finishWhatCrashed(
 		out.previewParentBump(ctx, flags, stood, op.command, info.Message, stood.SHA)
 	} else {
 		out.concludeAftercare(ctx, flags, gitDir, state, stood, edits, func(ctx context.Context) error {
-			return materializeCommitted(ctx, committed)
+			return materializeCommitted(ctx, flags.Effects(), committed)
 		}, op.command, info.Message)
 	}
 
@@ -1440,7 +1440,7 @@ func finishConclusion(ctx context.Context, gitDir string, state sequencer.State,
 // `worktree` is exempt by definition -- the file on disk IS the resolution --
 // and a gitlink is skipped because a submodule's working-tree state is the
 // submodule's own checkout, not a blob this repository can write.
-func materializeResolutions(ctx context.Context, sides map[string]conflict.Sides, declared []resolution) error {
+func materializeResolutions(ctx context.Context, fx *strictcli.Effects, sides map[string]conflict.Sides, declared []resolution) error {
 	if len(declared) == 0 {
 		return nil
 	}
@@ -1457,11 +1457,11 @@ func materializeResolutions(ctx context.Context, sides map[string]conflict.Sides
 		case resolveWorktree:
 			continue
 		case resolveDelete:
-			writeErr = removeWorktreeFile(abs)
+			writeErr = removeWorktreeFile(fx, abs)
 		case resolveOurs:
-			writeErr = writeStageToWorktree(ctx, abs, s.Ours)
+			writeErr = writeStageToWorktree(ctx, fx, abs, s.Ours)
 		case resolveTheirs:
-			writeErr = writeStageToWorktree(ctx, abs, s.Theirs)
+			writeErr = writeStageToWorktree(ctx, fx, abs, s.Theirs)
 		default:
 			return fmt.Errorf("internal: %s carries an unrecognized resolution %q", r.Path, r.Choice)
 		}
@@ -1478,9 +1478,9 @@ func materializeResolutions(ctx context.Context, sides map[string]conflict.Sides
 // writeStageToWorktree puts one stage's blob on disk. An ABSENT stage is the
 // side that deleted the path, so resolving to it removes the file -- exactly
 // what the same absent stage does to the index entry.
-func writeStageToWorktree(ctx context.Context, abs string, e *git.UnmergedEntry) error {
+func writeStageToWorktree(ctx context.Context, fx *strictcli.Effects, abs string, e *git.UnmergedEntry) error {
 	if e == nil {
-		return removeWorktreeFile(abs)
+		return removeWorktreeFile(fx, abs)
 	}
 	switch e.Mode {
 	case gitlinkMode:
@@ -1491,37 +1491,52 @@ func writeStageToWorktree(ctx context.Context, abs string, e *git.UnmergedEntry)
 		if err != nil {
 			return err
 		}
-		if err := removeWorktreeFile(abs); err != nil {
+		if err := removeWorktreeFile(fx, abs); err != nil {
 			return err
 		}
-		return os.Symlink(string(target), abs)
+		// The effects handle has no symlink primitive, so the link is made by
+		// ln, as a recorded process effect.
+		_, err = fx.Run([]interface{}{"ln", "-s", "--", string(target), abs}, strictcli.Resource("path:"+abs))
+		return err
 	}
 
 	content, err := git.CatFileBlob(ctx, e.SHA)
 	if err != nil {
 		return err
 	}
-	perm := os.FileMode(0644)
+	perm := 0o644
 	if e.Mode == executableMode {
-		perm = 0755
+		perm = 0o755
 	}
-	if err := os.WriteFile(abs, content, perm); err != nil {
+	if _, err := fx.Write(abs, content, strictcli.Resource("path:"+abs)); err != nil {
 		return err
 	}
-	// WriteFile leaves an existing file's mode alone, and a conflict can change
+	// Writing leaves an existing file's mode alone, and a conflict can change
 	// the executable bit, so the mode is set explicitly rather than inherited
 	// from whatever the conflicted file happened to be.
-	return os.Chmod(abs, perm)
+	_, err = fx.Chmod(abs, perm, strictcli.Resource("path:"+abs))
+	return err
 }
 
 // removeWorktreeFile deletes a path from disk, treating an already-absent file
 // as done. Empty parent directories are deliberately left behind: removing them
 // could take a directory another session is using.
-func removeWorktreeFile(abs string) error {
-	if err := os.Remove(abs); err != nil && !os.IsNotExist(err) {
+//
+// The effects handle's removal is recursive, so a directory standing at the
+// path is refused here rather than deleted with everything under it.
+func removeWorktreeFile(fx *strictcli.Effects, abs string) error {
+	info, err := os.Lstat(abs)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
 		return err
 	}
-	return nil
+	if info.IsDir() {
+		return fmt.Errorf("%s is a directory, not a file", abs)
+	}
+	_, err = fx.Remove(abs, strictcli.Resource("path:"+abs))
+	return err
 }
 
 // The index modes a resolution can carry, spelled once.

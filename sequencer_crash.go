@@ -11,6 +11,7 @@ import (
 	"github.com/stricttools/safegit/internal/conflict"
 	"github.com/stricttools/safegit/internal/exitcode"
 	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/strictcli/go/strictcli"
 )
 
 // The crash re-run: finishing a conclusion whose commit already stands.
@@ -127,7 +128,7 @@ func crashIndexEdits(committed []committedSide) []commit.IndexEdit {
 // carry is removed from disk exactly as `delete` removes one.
 //
 // It runs only after the overwrite check has passed, and never under --dry-run.
-func materializeCommitted(ctx context.Context, committed []committedSide) error {
+func materializeCommitted(ctx context.Context, fx *strictcli.Effects, committed []committedSide) error {
 	if len(committed) == 0 {
 		return nil
 	}
@@ -136,7 +137,7 @@ func materializeCommitted(ctx context.Context, committed []committedSide) error 
 		return fmt.Errorf("resolving the directory git's paths are relative to, to write the concluded files: %w", err)
 	}
 	for _, c := range committed {
-		if err := writeStageToWorktree(ctx, git.Anchor(root, c.path), c.entry()); err != nil {
+		if err := writeStageToWorktree(ctx, fx, git.Anchor(root, c.path), c.entry()); err != nil {
 			return fmt.Errorf("%s: %w", c.path, err)
 		}
 	}

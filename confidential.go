@@ -40,12 +40,12 @@ import (
 type effectsFileWriter struct{ flags globalFlags }
 
 func (w effectsFileWriter) WriteFile(p string, data []byte) error {
-	_, err := w.flags.effects().Write(p, data)
+	_, err := w.flags.Effects().Write(p, data)
 	return err
 }
 
 func (w effectsFileWriter) MkdirAll(p string) error {
-	_, err := w.flags.effects().Mkdir(p)
+	_, err := w.flags.Effects().Mkdir(p)
 	return err
 }
 

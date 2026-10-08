@@ -473,7 +473,7 @@ func hookInstall(flags globalFlags, srcPath string) int {
 		errorf(flags, "%v", err)
 		return exitcode.General
 	}
-	fx := flags.effects()
+	fx := flags.Effects()
 	if _, err := fx.Mkdir(filepath.Dir(dest)); err != nil {
 		errorf(flags, "creating hooks dir: %v", err)
 		return exitcode.General
@@ -562,7 +562,7 @@ func hookRemove(flags globalFlags, name string) int {
 	}
 
 	target := local[0]
-	fx := flags.effects()
+	fx := flags.Effects()
 	if _, err := fx.Remove(target.Path); err != nil {
 		errorf(flags, "removing %s: %v", target.Path, err)
 		return exitcode.General
@@ -626,7 +626,7 @@ func hookMigrate(flags globalFlags) int {
 		return 0
 	}
 
-	fx := flags.effects()
+	fx := flags.Effects()
 	if _, err := fx.Mkdir(hooks.LocalDir(shared)); err != nil {
 		errorf(flags, "creating %s: %v", hooks.LocalDir(shared), err)
 		return exitcode.General

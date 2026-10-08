@@ -32,7 +32,7 @@ func runRepairGit(flags globalFlags, worktree, resource string, args ...string) 
 	if err != nil {
 		return strictcli.Completed{}, err
 	}
-	return flags.effects().Run(argv, strictcli.Cwd(worktree), strictcli.Resource(resource))
+	return flags.Effects().Run(argv, strictcli.Cwd(worktree), strictcli.Resource(resource))
 }
 
 // --- the orphaned autostash --------------------------------------------------

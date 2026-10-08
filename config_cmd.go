@@ -99,7 +99,7 @@ func runConfigSet(flags globalFlags, key, value string) int {
 	}
 	// Minting the write on the handle is what makes `config set --dry-run`
 	// record the change instead of performing it.
-	if _, err := flags.effects().Write(configPath, data, strictcli.Resource("safegit-config:"+configPath)); err != nil {
+	if _, err := flags.Effects().Write(configPath, data, strictcli.Resource("safegit-config:"+configPath)); err != nil {
 		errorf(flags, "%v", err)
 		return exitcode.General
 	}
