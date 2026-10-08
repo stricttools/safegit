@@ -1,6 +1,6 @@
 +++
 title = "Divergences"
-description = "Where safegit departs from git's own behavior, by area (committing, moves, hooks, output and exit codes, consent, publishing, history rewriting), with what git does, what safegit does, and why."
+description = "Where safegit departs from git's own behavior, by area (committing and its confidential-name screen, moves, hooks, output and exit codes, consent, publishing, history rewriting), with what git does, what safegit does, and why."
 +++
 
 # Where safegit follows git, and where it deliberately does not

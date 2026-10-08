@@ -1,6 +1,6 @@
 +++
 title = "safegit scrub"
-description = "surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store"
+description = "surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, squash folds one first-parent range into a single commit, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store"
 generated = true
 seeded = true
 nav_group = "CLI Reference"
@@ -10,7 +10,7 @@ nav_order = 20
 
 # safegit scrub
 
-surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store
+surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, squash folds one first-parent range into a single commit, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store
 
 ## scrub file
 
@@ -81,6 +81,21 @@ execute a multi-operation scrub recipe from a TOML file, applying all pattern re
 | Name | Type | Presence | Description |
 | --- | --- | --- | --- |
 | `recipe` | str | required | path to the TOML recipe file containing scrub operations |
+
+## scrub squash
+
+fold one first-parent range of HEAD's history -- --first through --last, both inclusive, with no merge commit inside -- into ONE commit carrying the tree of --last, the parents of --first, the author and committer of --last, and the --message given. Every later commit HEAD reaches is rewritten onto it with its own tree, message, and identity unchanged, a branch or tag pointing at a folded commit moves to the squash commit, and the rewrite journal records every folded commit against the squash commit, so release tooling can follow each one. The rewrite is verified against that declaration before any ref moves
+
+**Effect:** mutating · **consequential** (prompts before running; `--approve-consequential` skips)
+
+### Flags
+
+| Name | Short | Type | Presence | Env | Description |
+| --- | --- | --- | --- | --- | --- |
+| `--first` |  | str | required |  | the oldest commit of the range to fold, inclusive; it must be on HEAD's first-parent history |
+| `--last` |  | str | required |  | the newest commit of the range to fold, inclusive; it must be on HEAD's first-parent history, no older than --first |
+| `--message` |  | str | required |  | the squash commit's whole message |
+| `--reason` |  | str | required |  | mandatory audit trail message explaining why this scrub operation is needed |
 
 ## scrub verify
 
