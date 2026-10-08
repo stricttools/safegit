@@ -1,0 +1,2 @@
+{"format_version":2,"id":"18dc88148e8d5548b7aaea0775314a48b77a3320356f7969","commits":["d1ca6a3c7361459e262440e8d63d9435a11e3488"],"user_facing":true,"description":"**Fix: use published strictcli dependency.** Removed local replace directive so `go install` and CI work correctly.","type":"fix"}
+{"format_version":2,"id":"18dc88148e8dd87552ed5e2df8054f21bcab6a75374540ae","commits":["6dbcd8d57c87b7b1767f8d84119ca10c099f9695"],"user_facing":false}

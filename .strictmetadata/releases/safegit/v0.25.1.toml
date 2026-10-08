@@ -1,0 +1,29 @@
+# strictspec document version gate (do not remove)
+format_version = 2
+# Version bump type: patch, minor, major, infra, or prerelease
+#   prerelease: advance an existing pre-release (0.6.0-beta.0 -> -beta.1)
+bump = "patch"
+# Short description of this release (required)
+description = "Publishes 0.25.0's platform binaries and container image, which a new source-wide secret scan had blocked"
+# Optional context explaining why these changes were made
+context = """
+0.25.0 shipped as a Go module and nothing else. The re-scaffolded publish workflow scans the whole source tree with gitleaks before it builds anything, and safegit's scrub and scan tests plant strings that look precisely like leaked credentials -- `SECRET_XYZ_123`, `sk_live_abc123` and friends -- because a scrubber that is never given anything to scrub is not being tested. The scan found five, both publish jobs failed, and the 0.25.0 Release ended up with no binaries attached and no image in the container registry.
+
+The repository simply had no `.gitleaks.toml`; the scan step is new. The allowlist added here names the four fixture literals rather than exempting the test files wholesale, so if a real credential is ever pasted into one of those files the scan still catches it.
+
+This is a fix-forward rather than a retag: the tag on 0.25.0 sits on a tree the scan will reject on every re-run, so there is no dispatch that could make it publish. Nothing about 0.25.0 is withdrawn -- the Go module proxy has served it since it was tagged, and this release changes no code.
+"""
+# Pre-release channel: alpha, beta, rc, or stable (ordered;
+# demotion is an error). With patch/minor/major it ENTERS the
+# channel (0.5.2 + minor + alpha -> 0.6.0-alpha.0); with
+# bump = "prerelease" it promotes, and "stable" strips the
+# suffix. See docs/release-workflow.md#the-pre-release-channel.
+# preid = ""
+# Set to true to generate a blog post for this release
+# blog = false
+include = ["go", "docker"]
+exclude = []
+release_commit = "217f3820c0fb3f2b6263b43a8cce09cb06231946"
+
+[released_trees]
+"." = "5d62cd24721a38aef173a0ab3c44a203bb86f9e5"

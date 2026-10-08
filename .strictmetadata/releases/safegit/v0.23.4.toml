@@ -1,0 +1,18 @@
+# strictspec document version gate (do not remove)
+format_version = 2
+# Version bump type: patch, minor, major, hotfix, or prerelease
+bump = "patch"
+# Short description of this release (required)
+description = "Fix flaky TestCleanRepo: SharedSafegitDir resolves git-common-dir from the correct repository."
+# Optional context explaining why these changes were made
+context = ""
+# Pre-release identifier: alpha, beta, rc, or stable
+# preid = ""
+# Set to true to generate a blog post for this release
+# blog = false
+include = ["go", "docker"]
+exclude = []
+release_commit = "437ece082db4df62d2e5f0029d3c91c67cb7bbd6"
+
+[released_trees]
+"." = "a49fb1f688b82cb739e38cf2505d7ee7840f0111"

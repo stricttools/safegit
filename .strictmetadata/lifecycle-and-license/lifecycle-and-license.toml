@@ -1,0 +1,24 @@
+format_version = 1
+[[lifecycle]]
+subject = "safegit"
+status = "active"
+from = 2026-10-08
+reason = "active when rlsbl's records moved to the .strictmetadata layout"
+[[licenses]]
+subject = "safegit"
+license = "MIT"
+from = 2026-10-08
+reason = "declared by the owner when rlsbl's records moved to the .strictmetadata layout"
+[[registry_names]]
+registry = "go"
+name = "github.com/stricttools/safegit"
+subject = "safegit"
+recorded_since = 2026-10-08
+[[identities]]
+subject = "safegit"
+facet = "releasable-name"
+value = "safegit"
+registry = ""
+tag_patterns = ["v*"]
+from = 2026-04-18
+reason = "recorded when rlsbl's records moved to the .strictmetadata layout"

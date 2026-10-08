@@ -1,0 +1,2 @@
+{"format_version":2,"id":"18dc88148ec590655b5bef08fa2b431d8ef602e882f514b9","commits":["391dad79b8293dcd3a388960358aaa133d08b622"],"user_facing":true,"description":"**Scrub now syncs submodule working trees after rewriting history.** Previously only the parent repo's working tree was updated; submodule files on disk could still contain pre-scrub content.","type":"fix"}
+{"format_version":2,"id":"18dc88148ec6154bb0898168e0f6416f8daa644e2e9ba560","commits":["a88299bc5213df361848bec9f3a1848b9c7268bb"],"user_facing":false}

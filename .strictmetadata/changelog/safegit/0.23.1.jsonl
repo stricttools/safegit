@@ -1,0 +1,2 @@
+{"format_version":2,"id":"18dc88148f07185fe1e4339879704525b882ceab901227e4","commits":["9b36a17fbcd15a348c72df46bf74ea0e572d9dd8"],"user_facing":true,"description":"**Fix.** CI submodule tests no longer fail on GitHub Actions runners with restricted file transport protocol.","type":"fix"}
+{"format_version":2,"id":"18dc88148f07ee84e48724ca9f7347c892071aabba91e6c6","commits":["b518d72e43338396658c5f85e85956a323a1e2d0"],"user_facing":false}

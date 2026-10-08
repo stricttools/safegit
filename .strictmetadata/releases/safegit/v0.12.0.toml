@@ -1,0 +1,20 @@
+# strictspec document version gate (do not remove)
+format_version = 2
+# Version bump type: patch, minor, or major
+bump = "minor"
+# Short description of this release (required)
+description = "Session-scoped undo, redo command, and scrub command for surgical history rewriting."
+# Optional context explaining why these changes were made
+context = """
+Three new features aimed at multi-session safety and sensitive content cleanup:
+
+- safegit undo is now session-scoped by default (requires CLAUDE_CODE_SESSION_ID), preventing accidental cross-session rollbacks. --bypass-session restores old behavior.
+- safegit redo explicitly restores what undo removed, with one-shot design to prevent oscillation.
+- safegit scrub <file> --from <commit> --reason <text> surgically replaces or removes a file's blob across history, with post-rewrite verification, annotated tag rewriting, and confirmation prompt.
+"""
+include = ["go", "docker"]
+exclude = []
+release_commit = "055daaf2fb3b9a2a8c3c7e5df1c14daf4973168d"
+
+[released_trees]
+"." = "fc332585bd60251fb62d62c0eb82ca6b4959525a"

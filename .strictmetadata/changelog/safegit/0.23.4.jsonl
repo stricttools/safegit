@@ -1,0 +1,2 @@
+{"format_version":2,"id":"18dc88148f0d8bc574edc4f100b747e79e84be82af28a184","commits":["71adbebca85bfc3b3d0fe36e3577359337073f18"],"user_facing":true,"description":"**Fix.** SharedSafegitDir now resolves git-common-dir from the correct repository, fixing a race where parallel tests modified the host project's .git/safegit/ instead of the test repo's.","type":"fix"}
+{"format_version":2,"id":"18dc88148f0dec83cbcafb92ee8b4817aa44155c161221fc","commits":["e26dea0979432297bd96940ff895d5f05bee7486"],"user_facing":false}

@@ -1,0 +1,27 @@
+# strictspec document version gate (do not remove)
+format_version = 2
+# Version bump type: patch, minor, major, infra, or prerelease
+#   prerelease: advance an existing pre-release (0.6.0-beta.0 -> -beta.1)
+bump = "minor"
+# Short description of this release (required)
+description = "Built on strictcli 0.38.0: output, early exits and signals go through the framework, the message flags become --message and --message-file, the hook-stop cap becomes --hook-kill-cap-s, and git is a declared requirement"
+# Optional context explaining why these changes were made
+context = """
+safegit moves to strictcli's new module path, github.com/stricttools/strictcli/go, at v0.38.0, and adopts what that release makes the framework own. Every line safegit writes now goes through the framework's writers, so under --json the document (interface_version 3) carries a command's answer in its output member and every progress line, warning and error in diagnostics, and a refusal ends through the framework's exit step, which writes the document instead of exiting with nothing on stdout. Signals cancel the git subprocesses a command is waiting on. The framework's naming rule refuses single-letter long flags and reserves the version command, so the message flags are renamed and safegit's own version command is gone. The hook-stop cap moves from a raw environment read to a flag bound to the same variable, and git is declared as the runtime requirement it always was.
+
+This release also carries the work of the 0.29.4 attempt, which was abandoned after its CI run failed: symlinks that replaced tracked directories commit as links, mv refuses paths beyond a symbolic link, and the hook containment, payload and interruption changes.
+"""
+# Pre-release channel: alpha, beta, rc, or stable (ordered;
+# demotion is an error). With patch/minor/major it ENTERS the
+# channel (0.5.2 + minor + alpha -> 0.6.0-alpha.0); with
+# bump = "prerelease" it promotes, and "stable" strips the
+# suffix. See docs/release-workflow.md#the-pre-release-channel.
+# preid = ""
+# Set to true to generate a blog post for this release
+# blog = false
+include = ["go"]
+exclude = []
+release_commit = "3d6dd8ca70a5f2adcaa991fef8d02b82ac16c5ff"
+
+[released_trees]
+"." = "316295a7de55c8eb50a8eae10f8af2690e0941b6"

@@ -1,0 +1,2 @@
+{"format_version":2,"id":"18dc88148eaedf4ff0398f718b304546bad9a77f149a54d4","commits":["7596d20a07918a0b71f2b2f7d0991e488b2db36b"],"user_facing":true,"description":"**Improved documentation descriptions.** Expanded CLI help strings and package doc comments for better AI discoverability.","type":"fix"}
+{"format_version":2,"id":"18dc88148eafd49b186d5beffc3842c89f46f0290ec906ff","commits":["0429890a1c7ea048d1b09e5063487cf4fffc5b1d"],"user_facing":false}

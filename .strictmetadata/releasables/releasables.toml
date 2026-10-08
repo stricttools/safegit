@@ -1,0 +1,26 @@
+format_version = 1
+repository_layout = "standalone"
+release_branches = ["main", "master"]
+
+[timeouts]
+push_seconds = 120
+
+[[releasables]]
+name = "safegit"
+tag_format = "v{version}"
+publish_mode = "ci"
+hooks = { pre_checks = ["bash .strictmetadata/release-hooks/safegit/pre-checks.sh"], pre_release = ["go vet ./...", "go build -o /dev/null .", "go test ./... -race -short -count=1"], post_release = ["bash .strictmetadata/release-hooks/safegit/post-release.sh"] }
+
+[[members]]
+path = "."
+name = "root"
+releasable = "safegit"
+targets = [{ name = "go" }]
+
+[[members.pipelines]]
+name = "go"
+type = "go"
+target = "go"
+local = true
+artifact = "binary"
+install_paths = ["."]

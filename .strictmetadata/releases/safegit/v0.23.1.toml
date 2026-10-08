@@ -1,0 +1,18 @@
+# strictspec document version gate (do not remove)
+format_version = 2
+# Version bump type: patch, minor, major, hotfix, or prerelease
+bump = "patch"
+# Short description of this release (required)
+description = "Fix CI submodule test failures on GitHub Actions"
+# Optional context explaining why these changes were made
+context = ""
+# Pre-release identifier: alpha, beta, rc, or stable
+# preid = ""
+# Set to true to generate a blog post for this release
+# blog = false
+include = ["go", "docker"]
+exclude = []
+release_commit = "ea278c11cdf4ba55f894d8e73b9560d05ef1a8a4"
+
+[released_trees]
+"." = "6dffca13b8193ab294bbe16dfcadd82aff576a96"

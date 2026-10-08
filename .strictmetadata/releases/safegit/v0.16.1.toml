@@ -1,0 +1,17 @@
+# strictspec document version gate (do not remove)
+format_version = 2
+# Version bump type: patch, minor, or major
+bump = "patch"
+# Short description of this release (required)
+description = "Fix macOS symlink bug in submodule detection."
+# Optional context explaining why these changes were made
+context = """
+DetectParent compared symlink-resolved paths from git with unresolved paths from os.Getwd(), \
+causing filepath.Rel to produce incorrect relative paths on macOS where /var -> /private/var. \
+This broke autobump and push-hook-cascade on macOS since v0.15.0."""
+include = ["go", "docker"]
+exclude = []
+release_commit = "120f9f027cd3b7f0ff1ac3c8059d5d6dfee192ce"
+
+[released_trees]
+"." = "4c753c4e9710f7c0ea9c1e380d64f45d4a42930c"

@@ -1,0 +1,20 @@
+# strictspec document version gate (do not remove)
+format_version = 2
+# Version bump type: patch, minor, or major
+bump = "minor"
+# Short description of this release (required)
+description = "Remove global --force flag, add --yes and --mangle, sync working tree after scrub, use --force-with-lease for pushes."
+# Optional context explaining why these changes were made
+context = """
+The global --force flag was overloaded across 10+ use sites with 5+ distinct meanings. \
+This release replaces it with explicit per-purpose mechanisms: --yes for confirmation prompts, \
+unconditional dirty-tree rejection, no coordination guard bypass, no hook skip, no gitignore override. \
+Push now uses --force-with-lease (safe force push) instead of --force (destructive). \
+Scrub operations now sync the working tree after rewriting history, so secrets no longer linger on disk. \
+New --mangle flag for scrub match replaces matched content with crypto-random printable ASCII of the same length."""
+include = ["go", "docker"]
+exclude = []
+release_commit = "f87cff3e4c3d06b05f38b7a04df68ad614446a0f"
+
+[released_trees]
+"." = "e122089e44b3b293cd53d5cd82858ffe405964a3"

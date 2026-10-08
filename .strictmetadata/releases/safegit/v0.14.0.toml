@@ -1,0 +1,22 @@
+# strictspec document version gate (do not remove)
+format_version = 2
+# Version bump type: patch, minor, or major
+bump = "minor"
+# Short description of this release (required)
+description = "New scrub match command for pattern-based secret removal with surgical cleanup."
+# Optional context explaining why these changes were made
+context = """
+Major release driven by a real secret leak incident. A user ran scrub on leaked API keys and found secrets persisted in reflog entries and unreachable objects.
+
+New: safegit scrub match --pattern <regex> --replace <text> --reason <text> --entire-history searches all git objects (blobs, commit messages, tag annotations) for a pattern and replaces matches. Includes surgical post-rewrite cleanup (tainted reflog entries expired, unreachable objects pruned) and re-scan verification that hard-errors if any matches survive.
+
+Breaking: safegit scrub is now a command group. The old 'safegit scrub <file>' becomes 'safegit scrub file <file>'. TreeEntry.BlobSHA renamed to TreeEntry.SHA.
+
+Also: shared walkAndRewrite extraction, ParseCommit dedup in verification, branch ref verification, streaming object enumeration, new scan package.
+"""
+include = ["go", "docker"]
+exclude = []
+release_commit = "0dde879bed7bbc42a5f4d855ba521ca529a74bde"
+
+[released_trees]
+"." = "ff79eebf7d3264bf9f8a386936a0fb6dbebfec46"
