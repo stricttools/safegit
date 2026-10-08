@@ -816,13 +816,23 @@
         },
         {
           "level": 2,
+          "text": "scrub squash",
+          "anchor": "scrub-squash"
+        },
+        {
+          "level": 3,
+          "text": "Flags",
+          "anchor": "flags-3"
+        },
+        {
+          "level": 2,
           "text": "scrub verify",
           "anchor": "scrub-verify"
         },
         {
           "level": 3,
           "text": "Flags",
-          "anchor": "flags-3"
+          "anchor": "flags-4"
         },
         {
           "level": 3,
@@ -4324,6 +4334,11 @@
           "level": 3,
           "text": "`confidentialNameScan.Inspect`",
           "anchor": "confidentialnamescaninspect"
+        },
+        {
+          "level": 3,
+          "text": "`globalFlags.Effects`",
+          "anchor": "globalflagseffects"
         },
         {
           "level": 3,
@@ -8175,6 +8190,11 @@
         },
         {
           "level": 3,
+          "text": "`globalFlags.Effects`",
+          "anchor": "globalflagseffects"
+        },
+        {
+          "level": 3,
           "text": "`remoteReadError.Error`",
           "anchor": "remotereaderrorerror"
         },
@@ -8254,7 +8274,7 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-10-08T11:26:05.771501+00:00",
+  "last_gen": "2026-10-08T14:44:20.478724+00:00",
   "theme": "minimal",
   "vocabulary": {
     "accepted": [
@@ -8268,6 +8288,10 @@
       },
       {
         "word": "Chacon",
+        "aliases": []
+      },
+      {
+        "word": "codenames",
         "aliases": []
       },
       {
@@ -8292,6 +8316,10 @@
       },
       {
         "word": "ilyagr",
+        "aliases": []
+      },
+      {
+        "word": "journaled",
         "aliases": []
       },
       {
@@ -8320,6 +8348,10 @@
       },
       {
         "word": "pidfds",
+        "aliases": []
+      },
+      {
+        "word": "releasables",
         "aliases": []
       },
       {

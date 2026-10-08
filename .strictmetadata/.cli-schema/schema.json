@@ -52,6 +52,7 @@
       "flags": [],
       "flag_sets": [],
       "args": [],
+      "args_after_separator": null,
       "tags": [],
       "constraints": [],
       "hidden": false,
@@ -83,7 +84,7 @@
   },
   "project_id": "github.com/stricttools/safegit",
   "name": "safegit",
-  "version": "0.30.0",
+  "version": "dev",
   "help": "The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood",
   "proc_observe_allowlist": [
     [
@@ -3383,7 +3384,7 @@
     },
     "scrub": {
       "name": "scrub",
-      "help": "surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store",
+      "help": "surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, squash folds one first-parent range into a single commit, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store",
       "commands": {
         "file": {
           "name": "file",
@@ -4120,6 +4121,155 @@
             {
               "name": "recipe",
               "help": "path to the TOML recipe file containing scrub operations",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            }
+          ],
+          "tags": [
+            "json"
+          ],
+          "requires": [
+            {
+              "name": "git",
+              "help": "the git executable, which safegit runs for every repository operation",
+              "install": "with your system's package manager, or from https://git-scm.com/downloads, so that git is on PATH"
+            }
+          ]
+        },
+        "squash": {
+          "name": "squash",
+          "help": "fold one first-parent range of HEAD's history -- --first through --last, both inclusive, with no merge commit inside -- into ONE commit carrying the tree of --last, the parents of --first, the author and committer of --last, and the --message given. Every later commit HEAD reaches is rewritten onto it with its own tree, message, and identity unchanged, a branch or tag pointing at a folded commit moves to the squash commit, and the rewrite journal records every folded commit against the squash commit, so release tooling can follow each one. The rewrite is verified against that declaration before any ref moves",
+          "effect": "mutating",
+          "consequential": true,
+          "payload_schema": {
+            "additionalProperties": false,
+            "properties": {
+              "cleanup_errors": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "cleanup_ok": {
+                "type": "boolean"
+              },
+              "commits_rewritten": {
+                "type": "integer"
+              },
+              "dry_run": {
+                "type": "boolean"
+              },
+              "first": {
+                "type": "string"
+              },
+              "last": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "new_head": {
+                "type": "string"
+              },
+              "old_head": {
+                "type": "string"
+              },
+              "pre_rewrite_remotes": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "rewrites": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              "squash_commit": {
+                "type": "string"
+              },
+              "squashed": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "sync_skipped": {
+                "type": "boolean"
+              },
+              "tags": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "annotated": {
+                      "type": "boolean"
+                    },
+                    "new_sha": {
+                      "type": "string"
+                    },
+                    "old_sha": {
+                      "type": "string"
+                    },
+                    "refname": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "refname",
+                    "old_sha",
+                    "new_sha",
+                    "annotated"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "version",
+              "dry_run",
+              "first",
+              "last",
+              "squashed",
+              "message",
+              "old_head"
+            ],
+            "type": "object"
+          },
+          "flags": [
+            {
+              "name": "first",
+              "help": "the oldest commit of the range to fold, inclusive; it must be on HEAD's first-parent history",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            },
+            {
+              "name": "last",
+              "help": "the newest commit of the range to fold, inclusive; it must be on HEAD's first-parent history, no older than --first",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            },
+            {
+              "name": "message",
+              "help": "the squash commit's whole message",
+              "value_schema": {
+                "type": "string"
+              },
+              "presence": "required"
+            },
+            {
+              "name": "reason",
+              "help": "mandatory audit trail message explaining why this scrub operation is needed",
               "value_schema": {
                 "type": "string"
               },

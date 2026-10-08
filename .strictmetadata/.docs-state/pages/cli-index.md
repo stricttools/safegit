@@ -41,7 +41,7 @@ Version: :-: var key="project.version"
 - [config](../cli-config/) -- show, get, or set safegit configuration key-value pairs
 - [hook](../cli-hook/) -- manage pre-pre-push hook scripts that run before every push
 - [author](../cli-author/) -- audit and rewrite commit author/committer identity — list all identities, check against expected values, and rewrite name or email across history
-- [scrub](../cli-scrub/) -- surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store
+- [scrub](../cli-scrub/) -- surgically rewrite git history to remove or replace sensitive content: file and match rewrite the commits, trees and blobs of a range the caller selects (--from or --entire-history), run applies a recipe of such operations in one coordinated pass, squash folds one first-parent range into a single commit, and verify only reads -- it confirms that the patterns named on its command line are absent from the whole object store
 
 ## Global flags
 
