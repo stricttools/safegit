@@ -373,7 +373,11 @@ Every future change that introduces a decision of this kind adds its entry here.
   every line the commit adds or changes (a line already present in the version
   it replaces is not its to answer for), and every new path. A match is a
   refusal naming the file, the line, the column, and the term, with nothing
-  written. Matching ignores case and counts whole tokens only. Under `--dry-run`
+  written. Matching ignores case and counts whole tokens only, and a term lying
+  inside a URL or a dotted hostname is not matched. The names are the ones the
+  record's `confidential-names` rule yields (registry names, the repository's
+  names when no releasable carries a non-proprietary license, codenames, and distinctive terms; see rlsbl's lifecycle-and-license
+  page). Under `--dry-run`
   the index writes are recorded, not made. Only the commit command is scanned;
   the other commands that write commits are not.
 - **Ruling:** ours — deliberate
