@@ -4,7 +4,7 @@ rlsbl_version = "0.131.0"
 [files]
 ".claude/go.mod" = "dd4165ab2ea2c7f27698a1b1ca5bfa8e08cfb21aae5c390b1675e65aab3cac27"
 ".github/workflows/ci.yml" = "081a4b72c413428ef3c6ed4bab173f964478e61380ef1c8d8a155dae7cb2695c"
-".github/workflows/publish.yml" = "90af9efb70939dddcaf6270fa8c2e48f5086816dfed491945553aa6aece20ffc"
+".github/workflows/publish.yml" = "2353d0603c5a2fe01e7b72890d9ab1e5fc9a6748f136d7edd689cf64cfcbaf8f"
 ".goreleaser.yml" = "16658928c983d760d4a4e8c74e9d03e3f76148c8a99b354874f0b84358f45a40"
 ".strictmetadata/go.mod" = "dd4165ab2ea2c7f27698a1b1ca5bfa8e08cfb21aae5c390b1675e65aab3cac27"
 "VERSION" = "42659901f3c792eb230cf32b2c844ae738cd6d53dd84c1b7eb434e969b472ec2"

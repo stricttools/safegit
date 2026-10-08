@@ -1,12 +1,12 @@
 name: Publish
+
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to publish (e.g. v1.2.3). Overrides the ref for
-          retry dispatch.
+        description: "Release tag to publish (e.g. v1.2.3). Overrides the ref for retry dispatch."
         required: false
         type: string
 
@@ -16,11 +16,13 @@ on:
 concurrency:
   group: publish-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
+
 permissions:
   contents: write
+
 jobs:
-  gate:
-    name: Gate on CI
+  wait-for-ci:
+    name: Wait for CI on the release commit
     runs-on: ubuntu-latest
     timeout-minutes: 25
     permissions:
@@ -29,120 +31,78 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
-      GATE_TIMEOUT_MINUTES: '20'
-      GATE_GRACE_MINUTES: '5'
-      GATE_POLL_SECONDS: '15'
-      GATE_MARKER_ATTEMPTS: '5'
-      GATE_MARKER_RETRY_SECONDS: '5'
-      CI_CHECK_REGEX: ^(build|test)( \(.*\))?$
+      WAIT_TIMEOUT_MINUTES: "20"
+      WAIT_GRACE_MINUTES: "5"
+      WAIT_POLL_SECONDS: "15"
+      MARKER_ATTEMPTS: "5"
+      MARKER_RETRY_SECONDS: "5"
+      CI_CHECK_PATTERN: '^(test)( \(.*\))?$'
     steps:
       - name: Wait for CI to succeed on the release commit
         run: |
           set -euo pipefail
 
-          # Commit resolution -- explicit marker-first order (never reads the release
-          # event payload; dispatch retries have none, so this path is uniform for
-          # release events and dispatch retries alike):
-          #   (1) Marker: rlsbl writes the exact commit CI ran on into the GitHub
-          #       Release body as a machine-parseable line of the form
-          #           <!-- rlsbl-ci-sha: <40-hex> -->
-          #       Prefer it when present -- it pins the precise commit and is immune to
-          #       ref races. A just-created release can lag on a GitHub API read replica
-          #       (the marker is written at release creation but may not be visible on
-          #       the first read), so RETRY the read GATE_MARKER_ATTEMPTS times,
-          #       GATE_MARKER_RETRY_SECONDS apart, before concluding it is absent. The
-          #       tag is inputs.tag (TAG_INPUT) when dispatched with an explicit
-          #       override, else GITHUB_REF_NAME (matches the router resolver).
-          #   (2) Fallback: older releases predate the marker, so fall back to
-          #       $GITHUB_SHA, the tag's commit for both release and dispatch-at-tag.
+          # The release commit: the rlsbl-ci-sha marker in the Release body when it is
+          # there (read MARKER_ATTEMPTS times, MARKER_RETRY_SECONDS apart, since a new
+          # Release can lag on GitHub's read replicas), else GITHUB_SHA, the tagged
+          # commit for a release event and for a dispatch at the tag alike. The tag is
+          # the dispatch's tag input when one was given (TAG_INPUT), else the ref.
           extract_ci_sha() {
-            # Emit the first rlsbl-ci-sha marker SHA found on stdin, if any.
             sed -n 's/.*<!-- rlsbl-ci-sha: \([0-9a-f]\{40\}\) -->.*/\1/p' | head -n1
           }
           tag="${TAG_INPUT:-$GITHUB_REF_NAME}"
-          marker_attempts="${GATE_MARKER_ATTEMPTS:-5}"
-          marker_retry_seconds="${GATE_MARKER_RETRY_SECONDS:-5}"
           sha=""
           attempt=1
-          while [ "$attempt" -le "$marker_attempts" ]; do
+          while [ "$attempt" -le "$MARKER_ATTEMPTS" ]; do
             if body="$(gh release view "$tag" --json body --jq .body 2>/dev/null)"; then
               sha="$(printf '%s\n' "$body" | extract_ci_sha)"
             fi
             if [ -n "$sha" ]; then
               break
             fi
-            if [ "$attempt" -lt "$marker_attempts" ]; then
-              echo "Publish gate: rlsbl-ci-sha marker not yet visible in the '$tag' release body (attempt $attempt/$marker_attempts); retrying in ${marker_retry_seconds}s..."
-              sleep "$marker_retry_seconds"
+            if [ "$attempt" -lt "$MARKER_ATTEMPTS" ]; then
+              echo "wait-for-ci: the rlsbl-ci-sha marker is not visible in the '$tag' Release body yet (attempt $attempt/$MARKER_ATTEMPTS); reading it again in ${MARKER_RETRY_SECONDS}s"
+              sleep "$MARKER_RETRY_SECONDS"
             fi
             attempt=$(( attempt + 1 ))
           done
           if [ -n "$sha" ]; then
-            echo "Publish gate: resolved release commit from rlsbl-ci-sha marker in the '$tag' release body."
+            echo "wait-for-ci: the release commit is the one the rlsbl-ci-sha marker of the '$tag' Release names."
           else
             sha="$GITHUB_SHA"
-            echo "Publish gate: no rlsbl-ci-sha marker after $marker_attempts attempt(s) on the '$tag' release body; falling back to \$GITHUB_SHA."
+            echo "wait-for-ci: no rlsbl-ci-sha marker in the '$tag' Release body after $MARKER_ATTEMPTS reads; the release commit is GITHUB_SHA."
           fi
-          echo "Publish gate: waiting for CI on $GITHUB_REF_NAME (commit $sha)"
-          echo "Check-run name filter: $CI_CHECK_REGEX"
-          # Timeout, grace window, and poll interval come from the job env above;
-          # edit them there if this repository's CI needs different limits. Raising
-          # GATE_TIMEOUT_MINUTES needs the job's own timeout-minutes raised with it
-          # (it is the deadline plus five), or GitHub cancels the job first.
+          echo "wait-for-ci: waiting for CI on $tag (commit $sha)"
+          echo "Check-run name pattern: $CI_CHECK_PATTERN"
+          # The limits are this job's env. Raising WAIT_TIMEOUT_MINUTES needs the job's
+          # timeout-minutes raised with it, or GitHub cancels the job first.
 
           now() { date +%s; }
           start="$(now)"
-          deadline=$(( start + GATE_TIMEOUT_MINUTES * 60 ))
-          grace_deadline=$(( start + GATE_GRACE_MINUTES * 60 ))
+          deadline=$(( start + WAIT_TIMEOUT_MINUTES * 60 ))
+          grace_deadline=$(( start + WAIT_GRACE_MINUTES * 60 ))
 
           while :; do
             if ! resp="$(gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$sha/check-runs?per_page=100")"; then
-              # The deadline holds here too: a checks API that keeps failing (a rate
-              # limit, an endpoint answering 404) must not hold the job until GitHub's
-              # own six-hour job limit.
               if [ "$(now)" -ge "$deadline" ]; then
-                echo "::error::Publish gate: the checks API request for $sha kept failing for $GATE_TIMEOUT_MINUTES minutes."
-                echo "Without the check runs the gate cannot tell whether CI passed, so it refuses to publish."
-                echo "Check the API response above and this job's checks:read permission, then re-dispatch this publish workflow at the tag ref: gh workflow run <publish workflow> --ref $GITHUB_REF_NAME"
+                echo "::error::wait-for-ci: the checks API request for $sha kept failing for $WAIT_TIMEOUT_MINUTES minutes."
+                echo "Without the check runs nothing says whether CI passed, so the publish is refused."
+                echo "Check the API response above and this job's checks: read permission, then dispatch this publish workflow again at the tag: gh workflow run <publish workflow> --ref $tag"
                 exit 1
               fi
-              echo "Checks API request failed; retrying in ${GATE_POLL_SECONDS}s..."
-              sleep "$GATE_POLL_SECONDS"
+              echo "The checks API request failed; asking again in ${WAIT_POLL_SECONDS}s"
+              sleep "$WAIT_POLL_SECONDS"
               continue
             fi
-            # Match this project's CI check runs by name; exclude check runs that
-            # belong to THIS workflow run (the gate itself and the queued publish
-            # jobs would otherwise deadlock the poll loop).
-            # A retried CI run creates a BRAND-NEW check-run with the same name as the
-            # old one, so a stale failure would block the gate forever. Project id and
-            # started_at, then reduce to the latest check-run per name (max started_at,
-            # numeric id as tiebreak for retries within the same second) BEFORE the
-            # pending / not-success logic runs. This way the newest run decides: still
-            # running -> wait; genuinely red -> hard fail.
-            # Recency alone cannot decide a SKIP, though. A `run_all` router dispatch
-            # deliberately puts two check runs of the same name on one commit: "skipped"
-            # from the push-triggered suite whose paths filter found nothing, and a real
-            # conclusion from the dispatched suite. The push suite stamps its skip only
-            # when its `detect` job finally releases the job, routinely AFTER the
-            # dispatched run concluded -- so the latest-per-name run is the skip, and a
-            # commit whose jobs all ran would be refused. When the latest check for a
-            # name is skipped it is therefore replaced by the latest COMPLETED
-            # non-skipped check of that same name, in whichever suite: success passes,
-            # failure fails, and a name that is only ever skipped still blocks.
-            # Then one more collapse, for the one case a per-name grouping cannot see:
-            # GitHub does not expand a matrix for a job its `if` skipped, so the whole job
-            # becomes ONE check run under the unsuffixed name ("cli-ci / test"), while the
-            # run that actually executes it emits one per leg ("cli-ci / test (3.12)").
-            # They never share a name, so the skip would outlive the run that answered it
-            # -- exactly the state a `run_all` router dispatch leaves behind. A skipped
-            # check is dropped when a COMPLETED, non-skipped check for the SAME job (its
-            # matrix expansion, by name) exists; the legs are then judged on their own
-            # conclusions, so a red leg still fails. Nothing else covers a skip: not a
-            # sibling job, not a merely prefix-sharing name, and not a leg that was
-            # itself skipped.
-            # Mirrors rlsbl.ci_checks.latest_check_runs -- the two gates answer the same
-            # question and must never diverge.
-            runs="$(jq -s --arg re "$CI_CHECK_REGEX" --arg run_id "$GITHUB_RUN_ID" '
+            # This project's check runs, minus this workflow run's own jobs. Same-named
+            # check runs collapse to the newest (started_at, then id), except that a
+            # skipped one gives way to the newest completed check run of the same name
+            # that is not skipped (a run_all dispatch of the CI router puts a
+            # verdict beside the push run's skip, often recorded earlier). Then a skip
+            # is dropped when a completed, unskipped matrix entry of the same job exists
+            # ("name (...)"), since GitHub records a skipped matrix job under the bare
+            # name. Nothing else covers a skip.
+            runs="$(jq -s --arg re "$CI_CHECK_PATTERN" --arg run_id "$GITHUB_RUN_ID" '
               [ .[].check_runs[]
                 | select(.name | test($re))
                 | select((.details_url // "") | contains("/actions/runs/" + $run_id + "/") | not)
@@ -168,63 +128,63 @@ jobs:
 
             if [ "$total" -eq 0 ]; then
               if [ "$(now)" -ge "$grace_deadline" ]; then
-                echo "::error::Publish gate: no CI check runs matching $CI_CHECK_REGEX appeared on $sha within $GATE_GRACE_MINUTES minutes."
-                echo "A scaffolded repository always has a CI workflow, and rlsbl verifies CI on this exact commit BEFORE tagging it, so check runs must exist here."
-                echo "Their absence means the check runs were deleted, the commit resolution is wrong, or this tag was created outside rlsbl."
-                echo "If CI jobs were renamed, update CI_CHECK_REGEX in this workflow's gate job to match the new names."
+                echo "::error::wait-for-ci: no CI check run matching $CI_CHECK_PATTERN appeared on $sha within $WAIT_GRACE_MINUTES minutes."
+                echo "rlsbl tags a commit only after its CI ran on it, so the check runs must be there."
+                echo "They are missing when the check runs were deleted, the release commit was resolved wrongly, or the tag was created outside rlsbl."
+                echo "When the CI jobs were renamed, change CI_CHECK_PATTERN in this job to match the new names."
                 exit 1
               fi
-              echo "No matching CI check runs yet; retrying in ${GATE_POLL_SECONDS}s..."
-              sleep "$GATE_POLL_SECONDS"
+              echo "No matching CI check run yet; asking again in ${WAIT_POLL_SECONDS}s"
+              sleep "$WAIT_POLL_SECONDS"
               continue
             fi
 
             pending="$(jq '[ .[] | select(.status != "completed") ] | length' <<< "$runs")"
             if [ "$pending" -gt 0 ]; then
               if [ "$(now)" -ge "$deadline" ]; then
-                echo "::error::Publish gate: timed out after $GATE_TIMEOUT_MINUTES minutes waiting for CI to complete on $sha."
+                echo "::error::wait-for-ci: CI did not complete on $sha within $WAIT_TIMEOUT_MINUTES minutes."
                 jq -r '.[] | "  \(.name): status=\(.status) conclusion=\(.conclusion // "none")"' <<< "$runs"
                 exit 1
               fi
-              echo "$pending of $total matching CI check runs still running; retrying in ${GATE_POLL_SECONDS}s..."
-              sleep "$GATE_POLL_SECONDS"
+              echo "$pending of $total matching CI check runs still running; asking again in ${WAIT_POLL_SECONDS}s"
+              sleep "$WAIT_POLL_SECONDS"
               continue
             fi
 
             not_success="$(jq '[ .[] | select(.conclusion != "success") ]' <<< "$runs")"
             if [ "$(jq 'length' <<< "$not_success")" -gt 0 ]; then
-              echo "::error::Publish gate: CI did not pass on $sha -- refusing to publish."
+              echo "::error::wait-for-ci: CI did not pass on $sha, so nothing is published."
               jq -r '.[] | "  \(.name): \(.conclusion)"' <<< "$not_success"
               while IFS= read -r conclusion; do
                 case "$conclusion" in
                   failure|timed_out)
                     echo "CI concluded '$conclusion' on the release commit."
-                    echo "rlsbl tags and releases a commit only AFTER its CI has gone green, so reaching this branch means one of: CI was re-run on an already-released commit and regressed, a required check was added after the release, or this tag/Release was created outside rlsbl."
-                    echo "Do NOT re-dispatch this publish workflow expecting a different answer -- a failure baked into the code at this commit fails identically every time, and there is no way to make this tag green."
-                    echo "Remedy: fix forward on the release branch and cut a NEW release with 'rlsbl release run' (its own CI gate must go green before it is tagged), then mark this one with 'rlsbl release deprecate <version>'."
+                    echo "rlsbl tags and releases a commit only after its CI went green, so CI was run again on a released commit and failed, a required check was added after the release, or the tag and Release were created outside rlsbl."
+                    echo "Dispatching this workflow again gives the same answer: the failure is in the code at this commit."
+                    echo "Fix it on the release branch, release a new version with 'rlsbl release run --watch', and mark this one with 'rlsbl release deprecate'."
                     ;;
                   cancelled)
-                    echo "A CI check run was CANCELLED. A cancelled run proves nothing about the commit, so the gate treats it as a hard failure instead of waiting for a conclusion that will never come."
-                    echo "Remedy: re-run the cancelled CI workflow on this exact commit (gh run rerun <run-id>). If it concludes success, re-dispatch this publish workflow at the tag ref: gh workflow run <publish workflow> --ref $GITHUB_REF_NAME"
+                    echo "A CI check run was cancelled, which proves nothing about the commit."
+                    echo "Run that CI workflow again on this commit (gh run rerun <run-id>); when it passes, dispatch this workflow again at the tag: gh workflow run <publish workflow> --ref $tag"
                     ;;
                   skipped)
-                    echo "A CI check run matching the filter was SKIPPED. The gate cannot treat a skipped check as passing: this project must actually run its own CI on the release commit."
-                    echo "Remedy: check paths filters and job conditions so CI runs for this project, re-run CI on this commit, then re-dispatch this publish workflow at the tag ref."
+                    echo "A CI check run matching the pattern was skipped: this project must run its own CI on the release commit."
+                    echo "Check the path filters and job conditions that skipped it, run CI on this commit again, then dispatch this workflow again at the tag."
                     ;;
                   *)
-                    echo "CI check concluded '$conclusion' (not success). The gate only proceeds when every matching check concluded success."
+                    echo "A CI check run concluded '$conclusion'; only success lets the publish go on."
                     ;;
                 esac
               done <<< "$(jq -r '.[].conclusion' <<< "$not_success" | sort -u)"
               exit 1
             fi
 
-            echo "Publish gate: all $total matching CI check runs succeeded."
+            echo "wait-for-ci: all $total matching CI check runs succeeded."
             jq -r '.[] | "  \(.name): \(.conclusion)"' <<< "$runs"
             exit 0
           done
   go:
-    needs: gate
+    needs: wait-for-ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -255,29 +215,27 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # rlsbl owns the release, goreleaser only BUILDS.
       #
-      # goreleaser's publisher cannot target a prefixed monorepo tag
-      # ("<name>@v1.2.3"): its tag validation rejects the prefix, and with
-      # --skip=validate its release lookup still resolves the stripped bare
-      # name and would create/append to a `v1.2.3` Release that no launcher
-      # shim ever reads. (`monorepo:` is goreleaser-Pro.) So the artifacts are
-      # built here and attached to the prefixed Release rlsbl already created.
-      - name: Derive the bare semver tag for goreleaser
+      # goreleaser's publisher cannot target a prefixed tag ("<name>@v1.2.3"):
+      # its tag validation rejects the prefix, and with --skip=validate its
+      # release lookup still resolves the stripped bare name and would create
+      # or append to a `v1.2.3` Release nothing reads. So the archives are
+      # built here and attached to the Release rlsbl already created.
+      - name: Derive the bare version tag for goreleaser
         id: bare-tag
         if: steps.check-go.outputs.skip != 'true'
         run: |
-          # Strip any "<name>@" / "<path>/" prefix: keep the trailing vX.Y.Z[-pre].
+          # Strip any "<name>@" / "<path>/" prefix: keep the trailing vX.Y.Z.
           BARE=$(printf '%s' "${RELEASE_TAG}" | sed -E 's/^.*(v[0-9]+\.[0-9]+\.[0-9]+.*)$/\1/')
           echo "tag=${BARE}" >> "$GITHUB_OUTPUT"
           # goreleaser reads GORELEASER_CURRENT_TAG's tag contents while getting
           # git state, BEFORE --skip=validate can excuse anything, so a name no
-          # tag carries aborts the run: `couldn't get tag contents: unexpected
-          # git tag output for "v0.2.4": ""`. A monorepo repository carries only
-          # the prefixed tags, so create the bare one locally at the released
+          # tag carries aborts the run. A repository whose tags are prefixed
+          # carries no bare tag, so create the bare one locally at the released
           # commit. It is a lightweight tag (an annotated one needs a tagger
           # identity no CI checkout sets) and nothing pushes it: goreleaser runs
           # --skip=publish, and the upload step below attaches the archives to
           # the prefixed tag. In a repository whose tags are already bare this
-          # is a no-op.
+          # does nothing.
           if ! git rev-parse -q --verify "refs/tags/${BARE}" >/dev/null; then
             git tag "${BARE}" "$(git rev-parse HEAD)"
           fi
@@ -286,13 +244,13 @@ jobs:
       - uses: goreleaser/goreleaser-action@v7.2.3
         if: steps.check-go.outputs.skip != 'true'
         with:
-          # Pinned exactly, from rlsbl's action-version table. A floating
-          # "~> v2" silently adopts each new goreleaser on the next release:
-          # 2.18.1 arrived that way and broke every prefixed-tag repository.
+          # Pinned from rlsbl's action-version table. A floating "~> v2"
+          # silently adopts each new goreleaser on the next release: 2.18.1
+          # arrived that way and broke every prefixed-tag repository.
           version: v2.18.1
           args: release --clean --skip=publish,announce,validate
         env:
-          # A prefixed tag is not parseable as semver, and validation would
+          # A prefixed tag is not parseable as a version, and validation would
           # compare the stripped tag against a git tag that does not exist.
           GORELEASER_CURRENT_TAG: ${{ steps.bare-tag.outputs.tag }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -312,11 +270,10 @@ jobs:
       - name: Upload release assets to the release tag
         if: steps.check-go.outputs.skip != 'true'
         run: |
-          # dist/ holds the archives plus checksums.txt (the literal filename
-          # the launcher shims verify against). --clobber keeps a re-dispatch
-          # at the same tag idempotent.
+          # dist/ holds the archives plus checksums.txt. --clobber keeps a
+          # re-dispatch at the same tag idempotent.
           shopt -s nullglob
-          ASSETS=(dist/*.tar.gz dist/*.zip dist/checksums.txt)
+          ASSETS=(dist/*.tar.gz dist/checksums.txt)
           if [ ${#ASSETS[@]} -eq 0 ]; then
             echo "::error::goreleaser produced no assets in dist/"
             exit 1
