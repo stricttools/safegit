@@ -319,3 +319,29 @@ func TestDryRunCommitLeavesTheIndexUnwritten(t *testing.T) {
 		t.Errorf("a dry run wrote the index:\n%s", got)
 	}
 }
+
+// A confidential repository whose public-client declaration leaves it no name
+// to protect is still confidential: its commits are not scanned, and it keeps
+// no entry in the index.
+func TestConfidentialRepositoryWithNoNameLeftIsNotScanned(t *testing.T) {
+	dir := newRepo(t)
+	env, indexPath := confidentialIndexEnv(t)
+	writeConfidentialIndex(t, indexPath, map[string][]string{"portal": {"portal"}, "widget": {"widget"}})
+	writeProprietaryRecord(t, dir, "widget")
+	record := filepath.Join(dir, ".strictmetadata/lifecycle-and-license/lifecycle-and-license.toml")
+	data, err := os.ReadFile(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testutil.WriteFile(t, dir, ".strictmetadata/lifecycle-and-license/lifecycle-and-license.toml",
+		string(data)+"\n[[public_clients]]\nsubject = \"widget\"\nreason = \"a thin public client is planned\"\ndeclared = 2020-02-01\n")
+
+	testutil.WriteFile(t, dir, "notes.txt", "the widget talks to the portal\n")
+	if _, stderr, code := runSafegitEnv(t, dir, env, "commit", "-m", "widget notes", "--", "notes.txt"); code != 0 {
+		t.Fatalf("a commit in a confidential repository with no name left was scanned and refused (code %d): %s", code, stderr)
+	}
+	got := readConfidentialIndex(t, indexPath)
+	if strings.Contains(got, `"widget"`) || !strings.Contains(got, `"portal"`) {
+		t.Errorf("the index should hold the other repository's entry alone:\n%s", got)
+	}
+}
