@@ -1,9 +1,9 @@
 # The next release of safegit. Fill in bump and description, then run `rlsbl release run --watch`.
 format_version = 2
 # How the release moves the version: patch, minor, major, or infra (moved as a patch, recorded as infra).
-bump = ""
+bump = "minor"
 # What this release is, in a sentence or two. Required.
-description = ""
+description = "Commits are screened for confidential names against the lifecycle-and-license record and the machine-local confidential-name index, and `safegit scrub squash` folds a first-parent range of history into one commit."
 # Why these changes were made. Optional.
 context = ""
 # The targets released, and the ones left out; between them they name every target of the releasable's members.
