@@ -4,8 +4,6 @@ github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 h1:1EYB5IzjZawrrnELUi78f9fPu57Hu
 github.com/santhosh-tekuri/jsonschema/v6 v6.0.3/go.mod h1:JXeL+ps8p7/KNMjDQk3TCwPpBy0wYklyWTfbkIzdIFU=
 github.com/stricttools/go-toml-edit v0.5.1 h1:lJPrnujDBwcFcMxfI4wauLAas7bf53nbZ/24LQ96+RY=
 github.com/stricttools/go-toml-edit v0.5.1/go.mod h1:7eeWlpfpfjScMk3JTUttd+JOusRnNSAYUSXIJCJzbB8=
-github.com/stricttools/strictcli/go v0.39.0 h1:o0DqYfwIW8JH9gq+ZImImfixaG1Zbe+Y7Fb2yyy2K60=
-github.com/stricttools/strictcli/go v0.39.0/go.mod h1:ejXzQB8aRi/uIQFlyqWi783nze+BmIp0iT0Vzp6vWWE=
 github.com/stricttools/strictcli/go v0.39.1 h1:pfdgW0UcRZtV+I9LuiVTCvMdIOd+LpCE05Wl6Ox4870=
 github.com/stricttools/strictcli/go v0.39.1/go.mod h1:ejXzQB8aRi/uIQFlyqWi783nze+BmIp0iT0Vzp6vWWE=
 github.com/stricttools/strictspec/go v0.6.0 h1:fNCiLfmeMpNHtSJNMeVJTCdy9m5CItBgesataAwoE7Q=
