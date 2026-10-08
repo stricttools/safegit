@@ -6,3 +6,4 @@
 {"format_version":2,"id":"18dc8a39086f9bdb2302256b03374199b1a5b3c6d24746ae","commits":["0caada2516498aff0ada47ec41cafd293f18cf1c"],"user_facing":true,"description":"A commit in a confidential repository whose public-client declarations leave it no name to protect is no longer screened as a public repository's commit","type":"fix"}
 {"format_version":2,"id":"18dc8d7a2538c1e9a635f027112c4ac4afd59c42ad9f012e","commits":["917e31ed3304697d66982990b2a9596caa722e0d"],"user_facing":false}
 {"format_version":2,"id":"18dc94342806f49a5276e0f81fec43c999c6e47c69d3f22c","commits":["b5cc39a50279d4b6f77ac2b80099aa7033e3ab62"],"user_facing":false}
+{"format_version":2,"id":"18dc9446ab2c98d4d85517b23b9f4d548358925b58bcca6c","commits":["c83135c108d0f2628e0503b6eed7acc75699f8b0"],"user_facing":false}
