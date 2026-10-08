@@ -32,7 +32,7 @@ agents, not for all humans.
 
 ## Install
 
-From source (requires the Go version `go.mod` declares -- currently 1.25.7):
+From source (requires the Go version `go.mod` declares):
 
 ```
 go install github.com/stricttools/safegit@v0

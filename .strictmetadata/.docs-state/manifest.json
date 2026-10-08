@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
-  "name": "release-checkout",
+  "name": "safegit",
   "slug": "safegit",
-  "version": "0.29.4",
+  "version": "0.30.0",
   "description": "The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood",
   "language": "go",
   "base_url": "https://safegit.smmh.dev",
@@ -2061,6 +2061,11 @@
         },
         {
           "level": 3,
+          "text": "`Screen`",
+          "anchor": "screen"
+        },
+        {
+          "level": 3,
           "text": "`Notices`",
           "anchor": "notices"
         },
@@ -3642,6 +3647,11 @@
           "anchor": "safegit-commit-refuses-while-an-operation-is-in-flight"
         },
         {
+          "level": 3,
+          "text": "A commit naming a confidential term in a public repository is refused",
+          "anchor": "a-commit-naming-a-confidential-term-in-a-public-repository-is-refused"
+        },
+        {
           "level": 2,
           "text": "Where the working directory reaches",
           "anchor": "where-the-working-directory-reaches"
@@ -4048,6 +4058,11 @@
         },
         {
           "level": 3,
+          "text": "A squash is a scrub over a declared first-parent range",
+          "anchor": "a-squash-is-a-scrub-over-a-declared-first-parent-range"
+        },
+        {
+          "level": 3,
           "text": "A rewrite is verified before any ref moves",
           "anchor": "a-rewrite-is-verified-before-any-ref-moves"
         },
@@ -4112,6 +4127,11 @@
         },
         {
           "level": 3,
+          "text": "`IntentSquash`",
+          "anchor": "intentsquash"
+        },
+        {
+          "level": 3,
           "text": "`ScrubVerifyPatternResult`",
           "anchor": "scrubverifypatternresult"
         },
@@ -4152,13 +4172,18 @@
         },
         {
           "level": 3,
-          "text": "`IntentKind`",
-          "anchor": "intentkind"
+          "text": "`IntentClass`",
+          "anchor": "intentclass"
         },
         {
           "level": 3,
           "text": "`RewriteIntent`",
           "anchor": "rewriteintent"
+        },
+        {
+          "level": 3,
+          "text": "`SquashDeclaration`",
+          "anchor": "squashdeclaration"
         },
         {
           "level": 3,
@@ -4242,6 +4267,11 @@
         },
         {
           "level": 3,
+          "text": "`ScrubSquashResult`",
+          "anchor": "scrubsquashresult"
+        },
+        {
+          "level": 3,
           "text": "`TagRewrite`",
           "anchor": "tagrewrite"
         },
@@ -4272,8 +4302,28 @@
         },
         {
           "level": 3,
+          "text": "`SquashIntent`",
+          "anchor": "squashintent"
+        },
+        {
+          "level": 3,
           "text": "`effectsRefUpdate.Update`",
           "anchor": "effectsrefupdateupdate"
+        },
+        {
+          "level": 3,
+          "text": "`effectsFileWriter.WriteFile`",
+          "anchor": "effectsfilewriterwritefile"
+        },
+        {
+          "level": 3,
+          "text": "`effectsFileWriter.MkdirAll`",
+          "anchor": "effectsfilewritermkdirall"
+        },
+        {
+          "level": 3,
+          "text": "`confidentialNameScan.Inspect`",
+          "anchor": "confidentialnamescaninspect"
         },
         {
           "level": 3,
@@ -4603,6 +4653,11 @@
           "level": 3,
           "text": "`Pipeline`",
           "anchor": "pipeline"
+        },
+        {
+          "level": 3,
+          "text": "`Screen`",
+          "anchor": "screen"
         },
         {
           "level": 3,
@@ -7920,6 +7975,11 @@
         },
         {
           "level": 3,
+          "text": "`IntentSquash`",
+          "anchor": "intentsquash"
+        },
+        {
+          "level": 3,
           "text": "`ScrubVerifyPatternResult`",
           "anchor": "scrubverifypatternresult"
         },
@@ -7960,13 +8020,18 @@
         },
         {
           "level": 3,
-          "text": "`IntentKind`",
-          "anchor": "intentkind"
+          "text": "`IntentClass`",
+          "anchor": "intentclass"
         },
         {
           "level": 3,
           "text": "`RewriteIntent`",
           "anchor": "rewriteintent"
+        },
+        {
+          "level": 3,
+          "text": "`SquashDeclaration`",
+          "anchor": "squashdeclaration"
         },
         {
           "level": 3,
@@ -8050,6 +8115,11 @@
         },
         {
           "level": 3,
+          "text": "`ScrubSquashResult`",
+          "anchor": "scrubsquashresult"
+        },
+        {
+          "level": 3,
           "text": "`TagRewrite`",
           "anchor": "tagrewrite"
         },
@@ -8080,8 +8150,28 @@
         },
         {
           "level": 3,
+          "text": "`SquashIntent`",
+          "anchor": "squashintent"
+        },
+        {
+          "level": 3,
           "text": "`effectsRefUpdate.Update`",
           "anchor": "effectsrefupdateupdate"
+        },
+        {
+          "level": 3,
+          "text": "`effectsFileWriter.WriteFile`",
+          "anchor": "effectsfilewriterwritefile"
+        },
+        {
+          "level": 3,
+          "text": "`effectsFileWriter.MkdirAll`",
+          "anchor": "effectsfilewritermkdirall"
+        },
+        {
+          "level": 3,
+          "text": "`confidentialNameScan.Inspect`",
+          "anchor": "confidentialnamescaninspect"
         },
         {
           "level": 3,
@@ -8164,7 +8254,7 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-10-07T12:50:28.340951+00:00",
+  "last_gen": "2026-10-08T11:26:05.771501+00:00",
   "theme": "minimal",
   "vocabulary": {
     "accepted": [
