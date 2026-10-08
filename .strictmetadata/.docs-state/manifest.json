@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "name": "safegit",
+  "name": "release-checkout",
   "slug": "safegit",
   "version": "0.30.0",
   "description": "The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood",
@@ -8274,7 +8274,7 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-10-08T14:44:20.478724+00:00",
+  "last_gen": "2026-10-08T14:44:39.151691+00:00",
   "theme": "minimal",
   "vocabulary": {
     "accepted": [
