@@ -2,12 +2,19 @@
 
 # Changelog
 
-## Unreleased
+## 0.31.0
+
+Commits are screened for confidential names against the lifecycle-and-license record and the machine-local confidential-name index, and `safegit scrub squash` folds a first-parent range of history into one commit.
 
 ### Features
 
 - **Commits are screened for confidential names.** `safegit commit` (with `--amend` and the reword form) reads the repository's lifecycle-and-license record offline. In a confidential repository (a releasable with a proprietary license period in effect) the commit records the repository's names in the machine-local confidential-name index, keyed by the record's open releasable-name identities, so no origin remote is needed, and is not scanned. In a public repository, a repository without a record included, the commit removes that repository's own index entry and is refused when its message, an added or changed line, or a new path names a term the index protects, naming the file, line, column, and term. Index writes are recorded rather than made under `--dry-run`. safegit now builds with Go 1.26.3 or newer.
 - **`safegit scrub squash`.** Folds one first-parent range of HEAD's history, `--first` through `--last` with no merge commit inside, into a single commit carrying the tree, author, and committer of `--last`, the parents of `--first`, and the given `--message`. Later commits are rewritten onto it unchanged, a branch or tag pointing into the range moves to it, the rewrite is verified before any ref moves, and the rewrite journal records every folded commit against the squash commit. Like the other history rewrites it is consequential.
+
+### Fixes
+
+- The commit screen in public repositories no longer refuses a confidential repository's releasable names, which are often common words, nor a term lying inside a URL or a dotted hostname; it still refuses registry names, repository names, codenames, and distinctive terms
+- A commit in a confidential repository whose public-client declarations leave it no name to protect is no longer screened as a public repository's commit
 
 ## 0.30.0
 
