@@ -21,6 +21,6 @@ targets = [{ name = "go" }]
 name = "go"
 type = "go"
 target = "go"
-local = true
+local = false
 artifact = "binary"
 install_paths = ["."]
