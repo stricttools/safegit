@@ -1,4 +1,4 @@
-== exit non-literal (630 sites)
+== exit non-literal (643 sites)
    aftercare.go:131  return in aftercareExit  code=exitcode.OK  | return exitcode.OK
    aftercare.go:133  return in aftercareExit  code=exitcode.CommitStands  | return exitcode.CommitStands
    author_check.go:75  return in runAuthorCheck  code=exitcode.Usage  | return exitcode.Usage
@@ -81,15 +81,18 @@
    commit.go:319  strictcli.ExitNow in runCommit  code=exitcode.Usage  | strictcli.ExitNow(exitcode.Usage, exitMessage(err))
    commit.go:325  strictcli.ExitNow in runCommit  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("loading config: %v", err))
    commit.go:332  strictcli.ExitNow in runCommit  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
-   commit.go:373  strictcli.ExitNow in runCommit  code=pipelineExitCode(err)  | strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
-   commit.go:416  return in runCommit  code=aftercareExit(residue)  | return aftercareExit(residue)
-   commit.go:514  strictcli.ExitNow in runCommitAmend  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("loading config: %v", err))
-   commit.go:521  strictcli.ExitNow in runCommitAmend  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
-   commit.go:553  strictcli.ExitNow in runCommitAmend  code=exitcode.Usage  | strictcli.ExitNow(exitcode.Usage, exitMessage(err))
-   commit.go:582  strictcli.ExitNow in runCommitAmend  code=pipelineExitCode(err)  | strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
-   commit.go:633  strictcli.ExitNow in runCommitAmend  code=exitcode.Usage  | strictcli.ExitNow(exitcode.Usage, "commit message required (--message/-m) when using --amend without files")
-   commit.go:657  strictcli.ExitNow in runCommitAmend  code=pipelineExitCode(err)  | strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
-   commit.go:704  return in runCommitAmend  code=aftercareExit(residue)  | return aftercareExit(residue)
+   commit.go:377  strictcli.ExitNow in runCommit  code=pipelineExitCode(err)  | strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
+   commit.go:420  return in runCommit  code=aftercareExit(residue)  | return aftercareExit(residue)
+   commit.go:518  strictcli.ExitNow in runCommitAmend  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("loading config: %v", err))
+   commit.go:525  strictcli.ExitNow in runCommitAmend  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+   commit.go:561  strictcli.ExitNow in runCommitAmend  code=exitcode.Usage  | strictcli.ExitNow(exitcode.Usage, exitMessage(err))
+   commit.go:590  strictcli.ExitNow in runCommitAmend  code=pipelineExitCode(err)  | strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
+   commit.go:641  strictcli.ExitNow in runCommitAmend  code=exitcode.Usage  | strictcli.ExitNow(exitcode.Usage, "commit message required (--message/-m) when using --amend without files")
+   commit.go:665  strictcli.ExitNow in runCommitAmend  code=pipelineExitCode(err)  | strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
+   commit.go:712  return in runCommitAmend  code=aftercareExit(residue)  | return aftercareExit(residue)
+   confidential.go:59  strictcli.ExitNow in mustCommitScreen  code=exitcode.General  | strictcli.ExitNow(exitcode.General, exitMessage(err))
+   confidential.go:63  strictcli.ExitNow in mustCommitScreen  code=exitcode.General  | strictcli.ExitNow(exitcode.General, exitMessage(err))
+   confidential.go:171  err.Code in Inspect  code=exitcode.General  | Code: exitcode.General,
    config_cmd.go:35  return in runConfigShow  code=exitcode.NotInitialized  | return exitcode.NotInitialized
    config_cmd.go:41  return in runConfigShow  code=exitcode.General  | return exitcode.General
    config_cmd.go:55  return in runConfigGet  code=exitcode.NotInitialized  | return exitcode.NotInitialized
@@ -193,16 +196,16 @@
    hook.go:690  strictcli.ExitNow in hookKillCap  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("%s is not allowed: %v; %s for the default of %d",
    internal/commit/amend.go:193  err.Code in Amend  code=exitcode.CASExhausted  | Code:    exitcode.CASExhausted,
    internal/commit/amend.go:294  err.Code in tryAmend  code=exitcode.WriteTree  | return nil, false, &CommitError{Code: exitcode.WriteTree, Message: fmt.Sprintf("write-tree failed: %v", err)}
-   internal/commit/amend.go:369  err.Code in tryAmend  code=exitcode.CommitTree  | return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
-   internal/commit/amend.go:597  err.Code in Reword  code=exitcode.CASExhausted  | Code:    exitcode.CASExhausted,
-   internal/commit/amend.go:672  err.Code in tryReword  code=exitcode.CommitTree  | return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
+   internal/commit/amend.go:372  err.Code in tryAmend  code=exitcode.CommitTree  | return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
+   internal/commit/amend.go:600  err.Code in Reword  code=exitcode.CASExhausted  | Code:    exitcode.CASExhausted,
+   internal/commit/amend.go:679  err.Code in tryReword  code=exitcode.CommitTree  | return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
    internal/commit/boundary.go:348  err.Code in refuseInsideOtherRepositories  code=exitcode.PathMatchedNothing  | return &CommitError{Code: exitcode.PathMatchedNothing, Message: strings.Join(lines, "\n")}
    internal/commit/commit.go:118  err.Code in stagingHunksError  code=exitcode.BinaryHunkSpec  | err = &CommitError{Code: exitcode.BinaryHunkSpec, Message: err.Error(), Err: err}
-   internal/commit/commit.go:480  err.Code in Execute  code=exitcode.CASExhausted  | Code:    exitcode.CASExhausted,
-   internal/commit/commit.go:603  err.Code in tryCommit  code=exitcode.WriteTree  | return nil, false, &CommitError{Code: exitcode.WriteTree, Message: fmt.Sprintf("write-tree failed: %v", err)}
-   internal/commit/commit.go:666  err.Code in tryCommit  code=exitcode.General  | Code:    exitcode.General,
-   internal/commit/commit.go:718  err.Code in tryCommit  code=exitcode.CommitTree  | return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
-   internal/commit/commit.go:893  err.Code in updateRef  code=exitcode.General  | Code:    exitcode.General,
+   internal/commit/commit.go:508  err.Code in Execute  code=exitcode.CASExhausted  | Code:    exitcode.CASExhausted,
+   internal/commit/commit.go:631  err.Code in tryCommit  code=exitcode.WriteTree  | return nil, false, &CommitError{Code: exitcode.WriteTree, Message: fmt.Sprintf("write-tree failed: %v", err)}
+   internal/commit/commit.go:694  err.Code in tryCommit  code=exitcode.General  | Code:    exitcode.General,
+   internal/commit/commit.go:749  err.Code in tryCommit  code=exitcode.CommitTree  | return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
+   internal/commit/commit.go:924  err.Code in updateRef  code=exitcode.General  | Code:    exitcode.General,
    internal/commit/hooks.go:171  err.Code in preCommit  code=exitcode.CommitHookRejected  | Code:    exitcode.CommitHookRejected,
    internal/commit/hooks.go:212  err.Code in commitMsg  code=exitcode.CommitHookRejected  | Code:    exitcode.CommitHookRejected,
    internal/commit/infer_moves.go:272  err.Code in records  code=exitcode.MoveWitnessChanged  | Code: exitcode.MoveWitnessChanged,
@@ -264,16 +267,17 @@
    main.go:706  strictcli.Exit in newApp.func  code=runScrubFile(globalsToFlags(ctx, kwargs), kwargs)  | return strictcli.Exit(runScrubFile(globalsToFlags(ctx, kwargs), kwargs))
    main.go:728  strictcli.Exit in newApp.func  code=runScrubMatch(globalsToFlags(ctx, kwargs), kwargs)  | return strictcli.Exit(runScrubMatch(globalsToFlags(ctx, kwargs), kwargs))
    main.go:748  strictcli.Exit in newApp.func  code=runScrubRun(globalsToFlags(ctx, kwargs), kwargs)  | return strictcli.Exit(runScrubRun(globalsToFlags(ctx, kwargs), kwargs))
-   main.go:770  strictcli.Exit in newApp.func  code=runScrubVerify(globalsToFlags(ctx, kwargs), kwargs)  | return strictcli.Exit(runScrubVerify(globalsToFlags(ctx, kwargs), kwargs))
-   main.go:821  strictcli.Exit in newApp.func  code=runUndo(gf, bypassSession, count, gf.sessionID)  | return strictcli.Exit(runUndo(gf, bypassSession, count, gf.sessionID))
-   main.go:838  strictcli.Exit in newApp.func  code=runUnlock(globalsToFlags(ctx, kwargs), ref)  | return strictcli.Exit(runUnlock(globalsToFlags(ctx, kwargs), ref))
-   main.go:844  strictcli.Exit in newApp.func  code=runScan(globalsToFlags(ctx, kwargs), kwargs)  | return strictcli.Exit(runScan(globalsToFlags(ctx, kwargs), kwargs))
-   main.go:888  return in optInt  code=fallback  | return fallback
-   main.go:890  return in optInt  code=v.(int)  | return v.(int)
-   main.go:1010  strictcli.ExitNow in mustGitDir  code=exitcode.NoRepository  | strictcli.ExitNow(exitcode.NoRepository, "not a git repository")
-   main.go:1112  strictcli.ExitNow in requireCleanTree  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("checking working tree: %v", err))
-   main.go:1115  strictcli.ExitNow in requireCleanTree  code=exitcode.General  | strictcli.ExitNow(exitcode.General, "working tree is dirty; commit changes before proceeding")
-   main.go:1136  return in releasingPassthroughLocks.func  code=h(ctx, name, args, globals)  | return h(ctx, name, args, globals)
+   main.go:770  strictcli.Exit in newApp.func  code=runScrubSquash(globalsToFlags(ctx, kwargs), kwargs)  | return strictcli.Exit(runScrubSquash(globalsToFlags(ctx, kwargs), kwargs))
+   main.go:786  strictcli.Exit in newApp.func  code=runScrubVerify(globalsToFlags(ctx, kwargs), kwargs)  | return strictcli.Exit(runScrubVerify(globalsToFlags(ctx, kwargs), kwargs))
+   main.go:837  strictcli.Exit in newApp.func  code=runUndo(gf, bypassSession, count, gf.sessionID)  | return strictcli.Exit(runUndo(gf, bypassSession, count, gf.sessionID))
+   main.go:854  strictcli.Exit in newApp.func  code=runUnlock(globalsToFlags(ctx, kwargs), ref)  | return strictcli.Exit(runUnlock(globalsToFlags(ctx, kwargs), ref))
+   main.go:860  strictcli.Exit in newApp.func  code=runScan(globalsToFlags(ctx, kwargs), kwargs)  | return strictcli.Exit(runScan(globalsToFlags(ctx, kwargs), kwargs))
+   main.go:904  return in optInt  code=fallback  | return fallback
+   main.go:906  return in optInt  code=v.(int)  | return v.(int)
+   main.go:1026  strictcli.ExitNow in mustGitDir  code=exitcode.NoRepository  | strictcli.ExitNow(exitcode.NoRepository, "not a git repository")
+   main.go:1128  strictcli.ExitNow in requireCleanTree  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("checking working tree: %v", err))
+   main.go:1131  strictcli.ExitNow in requireCleanTree  code=exitcode.General  | strictcli.ExitNow(exitcode.General, "working tree is dirty; commit changes before proceeding")
+   main.go:1152  return in releasingPassthroughLocks.func  code=h(ctx, name, args, globals)  | return h(ctx, name, args, globals)
    merge_cmd.go:103  return in runMerge  code=code  | return code
    merge_cmd.go:106  return in runMerge  code=runGuardedPassthrough(flags, "merge", args)  | return runGuardedPassthrough(flags, "merge", args)
    merge_cmd.go:108  return in runMerge  code=runRestructuredMerge(flags, args, parsed)  | return runRestructuredMerge(flags, args, parsed)
@@ -486,6 +490,15 @@
    scrub_run.go:536  strictcli.ExitNow in scrubRunDryRun  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning objects for operation %d: %v", i, err))
    scrub_run.go:545  strictcli.ExitNow in scrubRunDryRun  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("adding attribution for operation %d: %v", i, err))
    scrub_run.go:555  strictcli.ExitNow in scrubRunDryRun  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("building scoped blob set for operation %d (scope %q): %v", i, *op.Scope, scopeErr))
+   scrub_squash.go:109  return in planSquash.func  code=i  | return i
+   scrub_squash.go:112  return in planSquash.func  code=-1  | return -1
+   scrub_squash.go:253  strictcli.ExitNow in runScrubSquash  code=exitcode.Usage  | strictcli.ExitNow(exitcode.Usage, "--message is empty; the squash commit carries it as its whole message")
+   scrub_squash.go:258  strictcli.ExitNow in runScrubSquash  code=exitcode.NotInitialized  | strictcli.ExitNow(exitcode.NotInitialized, exitMessage(err))
+   scrub_squash.go:265  strictcli.ExitNow in runScrubSquash  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("resolving HEAD: %v", err))
+   scrub_squash.go:269  strictcli.ExitNow in runScrubSquash  code=exitcode.General  | strictcli.ExitNow(exitcode.General, exitMessage(err))
+   scrub_squash.go:291  return in runScrubSquash  code=exitcode.OK  | return exitcode.OK
+   scrub_squash.go:301  strictcli.ExitNow in runScrubSquash  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("HEAD moved from %s while the squash was being planned; nothing was changed, so run the command again", shortSHA(oldHeadSHA)))
+   scrub_squash.go:357  return in runScrubSquash  code=rewriteResult.TierBExit(exitcode.OK)  | return rewriteResult.TierBExit(exitcode.OK)
    sequencer_continue.go:422  return in runContinue  code=exitcode.NotInitialized  | return exitcode.NotInitialized
    sequencer_continue.go:430  return in runContinue  code=exitcode.Usage  | return exitcode.Usage
    sequencer_continue.go:437  return in runContinue  code=exitcode.General  | return exitcode.General
@@ -515,15 +528,15 @@
    sequencer_continue.go:913  return in finishWhatCrashed  code=exitcode.General  | return exitcode.General
    sequencer_continue.go:942  return in finishWhatCrashed  code=aftercareExit(out.residue)  | return aftercareExit(out.residue)
    sequencer_continue.go:1165  strictcli.ExitNow in concludeParkedOperation  code=pipelineExitCode(err)  | strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
-   sequencer_continue.go:1553  return in refuseWrongState  code=exitcode.CoordinationBusy  | return exitcode.CoordinationBusy
    sequencer_continue.go:1568  return in refuseWrongState  code=exitcode.CoordinationBusy  | return exitcode.CoordinationBusy
-   sequencer_continue.go:1633  return in refuseRawGitShape  code=exitcode.CoordinationBusy  | return exitcode.CoordinationBusy
-   sequencer_continue.go:1743  return in refuseUnreadableConflict  code=exitcode.CoordinationBusy  | return exitcode.CoordinationBusy
-   sequencer_continue.go:1796  return in refuseDetachedHead  code=exitcode.General  | return exitcode.General
-   sequencer_continue.go:1822  return in refuseEmptyConclusion  code=exitcode.General  | return exitcode.General
-   sequencer_continue.go:1850  return in refuseStrayResolutions  code=exitcode.ConclusionUnresolved  | return exitcode.ConclusionUnresolved
-   sequencer_continue.go:1862  return in checkCompleteness  code=code  | return code
-   sequencer_continue.go:1885  return in checkCompleteness  code=exitcode.ConclusionUnresolved  | return exitcode.ConclusionUnresolved
+   sequencer_continue.go:1583  return in refuseWrongState  code=exitcode.CoordinationBusy  | return exitcode.CoordinationBusy
+   sequencer_continue.go:1648  return in refuseRawGitShape  code=exitcode.CoordinationBusy  | return exitcode.CoordinationBusy
+   sequencer_continue.go:1758  return in refuseUnreadableConflict  code=exitcode.CoordinationBusy  | return exitcode.CoordinationBusy
+   sequencer_continue.go:1811  return in refuseDetachedHead  code=exitcode.General  | return exitcode.General
+   sequencer_continue.go:1837  return in refuseEmptyConclusion  code=exitcode.General  | return exitcode.General
+   sequencer_continue.go:1865  return in refuseStrayResolutions  code=exitcode.ConclusionUnresolved  | return exitcode.ConclusionUnresolved
+   sequencer_continue.go:1877  return in checkCompleteness  code=code  | return code
+   sequencer_continue.go:1900  return in checkCompleteness  code=exitcode.ConclusionUnresolved  | return exitcode.ConclusionUnresolved
    sequencer_continue_cmd.go:448  strictcli.Exit in continueHandler.func  code=runContinue(gf,
 			op,
 			kwargsStrSlice(kwargs["message"]),
@@ -532,13 +545,13 @@
 			optStr(kwargs["resolve_file"], ""),
 			optBool(kwargs["discard_unmatched_worktree"], false),
 		)  | return strictcli.Exit(runContinue(gf,
-   sequencer_crash.go:159  return in refuseContradictedDeclarations  code=code  | return code
-   sequencer_crash.go:178  return in refuseContradictedDeclarations  code=exitcode.General  | return exitcode.General
-   sequencer_crash.go:211  return in refuseContradictedDeclarations  code=exitcode.ConclusionUnresolved  | return exitcode.ConclusionUnresolved
-   sequencer_crash.go:271  return in refuseCrashWorktreeOverwrite  code=exitcode.General  | return exitcode.General
-   sequencer_crash.go:279  return in refuseCrashWorktreeOverwrite  code=exitcode.General  | return exitcode.General
-   sequencer_crash.go:288  return in refuseCrashWorktreeOverwrite  code=exitcode.General  | return exitcode.General
-   sequencer_crash.go:337  return in refuseCrashWorktreeOverwrite  code=exitcode.ConclusionWouldOverwrite  | return exitcode.ConclusionWouldOverwrite
+   sequencer_crash.go:160  return in refuseContradictedDeclarations  code=code  | return code
+   sequencer_crash.go:179  return in refuseContradictedDeclarations  code=exitcode.General  | return exitcode.General
+   sequencer_crash.go:212  return in refuseContradictedDeclarations  code=exitcode.ConclusionUnresolved  | return exitcode.ConclusionUnresolved
+   sequencer_crash.go:272  return in refuseCrashWorktreeOverwrite  code=exitcode.General  | return exitcode.General
+   sequencer_crash.go:280  return in refuseCrashWorktreeOverwrite  code=exitcode.General  | return exitcode.General
+   sequencer_crash.go:289  return in refuseCrashWorktreeOverwrite  code=exitcode.General  | return exitcode.General
+   sequencer_crash.go:338  return in refuseCrashWorktreeOverwrite  code=exitcode.ConclusionWouldOverwrite  | return exitcode.ConclusionWouldOverwrite
    sequencer_markers.go:606  return in refuseSurvivingMarkers  code=exitcode.ConclusionMarkerSurvived  | return exitcode.ConclusionMarkerSurvived
    sequencer_overwrite.go:85  return in refuseWorktreeOverwrite  code=exitcode.General  | return exitcode.General
    sequencer_overwrite.go:119  return in refuseWorktreeOverwrite  code=exitcode.ConclusionWouldOverwrite  | return exitcode.ConclusionWouldOverwrite
@@ -637,4 +650,4 @@
    unlock.go:104  return in runUnlock  code=exitcode.General  | return exitcode.General
    unlock.go:127  return in runUnlock  code=exitcode.General  | return exitcode.General
 
-total exit sites: 630 across 1 distinct codes
+total exit sites: 643 across 1 distinct codes
