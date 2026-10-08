@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v6
       # setup-go reads go.mod's `toolchain` line first, then its `go` directive.
       # Declare the development Go in `toolchain` (go mod edit -toolchain=goX.Y.Z)
-      # so CI tests with it; `go` stays the consumers' floor.
+      # so CI tests with it; `go` stays the minimum consumers need.
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
