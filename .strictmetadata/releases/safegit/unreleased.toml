@@ -1,11 +1,11 @@
 # The next release of safegit. Fill in bump and description, then run `rlsbl release run --watch`.
 format_version = 2
 # How the release moves the version: patch, minor, major, or infra (moved as a patch, recorded as infra).
-bump = ""
+bump = "minor"
 # What this release is, in a sentence or two. Required.
-description = ""
+description = "`scrub run` renames file and directory names with a recipe operation targeting paths, and a recipe operation's target now limits what it rewrites."
 # Why these changes were made. Optional.
-context = ""
+context = "A history scrub that removes a name must remove it from path names too, in the same single rewrite as the contents and messages."
 # The targets released, and the ones left out; between them they name every target of the releasable's members.
 include = ["go"]
 exclude = []
