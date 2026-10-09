@@ -909,11 +909,22 @@ func parseIdentity(raw string) AuthorInfo {
 
 // ParseCommit reads and parses a commit object by SHA using git cat-file.
 func ParseCommit(ctx context.Context, sha string) (CommitInfo, error) {
+	if s := storeFor(ctx); s != nil {
+		content, err := s.read(sha, "commit")
+		if err != nil {
+			return CommitInfo{}, err
+		}
+		return parseCommitContent(string(content)), nil
+	}
 	out, _, err := Run(ctx, "cat-file", "-p", sha)
 	if err != nil {
 		return CommitInfo{}, err
 	}
+	return parseCommitContent(out), nil
+}
 
+// parseCommitContent parses a commit object's raw content.
+func parseCommitContent(out string) CommitInfo {
 	// Split into header section and body at the first blank line.
 	var info CommitInfo
 	headerEnd := strings.Index(out, "\n\n")
@@ -959,7 +970,7 @@ func ParseCommit(ctx context.Context, sha string) (CommitInfo, error) {
 		}
 	}
 
-	return info, nil
+	return info
 }
 
 // TreeEntry represents an entry from git ls-tree (blob, tree, or other object).
@@ -1252,6 +1263,9 @@ func FilterIgnored(ctx context.Context, paths []string) (map[string]bool, error)
 // --full-tree is mandatory for the same reason it is on LsTreeAll: a listing
 // resolved against the working-directory prefix is a listing of the wrong tree.
 func LsTree(ctx context.Context, treeish string) ([]TreeEntry, error) {
+	if s := storeFor(ctx); s != nil {
+		return s.lsTree(treeish)
+	}
 	out, _, err := Run(ctx, "ls-tree", "--full-tree", "-z", treeish)
 	if err != nil {
 		return nil, fmt.Errorf("ls-tree %s: %w", treeish, err)
@@ -1321,6 +1335,9 @@ func HashObjectWriteTag(ctx context.Context, content []byte) (string, error) {
 
 // CatFileBlob reads blob content by SHA via git cat-file -p.
 func CatFileBlob(ctx context.Context, sha string) ([]byte, error) {
+	if s := storeFor(ctx); s != nil {
+		return s.read(sha, "blob")
+	}
 	out, _, err := Run(ctx, "cat-file", "-p", sha)
 	if err != nil {
 		return nil, err
@@ -1342,6 +1359,9 @@ func CatFileBlob(ctx context.Context, sha string) ([]byte, error) {
 // -z every path is taken literally, so the writer round-trips exactly what the
 // reader parsed.
 func MkTree(ctx context.Context, entries []TreeEntry) (string, error) {
+	if s := storeFor(ctx); s != nil {
+		return s.mkTree(entries)
+	}
 	var buf bytes.Buffer
 	for _, e := range entries {
 		fmt.Fprintf(&buf, "%s %s %s\t%s\x00", e.Mode, e.ObjectType, e.SHA, e.Path)

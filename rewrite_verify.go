@@ -24,14 +24,19 @@ import (
 // verifyIntendedChanges is Tier A's preservation check: it compares every
 // rewritten commit against what the operation declared it would change.
 //
-// One diff-tree per old/new pair answers the path question. The alternative --
-// materializing both trees with `ls-tree -r` and comparing maps -- reads two
-// whole trees per pair to compute a delta git computes directly.
+// The path question is answered by comparing the old and new trees through
+// one object store, descending only into subtrees whose ids differ: a rewrite
+// changes a few paths per commit, so this reads a few trees per pair, where a
+// diff-tree per pair started a git process per rewritten commit.
 //
 // Returns one failure string per disagreement; empty means the rewrite did
 // exactly what it said.
 func verifyIntendedChanges(ctx context.Context, shaMap map[string]string, intent *RewriteIntent) []string {
 	var failures []string
+
+	// Two commit reads per rewritten commit go through one reader process.
+	ctx, store := git.WithObjectStore(ctx)
+	defer store.Close()
 
 	rewritten := make(map[string]bool)
 	oldSHAs := make([]string, 0, len(shaMap))
@@ -224,12 +229,12 @@ func verifyMessageAgainstIntent(oldSHA string, oldInfo, newInfo git.CommitInfo, 
 func verifyPathsAgainstIntent(ctx context.Context, oldSHA string, oldInfo, newInfo git.CommitInfo, declared IntendedChange) ([]string, error) {
 	actual := make(map[string]bool)
 	if oldInfo.Tree != newInfo.Tree {
-		changed, err := git.DiffTree(ctx, oldInfo.Tree, newInfo.Tree)
+		changed, err := git.ChangedPathNames(ctx, oldInfo.Tree, newInfo.Tree)
 		if err != nil {
 			return nil, fmt.Errorf("commit %s: comparing the original and rewritten trees: %v", shortSHA(oldSHA), err)
 		}
-		for _, c := range changed {
-			actual[c.Path] = true
+		for _, p := range changed {
+			actual[p] = true
 		}
 	}
 

@@ -62,6 +62,14 @@ type remapState struct {
 	// instead of producing a time-varying result.
 	blobCache map[string]string
 
+	// treeCache maps (old tree SHA, path the tree sits at) to its remap
+	// result. It is sound for the same reason blobCache is: a tree's result is
+	// a function of its path and of its blobs' results, and those are final
+	// once computed. The path is part of the key because the globs can match
+	// directory components, so one subtree mounted at two paths may remap
+	// differently.
+	treeCache map[treeAtPath]treeRewrite
+
 	classCache map[string]candidateClass // stable classifications (see above)
 	stale      map[string]bool           // unresolvable candidates encountered
 }
@@ -77,6 +85,7 @@ func newRemapState(globs []string, rangeSHAs []string) *remapState {
 		globs:      globs,
 		rangeSet:   rangeSet,
 		blobCache:  make(map[string]string),
+		treeCache:  make(map[treeAtPath]treeRewrite),
 		classCache: make(map[string]candidateClass),
 		stale:      make(map[string]bool),
 	}
@@ -103,20 +112,30 @@ func validateRemapGlobs(globs []string) {
 	}
 }
 
+// treeAtPath is a tree as it sits at one path of a commit's tree.
+type treeAtPath struct {
+	sha, pathPrefix string
+}
+
 // remapTree walks treeSHA recursively with path tracking and returns a new
 // tree SHA with glob-matched blobs remapped (or the original SHA when nothing
 // changed). pathPrefix is "" at the root and always ends in "/" otherwise.
 //
-// No tree-level cache is used: glob patterns can match directory components,
-// so the same subtree mounted at different paths may remap differently — a
-// tree-SHA-keyed cache would be unsound. The expensive per-blob work is
-// cached in blobCache instead (see remapState).
+// It descends only into the directories a glob can reach (see
+// globsCanReach), and caches each result per tree and path (see
+// remapState.treeCache): a walk visits every commit, and reading every tree
+// of every commit made a remapping rewrite cost one git read per tree per
+// commit.
 //
 // The second return value is the list of paths remapped, relative to treeSHA,
 // which the caller adds to the commit's declared change set: a remapped file is
 // a file the operation decided to change, and Tier A verification would
 // otherwise read it as an unexplained change.
 func (rs *remapState) remapTree(ctx context.Context, treeSHA, pathPrefix string, shaMap map[string]string) (string, []string, error) {
+	key := treeAtPath{sha: treeSHA, pathPrefix: pathPrefix}
+	if cached, ok := rs.treeCache[key]; ok {
+		return cached.SHA, cached.Paths, nil
+	}
 	entries, err := git.LsTree(ctx, treeSHA)
 	if err != nil {
 		return "", nil, fmt.Errorf("ls-tree %s: %w", treeSHA, err)
@@ -139,7 +158,11 @@ func (rs *remapState) remapTree(ctx context.Context, treeSHA, pathPrefix string,
 				changedPaths = append(changedPaths, e.Path)
 			}
 		case "tree":
-			newSubSHA, subPaths, err := rs.remapTree(ctx, e.SHA, pathPrefix+e.Path+"/", shaMap)
+			dir := pathPrefix + e.Path + "/"
+			if !globsCanReach(rs.globs, dir) {
+				continue
+			}
+			newSubSHA, subPaths, err := rs.remapTree(ctx, e.SHA, dir, shaMap)
 			if err != nil {
 				return "", nil, err
 			}
@@ -154,13 +177,50 @@ func (rs *remapState) remapTree(ctx context.Context, treeSHA, pathPrefix string,
 	}
 
 	if len(changedPaths) == 0 {
+		rs.treeCache[key] = treeRewrite{SHA: treeSHA}
 		return treeSHA, nil, nil
 	}
 	newTreeSHA, err := git.MkTree(ctx, entries)
 	if err != nil {
 		return "", nil, fmt.Errorf("mktree: %w", err)
 	}
+	rs.treeCache[key] = treeRewrite{SHA: newTreeSHA, Paths: changedPaths}
 	return newTreeSHA, changedPaths, nil
+}
+
+// globsCanReach reports whether any glob can match a path inside the
+// directory dir ("a/b/", always ending in "/"), under matchScope's rules: the
+// full path, then the basename.
+//
+// A glob with no "/" can match a basename at any depth, so it reaches every
+// directory. A glob with a "/" can match only a full path, because a basename
+// holds no "/" for it to match; path.Match never lets a wildcard cross a "/",
+// so such a glob matches a path only segment by segment, and it reaches dir
+// only when it has more segments than dir and its leading segments match
+// dir's. A glob holding a character class or an escape is taken to reach
+// every directory, rather than reasoning about what its "/" means.
+func globsCanReach(globs []string, dir string) bool {
+	dirSegs := strings.Split(strings.TrimSuffix(dir, "/"), "/")
+	for _, g := range globs {
+		if !strings.Contains(g, "/") || strings.ContainsAny(g, "[\\") {
+			return true
+		}
+		globSegs := strings.Split(g, "/")
+		if len(globSegs) <= len(dirSegs) {
+			continue
+		}
+		reaches := true
+		for i, seg := range dirSegs {
+			if ok, _ := path.Match(globSegs[i], seg); !ok {
+				reaches = false
+				break
+			}
+		}
+		if reaches {
+			return true
+		}
+	}
+	return false
 }
 
 // remapBlob reads a blob, remaps 40-hex commit hashes in its content, writes
@@ -262,12 +322,14 @@ func (rs *remapState) classify(ctx context.Context, cand string) (candidateClass
 	// During the walk old objects still exist (pruning happens in Finalize),
 	// so object-store lookups see the pre-rewrite world.
 	var class candidateClass
-	out, _, err := git.Run(ctx, "cat-file", "-t", cand)
+	objType, err := git.ObjectType(ctx, cand)
 	switch {
 	case err != nil:
+		return 0, fmt.Errorf("--remap-shas-in: reading the type of %s: %w", cand, err)
+	case objType == "":
 		class = candidateStale
 		rs.stale[cand] = true
-	case strings.TrimSpace(out) == "commit":
+	case objType == "commit":
 		class = candidateOutsideRange
 	default:
 		class = candidateNonCommit

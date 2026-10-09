@@ -132,3 +132,63 @@ func TestMatchAnyScope(t *testing.T) {
 		}
 	}
 }
+
+// TestGlobsCanReachNeverPrunesAMatch: the remap walk skips a directory that
+// globsCanReach rules out, so a directory holding a path a glob matches must
+// never be ruled out. Every glob shape is checked against every ancestor of
+// every matching path, and the prunes the walk relies on are asserted too.
+func TestGlobsCanReachNeverPrunesAMatch(t *testing.T) {
+	globs := []string{
+		"*.jsonl",
+		".strictmetadata/changelog/*/*.jsonl",
+		".strictmetadata/retired-release-histories/*/changelog/*.jsonl",
+		"a/*/c/*",
+		"a/b",
+		"x/[ab]/y.txt",
+		"esc\\*/f",
+		"?/*.md",
+	}
+	paths := []string{
+		"top.jsonl",
+		"deep/er/still/top.jsonl",
+		".strictmetadata/changelog/rlsbl/unreleased.jsonl",
+		".strictmetadata/retired-release-histories/old/changelog/v1.jsonl",
+		"a/q/c/z",
+		"a/b",
+		"x/a/y.txt",
+		"esc*/f",
+		"d/readme.md",
+		"unrelated/file.txt",
+	}
+	for _, g := range globs {
+		for _, p := range paths {
+			if !matchAnyScope([]string{g}, p) {
+				continue
+			}
+			segs := strings.Split(p, "/")
+			for i := 1; i < len(segs); i++ {
+				dir := strings.Join(segs[:i], "/") + "/"
+				if !globsCanReach([]string{g}, dir) {
+					t.Errorf("globsCanReach(%q, %q) = false, but %q matches inside it", g, dir, p)
+				}
+			}
+		}
+	}
+
+	changelog := []string{".strictmetadata/changelog/*/*.jsonl"}
+	for _, tt := range []struct {
+		dir  string
+		want bool
+	}{
+		{".strictmetadata/", true},
+		{".strictmetadata/changelog/", true},
+		{".strictmetadata/changelog/rlsbl/", true},
+		{".strictmetadata/changelog/rlsbl/nested/", false},
+		{".strictmetadata/docs/", false},
+		{"internal/", false},
+	} {
+		if got := globsCanReach(changelog, tt.dir); got != tt.want {
+			t.Errorf("globsCanReach(%v, %q) = %v, want %v", changelog, tt.dir, got, tt.want)
+		}
+	}
+}

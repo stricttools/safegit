@@ -41,6 +41,11 @@ type TransformFunc func(ctx context.Context, sha string, info git.CommitInfo, re
 func walkAndRewrite(flags globalFlags, ctx context.Context, shas []string, transform TransformFunc, verbose bool) (shaMap map[string]string, rewrittenCount int, err error) {
 	shaMap = make(map[string]string, len(shas))
 
+	// One reader and one tree writer for the whole walk, handed to the
+	// transform through ctx, instead of a git process per object read.
+	ctx, store := git.WithObjectStore(ctx)
+	defer store.Close()
+
 	for _, sha := range shas {
 		info, err := git.ParseCommit(ctx, sha)
 		if err != nil {
