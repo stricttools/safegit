@@ -355,30 +355,50 @@ func scanParallel[R any](iter *git.ObjectIterator, work func(*git.ObjectEntry) R
 	const chunkObjects = 1024
 	const chunkBytes = 32 << 20
 	workers := runtime.GOMAXPROCS(0)
-	for {
-		var chunk []*git.ObjectEntry
-		size := 0
-		done := false
-		for len(chunk) < chunkObjects && size < chunkBytes {
-			entry, err := iter.Next()
-			if err == io.EOF {
-				done = true
-				break
+
+	// The next chunk is read while the current one is matched.
+	type chunk struct {
+		entries []*git.ObjectEntry
+		err     error
+	}
+	chunks := make(chan chunk, 2)
+	go func() {
+		defer close(chunks)
+		for {
+			var c chunk
+			size := 0
+			for len(c.entries) < chunkObjects && size < chunkBytes {
+				entry, err := iter.Next()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					c.err = err
+					break
+				}
+				c.entries = append(c.entries, entry)
+				size += len(entry.Content)
 			}
-			if err != nil {
-				return err
+			if len(c.entries) == 0 && c.err == nil {
+				return
 			}
-			chunk = append(chunk, entry)
-			size += len(entry.Content)
+			chunks <- c
+			if c.err != nil || len(c.entries) < chunkObjects && size < chunkBytes {
+				return
+			}
 		}
-		results := make([]R, len(chunk))
+	}()
+
+	var readErr error
+	for c := range chunks {
+		results := make([]R, len(c.entries))
 		var wg sync.WaitGroup
-		for w := 0; w < workers && w < len(chunk); w++ {
+		for w := 0; w < workers && w < len(c.entries); w++ {
 			wg.Add(1)
 			go func(w int) {
 				defer wg.Done()
-				for i := w; i < len(chunk); i += workers {
-					results[i] = work(chunk[i])
+				for i := w; i < len(c.entries); i += workers {
+					results[i] = work(c.entries[i])
 				}
 			}(w)
 		}
@@ -386,10 +406,11 @@ func scanParallel[R any](iter *git.ObjectIterator, work func(*git.ObjectEntry) R
 		for _, r := range results {
 			fold(r)
 		}
-		if done {
-			return nil
+		if c.err != nil {
+			readErr = c.err
 		}
 	}
+	return readErr
 }
 
 // parseSHAs extracts SHA values from rev-list --objects output.
@@ -467,6 +488,9 @@ func extractBody(content []byte) []byte {
 // full content so that multi-line patterns (e.g., (?s)foo.*bar) work correctly.
 // Line numbers are back-computed from byte offsets.
 func findMatches(sha, objType string, content []byte, pattern *regexp.Regexp, reachable bool) []Match {
+	if !mayMatch(pattern, content) {
+		return nil
+	}
 	locs := pattern.FindAllIndex(content, -1)
 	if len(locs) == 0 {
 		return nil
