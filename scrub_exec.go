@@ -322,10 +322,34 @@ func executeScrubRecipe(
 		strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
 	}
 
+	// The path operations rename entry names, which no object scan sees: the
+	// range's trees are read for the names they match.
+	rename := recipePathRenamer(recipe)
+	pathMatches := 0
+	if rename != nil {
+		roots, err := rangeRootTrees(ctx, fromSHA, entireHistory)
+		if err != nil {
+			strictcli.ExitNow(exitcode.General, err.Error())
+		}
+		var pathOps []*regexp.Regexp
+		for i, op := range recipe.Operations {
+			if op.appliesTo(TargetPaths) {
+				pathOps = append(pathOps, recipe.Patterns[i])
+			}
+		}
+		found, err := pathNameMatches(ctx, roots, pathOps)
+		if err != nil {
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning path names: %v", err))
+		}
+		for _, paths := range found {
+			pathMatches += len(paths)
+		}
+	}
+
 	// A search that matches nothing is a successful answer, not a failure --
 	// but it is stated in the terms the operator asked in, so "it worked" and
 	// "it found nothing" can never be confused for each other.
-	if len(results.Matches) == 0 && len(gitlinkMap) == 0 {
+	if len(results.Matches) == 0 && len(gitlinkMap) == 0 && pathMatches == 0 {
 		infof(flags, "0 commits contained the pattern. Nothing was rewritten and no history changed.")
 		return publishCompanionsAlone(), nil
 	}
@@ -406,10 +430,10 @@ func executeScrubRecipe(
 		strictcli.ExitNow(exitcode.General, fmt.Sprintf("building blob map: %v", err))
 	}
 
-	infof(flags, "Found %d blobs to replace, %d commit message matches, %d tag matches",
-		len(blobMap), commitMatchCount, tagMatchCount)
+	infof(flags, "Found %d blobs to replace, %d commit message matches, %d tag matches, %d path names to rename",
+		len(blobMap), commitMatchCount, tagMatchCount, pathMatches)
 
-	if len(blobMap) == 0 && commitMatchCount == 0 && tagMatchCount == 0 && len(gitlinkMap) == 0 {
+	if len(blobMap) == 0 && commitMatchCount == 0 && tagMatchCount == 0 && len(gitlinkMap) == 0 && pathMatches == 0 {
 		infof(flags, "0 commits contained the pattern within scope. Nothing was rewritten and no history changed.")
 		return publishCompanionsAlone(), nil
 	}
@@ -460,7 +484,7 @@ func executeScrubRecipe(
 		var xform CommitTransform
 
 		// Replace blobs in tree
-		newTreeSHA, changedPaths, err := replaceInTreeByBlobMap(ctx, info.Tree, blobMap, gitlinkMap, treeCache)
+		newTreeSHA, changedPaths, err := rewriteTree(ctx, info.Tree, blobMap, gitlinkMap, rename, treeCache)
 		if err != nil {
 			return CommitTransform{}, fmt.Errorf("replacing blobs in tree for commit %s: %w", sha, err)
 		}
@@ -487,8 +511,7 @@ func executeScrubRecipe(
 		newMessage := info.Message
 		for _, idx := range recipe.TopoOrder {
 			op := recipe.Operations[idx]
-			// Skip if this op doesn't target commits
-			if op.Target != nil && *op.Target != "commits" {
+			if !op.appliesTo(TargetCommits) {
 				continue
 			}
 			pat := recipe.Patterns[idx]
@@ -535,7 +558,13 @@ func executeScrubRecipe(
 		infof(flags, "Checking the rewritten history for surviving matches...")
 		for i, op := range recipe.Operations {
 			pat := recipe.Patterns[i]
-			if err := verifyPatternAbsentFromTips(ctx, pat, opScope(&op), plan.WalkedTips); err != nil {
+			if op.appliesTo(TargetPaths) {
+				if err := verifyNamesAbsentFromTips(ctx, pat, plan.WalkedTips); err != nil {
+					return fmt.Errorf("operation %d (pattern %q): %v", i, op.Pattern, err)
+				}
+				continue
+			}
+			if err := verifyPatternAbsentFromTips(ctx, pat, opScope(&op), plan.WalkedTips, recipeObjectTypes(op)); err != nil {
 				return fmt.Errorf("operation %d (pattern %q): %v", i, op.Pattern, err)
 			}
 		}
@@ -551,7 +580,13 @@ func executeScrubRecipe(
 		var findings []string
 		for i, op := range recipe.Operations {
 			pat := recipe.Patterns[i]
-			if verifyErr := verifySecretRemovedScoped(ctx, pat, opScope(&op)); verifyErr != nil {
+			var verifyErr error
+			if op.appliesTo(TargetPaths) {
+				verifyErr = verifyNamesRemoved(ctx, pat)
+			} else {
+				verifyErr = verifySecretRemovedScoped(ctx, pat, opScope(&op), recipeObjectTypes(op))
+			}
+			if verifyErr != nil {
 				findings = append(findings, fmt.Sprintf("operation %d (pattern %q): %v", i, op.Pattern, verifyErr))
 			}
 		}

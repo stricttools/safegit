@@ -134,6 +134,20 @@ type treeRewrite struct {
 // the recursion, and without them a tree seen twice would report its changes
 // only the first time.
 func replaceInTreeByBlobMap(ctx context.Context, treeSHA string, blobMap map[string]string, gitlinkMap map[string]string, cache map[string]treeRewrite) (string, []string, error) {
+	return rewriteTree(ctx, treeSHA, blobMap, gitlinkMap, nil, cache)
+}
+
+// entryRenamer is a recipe's path operations applied to one entry name: the
+// name the entry takes, which is the name itself when no operation matches.
+type entryRenamer func(name string) (string, error)
+
+// rewriteTree is replaceInTreeByBlobMap that also renames every entry, at any
+// depth, whose name rename changes (rename may be nil: nothing is renamed).
+// A renamed entry declares every path under its old name and every path
+// under its new one, the paths a comparison of the two trees reports. A
+// rename onto the name of another entry of the same tree is refused: the
+// tree would hold one of the two.
+func rewriteTree(ctx context.Context, treeSHA string, blobMap map[string]string, gitlinkMap map[string]string, rename entryRenamer, cache map[string]treeRewrite) (string, []string, error) {
 	if cached, ok := cache[treeSHA]; ok {
 		return cached.SHA, cached.Paths, nil
 	}
@@ -145,21 +159,22 @@ func replaceInTreeByBlobMap(ctx context.Context, treeSHA string, blobMap map[str
 
 	var changedPaths []string
 	for i, e := range entries {
+		var entryPaths []string
 		switch e.ObjectType {
 		case "blob":
 			if newSHA, ok := blobMap[e.SHA]; ok {
 				entries[i].SHA = newSHA
-				changedPaths = append(changedPaths, e.Path)
+				entryPaths = append(entryPaths, e.Path)
 			}
 		case "tree":
-			newSubSHA, subPaths, err := replaceInTreeByBlobMap(ctx, e.SHA, blobMap, gitlinkMap, cache)
+			newSubSHA, subPaths, err := rewriteTree(ctx, e.SHA, blobMap, gitlinkMap, rename, cache)
 			if err != nil {
 				return "", nil, err
 			}
 			if newSubSHA != e.SHA {
 				entries[i].SHA = newSubSHA
 				for _, p := range subPaths {
-					changedPaths = append(changedPaths, e.Path+"/"+p)
+					entryPaths = append(entryPaths, e.Path+"/"+p)
 				}
 			}
 		case "commit":
@@ -168,15 +183,39 @@ func replaceInTreeByBlobMap(ctx context.Context, treeSHA string, blobMap map[str
 			if gitlinkMap != nil {
 				if newSHA, ok := gitlinkMap[e.SHA]; ok {
 					entries[i].SHA = newSHA
-					changedPaths = append(changedPaths, e.Path)
+					entryPaths = append(entryPaths, e.Path)
 				}
 			}
 		}
+		if rename != nil {
+			newName, err := rename(e.Path)
+			if err != nil {
+				return "", nil, fmt.Errorf("tree %s: %w", treeSHA, err)
+			}
+			if newName != e.Path {
+				entries[i].Path = newName
+				entryPaths, err = renamedEntryPaths(ctx, e, entries[i])
+				if err != nil {
+					return "", nil, err
+				}
+			}
+		}
+		changedPaths = append(changedPaths, entryPaths...)
 	}
 
 	if len(changedPaths) == 0 {
 		cache[treeSHA] = treeRewrite{SHA: treeSHA}
 		return treeSHA, nil, nil
+	}
+
+	if rename != nil {
+		seen := make(map[string]bool, len(entries))
+		for _, e := range entries {
+			if seen[e.Path] {
+				return "", nil, fmt.Errorf("tree %s: renaming its entries leaves two entries named %q; a path operation may not rename an entry onto the name of another", treeSHA, e.Path)
+			}
+			seen[e.Path] = true
+		}
 	}
 
 	newTreeSHA, err := git.MkTree(ctx, entries)
@@ -185,4 +224,36 @@ func replaceInTreeByBlobMap(ctx context.Context, treeSHA string, blobMap map[str
 	}
 	cache[treeSHA] = treeRewrite{SHA: newTreeSHA, Paths: changedPaths}
 	return newTreeSHA, changedPaths, nil
+}
+
+// renamedEntryPaths are the paths, relative to the tree holding them, that a
+// renamed entry changes: every path under its old name, read from the old
+// entry, and every path under its new name, read from the new entry.
+func renamedEntryPaths(ctx context.Context, old, renamed git.TreeEntry) ([]string, error) {
+	var out []string
+	for _, e := range []git.TreeEntry{old, renamed} {
+		if err := appendLeafPaths(ctx, e, "", &out); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// appendLeafPaths appends the path of a non-tree entry, or of every non-tree
+// entry under a tree entry, prefixed by prefix.
+func appendLeafPaths(ctx context.Context, e git.TreeEntry, prefix string, out *[]string) error {
+	if e.ObjectType != "tree" {
+		*out = append(*out, prefix+e.Path)
+		return nil
+	}
+	children, err := git.LsTree(ctx, e.SHA)
+	if err != nil {
+		return fmt.Errorf("ls-tree %s: %w", e.SHA, err)
+	}
+	for _, c := range children {
+		if err := appendLeafPaths(ctx, c, prefix+e.Path+"/", out); err != nil {
+			return err
+		}
+	}
+	return nil
 }

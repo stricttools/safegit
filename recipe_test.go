@@ -592,3 +592,38 @@ unknown_key = "oops"
 		t.Errorf("expected the unknown key to be named, got: %v", err)
 	}
 }
+
+func TestParseRecipeRefusesWhatAPathOperationCannotTake(t *testing.T) {
+	for _, tc := range []struct {
+		name, toml, want string
+	}{
+		{"an unknown target", "[[operations]]\npattern = \"x\"\nreplace = \"y\"\ntarget = \"path\"\n", `target "path" is none of blobs, commits, tags, paths`},
+		{"mangle", "[[operations]]\npattern = \"x\"\nmangle = true\ntarget = \"paths\"\n", "takes replace, not mangle"},
+		{"a scope", "[[operations]]\npattern = \"x\"\nreplace = \"y\"\nscope = \"*.md\"\ntarget = \"paths\"\n", "takes no scope"},
+	} {
+		_, err := parseRecipe(writeRecipeFile(t, tc.toml))
+		if err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: %v", tc.name, err)
+		}
+	}
+}
+
+func TestARecipesPathOperationsRenameOnlyMatchingNames(t *testing.T) {
+	recipe, err := parseRecipe(writeRecipeFile(t, "[[operations]]\npattern = \"(?i)acme\"\nreplace = \"client\"\ntarget = \"paths\"\n\n[[operations]]\npattern = \"acme\"\nreplace = \"other\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rename := recipePathRenamer(recipe)
+	for name, want := range map[string]string{"Acme-notes.md": "client-notes.md", "keep.txt": "keep.txt"} {
+		if got, err := rename(name); err != nil || got != want {
+			t.Errorf("%s: %q, %v", name, got, err)
+		}
+	}
+	slash, err := parseRecipe(writeRecipeFile(t, "[[operations]]\npattern = \"acme\"\nreplace = \"a/b\"\ntarget = \"paths\"\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := recipePathRenamer(slash)("acme"); err == nil || !strings.Contains(err.Error(), "no tree entry can be named") {
+		t.Errorf("a rename to a name holding a slash was not refused: %v", err)
+	}
+}

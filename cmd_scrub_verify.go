@@ -72,6 +72,9 @@ type verifyTarget struct {
 	source   string
 	scope    string
 	compiled *regexp.Regexp
+	// paths is set for a recipe operation targeting paths, which is verified
+	// against the names of every tree's entries instead of content.
+	paths bool
 }
 
 // collectVerifyTargets turns the command's inputs into the patterns to check.
@@ -112,6 +115,7 @@ func collectVerifyTargets(patterns []string, scope string, recipePath string) []
 				pattern:  op.Pattern,
 				source:   scrubVerifySourceRecipe,
 				compiled: recipe.Patterns[i],
+				paths:    op.appliesTo(TargetPaths),
 			}
 			if op.Scope != nil {
 				t.scope = *op.Scope
@@ -243,6 +247,25 @@ func runScrubVerify(flags globalFlags, kwargs map[string]interface{}) int {
 			Source:  t.source,
 			Scope:   t.scope,
 		}
+		if t.paths {
+			names, err := storeNameMatches(ctx, t.compiled)
+			if err != nil {
+				strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning path names: %v", err))
+			}
+			if len(names) == 0 {
+				record.Pass = true
+				results = append(results, record)
+				passed++
+				infof(flags, "  PASS [%d] %s", i+1, verifyTargetLabel(t))
+				continue
+			}
+			detail := describeNameMatches("in the object store", names).Error()
+			record.Details = []string{detail}
+			results = append(results, record)
+			failed++
+			errorf(flags, "FAIL [%d] %s: %s", i+1, verifyTargetLabel(t), detail)
+			continue
+		}
 		if len(matches) == 0 {
 			record.Pass = true
 			results = append(results, record)
@@ -276,6 +299,9 @@ func runScrubVerify(flags globalFlags, kwargs map[string]interface{}) int {
 
 // verifyTargetLabel spells one target for the human line.
 func verifyTargetLabel(t verifyTarget) string {
+	if t.paths {
+		return fmt.Sprintf("pattern=%q target=%q", t.pattern, TargetPaths)
+	}
 	if t.scope == "" {
 		return fmt.Sprintf("pattern=%q", t.pattern)
 	}

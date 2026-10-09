@@ -39,8 +39,10 @@ type ScrubRunResult struct {
 	BlobDiffs    []ScrubRunDiffEntry `json:"blob_diffs,omitempty"`
 	MessageDiffs []MessageDiffEntry  `json:"message_diffs,omitempty"`
 	TotalBlobs   *int                `json:"total_blobs,omitempty"`
-	Shown        *int                `json:"shown,omitempty"`
-	Truncated    *bool               `json:"truncated,omitempty"`
+	// RenamedPaths are the paths whose names the path operations rename.
+	RenamedPaths []string `json:"renamed_paths,omitempty"`
+	Shown        *int     `json:"shown,omitempty"`
+	Truncated    *bool    `json:"truncated,omitempty"`
 
 	// Execute-only: what the rewrite did.
 	Rewrites          map[string]string `json:"rewrites,omitempty"`
@@ -75,6 +77,7 @@ var scrubRunPayloadSchema = strictcli.SchemaObject(
 				"commit_matches": strictcli.SchemaType("integer"),
 				"tag_matches":    strictcli.SchemaType("integer"),
 				"affected_files": strictcli.SchemaArray(strictcli.SchemaType("string")),
+				"path_matches":   strictcli.SchemaArray(strictcli.SchemaType("string")),
 			},
 			[]string{"index", "pattern", "blob_matches", "commit_matches", "tag_matches", "affected_files"},
 			false,
@@ -107,6 +110,7 @@ var scrubRunPayloadSchema = strictcli.SchemaObject(
 			false,
 		)),
 		"total_blobs":         strictcli.SchemaType("integer"),
+		"renamed_paths":       strictcli.SchemaArray(strictcli.SchemaType("string")),
 		"shown":               strictcli.SchemaType("integer"),
 		"truncated":           strictcli.SchemaType("boolean"),
 		"rewrites":            scrubRewritesSchema,
@@ -149,6 +153,9 @@ type ScrubRunOpMatches struct {
 	CommitMatches int      `json:"commit_matches"`
 	TagMatches    int      `json:"tag_matches"`
 	AffectedFiles []string `json:"affected_files"`
+	// PathMatches are the paths whose names an operation targeting paths
+	// renames; it is present for such an operation only.
+	PathMatches []string `json:"path_matches,omitempty"`
 }
 
 func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
@@ -242,7 +249,7 @@ func runScrubRun(flags globalFlags, kwargs map[string]interface{}) int {
 			strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning objects: %v", err))
 		}
 
-		if len(results.Matches) == 0 {
+		if len(results.Matches) == 0 && recipePathRenamer(recipe) == nil {
 			infof(flags, "No matches found. Nothing to rewrite.")
 			return 0
 		}
@@ -349,8 +356,7 @@ func recipeTagBodyTransform(recipe *ParsedRecipe) TagBodyTransformFunc {
 		newBody := body
 		for _, idx := range recipe.TopoOrder {
 			op := recipe.Operations[idx]
-			// Skip if this op doesn't target tags
-			if op.Target != nil && *op.Target != "tags" {
+			if !op.appliesTo(TargetTags) {
 				continue
 			}
 			pat := recipe.Patterns[idx]
@@ -448,7 +454,7 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 		newMessage := info.Message
 		for _, idx := range recipe.TopoOrder {
 			op := recipe.Operations[idx]
-			if op.Target != nil && *op.Target != "commits" {
+			if !op.appliesTo(TargetCommits) {
 				continue
 			}
 			pat := recipe.Patterns[idx]
@@ -480,6 +486,40 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 		}
 	}
 
+	// The names the path operations would rename, read from the range's trees.
+	var renamedPaths []string
+	var pathPatterns []*regexp.Regexp
+	for i, op := range recipe.Operations {
+		if op.appliesTo(TargetPaths) {
+			pathPatterns = append(pathPatterns, recipe.Patterns[i])
+		}
+	}
+	if len(pathPatterns) > 0 {
+		roots, err := rangeRootTrees(ctx, fromSHA, entireHistory)
+		if err != nil {
+			strictcli.ExitNow(exitcode.General, err.Error())
+		}
+		found, err := pathNameMatches(ctx, roots, pathPatterns)
+		if err != nil {
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning path names: %v", err))
+		}
+		seen := make(map[string]bool)
+		for _, paths := range found {
+			for _, p := range paths {
+				if !seen[p] {
+					seen[p] = true
+					renamedPaths = append(renamedPaths, p)
+				}
+			}
+		}
+		sort.Strings(renamedPaths)
+		if !flags.json {
+			for _, p := range renamedPaths {
+				infof(flags, "--- path %s is renamed", p)
+			}
+		}
+	}
+
 	if !flags.json {
 		summary := fmt.Sprintf("\nDiff preview: %d blobs would change", len(contentMap))
 		if truncated {
@@ -488,6 +528,9 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 		infof(flags, "%s", summary)
 		if len(messageDiffs) > 0 {
 			infof(flags, "  %d commit messages would change", len(messageDiffs))
+		}
+		if len(renamedPaths) > 0 {
+			infof(flags, "  %d path names would be renamed", len(renamedPaths))
 		}
 	}
 
@@ -502,6 +545,7 @@ func scrubRunDiff(ctx context.Context, flags globalFlags, cmd string, recipe *Pa
 		BlobDiffs:      blobDiffs,
 		MessageDiffs:   messageDiffs,
 		TotalBlobs:     intPtr(len(contentMap)),
+		RenamedPaths:   renamedPaths,
 		Shown:          intPtr(shown),
 		Truncated:      boolPtr(truncated),
 	})
@@ -563,11 +607,43 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 	totalBlob, totalCommit, totalTag := 0, 0, 0
 	allAffectedFiles := make(map[string]bool)
 
+	// The names the path operations match, read from the range's trees.
+	pathMatchesOf := make(map[int][]string)
+	var pathOpIndexes []int
+	var pathPatterns []*regexp.Regexp
+	for i, op := range recipe.Operations {
+		if op.appliesTo(TargetPaths) {
+			pathOpIndexes = append(pathOpIndexes, i)
+			pathPatterns = append(pathPatterns, recipe.Patterns[i])
+		}
+	}
+	if len(pathPatterns) > 0 {
+		roots, err := rangeRootTrees(ctx, fromSHA, entireHistory)
+		if err != nil {
+			strictcli.ExitNow(exitcode.General, err.Error())
+		}
+		found, err := pathNameMatches(ctx, roots, pathPatterns)
+		if err != nil {
+			strictcli.ExitNow(exitcode.General, fmt.Sprintf("scanning path names: %v", err))
+		}
+		for j, i := range pathOpIndexes {
+			pathMatchesOf[i] = found[j]
+			if pathMatchesOf[i] == nil {
+				pathMatchesOf[i] = []string{}
+			}
+		}
+	}
+	totalPath := 0
+
 	for i, results := range allResults {
 		var blobCount, commitCount, tagCount int
 		fileSet := make(map[string]bool)
+		types := recipeObjectTypes(recipe.Operations[i])
 
 		for _, m := range results.Matches {
+			if !types[m.ObjectType] {
+				continue
+			}
 			switch m.ObjectType {
 			case "blob":
 				// Filter by per-operation scope when set.
@@ -600,7 +676,9 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 			CommitMatches: commitCount,
 			TagMatches:    tagCount,
 			AffectedFiles: files,
+			PathMatches:   pathMatchesOf[i],
 		})
+		totalPath += len(pathMatchesOf[i])
 
 		totalBlob += blobCount
 		totalCommit += commitCount
@@ -617,7 +695,7 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 		binarySkipped = allResults[0].Skipped
 	}
 
-	totalMatches := totalBlob + totalCommit + totalTag
+	totalMatches := totalBlob + totalCommit + totalTag + totalPath
 
 	// Ensure empty slices serialize as [] not null.
 	for i := range opResults {
@@ -658,6 +736,15 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 
 	infof(flags, "\nDry-run summary:")
 	for _, op := range result.Operations {
+		if op.PathMatches != nil {
+			if len(op.PathMatches) == 0 {
+				infof(flags, "  Operation %d (%s): no path names match", op.Index, op.Pattern)
+				continue
+			}
+			infof(flags, "  Operation %d (%s): %d path names match", op.Index, op.Pattern, len(op.PathMatches))
+			infof(flags, "    Paths renamed: %s", strings.Join(op.PathMatches, ", "))
+			continue
+		}
 		opMatches := op.BlobMatches + op.CommitMatches + op.TagMatches
 		if opMatches == 0 {
 			infof(flags, "  Operation %d (%s): no matches", op.Index, op.Pattern)
@@ -669,8 +756,8 @@ func scrubRunDryRun(ctx context.Context, flags globalFlags, cmd string, recipe *
 			infof(flags, "    Affected files: %s", strings.Join(op.AffectedFiles, ", "))
 		}
 	}
-	infof(flags, "\n  Total: %d blob, %d commit, %d tag matches",
-		*result.TotalBlobMatches, *result.TotalCommitMatches, *result.TotalTagMatches)
+	infof(flags, "\n  Total: %d blob, %d commit, %d tag matches, %d path names",
+		*result.TotalBlobMatches, *result.TotalCommitMatches, *result.TotalTagMatches, totalPath)
 	infof(flags, "  Affected files: %d", *result.TotalAffectedFiles)
 	infof(flags, "  Estimated commits in range: %d", *result.EstimatedCommits)
 	if *result.BinarySkipped > 0 {

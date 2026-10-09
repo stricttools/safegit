@@ -1058,8 +1058,21 @@ Each operation requires:
 - `pattern`: regex string (required)
 - Exactly one of `replace` (literal string) or `mangle = true`
 - `scope`: optional glob to limit which file paths are affected
-- `target`: optional, one of `"blobs"`, `"commits"`, `"tags"` (default: all)
+- `target`: optional, one of `"blobs"` (file contents), `"commits"` (commit messages), `"tags"` (tag annotations), or `"paths"` (file and directory names); an operation without one rewrites blobs, commit messages, and tag annotations, and only an operation targeting `"paths"` renames anything
 - `depends_on`: optional array of zero-indexed operation indices (must form a DAG)
+
+An operation targeting `"paths"` renames every file or directory name, at any depth and in every commit of the range, that its pattern matches, with its `replace` text (it takes no `mangle` and no `scope`). A rename to an empty name, `.`, `..`, or a name holding `/`, and a rename onto the name of another entry of the same directory, are refused. Its verification reads the names of every tree's entries, not content:
+
+```toml
+[[operations]]
+pattern = "(?i)acme"
+replace = "a client"
+
+[[operations]]
+pattern = "(?i)acme"
+replace = "client"
+target = "paths"
+```
 
 ### Examples
 

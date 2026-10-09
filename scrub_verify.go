@@ -95,7 +95,10 @@ func verifyScrubbedFileContent(ctx context.Context, shaMap map[string]string, fi
 // this check and is caught by Tier B instead. That escalates the outcome from a
 // refusal (exit 30, nothing happened) to a finding (exit 31, the rewrite stands
 // and is reported incomplete) -- never to silence.
-func verifyPatternAbsentFromTips(ctx context.Context, pattern *regexp.Regexp, scope *string, tips []string) error {
+//
+// objectTypes, when not nil, names the object types ("blob", "commit", "tag")
+// whose matches count: a recipe operation answers only for what it rewrites.
+func verifyPatternAbsentFromTips(ctx context.Context, pattern *regexp.Regexp, scope *string, tips []string, objectTypes map[string]bool) error {
 	if len(tips) == 0 {
 		return nil
 	}
@@ -117,6 +120,9 @@ func verifyPatternAbsentFromTips(ctx context.Context, pattern *regexp.Regexp, sc
 
 	var failures []scan.Match
 	for _, m := range results.Matches {
+		if objectTypes != nil && !objectTypes[m.ObjectType] {
+			continue
+		}
 		if scope != nil && m.ObjectType == "blob" && !matchScope(*scope, m.Path) {
 			continue
 		}

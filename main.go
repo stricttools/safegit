@@ -744,7 +744,7 @@ func newApp() *strictcli.App {
 				scrubFromChoice, scrubEntireHistoryChoice),
 		), strictcli.WithRequires(gitRequirement),
 	)
-	sg.Command("run", "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
+	sg.Command("run", "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals, and the renames of every file and directory name an operation targeting paths matches, across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite", releasingLocks(func(ctx *strictcli.Context, kwargs map[string]interface{}) strictcli.Outcome {
 		return strictcli.Exit(runScrubRun(globalsToFlags(ctx, kwargs), kwargs))
 	}),
 		strictcli.WithEffect(strictcli.EffectMutating),
@@ -793,7 +793,7 @@ func newApp() *strictcli.App {
 			strictcli.StringFlag("scope", "glob pattern limiting which blob file paths a --pattern match counts against (e.g. '*.env', 'config/**'); recipe operations carry their own scope in the recipe file", strictcli.Optional()),
 		),
 		strictcli.WithArgs(
-			strictcli.NewArg("recipe", "path to a scrub recipe TOML file whose operations' patterns are verified; the format is the one 'scrub run' takes, and its replace/mangle/depends_on fields are ignored here because verification substitutes nothing", strictcli.ArgOptional()),
+			strictcli.NewArg("recipe", "path to a scrub recipe TOML file whose operations' patterns are verified; the format is the one 'scrub run' takes, and its replace/mangle/depends_on fields are ignored here because verification substitutes nothing; an operation targeting paths is verified against the names of every tree's entries instead of content", strictcli.ArgOptional()),
 		),
 		// Verification is stateless: it reads no policy file and remembers
 		// nothing between runs, so an invocation that names no pattern has

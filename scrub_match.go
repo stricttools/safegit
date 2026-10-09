@@ -844,7 +844,7 @@ func scrubMatchExecute(
 		// Tier A for the submodule: the pattern must be absent from the
 		// submodule history that is about to be published.
 		subTierA := func(ctx context.Context, plan *RefUpdatePlan) error {
-			return verifyPatternAbsentFromTips(ctx, compiledPattern, nil, plan.WalkedTips)
+			return verifyPatternAbsentFromTips(ctx, compiledPattern, nil, plan.WalkedTips, nil)
 		}
 
 		// Oplog extra for submodule (ref, oldHead, sha, rewritten are
@@ -1387,8 +1387,11 @@ func isBinaryContent(content []byte) bool {
 // instead, so the outcome escalates from a Tier A refusal (exit 30, nothing
 // happened) to a Tier B finding (exit 31, the rewrite stands and is reported
 // incomplete). It never slips through unreported.
-func verifySecretRemovedScoped(ctx context.Context, pattern *regexp.Regexp, scope *string) error {
-	if scope == nil {
+//
+// objectTypes, when not nil, names the object types ("blob", "commit", "tag")
+// whose matches count: a recipe operation answers only for what it rewrites.
+func verifySecretRemovedScoped(ctx context.Context, pattern *regexp.Regexp, scope *string, objectTypes map[string]bool) error {
+	if scope == nil && objectTypes == nil {
 		return verifySecretRemoved(ctx, pattern)
 	}
 
@@ -1397,8 +1400,20 @@ func verifySecretRemovedScoped(ctx context.Context, pattern *regexp.Regexp, scop
 	if err != nil {
 		return fmt.Errorf("re-scan failed: %w", err)
 	}
+	if objectTypes != nil {
+		kept := results.Matches[:0]
+		for _, m := range results.Matches {
+			if objectTypes[m.ObjectType] {
+				kept = append(kept, m)
+			}
+		}
+		results.Matches = kept
+	}
 	if len(results.Matches) == 0 {
 		return nil
+	}
+	if scope == nil {
+		return fmt.Errorf("%s", describeSurvivingMatches(ctx, results.Matches))
 	}
 
 	// Add attribution so blob matches have paths.

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"sort"
+	"strings"
 
 	tomledit "github.com/stricttools/go-toml-edit"
 	"github.com/stricttools/safegit/internal/git"
@@ -25,6 +27,28 @@ type RecipeOperation struct {
 	Scope     *string `toml:"scope"`      // nil if not set
 	Target    *string `toml:"target"`     // nil = all
 	DependsOn []int   `toml:"depends_on"` // zero-indexed operation indices
+}
+
+// The values of a recipe operation's target: what the operation rewrites.
+const (
+	TargetBlobs   = "blobs"
+	TargetCommits = "commits"
+	TargetTags    = "tags"
+	TargetPaths   = "paths"
+)
+
+// recipeTargets are the values a target takes, in the order an error lists
+// them.
+var recipeTargets = []string{TargetBlobs, TargetCommits, TargetTags, TargetPaths}
+
+// appliesTo reports whether the operation rewrites target. An operation
+// without a target rewrites blobs, commit messages, and tag annotations;
+// path names are renamed only by an operation whose target is paths.
+func (op RecipeOperation) appliesTo(target string) bool {
+	if op.Target == nil {
+		return target != TargetPaths
+	}
+	return *op.Target == target
 }
 
 // ParsedRecipe is the validated, compiled form of a Recipe.
@@ -68,6 +92,21 @@ func parseRecipe(path string) (*ParsedRecipe, error) {
 		}
 		if !hasReplace && !hasMangle {
 			return nil, fmt.Errorf("operation %d: must set exactly one of replace or mangle", i)
+		}
+
+		if op.Target != nil && !slices.Contains(recipeTargets, *op.Target) {
+			return nil, fmt.Errorf("operation %d: target %q is none of %s", i, *op.Target, strings.Join(recipeTargets, ", "))
+		}
+		if op.appliesTo(TargetPaths) {
+			// A path name is renamed to a name of its own choosing: random
+			// text could hold a slash, and a scope selects files by the very
+			// paths being renamed.
+			if hasMangle {
+				return nil, fmt.Errorf("operation %d: an operation targeting paths takes replace, not mangle", i)
+			}
+			if op.Scope != nil {
+				return nil, fmt.Errorf("operation %d: an operation targeting paths renames every matching name, so it takes no scope", i)
+			}
 		}
 
 		// Compile the regex pattern.
@@ -273,6 +312,10 @@ func applyRecipeToContent(recipe *ParsedRecipe, content []byte, allowedOps map[i
 	for _, idx := range recipe.TopoOrder {
 		// Skip operations not allowed for this blob (per-operation scope).
 		if allowedOps != nil && !allowedOps[idx] {
+			continue
+		}
+		// Skip operations that do not rewrite blobs.
+		if !recipe.Operations[idx].appliesTo(TargetBlobs) {
 			continue
 		}
 
