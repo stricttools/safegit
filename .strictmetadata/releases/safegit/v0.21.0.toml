@@ -18,7 +18,6 @@ from old to new location. Policies are now local to the machine where the scrub 
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "17d884bca6c0d712ab3ab578fcbe88a947e73100"
-
+release_commit = "2cb63a9fbfec4aafd38a66d3bd80cd79e132775f"
 [released_trees]
-"." = "b74db27c05296d32255d3126e92a340c60e7b3f5"
+"." = "6a62bc2336e13300f0ff46a65dc262d3b838e5b1"

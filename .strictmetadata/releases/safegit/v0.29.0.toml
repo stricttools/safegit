@@ -19,7 +19,6 @@ v0.28.0 shipped with known defects — scrub could destroy data when run from a 
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "ba53a2a98db63e15fb103c1ac26e5f58de3e9bb2"
-
+release_commit = "39afd3ee8a022cb0f5167170b2788c1264ab61b4"
 [released_trees]
-"." = "4dbe96decb7fa63fb42ea8f4b022f05fe1cea740"
+"." = "5a960d7d41a74b9e79133330bc8f9a428319a485"

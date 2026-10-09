@@ -12,7 +12,6 @@ context = "The redo command is removed in favor of undo --count N, which provide
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "893ae29966682a4d387a8648a0e9c5ec80c61a7d"
-
+release_commit = "cf6f90120853995bef9ce3d0e933b9d37b020646"
 [released_trees]
-"." = "70fa77c366722d4e745218ecc19226d55880070f"
+"." = "7a381473673d44376195ba03416d3b704b0e25da"

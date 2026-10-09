@@ -12,7 +12,6 @@ context = "The ci-go.yml workflow was missing GIT_CONFIG env vars that ci.yml al
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "4bca7a4048f5645b237dfdc6ac425977291df256"
-
+release_commit = "3437546c2febf73cba48eaf2ea1a2823dd04e7d9"
 [released_trees]
-"." = "6d0e5e6c5f1d661692e816587b91aaa9d5f9f61e"
+"." = "00470ba056737ab9ea10c1dddeec96b99de84fcc"

@@ -27,7 +27,6 @@ remapping it drives from it.
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "48a3915e478001bc62c48c3eee04ff5004a11af2"
-
+release_commit = "9f2faf05d2f5c642d0d1af863440da30a99a9c54"
 [released_trees]
-"." = "0efd388e9dc8e55edebbd5fd182332f175378e4c"
+"." = "940989d49d26f46d38a61020fdc3a79ef6c3bcb6"

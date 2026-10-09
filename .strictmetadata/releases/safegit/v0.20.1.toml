@@ -18,7 +18,6 @@ per-operation match counts without any writes or lock acquisition.
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "4715641e722b8723e44766bf83b28b603c50395c"
-
+release_commit = "54c78272fa21b0111d22b92be6f5ba4ae484f354"
 [released_trees]
-"." = "d86ea6f5fce4fb9b9bb543545a3cd31c472906a0"
+"." = "760af7bcc93cc135cb1f61eb2f60c6417ad35450"

@@ -23,7 +23,6 @@ self-consistent at every commit of the rewritten history.
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "da13474bfda07ac9a58548573ff3197ef2bfaf41"
-
+release_commit = "13bac58d1252d4c69823edfa0e7cd500beb40195"
 [released_trees]
-"." = "3cc3479253b3cb0b597df6de852c2cbcba120f81"
+"." = "29325cffbd37360b448d847a670b81c41ac4f3ec"

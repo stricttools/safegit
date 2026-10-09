@@ -16,7 +16,6 @@ acquired the exclusive rewrite lock, blocking concurrent operations during read-
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "4c1e09c027389bbd4694b04a4367ed98a624d2ad"
-
+release_commit = "23ec115c47c26173d3dbdb99446caf642499c194"
 [released_trees]
-"." = "7765da5002963130027db6039f663ea0eb2d440c"
+"." = "f3616f0e325f10d7b9c8839c639a22870ba71090"

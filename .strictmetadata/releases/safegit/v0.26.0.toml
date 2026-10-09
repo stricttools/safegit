@@ -39,7 +39,6 @@ content hashes are tracked in the repo, matching the rest of the fleet.
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "5faea1aaa67d5225afa7007a57e1d8e02501e948"
-
+release_commit = "39985f22588a809a855f125e84ab8a840c01af99"
 [released_trees]
-"." = "7a6567bf2e43c24e0b4cb95efe145daec8a8ff17"
+"." = "3ee3dbef7e94a4437adc035bd547fa7fbb925e92"

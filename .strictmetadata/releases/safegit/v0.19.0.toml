@@ -30,7 +30,6 @@ during scrubs. Multi-line regex patterns now work correctly in scan/dry-run mode
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "e2c378cbc20ca6589218f0f6cd8e8c0274e303a4"
-
+release_commit = "c6d5282cbe19e467b35704f086a00897491ead09"
 [released_trees]
-"." = "e7341f3fabd6ea2b441123ef46ff917dff587fb8"
+"." = "77bce4861caa5e920fd643c011a11a029c320e1f"

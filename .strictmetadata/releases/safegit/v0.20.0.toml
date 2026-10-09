@@ -29,7 +29,6 @@ strictcli upgraded from v0.9.0 to v0.16.2. JSON-producing commands are tagged in
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "97b439282d465d73362b23d916c75a9360fe65f4"
-
+release_commit = "486a1791dc04ae037eb44200b78d4c8156294f3e"
 [released_trees]
-"." = "ffca1bf3dc9115f7fa658e448a39e5135fae56cc"
+"." = "809ffdb7fb28f61cfd498aa31b398b67413294e3"

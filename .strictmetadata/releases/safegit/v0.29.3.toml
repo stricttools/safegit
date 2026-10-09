@@ -21,7 +21,6 @@ Preserving another session's staged work was stated over the whole index; it now
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "368f0f22617e8c8d57447e89f32527c299e9fb38"
-
+release_commit = "7ef4b089cc9e86465abd72c1eeef0d2544a61881"
 [released_trees]
 "." = "f853cdb179edfcbcaba03b64cdcd53fb317ccda4"

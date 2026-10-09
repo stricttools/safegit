@@ -12,7 +12,6 @@ context = ""
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "7d88bb9b6e3ebc151a09ef2699a30fa4306bbc39"
-
+release_commit = "1575fc872ccdf043965db6dc45ca36debdab4dea"
 [released_trees]
-"." = "43de21cae520526785f9a00a7bb3db358e880856"
+"." = "78e953acb5495c5a722f573777a20623b36a499e"

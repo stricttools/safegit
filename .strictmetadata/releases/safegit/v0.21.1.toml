@@ -17,7 +17,6 @@ for test isolation.
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "da8b4d6a31ff68d2728f69c4b302c94bc0ac5ba6"
-
+release_commit = "101883bb5d950575256195934c598ebd46732082"
 [released_trees]
-"." = "aabbd69a5fa4c9800b3fa55619cee02c507e4942"
+"." = "7649e2caac34fe1ba501c7e25b401bc3a7c9128a"

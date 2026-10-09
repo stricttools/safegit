@@ -35,7 +35,6 @@ code (2, or 70 for the unreachable-state refusals) and a framework parse error e
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "c07d899296f2d05ac8d3d8403f3f0d776d11f3ef"
-
+release_commit = "a5e0c7567345e7818c0450cf322aec3fa8a3fbdc"
 [released_trees]
-"." = "2f4ad95f3dd126f497a9cdeb60a2af6d8b4018ac"
+"." = "87b20c9b8f75fdc86b2c5f8ee28aabe8b1b9824f"

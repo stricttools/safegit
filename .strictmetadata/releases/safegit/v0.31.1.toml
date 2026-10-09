@@ -9,6 +9,6 @@ context = "An entire-history scrub of rlsbl's own history ran past the ten minut
 # The targets released, and the ones left out; between them they name every target of the releasable's members.
 include = ["go"]
 exclude = []
-release_commit = "026ae24e8b46a8d40a0930a9cc2b989afccebbea"
+release_commit = "0b286bd82f698e1fc4088af8decc197acc71689e"
 [released_trees]
-"." = "6f20fbafc749a3c3486fccbc62a32454a5f4d707"
+"." = "afaf4841d62b6652efc813035146374fc7ee1436"

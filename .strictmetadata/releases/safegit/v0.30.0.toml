@@ -21,7 +21,6 @@ This release also carries the work of the 0.29.4 attempt, which was abandoned af
 # blog = false
 include = ["go"]
 exclude = []
-release_commit = "3d6dd8ca70a5f2adcaa991fef8d02b82ac16c5ff"
-
+release_commit = "6570d42cfd2110660d20fa841e2f6aea56321872"
 [released_trees]
 "." = "316295a7de55c8eb50a8eae10f8af2690e0941b6"

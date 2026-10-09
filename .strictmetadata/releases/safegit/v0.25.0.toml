@@ -27,7 +27,6 @@ Also gone: the guard that killed `scrub` and `author rewrite` in any repository 
 # blog = false
 include = ["go", "docker"]
 exclude = []
-release_commit = "4adbd67fd4ab838b43e991f49226791c92fcc129"
-
+release_commit = "5e953e44069dd956d07d83235a57cb09747d3e1b"
 [released_trees]
-"." = "92113768af9cb3c388b7d5278b8285b7ea5595c6"
+"." = "eeeb003854c53f8bb1538d7606254eb2ecca1a36"
