@@ -1,5 +1,5 @@
 format_version = 1
-rlsbl_version = "0.131.0"
+rlsbl_version = "0.132.0"
 
 [files]
 ".claude/go.mod" = "dd4165ab2ea2c7f27698a1b1ca5bfa8e08cfb21aae5c390b1675e65aab3cac27"

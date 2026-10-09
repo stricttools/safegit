@@ -1,5 +1,5 @@
 {
-  "version": "0.31.1",
+  "version": "0.32.0",
   "description": "The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood",
   "repo": "https://github.com/stricttools/safegit",
   "source": [
@@ -21,7 +21,7 @@
   },
   "versions": [
     {
-      "version": "0.31.1"
+      "version": "0.32.0"
     }
   ],
   "locales": [

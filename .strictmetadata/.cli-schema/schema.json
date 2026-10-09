@@ -84,7 +84,7 @@
   },
   "project_id": "github.com/stricttools/safegit",
   "name": "safegit",
-  "version": "0.31.1",
+  "version": "0.32.0",
   "help": "The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood",
   "proc_observe_allowlist": [
     [
@@ -3837,7 +3837,7 @@
         },
         "run": {
           "name": "run",
-          "help": "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite",
+          "help": "execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals, and the renames of every file and directory name an operation targeting paths matches, across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite",
           "effect": "mutating",
           "consequential": true,
           "payload_schema": {
@@ -3956,6 +3956,12 @@
                     "index": {
                       "type": "integer"
                     },
+                    "path_matches": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
                     "pattern": {
                       "type": "string"
                     },
@@ -3980,6 +3986,12 @@
                   "type": "string"
                 },
                 "type": "object"
+              },
+              "renamed_paths": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
               },
               "rewrites": {
                 "additionalProperties": {
@@ -4376,7 +4388,7 @@
           "args": [
             {
               "name": "recipe",
-              "help": "path to a scrub recipe TOML file whose operations' patterns are verified; the format is the one 'scrub run' takes, and its replace/mangle/depends_on fields are ignored here because verification substitutes nothing",
+              "help": "path to a scrub recipe TOML file whose operations' patterns are verified; the format is the one 'scrub run' takes, and its replace/mangle/depends_on fields are ignored here because verification substitutes nothing; an operation targeting paths is verified against the names of every tree's entries instead of content",
               "value_schema": {
                 "type": "string"
               },

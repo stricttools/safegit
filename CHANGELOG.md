@@ -2,6 +2,25 @@
 
 # Changelog
 
+## 0.32.0
+
+`scrub run` renames file and directory names with a recipe operation targeting paths, and a recipe operation's target now limits what it rewrites.
+
+<details>
+<summary>Context</summary>
+
+A history scrub that removes a name must remove it from path names too, in the same single rewrite as the contents and messages.
+
+</details>
+
+### Features
+
+- **`scrub run` renames paths.** A recipe operation with `target = "paths"` renames every file and directory name its pattern matches, in every commit of the range, with its `replace` text; a rename onto another entry's name is refused, and the preview, both verification tiers, and `scrub verify` check path names for it.
+
+### Fixes
+
+- A recipe operation's `target` limits what it rewrites: an operation targeting `commits` or `tags` no longer rewrites file contents too, and an unknown target is refused.
+
 ## 0.31.1
 
 History rewrites run in time that grows with the commits they rewrite rather than with commits times directories: an entire-history scrub of a history of thousands of commits takes seconds instead of tens of minutes.
