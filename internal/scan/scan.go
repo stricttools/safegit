@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/stricttools/safegit/internal/git"
 )
@@ -145,67 +147,52 @@ func ScanObjectsMulti(ctx context.Context, patterns []*regexp.Regexp, opts ScanO
 		allResults[i] = &ScanResults{}
 	}
 
-	for {
-		entry, err := iter.Next()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, fmt.Errorf("iterate objects: %w", err)
-		}
-
+	// Each object yields its scannable content and every pattern's matches in
+	// it; the per-pattern results are folded in stream order.
+	type multiResult struct {
+		binary  bool
+		matches [][]Match // per pattern; nil when the object has no content to scan
+	}
+	err = scanParallel(iter, func(entry *git.ObjectEntry) multiResult {
 		isReachable := reachable[entry.SHA]
-
-		// Determine scannable content based on object type.
 		var content []byte
 		var objType string
 		switch entry.Type {
 		case "blob":
 			if isBinary(entry.Content) {
-				for _, r := range allResults {
-					r.Scanned++
-					r.Skipped++
-				}
-				continue
+				return multiResult{binary: true}
 			}
-			content = entry.Content
-			objType = "blob"
-		case "commit":
-			body := extractBody(entry.Content)
-			if len(body) == 0 {
-				for _, r := range allResults {
-					r.Scanned++
-				}
-				continue
+			content, objType = entry.Content, "blob"
+		case "commit", "tag":
+			content, objType = extractBody(entry.Content), entry.Type
+			if len(content) == 0 {
+				return multiResult{}
 			}
-			content = body
-			objType = "commit"
-		case "tag":
-			body := extractBody(entry.Content)
-			if len(body) == 0 {
-				for _, r := range allResults {
-					r.Scanned++
-				}
-				continue
-			}
-			content = body
-			objType = "tag"
 		default:
-			for _, r := range allResults {
-				r.Scanned++
-			}
-			continue
+			return multiResult{}
 		}
-
-		// Test each pattern against the same content.
+		out := multiResult{matches: make([][]Match, len(patterns))}
 		for i, pat := range patterns {
-			allResults[i].Scanned++
 			matches := findMatches(entry.SHA, objType, content, pat, isReachable)
 			for j := range matches {
 				matches[j].SubmodulePath = opts.SubmodulePath
 			}
-			allResults[i].Matches = append(allResults[i].Matches, matches...)
+			out.matches[i] = matches
 		}
+		return out
+	}, func(r multiResult) {
+		for i, res := range allResults {
+			res.Scanned++
+			if r.binary {
+				res.Skipped++
+			}
+			if r.matches != nil {
+				res.Matches = append(res.Matches, r.matches[i]...)
+			}
+		}
+	})
+	if err != nil {
+		return nil, fmt.Errorf("iterate objects: %w", err)
 	}
 
 	return allResults, nil
@@ -267,22 +254,12 @@ func scanEntireHistory(ctx context.Context, pattern *regexp.Regexp, opts ScanOpt
 	defer iter.Close()
 
 	results := &ScanResults{}
-
-	for {
-		entry, err := iter.Next()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, fmt.Errorf("iterate objects: %w", err)
-		}
-
-		results.Scanned++
-		isReachable := reachable[entry.SHA]
-
-		scanEntry(entry, pattern, isReachable, opts.SubmodulePath, results)
+	err = scanParallel(iter, func(entry *git.ObjectEntry) entryResult {
+		return scanEntry(entry, pattern, reachable[entry.SHA], opts.SubmodulePath)
+	}, results.add)
+	if err != nil {
+		return nil, fmt.Errorf("iterate objects: %w", err)
 	}
-
 	return results, nil
 }
 
@@ -322,59 +299,96 @@ func scanRange(ctx context.Context, pattern *regexp.Regexp, opts ScanOpts, hasDi
 	defer iter.Close()
 
 	results := &ScanResults{}
-
-	for {
-		entry, err := iter.Next()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, fmt.Errorf("iterate range objects: %w", err)
-		}
-
-		results.Scanned++
+	err = scanParallel(iter, func(entry *git.ObjectEntry) entryResult {
 		// Everything from rev-list is reachable by construction.
-		scanEntry(entry, pattern, true, opts.SubmodulePath, results)
+		return scanEntry(entry, pattern, true, opts.SubmodulePath)
+	}, results.add)
+	if err != nil {
+		return nil, fmt.Errorf("iterate range objects: %w", err)
 	}
-
 	return results, nil
 }
 
-// scanEntry processes a single object entry, appending any matches to results.
-func scanEntry(entry *git.ObjectEntry, pattern *regexp.Regexp, reachable bool, submodulePath string, results *ScanResults) {
+// entryResult is what scanning one object found.
+type entryResult struct {
+	matches []Match
+	binary  bool
+}
+
+// add folds one object's result into the aggregate.
+func (r *ScanResults) add(e entryResult) {
+	r.Scanned++
+	if e.binary {
+		r.Skipped++
+	}
+	r.Matches = append(r.Matches, e.matches...)
+}
+
+// scanEntry scans a single object entry.
+func scanEntry(entry *git.ObjectEntry, pattern *regexp.Regexp, reachable bool, submodulePath string) entryResult {
+	var content []byte
 	switch entry.Type {
 	case "blob":
 		if isBinary(entry.Content) {
-			results.Skipped++
-			return
+			return entryResult{binary: true}
 		}
-		matches := findMatches(entry.SHA, "blob", entry.Content, pattern, reachable)
-		for i := range matches {
-			matches[i].SubmodulePath = submodulePath
-		}
-		results.Matches = append(results.Matches, matches...)
+		content = entry.Content
+	case "commit", "tag":
+		content = extractBody(entry.Content)
+	}
+	if len(content) == 0 {
+		return entryResult{}
+	}
+	matches := findMatches(entry.SHA, entry.Type, content, pattern, reachable)
+	for i := range matches {
+		matches[i].SubmodulePath = submodulePath
+	}
+	return entryResult{matches: matches}
+}
 
-	case "commit":
-		body := extractBody(entry.Content)
-		if len(body) == 0 {
-			return
+// scanParallel reads every object iter yields, runs work on them across the
+// machine's cores, and hands each result to fold in the order the objects were
+// read, so the outcome is the same as a sequential scan's. Matching a pattern
+// against every object in the store is the whole cost of a scan, and a
+// rewrite runs several scans.
+func scanParallel[R any](iter *git.ObjectIterator, work func(*git.ObjectEntry) R, fold func(R)) error {
+	const chunkObjects = 1024
+	const chunkBytes = 32 << 20
+	workers := runtime.GOMAXPROCS(0)
+	for {
+		var chunk []*git.ObjectEntry
+		size := 0
+		done := false
+		for len(chunk) < chunkObjects && size < chunkBytes {
+			entry, err := iter.Next()
+			if err == io.EOF {
+				done = true
+				break
+			}
+			if err != nil {
+				return err
+			}
+			chunk = append(chunk, entry)
+			size += len(entry.Content)
 		}
-		matches := findMatches(entry.SHA, "commit", body, pattern, reachable)
-		for i := range matches {
-			matches[i].SubmodulePath = submodulePath
+		results := make([]R, len(chunk))
+		var wg sync.WaitGroup
+		for w := 0; w < workers && w < len(chunk); w++ {
+			wg.Add(1)
+			go func(w int) {
+				defer wg.Done()
+				for i := w; i < len(chunk); i += workers {
+					results[i] = work(chunk[i])
+				}
+			}(w)
 		}
-		results.Matches = append(results.Matches, matches...)
-
-	case "tag":
-		body := extractBody(entry.Content)
-		if len(body) == 0 {
-			return
+		wg.Wait()
+		for _, r := range results {
+			fold(r)
 		}
-		matches := findMatches(entry.SHA, "tag", body, pattern, reachable)
-		for i := range matches {
-			matches[i].SubmodulePath = submodulePath
+		if done {
+			return nil
 		}
-		results.Matches = append(results.Matches, matches...)
 	}
 }
 
