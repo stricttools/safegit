@@ -2,6 +2,25 @@
 
 # Changelog
 
+## 0.31.1
+
+History rewrites run in time that grows with the commits they rewrite rather than with commits times directories: an entire-history scrub of a history of thousands of commits takes seconds instead of tens of minutes.
+
+<details>
+<summary>Context</summary>
+
+An entire-history scrub of rlsbl's own history ran past the ten minutes rlsbl allowed it, because every object a rewrite read or wrote cost a git process.
+
+</details>
+
+### Features
+
+- **Faster history rewrites.** `scrub match`, `scrub file`, `scrub run`, `scrub squash`, and `author rewrite` read and write objects through long-running git processes instead of one git process per object, `--remap-shas-in` reads only the directories its globs can reach, and scans skip objects holding none of a pattern's fixed strings and use every core: an entire-history `scrub match --remap-shas-in` over 8,764 commits went from 22 minutes to 34 seconds.
+
+### Fixes
+
+- A `--remap-shas-in` hash whose object type cannot be read stops the rewrite instead of being counted as a stale hash and left in place.
+
 ## 0.31.0
 
 Commits are screened for confidential names against the lifecycle-and-license record and the machine-local confidential-name index, and `safegit scrub squash` folds a first-parent range of history into one commit.
