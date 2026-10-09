@@ -2,7 +2,7 @@
   "schema_version": 2,
   "name": "release-checkout",
   "slug": "safegit",
-  "version": "0.30.0",
+  "version": "0.31.0",
   "description": "The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood",
   "language": "go",
   "base_url": "https://safegit.smmh.dev",
@@ -2551,6 +2551,11 @@
         },
         {
           "level": 3,
+          "text": "`ObjectStore`",
+          "anchor": "objectstore"
+        },
+        {
+          "level": 3,
           "text": "`UnmergedStages`",
           "anchor": "unmergedstages"
         },
@@ -2926,6 +2931,21 @@
         },
         {
           "level": 3,
+          "text": "`WithObjectStore`",
+          "anchor": "withobjectstore"
+        },
+        {
+          "level": 3,
+          "text": "`ObjectType`",
+          "anchor": "objecttype"
+        },
+        {
+          "level": 3,
+          "text": "`ChangedPathNames`",
+          "anchor": "changedpathnames"
+        },
+        {
+          "level": 3,
           "text": "`StashApply`",
           "anchor": "stashapply"
         },
@@ -2948,6 +2968,11 @@
           "level": 3,
           "text": "`ObjectIterator.Close`",
           "anchor": "objectiteratorclose"
+        },
+        {
+          "level": 3,
+          "text": "`ObjectStore.Close`",
+          "anchor": "objectstoreclose"
         },
         {
           "level": 2,
@@ -5401,6 +5426,11 @@
         },
         {
           "level": 3,
+          "text": "`ObjectStore`",
+          "anchor": "objectstore"
+        },
+        {
+          "level": 3,
           "text": "`UnmergedStages`",
           "anchor": "unmergedstages"
         },
@@ -5776,6 +5806,21 @@
         },
         {
           "level": 3,
+          "text": "`WithObjectStore`",
+          "anchor": "withobjectstore"
+        },
+        {
+          "level": 3,
+          "text": "`ObjectType`",
+          "anchor": "objecttype"
+        },
+        {
+          "level": 3,
+          "text": "`ChangedPathNames`",
+          "anchor": "changedpathnames"
+        },
+        {
+          "level": 3,
           "text": "`StashApply`",
           "anchor": "stashapply"
         },
@@ -5798,6 +5843,11 @@
           "level": 3,
           "text": "`ObjectIterator.Close`",
           "anchor": "objectiteratorclose"
+        },
+        {
+          "level": 3,
+          "text": "`ObjectStore.Close`",
+          "anchor": "objectstoreclose"
         }
       ]
     },
@@ -8274,7 +8324,7 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-10-08T14:44:39.151691+00:00",
+  "last_gen": "2026-10-09T12:32:52.522309+00:00",
   "theme": "minimal",
   "vocabulary": {
     "accepted": [
