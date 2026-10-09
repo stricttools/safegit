@@ -1,11 +1,11 @@
 # The next release of safegit. Fill in bump and description, then run `rlsbl release run --watch`.
 format_version = 2
 # How the release moves the version: patch, minor, major, or infra (moved as a patch, recorded as infra).
-bump = ""
+bump = "patch"
 # What this release is, in a sentence or two. Required.
-description = ""
+description = "History rewrites run in time that grows with the commits they rewrite rather than with commits times directories: an entire-history scrub of a history of thousands of commits takes seconds instead of tens of minutes."
 # Why these changes were made. Optional.
-context = ""
+context = "An entire-history scrub of rlsbl's own history ran past the ten minutes rlsbl allowed it, because every object a rewrite read or wrote cost a git process."
 # The targets released, and the ones left out; between them they name every target of the releasable's members.
 include = ["go"]
 exclude = []
