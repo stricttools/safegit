@@ -142,6 +142,7 @@ var argvTakingCalls = map[string]string{
 	"runBackupGit":          "main.runBackupGit, the effects-handle route for a restore's fetch and fast-forward",
 	"runRepairGit":          "main.runRepairGit, the effects-handle route for the doctor repairs",
 	"ArgvAny":               "the boundary's own effects-handle argv builder",
+	"startBatch":            "internal/git.startBatch, the object store's long-running cat-file and mktree",
 }
 
 // authoringViolation reports the refused authoring shape for one argv
