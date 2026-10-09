@@ -1,8 +1,8 @@
 {
   "schema_version": 2,
-  "name": "release-checkout",
+  "name": "safegit",
   "slug": "safegit",
-  "version": "0.31.0",
+  "version": "0.31.1",
   "description": "The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood",
   "language": "go",
   "base_url": "https://safegit.smmh.dev",
@@ -4147,6 +4147,26 @@
         },
         {
           "level": 3,
+          "text": "`TargetBlobs`",
+          "anchor": "targetblobs"
+        },
+        {
+          "level": 3,
+          "text": "`TargetCommits`",
+          "anchor": "targetcommits"
+        },
+        {
+          "level": 3,
+          "text": "`TargetTags`",
+          "anchor": "targettags"
+        },
+        {
+          "level": 3,
+          "text": "`TargetPaths`",
+          "anchor": "targetpaths"
+        },
+        {
+          "level": 3,
           "text": "`IntentUnset`",
           "anchor": "intentunset"
         },
@@ -8025,6 +8045,26 @@
         },
         {
           "level": 3,
+          "text": "`TargetBlobs`",
+          "anchor": "targetblobs"
+        },
+        {
+          "level": 3,
+          "text": "`TargetCommits`",
+          "anchor": "targetcommits"
+        },
+        {
+          "level": 3,
+          "text": "`TargetTags`",
+          "anchor": "targettags"
+        },
+        {
+          "level": 3,
+          "text": "`TargetPaths`",
+          "anchor": "targetpaths"
+        },
+        {
+          "level": 3,
           "text": "`IntentUnset`",
           "anchor": "intentunset"
         },
@@ -8324,7 +8364,7 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-10-09T12:32:52.522309+00:00",
+  "last_gen": "2026-10-09T14:46:36.920278+00:00",
   "theme": "minimal",
   "vocabulary": {
     "accepted": [
