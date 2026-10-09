@@ -60,7 +60,7 @@ replace every occurrence of a regex pattern in the blobs, commit messages and ta
 
 ## scrub run
 
-execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite
+execute a multi-operation scrub recipe from a TOML file, applying all pattern replacements and file removals, and the renames of every file and directory name an operation targeting paths matches, across history in a single coordinated pass with topological commit ordering, overlap detection between operations, and automatic verification that no matched content survives in the rewritten object store — use --diff to preview all changes as unified diffs before committing to the rewrite
 
 **Effect:** mutating · **consequential** (prompts before running; `--approve-consequential` skips)
 
@@ -114,7 +114,7 @@ confirm that the patterns named on the command line -- repeatable --pattern rege
 
 | Name | Type | Presence | Description |
 | --- | --- | --- | --- |
-| `recipe` | str | optional | path to a scrub recipe TOML file whose operations' patterns are verified; the format is the one 'scrub run' takes, and its replace/mangle/depends_on fields are ignored here because verification substitutes nothing |
+| `recipe` | str | optional | path to a scrub recipe TOML file whose operations' patterns are verified; the format is the one 'scrub run' takes, and its replace/mangle/depends_on fields are ignored here because verification substitutes nothing; an operation targeting paths is verified against the names of every tree's entries instead of content |
 
 ### Constraints
 
