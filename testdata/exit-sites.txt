@@ -359,7 +359,7 @@
    push.go:406  strictcli.ExitNow in runPush  code=exitcode.PushFailed  | strictcli.ExitNow(exitcode.PushFailed, fmt.Sprintf(
    push.go:412  return in runPush  code=exitcode.PushFailed  | return exitcode.PushFailed
    push.go:421  return in runPush  code=exitcode.PushFailed  | return exitcode.PushFailed
-   remap.go:101  strictcli.ExitNow in validateRemapGlobs  code=exitcode.Usage  | strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("invalid --remap-shas-in glob %q: %v", g, err))
+   remap.go:110  strictcli.ExitNow in validateRemapGlobs  code=exitcode.Usage  | strictcli.ExitNow(exitcode.Usage, fmt.Sprintf("invalid --remap-shas-in glob %q: %v", g, err))
    revert_cmd.go:69  return in runRevert  code=code  | return code
    revert_cmd.go:72  return in runRevert  code=runGuardedPassthrough(flags, "revert", args)  | return runGuardedPassthrough(flags, "revert", args)
    revert_cmd.go:75  return in runRevert  code=runComputingPassthrough(flags, "revert", args)  | return runComputingPassthrough(flags, "revert", args)
