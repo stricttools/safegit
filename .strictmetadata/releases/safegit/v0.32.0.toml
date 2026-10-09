@@ -9,3 +9,6 @@ context = "A history scrub that removes a name must remove it from path names to
 # The targets released, and the ones left out; between them they name every target of the releasable's members.
 include = ["go"]
 exclude = []
+release_commit = "c1d49104cfcd592fbf23bed6172a8ce39e2f100b"
+[released_trees]
+"." = "4054e08ed93f2157c49e500fd404b9f7d5e8843f"
