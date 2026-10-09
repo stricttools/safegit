@@ -126,6 +126,8 @@ func planSquash(ctx context.Context, firstArg, lastArg string) (squashPlan, erro
 	for i := iFirst; i >= iLast; i-- {
 		members = append(members, chain[i])
 	}
+	ctx, store := git.WithObjectStore(ctx)
+	defer store.Close()
 	var firstParents []string
 	for i, m := range members {
 		info, err := git.ParseCommit(ctx, m)
@@ -162,6 +164,10 @@ func planSquash(ctx context.Context, firstArg, lastArg string) (squashPlan, erro
 // branched off from inside the range is rewritten onto the squash commit like
 // every other descendant.
 func squashWalk(flags globalFlags, ctx context.Context, plan squashPlan, message string) (map[string]string, int, string, error) {
+	// Every commit of the walk is read through one reader process.
+	ctx, store := git.WithObjectStore(ctx)
+	defer store.Close()
+
 	members := plan.members
 	folded := make(map[string]bool, len(members))
 	for _, m := range members {
