@@ -227,7 +227,7 @@ A history rewrite invalidates metadata that lives outside the commit graph: chan
 
 The scrub walker processes commits in topological order (parents before children), applying a transform function to each commit. Parent SHAs are remapped through the growing old-to-new map, so descendant commits automatically inherit rewritten parents. When the transform changes a commit's tree, message, or author, a new commit object is created; otherwise the original SHA is preserved as an identity mapping.
 
-After the walk, the shared finalization pipeline updates all branch and tag refs to point at rewritten commits, syncs the main index with the rewritten HEAD, expires tainted reflog entries, and prunes old objects.
+After the walk, the shared finalization pipeline updates all branch and tag refs to point at rewritten commits, syncs the main index with the rewritten HEAD, expires every reflog entry (an entry naming a pre-rewrite commit would keep it reachable), and prunes old objects.
 
 ## Common concurrent workflows
 

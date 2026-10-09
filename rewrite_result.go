@@ -206,7 +206,7 @@ func (r *RewriteResult) TierBExit(prior int) int {
 //     or SKIP the sync, printing what to do -- foreign staged state is never
 //     overwritten.
 //  7. untrackProtectedPaths -- remove tracked-but-gitignored files from index
-//  8. cleanupAfterRewrite -- expire tainted reflog entries, repack, prune
+//  8. cleanupAfterRewrite -- expire the reflogs, repack, prune
 //  9. TIER B: stale-ref pointers plus the command's own hook. Findings are
 //     recorded and reported; the rewrite stands and the exit code turns
 //     nonzero via TierBExit.
@@ -367,7 +367,7 @@ func (r *RewriteResult) publish(ctx context.Context, flags globalFlags, cmd stri
 		untrackProtectedPaths(ctx, flags, protectedPaths)
 	}
 
-	// 8. Post-rewrite cleanup: expire tainted reflog entries and prune old
+	// 8. Post-rewrite cleanup: expire the reflogs and prune old
 	// objects. Failures stay non-fatal (warnings) but are captured
 	// machine-readably in CleanupOK/CleanupErrors for orchestrators.
 	cleanupErrors, residue, cleanupErr := cleanupAfterRewrite(ctx, flags, cmd, r.ShaMap, allTagRewrites, r.SgDir)

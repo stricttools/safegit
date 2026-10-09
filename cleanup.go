@@ -9,8 +9,8 @@ import (
 	"github.com/stricttools/safegit/internal/git"
 )
 
-// cleanupAfterRewrite performs surgical post-rewrite cleanup: expires only
-// tainted reflog entries (those referencing pre-rewrite SHAs), prunes
+// cleanupAfterRewrite performs post-rewrite cleanup: expires every reflog
+// entry (an entry naming a pre-rewrite SHA keeps it reachable), prunes
 // unreachable objects, and warns about stash/notes/replace refs that still
 // reference old commits.
 //
@@ -46,25 +46,18 @@ func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, sha
 		return nil, "", nil // nothing was rewritten
 	}
 
-	// Step 1+2: Identify and delete tainted reflog entries.
-	if err := expireTaintedReflogEntries(ctx, flags, oldSHAs); err != nil {
-		// Non-fatal: warn and continue to pruning.
-		warnf(flags, "reflog cleanup: %v", err)
-		cleanupErrors = append(cleanupErrors, fmt.Sprintf("reflog cleanup: %v", err))
-	}
-
-	// Step 2b: Expire all remaining reflog entries. Surgical deletion (step 1+2)
-	// removes entries whose "to" SHA matches an old commit, but reflog entries
-	// also store a "from" SHA. Git considers both SHAs reachable, so entries
-	// like "a6bca30 -> 49f563f" keep old commit a6bca30 alive even after the
-	// "to" entry was deleted. A full expire is needed to clean up these
-	// remaining references after a security-sensitive rewrite.
+	// Step 1: Expire every reflog entry. Deleting only the entries whose "to"
+	// SHA is a pre-rewrite commit is not enough: an entry also stores a "from"
+	// SHA, and git counts both as reachable, so an entry like
+	// "a6bca30 -> 49f563f" keeps the old commit a6bca30 alive. A full expire is
+	// what a security-sensitive rewrite needs, and it removes the tainted
+	// entries along with the rest, so they are not deleted one by one first.
 	if _, _, err := git.Run(ctx, "reflog", "expire", "--expire=now", "--all"); err != nil {
 		warnf(flags, "reflog expire: %v", err)
 		cleanupErrors = append(cleanupErrors, fmt.Sprintf("reflog expire: %v", err))
 	}
 
-	// Step 3: Prune unreachable objects. git prune only removes loose objects;
+	// Step 2: Prune unreachable objects. git prune only removes loose objects;
 	// git repack -a -d --unpack-unreachable=now drops unreachable objects from
 	// pack files as well. Both are needed because objects may be loose (newly
 	// created) or packed (pre-existing).
@@ -80,12 +73,12 @@ func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, sha
 		cleanupErrors = append(cleanupErrors, fmt.Sprintf("git prune: %v", err))
 	}
 
-	// Step 4: Check stash/notes/replace refs for old SHAs.
+	// Step 3: Check stash/notes/replace refs for old SHAs.
 	checkStashForOldSHAs(flags, ctx, oldSHAs)
 	checkNotesForOldSHAs(flags, ctx, oldSHAs)
 	checkReplaceRefsForOldSHAs(flags, ctx, oldSHAs)
 
-	// Step 5: Verify old objects are gone.
+	// Step 4: Verify old objects are gone.
 	surviving, sErr := verifyOldObjectsGone(ctx, flags, oldSHAs)
 	switch {
 	case sErr != nil:
@@ -106,122 +99,6 @@ func cleanupAfterRewrite(ctx context.Context, flags globalFlags, cmd string, sha
 	}
 
 	return cleanupErrors, residue, nil
-}
-
-// reflogEntry holds a parsed reflog line.
-type reflogEntry struct {
-	sha       string // commit SHA
-	qualifier string // e.g. "HEAD@{3}" or "refs/heads/main@{5}"
-	ref       string // the ref portion, e.g. "HEAD" or "refs/heads/main"
-	index     int    // the numeric index within the ref's reflog
-}
-
-// expireTaintedReflogEntries finds reflog entries whose SHA is in oldSHAs
-// and deletes them in reverse index order (per ref) to avoid index shifting.
-func expireTaintedReflogEntries(ctx context.Context, flags globalFlags, oldSHAs map[string]bool) error {
-	// Get all reflog entries across all refs.
-	out, _, err := git.Run(ctx, "reflog", "show", "--format=%H %gD", "--all")
-	if err != nil {
-		// Also try HEAD specifically — some repos don't have --all reflogs.
-		out, _, err = git.Run(ctx, "reflog", "show", "--format=%H %gD")
-		if err != nil {
-			return fmt.Errorf("reading reflogs: %w", err)
-		}
-	}
-
-	// Also get HEAD reflog entries (--all may not include HEAD).
-	headOut, _, _ := git.Run(ctx, "reflog", "show", "--format=%H %gD", "HEAD")
-
-	// Merge both outputs, dedup by qualifier.
-	seen := make(map[string]bool)
-	var tainted []reflogEntry
-
-	for _, block := range []string{out, headOut} {
-		for _, line := range strings.Split(block, "\n") {
-			line = strings.TrimSpace(line)
-			if line == "" {
-				continue
-			}
-			parts := strings.SplitN(line, " ", 2)
-			if len(parts) != 2 {
-				continue
-			}
-			sha := parts[0]
-			qualifier := parts[1]
-
-			if seen[qualifier] {
-				continue
-			}
-			seen[qualifier] = true
-
-			if !oldSHAs[sha] {
-				continue
-			}
-
-			// Parse qualifier to extract ref and index.
-			// Format: "HEAD@{3}" or "refs/heads/main@{5}"
-			ref, idx := parseQualifier(qualifier)
-			if ref == "" {
-				continue
-			}
-
-			tainted = append(tainted, reflogEntry{
-				sha:       sha,
-				qualifier: qualifier,
-				ref:       ref,
-				index:     idx,
-			})
-		}
-	}
-
-	if len(tainted) == 0 {
-		return nil
-	}
-
-	if flags.verbose {
-		debugf(flags, "Expiring %d reflog entries referencing pre-rewrite objects", len(tainted))
-	}
-
-	// Group by ref, then sort each group by index descending (reverse order
-	// to avoid index shifting when deleting).
-	byRef := make(map[string][]reflogEntry)
-	for _, e := range tainted {
-		byRef[e.ref] = append(byRef[e.ref], e)
-	}
-
-	for _, entries := range byRef {
-		sort.Slice(entries, func(i, j int) bool {
-			return entries[i].index > entries[j].index // descending
-		})
-		for _, e := range entries {
-			if _, _, err := git.Run(ctx, "reflog", "delete", e.qualifier); err != nil {
-				if flags.verbose {
-					debugf(flags, "  warning: failed to delete reflog entry %s: %v", e.qualifier, err)
-				}
-			}
-		}
-	}
-
-	return nil
-}
-
-// parseQualifier extracts the ref name and numeric index from a reflog
-// qualifier like "HEAD@{3}" or "refs/heads/main@{5}".
-func parseQualifier(q string) (ref string, index int) {
-	atIdx := strings.LastIndex(q, "@{")
-	if atIdx < 0 {
-		return "", 0
-	}
-	ref = q[:atIdx]
-	idxStr := strings.TrimSuffix(q[atIdx+2:], "}")
-	idx := 0
-	for _, c := range idxStr {
-		if c < '0' || c > '9' {
-			return ref, 0
-		}
-		idx = idx*10 + int(c-'0')
-	}
-	return ref, idx
 }
 
 // checkStashForOldSHAs warns if any stash entry references a pre-rewrite commit.
@@ -317,13 +194,21 @@ func verifyOldObjectsGone(ctx context.Context, flags globalFlags, oldSHAs map[st
 		return nil, err
 	}
 
+	// One reader answers every existence question, rather than a cat-file -e
+	// per pre-rewrite object.
+	ctx, store := git.WithObjectStore(ctx)
+	defer store.Close()
+
 	var surviving []string
 	for sha := range oldSHAs {
 		if reachable[sha] {
 			continue
 		}
-		// git cat-file -e exits 0 if the object exists, non-zero if gone.
-		if _, _, cerr := git.Run(ctx, "cat-file", "-e", sha); cerr == nil {
+		objType, terr := git.ObjectType(ctx, sha)
+		if terr != nil {
+			return nil, terr
+		}
+		if objType != "" {
 			surviving = append(surviving, sha)
 			if flags.verbose {
 				debugf(flags, "  pre-rewrite object %s still exists after cleanup and no ref reaches it", shortSHA(sha))
