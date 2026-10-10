@@ -2,7 +2,7 @@
   "schema_version": 2,
   "name": "release-checkout",
   "slug": "safegit",
-  "version": "0.31.1",
+  "version": "0.32.0",
   "description": "The Git CLI that is safe to hand to your AI Agents: no sharp edges by design, commit concurrency built-in, Git-compatible because it uses Git plumbing under the hood",
   "language": "go",
   "base_url": "https://safegit.smmh.dev",
@@ -2071,11 +2071,6 @@
         },
         {
           "level": 3,
-          "text": "`Screen`",
-          "anchor": "screen"
-        },
-        {
-          "level": 3,
           "text": "`Notices`",
           "anchor": "notices"
         },
@@ -3682,11 +3677,6 @@
           "anchor": "safegit-commit-refuses-while-an-operation-is-in-flight"
         },
         {
-          "level": 3,
-          "text": "A commit naming a confidential term in a public repository is refused",
-          "anchor": "a-commit-naming-a-confidential-term-in-a-public-repository-is-refused"
-        },
-        {
           "level": 2,
           "text": "Where the working directory reaches",
           "anchor": "where-the-working-directory-reaches"
@@ -4367,21 +4357,6 @@
         },
         {
           "level": 3,
-          "text": "`effectsFileWriter.WriteFile`",
-          "anchor": "effectsfilewriterwritefile"
-        },
-        {
-          "level": 3,
-          "text": "`effectsFileWriter.MkdirAll`",
-          "anchor": "effectsfilewritermkdirall"
-        },
-        {
-          "level": 3,
-          "text": "`confidentialNameScan.Inspect`",
-          "anchor": "confidentialnamescaninspect"
-        },
-        {
-          "level": 3,
           "text": "`globalFlags.Effects`",
           "anchor": "globalflagseffects"
         },
@@ -4713,11 +4688,6 @@
           "level": 3,
           "text": "`Pipeline`",
           "anchor": "pipeline"
-        },
-        {
-          "level": 3,
-          "text": "`Screen`",
-          "anchor": "screen"
         },
         {
           "level": 3,
@@ -8265,21 +8235,6 @@
         },
         {
           "level": 3,
-          "text": "`effectsFileWriter.WriteFile`",
-          "anchor": "effectsfilewriterwritefile"
-        },
-        {
-          "level": 3,
-          "text": "`effectsFileWriter.MkdirAll`",
-          "anchor": "effectsfilewritermkdirall"
-        },
-        {
-          "level": 3,
-          "text": "`confidentialNameScan.Inspect`",
-          "anchor": "confidentialnamescaninspect"
-        },
-        {
-          "level": 3,
           "text": "`globalFlags.Effects`",
           "anchor": "globalflagseffects"
         },
@@ -8364,7 +8319,7 @@
     }
   ],
   "posts": [],
-  "last_gen": "2026-10-09T14:47:25.321939+00:00",
+  "last_gen": "2026-10-10T20:41:02.860489+00:00",
   "theme": "minimal",
   "vocabulary": {
     "accepted": [
@@ -8378,10 +8333,6 @@
       },
       {
         "word": "Chacon",
-        "aliases": []
-      },
-      {
-        "word": "codenames",
         "aliases": []
       },
       {
@@ -8438,10 +8389,6 @@
       },
       {
         "word": "pidfds",
-        "aliases": []
-      },
-      {
-        "word": "releasables",
         "aliases": []
       },
       {
