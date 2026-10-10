@@ -1,6 +1,6 @@
 +++
 title = "Divergences"
-description = "Where safegit departs from git's own behavior, by area (committing and its confidential-name screen, moves, hooks, output and exit codes, consent, publishing, history rewriting), with what git does, what safegit does, and why."
+description = "Where safegit departs from git's own behavior, by area (committing, moves, hooks, output and exit codes, consent, publishing, history rewriting), with what git does, what safegit does, and why."
 +++
 
 # Where safegit follows git, and where it deliberately does not
@@ -351,35 +351,6 @@ Every future change that introduces a decision of this kind adds its entry here.
   safegit cannot parse is a refusal too — an unreadable `MERGE_HEAD` is not
   evidence that no merge is in flight, and the permissive reading is the
   dangerous one.
-- **Ruling:** ours — deliberate
-
-### A commit naming a confidential term in a public repository is refused
-
-- **git's idiom:** git commits whatever content it is handed. What a repository
-  may mention is not git's question.
-- **safegit:** `safegit commit`, its `--amend` form, and the reword form read the
-  repository's lifecycle-and-license record
-  (`.strictmetadata/lifecycle-and-license/lifecycle-and-license.toml`) from the
-  working tree, offline, and never ask the hosting service. A repository is
-  confidential while one of its releasables has a proprietary license period in
-  effect, and public otherwise; a repository with no record is public. A commit
-  in a confidential repository writes that repository's names into the
-  machine-local confidential-name index (`<user config directory>/strictspec/confidential-names.toml`),
-  keyed by the record's open releasable-name identities (no remote is needed),
-  and is not scanned; a confidential record with no open releasable-name
-  identity is refused, naming `rlsbl transition identity --facet releasable-name`. A commit in
-  a public repository removes that repository's own entry from the index, if it
-  has one, and is then scanned against every name the index holds: the message,
-  every line the commit adds or changes (a line already present in the version
-  it replaces is not its to answer for), and every new path. A match is a
-  refusal naming the file, the line, the column, and the term, with nothing
-  written. Matching ignores case and counts whole tokens only, and a term lying
-  inside a URL or a dotted hostname is not matched. The names are the ones the
-  record's `confidential-names` rule yields (registry names, the repository's
-  names when no releasable carries a non-proprietary license, codenames, and distinctive terms; see rlsbl's lifecycle-and-license
-  page). Under `--dry-run`
-  the index writes are recorded, not made. Only the commit command is scanned;
-  the other commands that write commits are not.
 - **Ruling:** ours — deliberate
 
 ---

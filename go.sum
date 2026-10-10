@@ -6,8 +6,6 @@ github.com/stricttools/go-toml-edit v0.5.1 h1:lJPrnujDBwcFcMxfI4wauLAas7bf53nbZ/
 github.com/stricttools/go-toml-edit v0.5.1/go.mod h1:7eeWlpfpfjScMk3JTUttd+JOusRnNSAYUSXIJCJzbB8=
 github.com/stricttools/strictcli/go v0.39.1 h1:pfdgW0UcRZtV+I9LuiVTCvMdIOd+LpCE05Wl6Ox4870=
 github.com/stricttools/strictcli/go v0.39.1/go.mod h1:ejXzQB8aRi/uIQFlyqWi783nze+BmIp0iT0Vzp6vWWE=
-github.com/stricttools/strictspec/go v0.6.0 h1:fNCiLfmeMpNHtSJNMeVJTCdy9m5CItBgesataAwoE7Q=
-github.com/stricttools/strictspec/go v0.6.0/go.mod h1:0vvnp7+7PxQLLxWmYnHJgnChrlmjUV502Uljm9pPtZs=
 github.com/stricttools/testisolation/go v0.3.1 h1:XZ4J1zWA1LY0S1veOXewrj/yp9dqC5Dsu44BbmKbncI=
 github.com/stricttools/testisolation/go v0.3.1/go.mod h1:Msq2nI3vbl4+ehyZeMbouhquAni1GQrX6Q6UYAyh8AE=
 github.com/toml-lang/toml-test/v2 v2.2.0 h1:q3ELZu7oPnpl9TClC6OOcAccXwj+jwAyFP8WvzBdK1M=

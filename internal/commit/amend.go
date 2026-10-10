@@ -362,9 +362,6 @@ func (p *Pipeline) tryAmend(
 	if err != nil {
 		return nil, false, err
 	}
-	if err := p.screen(ctx, msg, changed); err != nil {
-		return nil, false, err
-	}
 
 	// Create the replacement commit on the replaced commit's own parents.
 	commitSHA, err := git.CommitTree(ctx, treeSHA, parents, trailer.Inject(msg, p.SessionID), nil)
@@ -656,10 +653,6 @@ func (p *Pipeline) tryReword(
 	rewordTrailers := commitTrailers(req.Trailers, preservedMovedLines(tip.Message, true), movedTrailers)
 	msg, err := hooks.commitMsg(ctx, hookIndex, trailer.AppendCustom(req.Message, rewordTrailers))
 	if err != nil {
-		return nil, false, err
-	}
-	// A reword changes no path, so the screen sees the message alone.
-	if err := p.screen(ctx, msg, nil); err != nil {
 		return nil, false, err
 	}
 

@@ -7,7 +7,6 @@ toolchain go1.26.6
 require (
 	github.com/stricttools/go-toml-edit v0.5.1
 	github.com/stricttools/strictcli/go v0.39.1
-	github.com/stricttools/strictspec/go v0.6.0
 )
 
 require github.com/stricttools/testisolation/go v0.3.1

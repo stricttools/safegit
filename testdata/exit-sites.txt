@@ -1,4 +1,4 @@
-== exit non-literal (650 sites)
+== exit non-literal (647 sites)
    aftercare.go:131  return in aftercareExit  code=exitcode.OK  | return exitcode.OK
    aftercare.go:133  return in aftercareExit  code=exitcode.CommitStands  | return exitcode.CommitStands
    author_check.go:75  return in runAuthorCheck  code=exitcode.Usage  | return exitcode.Usage
@@ -82,18 +82,15 @@
    commit.go:319  strictcli.ExitNow in runCommit  code=exitcode.Usage  | strictcli.ExitNow(exitcode.Usage, exitMessage(err))
    commit.go:325  strictcli.ExitNow in runCommit  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("loading config: %v", err))
    commit.go:332  strictcli.ExitNow in runCommit  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
-   commit.go:377  strictcli.ExitNow in runCommit  code=pipelineExitCode(err)  | strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
-   commit.go:420  return in runCommit  code=aftercareExit(residue)  | return aftercareExit(residue)
-   commit.go:518  strictcli.ExitNow in runCommitAmend  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("loading config: %v", err))
-   commit.go:525  strictcli.ExitNow in runCommitAmend  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
-   commit.go:561  strictcli.ExitNow in runCommitAmend  code=exitcode.Usage  | strictcli.ExitNow(exitcode.Usage, exitMessage(err))
-   commit.go:590  strictcli.ExitNow in runCommitAmend  code=pipelineExitCode(err)  | strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
-   commit.go:641  strictcli.ExitNow in runCommitAmend  code=exitcode.Usage  | strictcli.ExitNow(exitcode.Usage, "commit message required (--message/-m) when using --amend without files")
-   commit.go:665  strictcli.ExitNow in runCommitAmend  code=pipelineExitCode(err)  | strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
-   commit.go:712  return in runCommitAmend  code=aftercareExit(residue)  | return aftercareExit(residue)
-   confidential.go:59  strictcli.ExitNow in mustCommitScreen  code=exitcode.General  | strictcli.ExitNow(exitcode.General, exitMessage(err))
-   confidential.go:63  strictcli.ExitNow in mustCommitScreen  code=exitcode.General  | strictcli.ExitNow(exitcode.General, exitMessage(err))
-   confidential.go:171  err.Code in Inspect  code=exitcode.General  | Code: exitcode.General,
+   commit.go:373  strictcli.ExitNow in runCommit  code=pipelineExitCode(err)  | strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
+   commit.go:416  return in runCommit  code=aftercareExit(residue)  | return aftercareExit(residue)
+   commit.go:514  strictcli.ExitNow in runCommitAmend  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("loading config: %v", err))
+   commit.go:521  strictcli.ExitNow in runCommitAmend  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("auto-bump parent: %v", err))
+   commit.go:553  strictcli.ExitNow in runCommitAmend  code=exitcode.Usage  | strictcli.ExitNow(exitcode.Usage, exitMessage(err))
+   commit.go:582  strictcli.ExitNow in runCommitAmend  code=pipelineExitCode(err)  | strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
+   commit.go:633  strictcli.ExitNow in runCommitAmend  code=exitcode.Usage  | strictcli.ExitNow(exitcode.Usage, "commit message required (--message/-m) when using --amend without files")
+   commit.go:657  strictcli.ExitNow in runCommitAmend  code=pipelineExitCode(err)  | strictcli.ExitNow(pipelineExitCode(err), exitMessage(err))
+   commit.go:704  return in runCommitAmend  code=aftercareExit(residue)  | return aftercareExit(residue)
    config_cmd.go:35  return in runConfigShow  code=exitcode.NotInitialized  | return exitcode.NotInitialized
    config_cmd.go:41  return in runConfigShow  code=exitcode.General  | return exitcode.General
    config_cmd.go:55  return in runConfigGet  code=exitcode.NotInitialized  | return exitcode.NotInitialized
@@ -197,16 +194,16 @@
    hook.go:690  strictcli.ExitNow in hookKillCap  code=exitcode.General  | strictcli.ExitNow(exitcode.General, fmt.Sprintf("%s is not allowed: %v; %s for the default of %d",
    internal/commit/amend.go:193  err.Code in Amend  code=exitcode.CASExhausted  | Code:    exitcode.CASExhausted,
    internal/commit/amend.go:294  err.Code in tryAmend  code=exitcode.WriteTree  | return nil, false, &CommitError{Code: exitcode.WriteTree, Message: fmt.Sprintf("write-tree failed: %v", err)}
-   internal/commit/amend.go:372  err.Code in tryAmend  code=exitcode.CommitTree  | return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
-   internal/commit/amend.go:600  err.Code in Reword  code=exitcode.CASExhausted  | Code:    exitcode.CASExhausted,
-   internal/commit/amend.go:679  err.Code in tryReword  code=exitcode.CommitTree  | return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
+   internal/commit/amend.go:369  err.Code in tryAmend  code=exitcode.CommitTree  | return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
+   internal/commit/amend.go:597  err.Code in Reword  code=exitcode.CASExhausted  | Code:    exitcode.CASExhausted,
+   internal/commit/amend.go:672  err.Code in tryReword  code=exitcode.CommitTree  | return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
    internal/commit/boundary.go:348  err.Code in refuseInsideOtherRepositories  code=exitcode.PathMatchedNothing  | return &CommitError{Code: exitcode.PathMatchedNothing, Message: strings.Join(lines, "\n")}
    internal/commit/commit.go:118  err.Code in stagingHunksError  code=exitcode.BinaryHunkSpec  | err = &CommitError{Code: exitcode.BinaryHunkSpec, Message: err.Error(), Err: err}
-   internal/commit/commit.go:508  err.Code in Execute  code=exitcode.CASExhausted  | Code:    exitcode.CASExhausted,
-   internal/commit/commit.go:631  err.Code in tryCommit  code=exitcode.WriteTree  | return nil, false, &CommitError{Code: exitcode.WriteTree, Message: fmt.Sprintf("write-tree failed: %v", err)}
-   internal/commit/commit.go:694  err.Code in tryCommit  code=exitcode.General  | Code:    exitcode.General,
-   internal/commit/commit.go:749  err.Code in tryCommit  code=exitcode.CommitTree  | return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
-   internal/commit/commit.go:924  err.Code in updateRef  code=exitcode.General  | Code:    exitcode.General,
+   internal/commit/commit.go:480  err.Code in Execute  code=exitcode.CASExhausted  | Code:    exitcode.CASExhausted,
+   internal/commit/commit.go:603  err.Code in tryCommit  code=exitcode.WriteTree  | return nil, false, &CommitError{Code: exitcode.WriteTree, Message: fmt.Sprintf("write-tree failed: %v", err)}
+   internal/commit/commit.go:666  err.Code in tryCommit  code=exitcode.General  | Code:    exitcode.General,
+   internal/commit/commit.go:718  err.Code in tryCommit  code=exitcode.CommitTree  | return nil, false, &CommitError{Code: exitcode.CommitTree, Message: fmt.Sprintf("commit-tree failed: %v", err)}
+   internal/commit/commit.go:893  err.Code in updateRef  code=exitcode.General  | Code:    exitcode.General,
    internal/commit/hooks.go:171  err.Code in preCommit  code=exitcode.CommitHookRejected  | Code:    exitcode.CommitHookRejected,
    internal/commit/hooks.go:212  err.Code in commitMsg  code=exitcode.CommitHookRejected  | Code:    exitcode.CommitHookRejected,
    internal/commit/infer_moves.go:272  err.Code in records  code=exitcode.MoveWitnessChanged  | Code: exitcode.MoveWitnessChanged,
@@ -657,4 +654,4 @@
    unlock.go:104  return in runUnlock  code=exitcode.General  | return exitcode.General
    unlock.go:127  return in runUnlock  code=exitcode.General  | return exitcode.General
 
-total exit sites: 650 across 1 distinct codes
+total exit sites: 647 across 1 distinct codes
