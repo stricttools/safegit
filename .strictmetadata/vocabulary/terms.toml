@@ -13,10 +13,6 @@ word = "Chacon"
 meaning = "Scott Chacon, GitButler's creator and Pro Git co-author, cited in the research survey."
 
 [[accepted]]
-word = "codenames"
-meaning = "Internal project names a confidential repository records so that they are kept out of public repositories."
-
-[[accepted]]
 word = "daemonized"
 meaning = "Turned into a daemon: a process that detaches and keeps running after the hook that started it exits."
 
@@ -71,10 +67,6 @@ meaning = "A Linux process file descriptor (Linux 5.3+), which safegit uses to s
 [[accepted]]
 word = "pidfds"
 meaning = "Plural of pidfd: Linux process file descriptors."
-
-[[accepted]]
-word = "releasables"
-meaning = "The units rlsbl releases, each with its own version, tag, and changelog."
 
 [[accepted]]
 word = "reparented"
