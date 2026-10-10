@@ -2,6 +2,21 @@
 
 # Changelog
 
+## 0.33.0
+
+Commits are never refused for a confidential term: safegit no longer scans commits, and no longer reads or writes the machine-local confidential-name index.
+
+<details>
+<summary>Context</summary>
+
+Confidential terms now live in one encrypted list outside every repository, and only a release scans for them, so a false positive never interrupts work and every hit of a release is judged together.
+
+</details>
+
+### Breaking
+
+- **Commits are never refused for a confidential term.** `safegit commit` and its amend and reword forms no longer scan commits against the machine-local confidential-name index, and no longer read or write that index; the release enforces the confidential-term list instead.
+
 ## 0.32.0
 
 `scrub run` renames file and directory names with a recipe operation targeting paths, and a recipe operation's target now limits what it rewrites.
