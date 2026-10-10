@@ -1,11 +1,11 @@
 # The next release of safegit. Fill in bump and description, then run `rlsbl release run --watch`.
 format_version = 2
 # How the release moves the version: patch, minor, major, or infra (moved as a patch, recorded as infra).
-bump = ""
+bump = "minor"
 # What this release is, in a sentence or two. Required.
-description = ""
+description = "Commits are never refused for a confidential term: safegit no longer scans commits, and no longer reads or writes the machine-local confidential-name index."
 # Why these changes were made. Optional.
-context = ""
+context = "Confidential terms now live in one encrypted list outside every repository, and only a release scans for them, so a false positive never interrupts work and every hit of a release is judged together."
 # The targets released, and the ones left out; between them they name every target of the releasable's members.
 include = ["go"]
 exclude = []
