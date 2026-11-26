@@ -1,0 +1,254 @@
+[
+    {
+        "command":  "commit",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "mv",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "merge-continue",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "cherry-pick-continue",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "revert-continue",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "switch",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "merge",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "rebase",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "reset",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "bisect",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "push",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "pull",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "doctor",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "cherry-pick",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "revert",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "undo",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "unlock",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "scan",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "backup",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "backup backup",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "backup list",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "backup restore",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "config",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "config show",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "config get",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "config set",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "hook",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "hook list",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "hook run",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "hook install",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "hook remove",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "hook migrate",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "author",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "author list",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "author check",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "author rewrite",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "scrub",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "scrub file",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "scrub match",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "scrub run",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "scrub squash",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    },
+    {
+        "command":  "scrub verify",
+        "probe":  "help-only",
+        "exit_code":  0,
+        "nonempty_output":  true
+    }
+]

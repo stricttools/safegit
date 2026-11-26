@@ -409,7 +409,13 @@ func runOne(ctx context.Context, hookPath string, stdin []byte, timeoutSec int, 
 		return result, fmt.Errorf("hook %s: %w", name, err)
 	}
 
-	cmd := exec.Command(hookPath)
+	cmd, commandErr := hookCommand(hookPath)
+	if commandErr != nil {
+		p.closeAll()
+		result.StartError = startError(commandErr)
+		result.Duration = time.Since(start)
+		return result, nil
+	}
 	cmd.Stdin = p.inR
 	cmd.Stdout = p.outW
 	cmd.Stderr = p.errW
@@ -738,11 +744,6 @@ func (p *hookPipes) readFds() []int {
 		rc.Control(func(fd uintptr) { fds = append(fds, int(fd)) })
 	}
 	return fds
-}
-
-// isExecutable checks if a file has any execute permission bit set.
-func isExecutable(info os.FileInfo) bool {
-	return info.Mode()&0111 != 0
 }
 
 // PlanInstall reads the hook source and resolves the destination inside the

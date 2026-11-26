@@ -2,6 +2,7 @@ package sequencer
 
 import (
 	"fmt"
+	"github.com/stricttools/safegit/internal/atomicfile"
 	"os"
 	"path/filepath"
 )
@@ -60,7 +61,7 @@ func MarkCherryPick(gitDir, sha string) error {
 	if err := os.Chmod(tmpName, 0644); err != nil {
 		return fmt.Errorf("setting the mode of %s: %w", tmpName, err)
 	}
-	if err := os.Rename(tmpName, final); err != nil {
+	if err := atomicfile.Rename(tmpName, final); err != nil {
 		return fmt.Errorf("publishing %s: %w", final, err)
 	}
 	return nil

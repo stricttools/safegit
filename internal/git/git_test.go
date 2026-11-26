@@ -1405,15 +1405,15 @@ func TestLsTreePathsRecursiveMatchesNamesLiterally(t *testing.T) {
 
 	// The two names, written and added through the same literal magic so the
 	// fixture itself does not depend on the behavior under test.
-	const colonName = ":colon.txt"
-	const starName = "a*.txt"
+	colonName := testutil.FixturePath(":colon.txt")
+	starName := testutil.FixturePath("a*.txt")
 	for name, content := range map[string]string{
 		colonName: "colon content\n",
 		starName:  "star content\n",
 		"ab.txt":  "decoy the wildcard would match\n",
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
-			t.Skipf("this filesystem cannot hold the name %q: %v", name, err)
+			t.Fatalf("this filesystem cannot hold the platform fixture name %q: %v", name, err)
 		}
 		run("git", "add", "--", ":(literal)"+name)
 	}

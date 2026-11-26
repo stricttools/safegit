@@ -308,10 +308,8 @@ func TestMvRollsBackCompletedRenamesOnAMidSequenceFailure(t *testing.T) {
 	if err := os.Mkdir(locked, 0o755); err != nil {
 		t.Fatalf("mkdir locked: %v", err)
 	}
-	if err := os.Chmod(locked, 0o555); err != nil {
-		t.Fatalf("chmod locked: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	testutil.SetDirectoryWritable(t, locked, false)
+	t.Cleanup(func() { testutil.SetDirectoryWritable(t, locked, true) })
 
 	_, stderr, code := runSafegit(t, dir, "mv", "-m", "move both",
 		"a.txt -> moved-a.txt", "b.txt -> locked/b.txt")

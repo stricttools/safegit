@@ -183,25 +183,32 @@ for confirmation.
   checks and hostname comparison. On network filesystems (NFS, CIFS), `safegit
   doctor` warns about reduced lock atomicity guarantees. Cross-machine lock
   reclaim is refused when the hostname doesn't match.
-- **The filesystem must support hard links and `flock(2)`.** A lock is published
+- **The filesystem must support hard links and file locks.** A lock is published
   by writing its record to a temporary sibling and `link(2)`-ing it into place,
   so the published file is complete the instant it exists; and a stale lock is
-  reclaimed only under an exclusive `flock` on the lock file, with an inode
+  reclaimed only under an exclusive file lock (`flock` on Unix, `LockFileEx`
+  on Windows), with a file identity
   identity re-check, so two contenders can never both "reclaim" the same lock.
-  Where `flock` does not work, nothing is reclaimed at all: contenders time out
+  Where file locking does not work, nothing is reclaimed at all: contenders time out
   and `safegit unlock <name>` is the recovery path.
 - **PID reuse.** On Linux, safegit records the holder's process start identity
   from `/proc` in the lock file and compares it against the current start time
   of whatever holds that PID, so a recycled PID is detected and a live holder is
-  never mistaken for one. On other platforms the comparison is unavailable and
+  never mistaken for one. Windows records and compares `GetProcessTimes` creation times. On macOS
+  the comparison is unavailable and
   fails closed: a reused PID keeps an orphan lock looking alive, and `safegit
   unlock` refuses to clear a lock whose holder appears alive, so such a lock has
   to be removed by hand from `.git/safegit/locks/`. Where the holder really is
   gone, `safegit unlock refs/heads/main` clears it.
-- **Linux and macOS only.** Windows is not supported and is not built: the
-  release binaries cover linux and darwin on amd64 and arm64, and safegit uses
-  Unix-only syscalls for locking, signals and process management. WSL (Windows
-  Subsystem for Linux) works, since it runs the Linux binary natively.
+- **Native Windows.** The full ordinary suite passes in disjoint groups on
+  Windows amd64 with native Go and Git for Windows, and all 37 declared leaf
+  commands have real execution/refusal coverage; WSL is not required. Two
+  case-sensitive-filesystem cases are explicitly inapplicable on the current
+  folding NTFS, and opt-in stress/race/CI execution is not claimed. Windows uses
+  `LockFileEx`, process-creation-time PID identities, atomic replacement and
+  Job Object hook containment. See [Windows port validation](.strictmetadata/docs/windows.md)
+  for exact results, skips and platform limits. Release binaries still cover
+  Linux and macOS only.
 
 ## License
 

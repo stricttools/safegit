@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -85,6 +84,7 @@ func TestSignalledCommitReleasesItsLocksAndExitsTheConventionalStatus(t *testing
 	testutil.WriteFile(t, dir, "signalled.txt", "content\n")
 
 	cmd := exec.Command(safegitBin, "commit", "-m", "signalled mid-commit", "--", "signalled.txt")
+	testutil.PrepareInterruptible(cmd)
 	cmd.Dir = dir
 	cmd.Env = controlledEnv(t)
 	var out strings.Builder
@@ -105,9 +105,7 @@ func TestSignalledCommitReleasesItsLocksAndExitsTheConventionalStatus(t *testing
 		t.Fatal("the commit holds no lock file while its pre-commit hook runs, so this test would prove nothing")
 	}
 
-	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-		t.Fatalf("signalling the commit: %v", err)
-	}
+	testutil.InterruptCommand(t, cmd)
 	// Let the hook finish on its own rather than outliving the test.
 	if err := os.WriteFile(release, []byte("go\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -118,7 +116,7 @@ func TestSignalledCommitReleasesItsLocksAndExitsTheConventionalStatus(t *testing
 	if !errors.As(waitErr, &exitErr) {
 		t.Fatalf("the signalled commit did not fail (err=%v)\noutput: %s", waitErr, out.String())
 	}
-	wantStatus := 128 + int(syscall.SIGTERM)
+	wantStatus := testutil.InterruptExitStatus
 	if got := exitErr.ExitCode(); got != wantStatus {
 		t.Errorf("the signalled commit exited %d, want %d (128 + SIGTERM)\noutput: %s", got, wantStatus, out.String())
 	}

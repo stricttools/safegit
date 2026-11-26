@@ -566,6 +566,7 @@ func mvEntryIsDirty(ctx context.Context, repoRoot string, e mvEntry) (bool, erro
 	// it is hashed raw rather than as the path it will live at.
 	if info.Mode()&os.ModeSymlink != 0 {
 		target, err := os.Readlink(abs)
+		target = filepath.ToSlash(target)
 		if err != nil {
 			return false, err
 		}

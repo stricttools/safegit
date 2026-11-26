@@ -65,7 +65,7 @@ func TestQuarantineAppliesToExplicitDirectorySites(t *testing.T) {
 		t.Errorf("GIT_OBJECT_DIRECTORY = %q, want the quarantine at an explicit-directory site too", got)
 	}
 	alt, _ := envValue(cmd.Env, "GIT_ALTERNATE_OBJECT_DIRECTORIES")
-	want := "/repo/.git/modules/sub/objects"
+	want := filepath.Join("/repo/.git/modules/sub", "objects")
 	found := false
 	for _, e := range altEntries(alt) {
 		if e == want {

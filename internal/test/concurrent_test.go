@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -50,8 +51,12 @@ func runSuite(m *testing.M) int {
 		return 1
 	}
 	defer os.RemoveAll(tmpDir)
+	defer testutil.CleanupExecutables()
 
 	binPath := filepath.Join(tmpDir, "safegit")
+	if runtime.GOOS == "windows" {
+		binPath += ".exe"
+	}
 	cmd := exec.Command("go", "build", "-o", binPath, ".")
 	cmd.Dir = projectRoot()
 	if out, err := cmd.CombinedOutput(); err != nil {
@@ -214,7 +219,15 @@ func controlledEnv(t *testing.T, extra ...string) []string {
 	}
 
 	home := t.TempDir()
-	env := make([]string, 0, len(envAllowlist)+len(extra)+8)
+	// Windows crypto providers also consult machine-wide application data.
+	// All of these paths must exist: missing variables/directories can make
+	// native providers create Microsoft/ relative to the child's worktree.
+	for _, path := range []string{filepath.Join(home, "AppData", "Roaming"), filepath.Join(home, "AppData", "Local"), filepath.Join(home, "ProgramData")} {
+		if err := os.MkdirAll(path, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	env := make([]string, 0, len(envAllowlist)+len(extra)+10)
 	for _, name := range envAllowlist {
 		if v, ok := os.LookupEnv(name); ok {
 			env = append(env, name+"="+v)
@@ -223,6 +236,12 @@ func controlledEnv(t *testing.T, extra ...string) []string {
 	env = append(env,
 		"HOME="+home,
 		"USERPROFILE="+home,
+		// Windows libraries must not fall back to relative application-data
+		// paths inside the fixture repository (for example Microsoft/ crypto data).
+		"APPDATA="+filepath.Join(home, "AppData", "Roaming"),
+		"LOCALAPPDATA="+filepath.Join(home, "AppData", "Local"),
+		"PROGRAMDATA="+filepath.Join(home, "ProgramData"),
+		"ALLUSERSPROFILE="+filepath.Join(home, "ProgramData"),
 		"XDG_CONFIG_HOME="+filepath.Join(home, ".config"),
 		"GIT_TERMINAL_PROMPT=0",
 		"LANG=C",

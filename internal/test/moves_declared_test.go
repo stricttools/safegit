@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -194,11 +195,13 @@ func TestDeclaredSubtreeMoveIsOneRecord(t *testing.T) {
 }
 
 func TestDeclaredMoveQuotesAPathThatNeedsIt(t *testing.T) {
-	dir := seedMove(t, "two words.txt", "renamed \"quoted\".txt")
+	dest := testutil.FixturePath("renamed \"quoted\".txt")
+	pair := strconv.Quote("two words.txt") + " -> " + strconv.Quote(dest)
+	dir := seedMove(t, "two words.txt", dest)
 
 	_, stderr, code := runSafegit(t, dir, "commit", "-m", "move an awkward name",
-		"--moved", `"two words.txt" -> "renamed \"quoted\".txt"`,
-		"--", "two words.txt", `renamed "quoted".txt`)
+		"--moved", pair,
+		"--", "two words.txt", dest)
 	if code != 0 {
 		t.Fatalf("commit failed (code %d): %s", code, stderr)
 	}
@@ -207,7 +210,9 @@ func TestDeclaredMoveQuotesAPathThatNeedsIt(t *testing.T) {
 	if len(records) != 1 {
 		t.Fatalf("expected one record in:\n%s", msg)
 	}
-	want := `"two words.txt" -> "renamed \"quoted\".txt"`
+	// Git-style canonical quoting octal-escapes UTF-8 bytes; the Windows
+	// legal full-width quote fixture still has a byte-exact expected record.
+	want := strings.ReplaceAll(pair, "＂", `\357\274\202`)
 	if records[0][1] != want {
 		t.Errorf("record pair is %q, want %q", records[0][1], want)
 	}

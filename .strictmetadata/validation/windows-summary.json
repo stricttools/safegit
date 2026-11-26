@@ -1,0 +1,35 @@
+{
+  "nonIntegrationPackagesPassed": 21,
+  "packagesWithoutTests": [
+    "github.com/stricttools/safegit/internal/procutil"
+  ],
+  "integrationTopLevelTests": 1086,
+  "integrationTopLevelPassed": 1078,
+  "passedCases": 1528,
+  "skippedTests": [
+    "TestStress50",
+    "TestHookTimeout",
+    "TestMvCaseOnlyRefusesAnOccupiedDestination",
+    "TestStress100",
+    "TestStressDifferentBranches",
+    "TestStressOpLog",
+    "TestConcurrentPush",
+    "TestMvRenamesOnlyTheCase/ignorecase=false",
+    "TestConcurrentDifferentBranchPush"
+  ],
+  "optInStressSkippedTests": [
+    "TestStress50",
+    "TestHookTimeout",
+    "TestStress100",
+    "TestStressDifferentBranches",
+    "TestStressOpLog",
+    "TestConcurrentPush",
+    "TestConcurrentDifferentBranchPush"
+  ],
+  "filesystemInapplicableTests": [
+    "TestMvCaseOnlyRefusesAnOccupiedDestination",
+    "TestMvRenamesOnlyTheCase/ignorecase=false"
+  ],
+  "functionalCommandRows": 37,
+  "evidence": "windows-integration-[0-3].jsonl"
+}

@@ -568,9 +568,9 @@ func randomPaths(r *rand.Rand, n int) []string {
 		depth := r.Intn(3)
 		var segs []string
 		for d := 0; d < depth; d++ {
-			segs = append(segs, "d"+pathTokens[r.Intn(len(pathTokens))])
+			segs = append(segs, "d"+testutil.FixturePath(pathTokens[r.Intn(len(pathTokens))]))
 		}
-		segs = append(segs, fmt.Sprintf("f%d", i)+pathTokens[r.Intn(len(pathTokens))])
+		segs = append(segs, fmt.Sprintf("f%d", i)+testutil.FixturePath(pathTokens[r.Intn(len(pathTokens))]))
 		paths = append(paths, strings.Join(segs, "/"))
 	}
 	return paths
@@ -729,7 +729,7 @@ func TestQuotePathForIndexInfoRoundTripsThroughGit(t *testing.T) {
 	var lines []string
 	want := make(map[string]bool)
 	for i, token := range pathTokens {
-		p := fmt.Sprintf("f%d", i) + token
+		p := fmt.Sprintf("f%d", i) + testutil.FixturePath(token)
 		want[p] = true
 		lines = append(lines, indexInfoLine(indexSlot{Mode: "100644", SHA: sha, Stage: 0, Path: p}))
 	}

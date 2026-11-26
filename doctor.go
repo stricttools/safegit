@@ -603,7 +603,7 @@ func checkUnusedNativeHooks(env doctorEnv) doctorFinding {
 			continue
 		}
 		info, sErr := e.Info()
-		if sErr != nil || info.Mode()&0111 == 0 {
+		if sErr != nil || !hooks.Executable(filepath.Join(dir, name), info) {
 			// git ignores a hook it cannot execute, so its absence from
 			// safegit's runs is no surprise to report.
 			continue

@@ -22,7 +22,7 @@ func installHook(t *testing.T, dir, name, script string) {
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(hooksDir, name), []byte(script), 0755); err != nil {
+	if err := os.WriteFile(filepath.Join(hooksDir, name), []byte(testutil.FixtureScript(script)), 0755); err != nil {
 		t.Fatal(err)
 	}
 }

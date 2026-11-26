@@ -38,7 +38,7 @@ func storeFixture(t *testing.T, objectFormat string) (string, string) {
 	git("", "config", "user.email", "test@test.com")
 	git("", "config", "user.name", "Test")
 	write := func(rel, content string, mode os.FileMode) {
-		p := filepath.Join(dir, rel)
+		p := filepath.Join(dir, testutil.FixturePath(rel))
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -267,7 +267,7 @@ func TestChangedPathNamesMatchesDiffTree(t *testing.T) {
 	}
 	before := run("rev-parse", "HEAD^{tree}")
 	write := func(rel, content string) {
-		p := filepath.Join(dir, rel)
+		p := filepath.Join(dir, testutil.FixturePath(rel))
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
 		}

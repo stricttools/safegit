@@ -190,6 +190,7 @@ func TestPushDryRunRefusesANonExecutableTrackedHook(t *testing.T) {
 	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\nexit 0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	testutil.SetExecutable(t, hookPath, false)
 	safegitCommit(t, dir, "add a committed hook without its mode", filepath.Join(".safegit", "hooks", "pre-pre-push"))
 
 	_, stderr, code := runSafegit(t, dir, "--dry-run", "push", "--refs", "head", "origin")

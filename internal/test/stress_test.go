@@ -3,6 +3,7 @@ package test
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/stricttools/safegit/internal/testutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -231,7 +232,7 @@ func TestHookTimeout(t *testing.T) {
 	if err := os.MkdirAll(hookDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(hookPath, []byte(hookContent), 0755); err != nil {
+	if err := os.WriteFile(hookPath, []byte(testutil.FixtureScript(hookContent)), 0755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -530,7 +531,7 @@ func TestDiskFullSimulated(t *testing.T) {
 				return nil
 			}
 			if info.IsDir() {
-				os.Chmod(path, 0755)
+				testutil.SetDirectoryWritable(t, path, true)
 			}
 			return nil
 		})
@@ -542,8 +543,16 @@ func TestDiskFullSimulated(t *testing.T) {
 	}
 
 	// Make .git/objects read-only (prevents git from writing new objects)
-	if err := os.Chmod(objectsDir, 0555); err != nil {
-		t.Fatalf("chmod objects dir: %v", err)
+	if err := filepath.Walk(objectsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			testutil.SetDirectoryWritable(t, path, false)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	// Commit should fail (can't write objects)
@@ -553,8 +562,16 @@ func TestDiskFullSimulated(t *testing.T) {
 	}
 
 	// Restore permissions
-	if err := os.Chmod(objectsDir, 0755); err != nil {
-		t.Fatalf("restoring objects dir permissions: %v", err)
+	if err := filepath.Walk(objectsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			testutil.SetDirectoryWritable(t, path, true)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	// Now commit should succeed

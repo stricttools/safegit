@@ -1,9 +1,5 @@
-// Package filelock provides file locking for append operations, using flock(2)
-// for advisory locking. There is no Windows implementation on purpose: the
-// appended files have no line-size limit, so the lock -- not POSIX O_APPEND
-// atomicity -- is the only thing that keeps concurrent appends intact, and a
-// no-op lock would silently mean no integrity at all. A Windows build fails to
-// compile here; see todo/.defer/windows-lockfileex-support.md.
+// Package filelock serializes unlimited-size append records with flock on Unix
+// and whole-file LockFileEx locks on Windows. No platform uses a no-op lock.
 package filelock
 
 import (
@@ -23,7 +19,7 @@ func LockedAppend(path string, data []byte, mkdirAll bool) error {
 		}
 	}
 
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	f, err := openAppend(path)
 	if err != nil {
 		return fmt.Errorf("opening %s: %w", path, err)
 	}

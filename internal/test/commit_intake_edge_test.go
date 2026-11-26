@@ -147,7 +147,7 @@ func TestIntakeEdgePlainDeletionControl(t *testing.T) {
 // and this test keeps the easy case pinned beside the hard one below.
 func TestIntakeEdgeColonNameNonNumericSuffixDeletion(t *testing.T) {
 	dir := newRepo(t)
-	name := "sprint:final"
+	name := testutil.FixturePath("sprint:final")
 	testutil.WriteFileAt(t, filepath.Join(dir, name), "planning\n")
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "add", "--", name); code != 0 {
 		t.Fatalf("seed commit of %q failed (%d): %s", name, code, stderr)
@@ -174,7 +174,7 @@ func TestIntakeEdgeColonNameNonNumericSuffixDeletion(t *testing.T) {
 // commit was refused naming a path the caller never typed.
 func TestIntakeEdgeColonNameDeletion(t *testing.T) {
 	dir := newRepo(t)
-	name := "sprint:1"
+	name := testutil.FixturePath("sprint:1")
 	testutil.WriteFileAt(t, filepath.Join(dir, name), "planning\n")
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "add colon file", "--", name); code != 0 {
 		t.Fatalf("seed commit of %q failed (%d): %s", name, code, stderr)
@@ -271,11 +271,12 @@ func TestIntakeEdgeColonNameBrokenSymlink(t *testing.T) {
 // how the argument is read.
 func TestIntakeEdgeSameArgvHasOneMeaningFromEveryDirectory(t *testing.T) {
 	dir := newRepo(t)
+	literal := testutil.FixturePath("notes:1")
 	sub := filepath.Join(dir, "sub")
 
-	// A literal file named "notes:1" at the repo root, and a tracked file
+	// A literal file named literal at the repo root, and a tracked file
 	// named "notes" inside sub/ with two hunks of pending modifications.
-	testutil.WriteFileAt(t, filepath.Join(dir, "notes:1"), "literal colon file\n")
+	testutil.WriteFileAt(t, filepath.Join(dir, literal), "literal colon file\n")
 	testutil.WriteFileAt(t, filepath.Join(sub, "notes"), intakeEdgeNumbered(20, nil))
 	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "seed notes", "--", "sub/notes"); code != 0 {
 		t.Fatalf("seed commit failed (%d): %s", code, stderr)
@@ -285,11 +286,11 @@ func TestIntakeEdgeSameArgvHasOneMeaningFromEveryDirectory(t *testing.T) {
 	// Positional, from sub/: the literal path sub/notes:1, which is not there.
 	// The refusal must name what the caller typed and must not have staged any
 	// hunk of sub/notes.
-	_, stderr, code := runSafegit(t, sub, "commit", "-m", "positional from sub", "--", "notes:1")
+	_, stderr, code := runSafegit(t, sub, "commit", "-m", "positional from sub", "--", literal)
 	if code == 0 {
 		t.Errorf("a positional naming a file that is not in the caller's directory was accepted; stderr: %s", stderr)
 	}
-	if !strings.Contains(stderr, "notes:1") {
+	if !strings.Contains(stderr, literal) {
 		t.Errorf("the refusal must name the literal argument, got: %s", stderr)
 	}
 	if got, ok := testutil.Show(t, dir, "HEAD", "sub/notes"); ok && strings.Contains(got, "FIRST-CHANGE") {
@@ -297,10 +298,10 @@ func TestIntakeEdgeSameArgvHasOneMeaningFromEveryDirectory(t *testing.T) {
 	}
 
 	// Positional, from the repo root: the literal file that is there.
-	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "positional from root", "--", "notes:1"); code != 0 {
+	if _, stderr, code := runSafegit(t, dir, "commit", "-m", "positional from root", "--", literal); code != 0 {
 		t.Fatalf("committing the literal file notes:1 from the repo root failed (%d): %s", code, stderr)
 	}
-	if _, ok := testutil.Show(t, dir, "HEAD", "notes:1"); !ok {
+	if _, ok := testutil.Show(t, dir, "HEAD", literal); !ok {
 		t.Error("the literal file notes:1 was not committed from the repo root")
 	}
 

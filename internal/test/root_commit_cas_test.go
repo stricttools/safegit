@@ -123,9 +123,7 @@ exec "$REAL" "$@"
 `, realGit, markerPath, argvPath, rivalSHA)
 
 	shimPath := filepath.Join(shimDir, "git")
-	if err := os.WriteFile(shimPath, []byte(script), 0755); err != nil {
-		t.Fatal(err)
-	}
+	testutil.WriteExecutable(t, shimPath, script)
 	return shimDir, markerPath, argvPath
 }
 

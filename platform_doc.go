@@ -1,0 +1,3 @@
+package main
+
+const hookPlatformHelp = " On native Windows, execution permission means the FILE_EXECUTE ACL, not a POSIX mode bit. Native executables and PowerShell .ps1 scripts run directly or through PowerShell; other scripts require a supported shebang and its interpreter (Git for Windows supplies sh and bash). Hook code starts suspended and is assigned to a non-breakaway, kill-on-close Job Object before it can run. A timeout or console interruption forcibly terminates the job: Windows has no SIGTERM/SIGKILL grace sequence. Console Ctrl-C/Ctrl-Break is reported as exit 130; Unix signal delivery is not available."

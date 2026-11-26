@@ -330,6 +330,7 @@ func canonicalRel(repoRoot, arg string, followFinal bool) (string, error) {
 			// repository, so this is a link in the repository leading out of it.
 			link, _ := filepath.Rel(repoRoot, absPath)
 			target, rerr := os.Readlink(absPath)
+			target = filepath.ToSlash(target)
 			if rerr != nil {
 				target = followed
 			}
@@ -525,7 +526,8 @@ func belowRoot(repoRoot, dir string) (string, bool) {
 	}
 	for i := len(ancestors) - 1; i >= 0; i-- {
 		resolved, err := filepath.EvalSymlinks(ancestors[i])
-		if err != nil || resolved != repoRoot {
+		same, sameErr := filepath.Rel(repoRoot, resolved)
+		if err != nil || sameErr != nil || same != "." {
 			continue
 		}
 		rest, err := filepath.Rel(ancestors[i], dir)
@@ -643,10 +645,14 @@ func nonPortableLinkTarget(repoRoot, rel string) (string, targetShape) {
 	if err != nil {
 		return "", portableTarget
 	}
+	target = filepath.ToSlash(target)
 	// An absolute target is judged on its spelling alone: where it resolves in
 	// THIS checkout says nothing about where it resolves in another one, which
 	// is the only question the recorded text has to answer.
-	if filepath.IsAbs(target) {
+	// Windows drive-rooted (/foo) and drive-relative (C:foo) spellings
+	// also depend on this machine/drive, even though IsAbs requires a volume
+	// AND root separator there. They cannot be portable Git link text.
+	if filepath.IsAbs(target) || strings.HasPrefix(target, "/") || filepath.VolumeName(target) != "" {
 		return target, absoluteTarget
 	}
 	resolved := filepath.Clean(filepath.Join(filepath.Dir(abs), target))

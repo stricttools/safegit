@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -204,6 +205,7 @@ func worktreeContent(abs string) (content []byte, present bool, err error) {
 	switch {
 	case info.Mode()&os.ModeSymlink != 0:
 		target, err := os.Readlink(abs)
+		target = filepath.ToSlash(target)
 		if err != nil {
 			return nil, false, err
 		}

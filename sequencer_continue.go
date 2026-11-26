@@ -1496,7 +1496,7 @@ func writeStageToWorktree(ctx context.Context, fx *strictcli.Effects, abs string
 		}
 		// The effects handle has no symlink primitive, so the link is made by
 		// ln, as a recorded process effect.
-		_, err = fx.Run([]interface{}{"ln", "-s", "--", string(target), abs}, strictcli.Resource("path:"+abs))
+		_, err = fx.Run(symlinkCommand(string(target), abs), strictcli.Resource("path:"+abs))
 		return err
 	}
 

@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/stricttools/safegit/internal/testutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,9 +51,7 @@ func TestPushRefusesNonExecutableLocalHook(t *testing.T) {
 	// The offender: same store, correct name, no execute bit.
 	unarmed := filepath.Join(localHookDir(dir), "pre-pre-push.d", "20-unarmed")
 	writeHookScript(t, unarmed, "true")
-	if err := os.Chmod(unarmed, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	testutil.SetExecutable(t, unarmed, false)
 
 	_, stderr, code := runSafegit(t, dir, "push", "--refs", "head", "origin")
 

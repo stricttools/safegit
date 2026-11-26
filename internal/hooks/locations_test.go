@@ -2,6 +2,7 @@ package hooks
 
 import (
 	"errors"
+	"github.com/stricttools/safegit/internal/testutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,6 +17,7 @@ func writeFileMode(t *testing.T, path, content string, mode os.FileMode) {
 	if err := os.WriteFile(path, []byte(content), mode); err != nil {
 		t.Fatal(err)
 	}
+	testutil.SetExecutable(t, path, mode&0111 != 0)
 }
 
 // rels renders the enumeration as "<origin>:<rel>" strings, which is what the

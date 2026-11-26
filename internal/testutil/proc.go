@@ -70,6 +70,9 @@ func spawnSleeperNamed(t *testing.T, basename string) *Process {
 	if err != nil {
 		t.Skipf("no sleep binary available to spawn a controllable process: %v", err)
 	}
+	if runtime.GOOS == "windows" {
+		basename += ".exe"
+	}
 	link := filepath.Join(t.TempDir(), basename)
 	if err := os.Symlink(sleep, link); err != nil {
 		t.Fatalf("symlinking %s to %s: %v", link, sleep, err)

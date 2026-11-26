@@ -1,52 +1,133 @@
 name: CI
-
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
-
-# Per-SHA group: re-runs of the same commit dedupe, but a new commit never
-# cancels an earlier commit's in-flight run (release CI conclusions stay intact).
+permissions:
+  contents: read
 concurrency:
-  group: ${{ github.workflow_ref }}-${{ github.sha }}
-  cancel-in-progress: true
-
+  group: ci-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
+env:
+  GIT_CONFIG_COUNT: '1'
+  GIT_CONFIG_KEY_0: protocol.file.allow
+  GIT_CONFIG_VALUE_0: always
 jobs:
   test:
-    # This is the repository's ONE push-triggered test workflow, and the only
-    # workflow named CI. The linux+macos matrix came from a hand-made second
-    # workflow that was also named CI, which made the release's CI-check
-    # resolution ambiguous and doubled the wait.
-    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-    env:
-      GIT_CONFIG_COUNT: 1
-      GIT_CONFIG_KEY_0: protocol.file.allow
-      GIT_CONFIG_VALUE_0: always
+        os: [ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
-      # setup-go reads go.mod's `toolchain` line first, then its `go` directive.
-      # Declare the development Go in `toolchain` (go mod edit -toolchain=goX.Y.Z)
-      # so CI tests with it; `go` stays the minimum consumers need.
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - run: go vet ./...
-      # No -short: the multi-minute stress scenarios are opt-in behind the test
-      # binary's own --stress flag, so an ordinary run is already the fast one
-      # and -short would only silence unrelated tests.
-      #
-      # The budget is 30m because the macOS runner is roughly three times
-      # slower on this suite than the linux one is WITH the race detector --
-      # the suite spawns the safegit binary thousands of times and macOS pays
-      # far more per spawn. Measured on the 0.29.0 release candidate: linux
-      # 4m51s with -race, macOS 14m38s without it, and the attempt before that
-      # one ran past a 15m budget and was killed mid-suite. A budget the suite
-      # finishes against by twenty seconds is a red gate waiting to happen, so
-      # the number is set well clear of the measurement rather than just above
-      # it.
-      - run: go test ./... ${{ matrix.os == 'ubuntu-latest' && '-race' || '' }} -timeout=30m
+      - run: go test ./... ${{ runner.os == 'Linux' && '-race' || '' }} -count=1 -timeout=40m
+  macos-unit:
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - shell: bash
+        run: |
+          set -euo pipefail
+          packages=$(go list ./... | grep -v '^github.com/stricttools/safegit/internal/test$')
+          go test $packages -count=1 -timeout=35m
+  macos-integration:
+    runs-on: macos-15-intel
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: bash scripts/test-unix-integration.sh ${{ matrix.shard }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-tests-${{ matrix.shard }}
+          path: .strictmetadata/validation/unix-*
+  windows-unit:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: ./scripts/test-windows-inventory.ps1
+      - shell: pwsh
+        run: |
+          $packages = @(go list ./... | Where-Object { $_ -ne 'github.com/stricttools/safegit/internal/test' })
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go test $packages -count=1 -timeout=35m
+          exit $LASTEXITCODE
+  windows-integration:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: ./scripts/test-windows-integration.ps1 -Shard ${{ matrix.shard }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-tests-${{ matrix.shard }}
+          path: .strictmetadata/validation/windows-integration-*
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-latest, goos: linux, goarch: amd64}
+          - {os: ubuntu-latest, goos: linux, goarch: arm64}
+          - {os: ubuntu-latest, goos: darwin, goarch: amd64}
+          - {os: ubuntu-latest, goos: darwin, goarch: arm64}
+          - {os: windows-latest, goos: windows, goarch: amd64}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      GOOS: ${{ matrix.goos }}
+      GOARCH: ${{ matrix.goarch }}
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - shell: bash
+        run: |
+          set -euo pipefail
+          version=0.33.0-windows.1
+          binary=safegit
+          if [ "$GOOS" = windows ]; then binary=safegit.exe; fi
+          mkdir -p dist/stage
+          go build -trimpath -ldflags "-s -w -X main.version=$version" -o "dist/stage/$binary" .
+          cp LICENSE dist/stage/LICENSE
+          tar -czf "dist/safegit_${version}_${GOOS}_${GOARCH}.tar.gz" -C dist/stage "$binary" LICENSE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: safegit-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error

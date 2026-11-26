@@ -171,7 +171,7 @@ func Legacy(sharedGitDir string) ([]Location, error) {
 			Path:       LegacyFile(sharedGitDir),
 			Rel:        "pre-pre-push",
 			Origin:     OriginLegacy,
-			Executable: isExecutable(info),
+			Executable: isExecutable(LegacyFile(sharedGitDir), info),
 		})
 	}
 
@@ -225,7 +225,7 @@ func walkStore(root string, origin Origin) ([]Location, error) {
 			Path:       path,
 			Rel:        relSlash(root, path),
 			Origin:     origin,
-			Executable: isExecutable(info),
+			Executable: isExecutable(path, info),
 		})
 		return nil
 	})

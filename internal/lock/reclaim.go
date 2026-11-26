@@ -1,10 +1,6 @@
 package lock
 
-import (
-	"errors"
-	"os"
-	"syscall"
-)
+import "os"
 
 // reclaimOutcome is what a reclamation attempt concluded about a lock file
 // whose holder looked stale.
@@ -41,7 +37,7 @@ const (
 // an unreclaimable lock is waited on and eventually times out rather than being
 // removed on a guess.
 func openForReclaim(path string) (*os.File, reclaimOutcome) {
-	f, err := os.Open(path)
+	f, err := openReclaim(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Already reclaimed by someone else; race for creation instead.
@@ -50,13 +46,8 @@ func openForReclaim(path string) (*os.File, reclaimOutcome) {
 		return nil, reclaimNone
 	}
 
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+	if err := lockReclaim(f); err != nil {
 		f.Close()
-		if errors.Is(err, syscall.EWOULDBLOCK) {
-			// Another contender is reclaiming this same file right now. It will
-			// finish; waiting is cheaper and safer than racing it.
-			return nil, reclaimNone
-		}
 		return nil, reclaimNone
 	}
 	return f, reclaimNone
@@ -124,7 +115,7 @@ func reclaimLocked(f *os.File, path string, remove func(string) error) (reclaimO
 	if err != nil {
 		return reclaimRestart, 0
 	}
-	atPath, err := os.Stat(path)
+	atPath, err := statIdentity(path)
 	if err != nil || !os.SameFile(held, atPath) {
 		// The path no longer names the file we hold: someone reclaimed it
 		// first. Removing now would delete their lock, not the stale one.

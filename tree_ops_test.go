@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"github.com/stricttools/safegit/internal/testutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -278,6 +279,9 @@ func TestReplaceInTreePreservesMode(t *testing.T) {
 		t.Fatalf("chmod: %v\n%s", err, out)
 	}
 
+	if _, _, err := git.Run(ctx, "update-index", "--add", "--chmod=+x", "--", "script.sh"); err != nil {
+		t.Fatal(err)
+	}
 	writeFile(t, dir, "normal.txt", "normal\n")
 	sha := commitAll(t, dir, ctx, "init")
 	treeSHA := commitTreeSHA(t, ctx, sha)
@@ -626,7 +630,7 @@ func TestTreeRewriteSurvivesAPathologicalPath(t *testing.T) {
 
 	// A leading double quote and a backslash: the two characters plain mktree
 	// input gives a meaning to.
-	const weird = `"quoted\name.txt`
+	weird := testutil.FixturePath(`"quoted\name.txt`)
 	writeFile(t, dir, weird, "hunter2\n")
 	writeFile(t, dir, "plain.txt", "ordinary\n")
 	commitSHA := commitAll(t, dir, ctx, "add a pathological path")

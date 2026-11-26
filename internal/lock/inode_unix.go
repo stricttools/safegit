@@ -1,3 +1,5 @@
+//go:build !windows
+
 package lock
 
 import (
@@ -8,8 +10,7 @@ import (
 // inodeOf returns the inode number of a stat result, or 0 when the platform
 // does not expose one.
 //
-// safegit builds only for unix (the windows sources were removed with the
-// platform), so the type assertion succeeds in practice; the zero fallback
+// On Unix the type assertion succeeds in practice; the zero fallback
 // keeps holderIdentity comparison sound rather than panicking if it ever does
 // not -- with the inode always zero, identity falls back to size and
 // modification time, which is weaker but never wrong in the unsafe direction:

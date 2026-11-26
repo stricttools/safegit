@@ -409,8 +409,8 @@ func TestHookRunRefusesDryRun(t *testing.T) {
 	// Anything in the tool-owned store is a hook, whatever it is called;
 	// `hook install` copies the source under its own basename.
 	src := filepath.Join(t.TempDir(), "pre-pre-push")
-	script := "#!/bin/sh\ntouch " + marker + "\nexit 0\n"
-	if err := os.WriteFile(src, []byte(script), 0o755); err != nil {
+	script := "#!/bin/sh\ntouch " + testutil.ShellPath(marker) + "\nexit 0\n"
+	if err := os.WriteFile(src, []byte(testutil.FixtureScript(script)), 0o755); err != nil {
 		t.Fatalf("writing hook source: %v", err)
 	}
 	if _, stderr, code := runSafegit(t, dir, "hook", "install", src); code != 0 {

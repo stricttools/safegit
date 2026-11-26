@@ -2,6 +2,7 @@ package test
 
 import (
 	"encoding/json"
+	"github.com/stricttools/safegit/internal/testutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -43,7 +44,7 @@ func writeHookScript(t *testing.T, path string, body string) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body+"\nexit 0\n"), 0o755); err != nil {
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+testutil.FixtureScript(body)+"\nexit 0\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -1,0 +1,3 @@
+# Generated documentation checks compare exact LF text. Git for Windows may
+# default to autocrlf=true; keep checkout bytes reproducible on every runner.
+* text=auto eol=lf

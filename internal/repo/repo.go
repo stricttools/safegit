@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/stricttools/safegit/internal/atomicfile"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -232,7 +233,7 @@ func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 		os.Remove(tmpPath)
 		return fmt.Errorf("closing %s: %w", tmpPath, err)
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := atomicfile.Rename(tmpPath, path); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("renaming %s to %s: %w", tmpPath, path, err)
 	}
@@ -376,7 +377,7 @@ func worktreeCheckout(wtGitDir, name string) string {
 // LoadConfig reads and parses config.json from the safegit directory.
 func LoadConfig(gitDir string) (*Config, error) {
 	configPath := filepath.Join(SafegitDir(gitDir), "config.json")
-	data, err := os.ReadFile(configPath)
+	data, err := atomicfile.ReadFile(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("reading config.json: %w", err)
 	}
@@ -392,7 +393,7 @@ func LoadConfig(gitDir string) (*Config, error) {
 
 // LoadConfigFrom reads and parses config from an arbitrary path.
 func LoadConfigFrom(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	data, err := atomicfile.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading config: %w", err)
 	}

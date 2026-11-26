@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/stricttools/safegit/internal/procutil"
+	"github.com/stricttools/safegit/internal/testutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -114,6 +116,7 @@ func TestRefuseNonExecutableLocalHook(t *testing.T) {
 	if err := os.WriteFile(bad, []byte("#!/bin/sh\nexit 0\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
+	testutil.SetExecutable(t, bad, false)
 
 	hooks, err := Discover(store(gitDir))
 	var local *LocalNotExecutableError
@@ -272,6 +275,7 @@ func TestDiscoverWritesNoWarningOfItsOwn(t *testing.T) {
 	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\nexit 0\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
+	testutil.SetExecutable(t, hookPath, false)
 
 	hooks, err := Discover(store(gitDir))
 	var local *LocalNotExecutableError
@@ -342,7 +346,15 @@ func TestHookWhoseBackgroundChildHoldsStdoutFailsWithoutWaiting(t *testing.T) {
 		t.Fatal(err)
 	}
 	pid := readPid(t, pidFile)
-	defer syscall.Kill(pid, syscall.SIGKILL)
+	defer func() {
+		if runtime.GOOS == "windows" {
+			return
+		}
+		p, _ := os.FindProcess(pid)
+		if p != nil {
+			p.Kill()
+		}
+	}()
 	if len(results) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(results))
 	}
@@ -350,7 +362,7 @@ func TestHookWhoseBackgroundChildHoldsStdoutFailsWithoutWaiting(t *testing.T) {
 	if r.TimedOut || !r.Failed() {
 		t.Errorf("a hook that left a child running must fail on its own, not time out: %+v", r)
 	}
-	if len(r.Leftovers) != 1 || r.Leftovers[0].PID != pid || !r.Leftovers[0].Killed {
+	if runtime.GOOS != "windows" && (len(r.Leftovers) != 1 || r.Leftovers[0].PID != pid || !r.Leftovers[0].Killed) {
 		t.Errorf("the result must name the background child %d as killed: %+v", pid, r.Leftovers)
 	}
 	if elapsed > 10*time.Second {
@@ -359,7 +371,16 @@ func TestHookWhoseBackgroundChildHoldsStdoutFailsWithoutWaiting(t *testing.T) {
 	if got := outBuf.String(); got != "started\n" {
 		t.Errorf("hook stdout = %q, want %q", got, "started\n")
 	}
-	if !waitGone(pid, 5*time.Second) {
+	if runtime.GOOS == "windows" {
+		for _, leftover := range r.Leftovers {
+			if !leftover.Killed || !waitGone(leftover.PID, 5*time.Second) {
+				t.Errorf("native leftover %d survived", leftover.PID)
+			}
+		}
+		if len(r.Leftovers) == 0 {
+			t.Error("no native leftovers reported")
+		}
+	} else if !waitGone(pid, 5*time.Second) {
 		t.Errorf("the background child %d is still running", pid)
 	}
 }
@@ -421,7 +442,7 @@ func readPid(t *testing.T, path string) int {
 func waitGone(pid int, d time.Duration) bool {
 	deadline := time.Now().Add(d)
 	for time.Now().Before(deadline) {
-		if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+		if !procutil.ProcessAlive(pid) {
 			return true
 		}
 		time.Sleep(50 * time.Millisecond)
@@ -456,6 +477,15 @@ func TestHookThatCannotStartRecordsTheStartError(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tc.content), tc.mode); err != nil {
 				t.Fatal(err)
 			}
+			testutil.SetExecutable(t, path, tc.mode&0111 != 0)
+			if runtime.GOOS == "windows" {
+				switch tc.name {
+				case "not executable":
+					tc.want = "exec: Access is denied."
+				case "missing interpreter":
+					tc.want = "exec: executable file not found in %PATH%"
+				}
+			}
 			r, err := RunSingle(context.Background(), path, nil, 30, DefaultStopCap, nil, noWarn)
 			if err != nil {
 				t.Fatalf("RunSingle: %v", err)
@@ -477,7 +507,7 @@ func TestHookThatCannotStartRecordsTheStartError(t *testing.T) {
 // missingprog` starts -- env runs, fails to find the program, and exits 127 --
 // so it is an ordinary nonzero exit, not a start error.
 func TestHookWhoseInterpreterExitsNonzeroIsNotAStartError(t *testing.T) {
-	if _, err := os.Stat("/usr/bin/env"); err != nil {
+	if _, err := os.Stat("/usr/bin/env"); err != nil && runtime.GOOS != "windows" {
 		t.Skip("/usr/bin/env is not present")
 	}
 	path := filepath.Join(t.TempDir(), "pre-pre-push")

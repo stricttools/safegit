@@ -169,7 +169,7 @@ func TestDiffTreeRawFieldsQuotedPath(t *testing.T) {
 	testutil.Chdir(t, dir)
 	ctx := context.Background()
 
-	const weird = "a b\tc\xc3\xa9.txt"
+	weird := testutil.FixturePath("a b\tc\xc3\xa9.txt")
 	testutil.WriteFile(t, dir, weird, "content\n")
 	testutil.Git(t, dir, "update-index", "--add", "--", weird)
 	tree := trimNL(testutil.GitOut(t, dir, "write-tree"))

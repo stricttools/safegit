@@ -12,12 +12,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/stricttools/safegit/internal/exitcode"
 	"github.com/stricttools/safegit/internal/git"
+	"github.com/stricttools/safegit/internal/hooks"
 )
 
 // The three hooks git runs around a commit that safegit runs too.
@@ -109,7 +109,7 @@ func (h *nativeHooks) noteSkipped(info func(string)) {
 func (h *nativeHooks) path(name string) string {
 	p := filepath.Join(h.hooksDir, name)
 	info, err := os.Stat(p)
-	if err != nil || info.Mode()&0111 == 0 {
+	if err != nil || info.IsDir() || !hooks.Executable(p, info) {
 		return ""
 	}
 	return p
@@ -143,7 +143,10 @@ func (h *nativeHooks) wantsIndex() bool {
 // a hook is an operator-supplied script whose children it can neither classify
 // nor reach.
 func (h *nativeHooks) run(ctx context.Context, hookPath, indexPath string, args ...string) error {
-	cmd := exec.CommandContext(ctx, hookPath, args...)
+	cmd, err := hooks.CommandContext(ctx, hookPath, args...)
+	if err != nil {
+		return err
+	}
 	cmd.Dir = h.repoRoot
 	cmd.Env = os.Environ()
 	if indexPath != "" {

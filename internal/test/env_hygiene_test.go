@@ -48,6 +48,22 @@ func TestControlledEnvIsAllowlisted(t *testing.T) {
 		}
 	}
 
+	for _, name := range []string{"APPDATA", "LOCALAPPDATA", "PROGRAMDATA", "ALLUSERSPROFILE"} {
+		found := false
+		for _, e := range env {
+			if value, ok := strings.CutPrefix(e, name+"="); ok {
+				info, err := os.Stat(value)
+				if !filepath.IsAbs(value) || err != nil || !info.IsDir() {
+					t.Fatalf("%s must name an existing absolute isolated directory: %q (%v)", name, value, err)
+				}
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("controlled env missing %s", name)
+		}
+	}
+
 	// Explicit overrides must survive.
 	withExtra := controlledEnv(t, "CLAUDE_CODE_SESSION_ID=explicit-session")
 	found := false

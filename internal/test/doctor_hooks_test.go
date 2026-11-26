@@ -103,6 +103,7 @@ func TestDoctorReportsANonExecutableLocalHookAsAnError(t *testing.T) {
 	if err := os.WriteFile(nonExec, []byte("#!/bin/sh\nexit 0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	testutil.SetExecutable(t, nonExec, false)
 
 	stdout, _, code := runSafegit(t, dir, "doctor", "--action", "diagnose")
 	if code != 50 {
@@ -167,7 +168,7 @@ func TestCoreHooksPathRedirectsSafegitsOwnHookRuns(t *testing.T) {
 	// Doctor reads the same resolution, so its report is about the files git
 	// would actually run.
 	stdout, _, _ := runSafegit(t, dir, "doctor", "--action", "diagnose")
-	if !strings.Contains(stdout, "prepare-commit-msg") || !strings.Contains(stdout, hooksPath) {
+	if !strings.Contains(stdout, "prepare-commit-msg") || !strings.Contains(stdout, filepath.ToSlash(hooksPath)) {
 		t.Errorf("doctor reported hooks from the wrong directory:\n%s", stdout)
 	}
 }

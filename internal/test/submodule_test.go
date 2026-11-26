@@ -1063,7 +1063,7 @@ func TestPushHookCascadeFromParent(t *testing.T) {
 	markerFile := filepath.Join(evalTempDir(t), "cascade-marker")
 	hookScript := fmt.Sprintf("#!/bin/sh\ntouch %s\n", markerFile)
 	hookPath := filepath.Join(hooksDir, "pre-pre-push")
-	if err := os.WriteFile(hookPath, []byte(hookScript), 0755); err != nil {
+	if err := os.WriteFile(hookPath, []byte(testutil.FixtureScript(hookScript)), 0755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1122,7 +1122,7 @@ func TestPushHookCascadeRejectsOnParentHookFailure(t *testing.T) {
 	}
 	hookScript := "#!/bin/sh\necho 'parent hook rejects push' >&2\nexit 1\n"
 	hookPath := filepath.Join(hooksDir, "pre-pre-push")
-	if err := os.WriteFile(hookPath, []byte(hookScript), 0755); err != nil {
+	if err := os.WriteFile(hookPath, []byte(testutil.FixtureScript(hookScript)), 0755); err != nil {
 		t.Fatal(err)
 	}
 

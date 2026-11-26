@@ -25,9 +25,7 @@ func countingGit(t *testing.T) (pathEnv, logPath string) {
 	dir := t.TempDir()
 	logPath = filepath.Join(dir, "starts.log")
 	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' \"$*\" >> '%s'\nexec '%s' \"$@\"\n", logPath, realGit)
-	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testutil.WriteExecutable(t, filepath.Join(dir, "git"), script)
 	return "PATH=" + dir + string(os.PathListSeparator) + os.Getenv("PATH"), logPath
 }
 

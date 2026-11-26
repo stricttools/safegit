@@ -219,7 +219,7 @@ func TestBackupRefusesWhenTheSlotMovesInsideTheWindow(t *testing.T) {
 	commitFileIn(t, dir, "two.txt", "two\n", "second")
 
 	env, pushes := gitShim(t, "push",
-		`"$REALGIT" --git-dir=`+remoteDir+` update-ref refs/backups/main `+foreign)
+		`"$REALGIT" --git-dir=`+testutil.ShellPath(remoteDir)+` update-ref refs/backups/main `+foreign)
 
 	_, stderr, code := runSafegitEnv(t, dir, env, "backup", "backup", "origin")
 	if code != exitcode.PushLeaseRejected {

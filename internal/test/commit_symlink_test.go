@@ -147,7 +147,7 @@ func TestCommitNonPortableSymlinkRefusalNamesTheLiteralTarget(t *testing.T) {
 		t.Errorf("a symlink leaving the repository exited %d, want %d (NonPortableTarget); stderr: %s",
 			code, exitcode.NonPortableTarget, stderr)
 	}
-	if !strings.Contains(stderr, target) {
+	if !strings.Contains(stderr, filepath.ToSlash(target)) {
 		t.Errorf("the refusal must name the literal target %q; stderr:\n%s", target, stderr)
 	}
 	if !strings.Contains(stderr, "--allow-non-portable-targets") {
@@ -180,7 +180,7 @@ func TestCommitNonPortableSymlinkRefusalNamesEveryOffender(t *testing.T) {
 			code, exitcode.NonPortableTarget, stderr)
 	}
 	for _, want := range []string{"../elsewhere/first.txt", "../elsewhere/second.txt"} {
-		if !strings.Contains(stderr, want) {
+		if !strings.Contains(stderr, filepath.ToSlash(want)) {
 			t.Errorf("the refusal does not name %q; stderr:\n%s", want, stderr)
 		}
 	}
@@ -203,7 +203,7 @@ func TestAmendNonPortableSymlinkIsRefusedAndElects(t *testing.T) {
 		t.Errorf("an --amend of a non-portable symlink exited %d, want %d (NonPortableTarget); stderr: %s",
 			code, exitcode.NonPortableTarget, stderr)
 	}
-	if !strings.Contains(stderr, target) {
+	if !strings.Contains(stderr, filepath.ToSlash(target)) {
 		t.Errorf("the refusal must name the target %q; stderr:\n%s", target, stderr)
 	}
 	if after := testutil.Rev(t, dir, "HEAD"); after != before {
@@ -431,7 +431,7 @@ func TestCommitNonPortableSymlinkFoundByDirectoryExpansionIsRefused(t *testing.T
 		t.Errorf("a directory holding a non-portable symlink exited %d, want %d (NonPortableTarget); stderr: %s",
 			code, exitcode.NonPortableTarget, stderr)
 	}
-	if !strings.Contains(stderr, target) {
+	if !strings.Contains(stderr, filepath.ToSlash(target)) {
 		t.Errorf("the refusal must name the target %q; stderr:\n%s", target, stderr)
 	}
 	if !strings.Contains(stderr, "sub/escapes") {
@@ -476,7 +476,7 @@ func TestCommitAbsoluteSymlinkTargetInsideTheRepositoryIsRefused(t *testing.T) {
 		t.Errorf("an absolute in-repository symlink exited %d, want %d (NonPortableTarget); stderr: %s",
 			code, exitcode.NonPortableTarget, stderr)
 	}
-	if !strings.Contains(stderr, target) {
+	if !strings.Contains(stderr, filepath.ToSlash(target)) {
 		t.Errorf("the refusal must name the literal target %q; stderr:\n%s", target, stderr)
 	}
 	if !strings.Contains(stderr, "Spell the target relative to the link") {
@@ -497,7 +497,7 @@ func TestCommitAbsoluteSymlinkTargetInsideTheRepositoryIsRefused(t *testing.T) {
 	if mode := treeEntryMode(t, dir, "abslink"); mode != "120000" {
 		t.Errorf("expected HEAD entry %q with mode 120000, got mode %q; tree:\n%s", "abslink", mode, lsTreeHEAD(t, dir))
 	}
-	if got := catFileBlob(t, dir, "abslink"); got != target {
+	if got := catFileBlob(t, dir, "abslink"); got != filepath.ToSlash(target) {
 		t.Errorf("symlink blob = %q, want the absolute link text %q", got, target)
 	}
 	if !strings.Contains(stderr, "warning:") || !strings.Contains(stderr, "the commit records the link text") {
@@ -551,8 +551,8 @@ func TestCommitAbsoluteSymlinkTargetOutsideTheRepositoryIsRefused(t *testing.T) 
 		t.Errorf("an absolute symlink resolving outside the repository exited %d, want %d (NonPortableTarget); stderr: %s",
 			code, exitcode.NonPortableTarget, stderr)
 	}
-	for _, want := range []string{"abslink", target} {
-		if !strings.Contains(stderr, want) {
+	for _, want := range []string{"abslink", filepath.ToSlash(target)} {
+		if !strings.Contains(stderr, filepath.ToSlash(want)) {
 			t.Errorf("the refusal must name %q; stderr:\n%s", want, stderr)
 		}
 	}
@@ -565,7 +565,7 @@ func TestCommitAbsoluteSymlinkTargetOutsideTheRepositoryIsRefused(t *testing.T) 
 	// both cases: the relative spelling for a target pointing inside, and the
 	// statement that a target pointing outside has no such spelling.
 	for _, want := range []string{absoluteRemedyInside, absoluteRemedyOutside} {
-		if !strings.Contains(stderr, want) {
+		if !strings.Contains(stderr, filepath.ToSlash(want)) {
 			t.Errorf("the absolute remedy does not carry %q; stderr:\n%s", want, stderr)
 		}
 	}
@@ -581,7 +581,7 @@ func TestCommitAbsoluteSymlinkTargetOutsideTheRepositoryIsRefused(t *testing.T) 
 	if code != 0 {
 		t.Fatalf("an elected absolute symlink was refused (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
-	if got := catFileBlob(t, dir, "abslink"); got != target {
+	if got := catFileBlob(t, dir, "abslink"); got != filepath.ToSlash(target) {
 		t.Errorf("symlink blob = %q, want the absolute link text %q", got, target)
 	}
 	if !strings.Contains(stderr, absoluteNoticePhrase) {
@@ -609,7 +609,7 @@ func TestCommitDryRunNonPortableSymlinkIsRefused(t *testing.T) {
 		t.Errorf("a dry-run commit of a non-portable symlink exited %d, want %d (NonPortableTarget)\nstdout: %s\nstderr: %s",
 			code, exitcode.NonPortableTarget, stdout, stderr)
 	}
-	if !strings.Contains(stderr, target) {
+	if !strings.Contains(stderr, filepath.ToSlash(target)) {
 		t.Errorf("the preview's refusal does not name the target %q; stderr:\n%s", target, stderr)
 	}
 	if after := testutil.Rev(t, dir, "HEAD"); after != before {
@@ -642,7 +642,7 @@ func TestCommitNonPortableSymlinkRefusalGroupsOffendersByShape(t *testing.T) {
 			code, exitcode.NonPortableTarget, stderr)
 	}
 	for _, want := range []string{absTarget, outTarget, "abslink", "escapes"} {
-		if !strings.Contains(stderr, want) {
+		if !strings.Contains(stderr, filepath.ToSlash(want)) {
 			t.Errorf("the refusal does not name %q; stderr:\n%s", want, stderr)
 		}
 	}
@@ -684,7 +684,7 @@ func TestCommitTraversingSymlinkTargetLandingInsideIsCommitted(t *testing.T) {
 	if mode := treeEntryMode(t, dir, "sub/climber"); mode != "120000" {
 		t.Errorf("expected HEAD entry %q with mode 120000, got mode %q; tree:\n%s", "sub/climber", mode, lsTreeHEAD(t, dir))
 	}
-	if got := catFileBlob(t, dir, "sub/climber"); got != target {
+	if got := catFileBlob(t, dir, "sub/climber"); got != filepath.ToSlash(target) {
 		t.Errorf("symlink blob = %q, want the link text %q", got, target)
 	}
 	// As in the inside-target control: the phrase asserted absent is one every

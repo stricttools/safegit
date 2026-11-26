@@ -219,7 +219,9 @@ func (b *RepositoryBoundaries) isRepository(dir string) (bool, error) {
 	dotGit := filepath.Join(git.Anchor(b.repoRoot, dir), ".git")
 	is := false
 	if _, err := os.Lstat(dotGit); err == nil {
-		_, _, gerr := git.Run(b.ctx, "rev-parse", "--resolve-git-dir", dotGit)
+		// Git's gitfile resolver splits on '/', including on Windows. Preserve
+		// the gitfile's parent when resolving its relative gitdir record.
+		_, _, gerr := git.Run(b.ctx, "rev-parse", "--resolve-git-dir", filepath.ToSlash(dotGit))
 		var exitErr *exec.ExitError
 		switch {
 		case gerr == nil:
@@ -248,7 +250,7 @@ func shellQuote(s string) string {
 // the boundary's absolute path, because the caller may be standing in any
 // subdirectory. args are spelled as given; the caller quotes paths.
 func BoundaryCommand(repoRoot string, bd RepositoryBoundary, args string) string {
-	return fmt.Sprintf("(cd %s && safegit %s)", shellQuote(git.Anchor(repoRoot, bd.Dir)), args)
+	return fmt.Sprintf("(cd %s && safegit %s)", shellQuote(filepath.ToSlash(git.Anchor(repoRoot, bd.Dir))), args)
 }
 
 // ShellQuote is shellQuote for a caller outside this package.

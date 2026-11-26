@@ -1,5 +1,3 @@
-//go:build !windows
-
 package filelock
 
 import (
@@ -24,7 +22,7 @@ import (
 // lockFile/unlockFile against the same kind of descriptor the real code uses.
 func openLockTarget(t *testing.T, path string) *os.File {
 	t.Helper()
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+	f, err := openAppend(path)
 	if err != nil {
 		t.Fatalf("opening %s: %v", path, err)
 	}
@@ -134,7 +132,7 @@ func TestConcurrentLockersSerialize(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0644)
+			f, err := openAppend(path)
 			if err != nil {
 				t.Errorf("opening the lock target: %v", err)
 				return

@@ -70,7 +70,7 @@ func assertLinkReplacedDirectory(t *testing.T, dir, before, target string) {
 	if mode := treeEntryMode(t, dir, "logs"); mode != "120000" {
 		t.Errorf("expected HEAD entry \"logs\" with mode 120000, got %q; tree:\n%s", mode, lsTreeHEAD(t, dir))
 	}
-	if got := catFileBlob(t, dir, "logs"); got != target {
+	if got := catFileBlob(t, dir, "logs"); got != filepath.ToSlash(target) {
 		t.Errorf("symlink blob = %q, want the link text %q", got, target)
 	}
 	for _, p := range testutil.TreePaths(t, dir, "HEAD") {
@@ -112,7 +112,7 @@ func TestCommitLinkReplacingTrackedDirectory(t *testing.T) {
 				t.Fatalf("without the election, exit %d, want %d (NonPortableTarget); stderr:\n%s",
 					code, exitcode.NonPortableTarget, stderr)
 			}
-			if !strings.Contains(stderr, "logs -> "+target) {
+			if !strings.Contains(stderr, "logs -> "+filepath.ToSlash(target)) {
 				t.Errorf("the refusal must name the link and its target; stderr:\n%s", stderr)
 			}
 
@@ -215,7 +215,7 @@ func assertLinkLeavesRefused(t *testing.T, dir, before, target string, args, wan
 	if code != exitcode.General {
 		t.Fatalf("exit %d, want %d (General); stderr:\n%s", code, exitcode.General, stderr)
 	}
-	head := "file logs/ is outside the repository: logs is a symlink to " + target +
+	head := "file logs/ is outside the repository: logs is a symlink to " + filepath.ToSlash(target) +
 		", which leads outside the repository, and the trailing slash reads through the link"
 	for _, w := range append([]string{head}, want...) {
 		if !strings.Contains(stderr, w) {
@@ -330,7 +330,7 @@ func TestCommitTrailingSlashThroughALinkLeavingTheRepositoryNothingTracked(t *te
 	if code != 0 {
 		t.Fatalf("the suggested commit failed (code %d)\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
-	if got := catFileBlob(t, dir, "logs"); got != target {
+	if got := catFileBlob(t, dir, "logs"); got != filepath.ToSlash(target) {
 		t.Errorf("symlink blob = %q, want the link text %q", got, target)
 	}
 }
@@ -372,7 +372,7 @@ func TestCommitIgnoredLinkReplacingTrackedDirectoryIsRefusedByItsRule(t *testing
 		}
 		want := "file logs is gitignored, through line 1 of .gitignore (`/logs`), and safegit never commits " +
 			"an ignored path: narrow that rule so it no longer matches logs or leave logs out of this commit"
-		if !strings.Contains(stderr, want) {
+		if !strings.Contains(stderr, filepath.ToSlash(want)) {
 			t.Errorf("the refusal must say %q; stderr:\n%s", want, stderr)
 		}
 		for _, raw := range []string{"git add", "-f", "hint:"} {
@@ -542,7 +542,7 @@ func assertMvBeyondLinkRefused(t *testing.T, dir, before, pair, path string) {
 		t.Fatalf("mv %q exited %d, want %d (MoveNotBorneOut); stderr:\n%s", pair, code, exitcode.MoveNotBorneOut, stderr)
 	}
 	want := path + " is beyond a symbolic link: logs is a symlink"
-	if !strings.Contains(stderr, want) {
+	if !strings.Contains(stderr, filepath.ToSlash(want)) {
 		t.Errorf("the refusal must say %q; stderr:\n%s", want, stderr)
 	}
 	if after := testutil.Rev(t, dir, "HEAD"); after != before {
@@ -746,7 +746,7 @@ func assertMovedBeyondLinkRefused(t *testing.T, dir, before, pair, path string, 
 		t.Fatalf("commit --moved %q exited %d, want %d (MoveNotBorneOut); stderr:\n%s", pair, code, exitcode.MoveNotBorneOut, stderr)
 	}
 	want := path + " is beyond a symbolic link: logs is a symlink"
-	if !strings.Contains(stderr, want) {
+	if !strings.Contains(stderr, filepath.ToSlash(want)) {
 		t.Errorf("the refusal must say %q; stderr:\n%s", want, stderr)
 	}
 	if after := testutil.Rev(t, dir, "HEAD"); after != before {

@@ -40,7 +40,7 @@ func legacyHookDir(repoDir string) string {
 // sequence hooks ran in.
 func appendingHook(t *testing.T, path, marker, label string) {
 	t.Helper()
-	writeHookScript(t, path, "printf '"+label+"\\n' >> "+marker)
+	writeHookScript(t, path, "printf '"+label+"\\n' >> "+testutil.ShellPath(marker))
 }
 
 // markerLines reads a marker file written by appendingHook.
@@ -205,6 +205,7 @@ func TestNonExecutableCommittedHookRefusesPush(t *testing.T) {
 	if err := os.WriteFile(hookPath, []byte("#!/bin/sh\nexit 0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	testutil.SetExecutable(t, hookPath, false)
 	safegitCommit(t, dir, "add a committed hook without its mode", filepath.Join(".safegit", "hooks", "pre-pre-push"))
 
 	_, stderr, code := runSafegit(t, dir, "push", "--refs", "head", "origin")
@@ -306,9 +307,7 @@ func TestHookListRendersStateAndOrigin(t *testing.T) {
 	writeHookScript(t, filepath.Join(localHookDir(dir), "pre-pre-push"), "true")
 	nonExec := filepath.Join(localHookDir(dir), "pre-pre-push.d", "20-unarmed")
 	writeHookScript(t, nonExec, "true")
-	if err := os.Chmod(nonExec, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	testutil.SetExecutable(t, nonExec, false)
 	writeHookScript(t, filepath.Join(localHookDir(dir), "pre-pre-push.d", ".hidden"), "true")
 	writeHookScript(t, filepath.Join(localHookDir(dir), "pre-pre-push.d", "30-edited~"), "true")
 

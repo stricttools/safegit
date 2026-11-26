@@ -169,9 +169,9 @@ func TestCommitBoundaryRefusalGroupsOffendersByBoundary(t *testing.T) {
 	}
 	for _, want := range []string{
 		"sub is a submodule recorded as a gitlink in refs/heads/main; named here as sub/n, sub/d/z",
-		"(cd " + filepath.Join(dir, "sub") + " && safegit commit -m <message> -- n d/z)",
+		"(cd " + filepath.ToSlash(filepath.Join(dir, "sub")) + " && safegit commit -m <message> -- n d/z)",
 		"nested is a separate git repository (it has its own .git); named here as nested/n",
-		"(cd " + filepath.Join(dir, "nested") + " && safegit commit -m <message> -- n)",
+		"(cd " + filepath.ToSlash(filepath.Join(dir, "nested")) + " && safegit commit -m <message> -- n)",
 		"or leave them out of this commit",
 	} {
 		if !strings.Contains(stderr, want) {
@@ -334,7 +334,7 @@ func TestCommitBoundaryRefusalQuotesPathsForTheShell(t *testing.T) {
 	if code != exitcode.PathMatchedNothing {
 		t.Fatalf("exit %d, want %d: %s", code, exitcode.PathMatchedNothing, stderr)
 	}
-	want := "(cd '" + filepath.Join(dir, "two words") + "' && safegit commit -m <message> -- 'it'\\''s here')"
+	want := "(cd '" + filepath.ToSlash(filepath.Join(dir, "two words")) + "' && safegit commit -m <message> -- 'it'\\''s here')"
 	if !strings.Contains(stderr, want) {
 		t.Fatalf("refusal lacks the quoted command %q:\n%s", want, stderr)
 	}

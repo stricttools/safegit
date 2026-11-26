@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -228,7 +229,12 @@ func TestTryCreatePublishesCompleteLockFile(t *testing.T) {
 				return
 			default:
 			}
-			raw, err := os.ReadFile(lp)
+			f, err := openReclaim(lp)
+			if err != nil {
+				continue
+			}
+			raw, err := io.ReadAll(f)
+			f.Close()
 			if err != nil {
 				continue // absent is a fine thing to observe
 			}

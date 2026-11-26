@@ -3,7 +3,9 @@ package test
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -423,7 +425,7 @@ func writeRawHook(t *testing.T, dir, name, content string) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o755); err != nil {
+	if err := os.WriteFile(path, []byte(testutil.FixtureScript(content)), 0o755); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -440,6 +442,9 @@ func TestHookThatCannotStartIsRecordedAsAStartError(t *testing.T) {
 		{"malformed", "\x00\x01\x02 not a program\n", "exec: exec format error"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if runtime.GOOS == "windows" && tc.name == "missing interpreter" {
+				tc.want = "exec: " + exec.ErrNotFound.Error()
+			}
 			dir, remote := newRepoWithRemote(t)
 			writeRawHook(t, dir, "10-lint", tc.content)
 			for _, args := range [][]string{

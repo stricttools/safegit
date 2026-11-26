@@ -2,6 +2,7 @@ package lock
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,7 +155,7 @@ func TestIsStale(t *testing.T) {
 
 	// Create a lock file with PID 1 (alive) on the local host
 	aliveLock := filepath.Join(dir, "alive.lock")
-	os.WriteFile(aliveLock, []byte("pid=1\nts=2026-01-01T00:00:00Z\nop=test\nhost="+hostname+"\n"), 0644)
+	os.WriteFile(aliveLock, []byte(fmt.Sprintf("pid=%d\nts=2026-01-01T00:00:00Z\nop=test\nhost=%s\n", os.Getpid(), hostname)), 0644)
 
 	if IsStale(aliveLock) {
 		t.Error("lock with PID 1 should not be stale")

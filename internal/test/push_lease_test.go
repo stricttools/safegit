@@ -219,17 +219,15 @@ func gitShim(t *testing.T, sub, before string) (env []string, calls func() []str
 	script := "#!/bin/sh\n" +
 		"for a in \"$@\"; do\n" +
 		"  if [ \"$a\" = \"" + sub + "\" ]; then\n" +
-		"    printf '%s\\n' \"$*\" >> " + argvLog + "\n" +
-		"    ATTEMPT=$(wc -l < " + argvLog + " | tr -d ' ')\n" +
-		"    REALGIT=" + realGit + "\n" +
+		"    printf '%s\\n' \"$*\" >> " + testutil.ShellPath(argvLog) + "\n" +
+		"    ATTEMPT=$(wc -l < " + testutil.ShellPath(argvLog) + " | tr -d ' ')\n" +
+		"    REALGIT=" + testutil.ShellPath(realGit) + "\n" +
 		before + "\n" +
 		"    break\n" +
 		"  fi\n" +
 		"done\n" +
-		"exec " + realGit + " \"$@\"\n"
-	if err := os.WriteFile(filepath.Join(shimDir, "git"), []byte(script), 0755); err != nil {
-		t.Fatal(err)
-	}
+		"exec " + testutil.ShellPath(realGit) + " \"$@\"\n"
+	testutil.WriteExecutable(t, filepath.Join(shimDir, "git"), script)
 
 	return []string{"PATH=" + shimDir + string(os.PathListSeparator) + os.Getenv("PATH")}, read
 }
@@ -273,7 +271,7 @@ func divergedFromRemote(t *testing.T) (dir, remoteDir, remoteBase string) {
 func TestPushLeaseRefusesWhenTheRemoteMovedUnderUs(t *testing.T) {
 	dir, remoteDir, remoteBase := divergedFromRemote(t)
 
-	env, pushes := gitShim(t, "push", `"$REALGIT" --git-dir=`+remoteDir+` update-ref refs/heads/main `+remoteBase)
+	env, pushes := gitShim(t, "push", `"$REALGIT" --git-dir=`+testutil.ShellPath(remoteDir)+` update-ref refs/heads/main `+remoteBase)
 
 	_, stderr, code := runSafegitEnv(t, dir, env, "--approve-consequential", "push",
 		"--refs", "head", "--force-with-lease", "origin")
@@ -305,7 +303,7 @@ func TestPushLeaseRejectionIsNotRetried(t *testing.T) {
 		t.Fatalf("setting push.retryAttempts failed (code %d): %s", code, stderr)
 	}
 
-	env, pushes := gitShim(t, "push", `"$REALGIT" --git-dir=`+remoteDir+` update-ref refs/heads/main `+remoteBase)
+	env, pushes := gitShim(t, "push", `"$REALGIT" --git-dir=`+testutil.ShellPath(remoteDir)+` update-ref refs/heads/main `+remoteBase)
 
 	_, stderr, code := runSafegitEnv(t, dir, env, "--approve-consequential", "push",
 		"--refs", "head", "--force-with-lease", "origin")

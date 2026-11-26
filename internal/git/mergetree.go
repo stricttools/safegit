@@ -74,6 +74,9 @@ func MergeTree(ctx context.Context, base, ours, theirs string, extra ...string) 
 		}
 	}
 
+	if strings.TrimSpace(stdout) == "" {
+		return MergeTreeResult{}, fmt.Errorf("git merge-tree produced no tree: %s", strings.TrimSpace(stderr))
+	}
 	result, err := parseMergeTree(stdout)
 	if err != nil {
 		return MergeTreeResult{}, err

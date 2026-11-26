@@ -1,6 +1,7 @@
 package test
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -85,7 +86,7 @@ func TestPushRetriesATransportFailureAndRePinsTheLease(t *testing.T) {
 	// from the first one) and then fails as a dropped connection. The second is
 	// let through to the real git.
 	env, pushes := gitShim(t, "push", `if [ "$ATTEMPT" = 1 ]; then
-	  "$REALGIT" --git-dir=`+remoteDir+` update-ref refs/heads/main `+remoteBase+`
+	  "$REALGIT" --git-dir=`+testutil.ShellPath(remoteDir)+` update-ref refs/heads/main `+remoteBase+`
 	  echo "fatal: unable to access 'origin': Connection reset by peer" >&2
 	  exit 1
 	fi`)
@@ -136,7 +137,7 @@ func TestPushRefusesARetryWhenALocalRefMovedUnderTheHooks(t *testing.T) {
 	// back a commit, so the retry's re-resolution sees a ref the hooks never
 	// validated.
 	env, pushes := gitShim(t, "push", `if [ "$ATTEMPT" = 1 ]; then
-	  "$REALGIT" --git-dir=`+dir+`/.git update-ref refs/heads/main refs/heads/main^
+	  "$REALGIT" --git-dir=`+testutil.ShellPath(filepath.Join(dir, ".git"))+` update-ref refs/heads/main refs/heads/main^
 	  echo "fatal: unable to access 'origin': Connection reset by peer" >&2
 	  exit 1
 	fi`)

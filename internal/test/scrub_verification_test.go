@@ -163,7 +163,7 @@ func TestScrubSkipsWorktreeSyncWhenForeignStateAppears(t *testing.T) {
 		"  git add foreign.txt\n" +
 		"fi\n" +
 		"exit 0\n"
-	if err := os.WriteFile(hook, []byte(script), 0o755); err != nil {
+	if err := os.WriteFile(hook, []byte(testutil.FixtureScript(script)), 0o755); err != nil {
 		t.Fatalf("installing the reference-transaction hook: %v", err)
 	}
 
@@ -460,7 +460,7 @@ func TestSubmoduleScrubSkippedSyncReachesThePayload(t *testing.T) {
 		"  echo \"another session's work\" > " + foreign + "\n" +
 		"fi\n" +
 		"exit 0\n"
-	if err := os.WriteFile(filepath.Join(hookDir, "reference-transaction"), []byte(script), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(hookDir, "reference-transaction"), []byte(testutil.FixtureScript(script)), 0o755); err != nil {
 		t.Fatalf("installing the submodule reference-transaction hook: %v", err)
 	}
 
@@ -504,7 +504,7 @@ func TestScrubMatchSubmoduleSkippedSyncReachesThePayload(t *testing.T) {
 		"  echo \"another session's work\" > " + foreign + "\n" +
 		"fi\n" +
 		"exit 0\n"
-	if err := os.WriteFile(filepath.Join(hookDir, "reference-transaction"), []byte(script), 0o755); err != nil {
+	if err := os.WriteFile(filepath.Join(hookDir, "reference-transaction"), []byte(testutil.FixtureScript(script)), 0o755); err != nil {
 		t.Fatalf("installing the submodule reference-transaction hook: %v", err)
 	}
 

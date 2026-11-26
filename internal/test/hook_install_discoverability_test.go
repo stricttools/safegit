@@ -1,6 +1,7 @@
 package test
 
 import (
+	"github.com/stricttools/safegit/internal/testutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,7 +30,7 @@ func TestHookInstallArbitraryBasenameIsDiscoverable(t *testing.T) {
 
 	src := filepath.Join(dir, "hooksrc", "my-check.sh")
 	marker := filepath.Join(dir, "my-check-ran.txt")
-	writeHookScript(t, src, "printf ran > "+marker)
+	writeHookScript(t, src, "printf ran > "+testutil.ShellPath(marker))
 
 	stdout, stderr, code := runSafegit(t, dir, "hook", "install", src)
 	if code != 0 {
@@ -65,7 +66,7 @@ func TestHookInstallDiscoverableBasenameControl(t *testing.T) {
 
 	src := filepath.Join(dir, "hooksrc", "pre-pre-push")
 	marker := filepath.Join(dir, "pre-pre-push-ran.txt")
-	writeHookScript(t, src, "printf ran > "+marker)
+	writeHookScript(t, src, "printf ran > "+testutil.ShellPath(marker))
 
 	_, stderr, code := runSafegit(t, dir, "hook", "install", src)
 	if code != 0 {

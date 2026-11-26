@@ -3,6 +3,7 @@
 package hooks
 
 import (
+	"os"
 	"os/exec"
 	"syscall"
 )
@@ -23,3 +24,6 @@ func killGroup(cmd *exec.Cmd, sig syscall.Signal) error {
 var signalGroup = func(pgid int, sig syscall.Signal) error {
 	return syscall.Kill(-pgid, sig)
 }
+
+func hookCommand(path string) (*exec.Cmd, error)      { return exec.Command(path), nil }
+func isExecutable(path string, info os.FileInfo) bool { return info.Mode()&0111 != 0 }

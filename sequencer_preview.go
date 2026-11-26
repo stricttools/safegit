@@ -363,6 +363,17 @@ func previewReplay(flags globalFlags, ctx context.Context, verb string, parsed g
 		return exitcode.General
 	}
 
+	// Git 2.43/2.44 accepts commits, not a tree, for merge-tree's sides.
+	// A deterministic parentless commit over the empty tree expresses the
+	// same state without raising the declared Git floor. Preview's object
+	// quarantine owns this unreachable synthetic object; no ref is published.
+	if ours != "HEAD" {
+		ours, err = git.CommitTree(ctx, ours, nil, "safegit preview empty side\n", &git.CommitIdentity{Author: git.AuthorInfo{Name: "Safegit preview", Email: "preview@safegit.invalid", Date: "946684800 +0000"}, Committer: git.AuthorInfo{Name: "Safegit preview", Email: "preview@safegit.invalid", Date: "946684800 +0000"}})
+		if err != nil {
+			errorf(flags, "preparing the empty preview side: %v", err)
+			return exitcode.General
+		}
+	}
 	base, theirs, err := replaySides(ctx, verb, c, mainline)
 	if err != nil {
 		errorf(flags, "%v", err)

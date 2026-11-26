@@ -2,6 +2,7 @@ package index
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -91,7 +92,7 @@ func TestGarbageCollectPlan(t *testing.T) {
 	os.WriteFile(filepath.Join(deadDir, "index"), []byte("fake"), 0644)
 
 	// Create a dir with our own PID (should be kept)
-	aliveDir := filepath.Join(tmpBase, "1-abcd1234") // PID 1 is always alive (init)
+	aliveDir := filepath.Join(tmpBase, fmt.Sprintf("%d-abcd1234", os.Getpid())) // PID 1 is always alive (init)
 	os.MkdirAll(aliveDir, 0755)
 
 	planned, err := GarbageCollectPlan(sgDir)
